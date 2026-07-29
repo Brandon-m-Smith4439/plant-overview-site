@@ -13,11 +13,17 @@ def main() -> None:
     preview = (ROOT / "public" / "preview.html").read_text(encoding="utf-8")
     script = (ROOT / "public" / "plant-app.js").read_text(encoding="utf-8")
     data_script = (ROOT / "public" / "plant-data.js").read_text(encoding="utf-8")
+    machine_script = (ROOT / "public" / "machine-data.js").read_text(encoding="utf-8")
     hosting = json.loads((ROOT / ".openai" / "hosting.json").read_text(encoding="utf-8"))
 
     prefix = "window.PLANT_CAD_DATA = "
     assert data_script.startswith(prefix) and data_script.rstrip().endswith(";")
     data = json.loads(data_script[len(prefix) :].strip().removesuffix(";"))
+    machine_prefix = "window.PLANT_MACHINE_DATA = "
+    assert machine_script.startswith(machine_prefix) and machine_script.rstrip().endswith(";")
+    machine_data = json.loads(
+        machine_script[len(machine_prefix) :].strip().removesuffix(";")
+    )
 
     assert hosting["project_id"].startswith("appgprj_")
     assert data["source"] == "Monroe Archs w Updates 1-23-25 (002).dwg"
@@ -31,6 +37,7 @@ def main() -> None:
         "plant-app",
         "plant-canvas",
         "stage-number",
+        "stage-total",
         "stage-title",
         "stage-description",
         "previous-stage",
@@ -47,7 +54,16 @@ def main() -> None:
         "Utilities set",
         "Walls painted",
         "Safety yellow",
-        "Machines installed",
+        "Crane runways set",
+        "Barefoot tables set",
+        "SQ4020 waterjet set",
+        "Waterjet filtration set",
+        "Kodiak 10-45 set",
+        "Denver Surface #1 set",
+        "Denver Surface #2 set",
+        "Tempering furnace set",
+        "Fuze Cube set",
+        "Chop saw set",
         "First raw glass",
         "Plant offices built",
         "First production",
@@ -56,7 +72,23 @@ def main() -> None:
     for phase in required_phases:
         assert phase in script, phase
 
-    for asset in ("plant-data.js", "plant-app.js"):
+    assert machine_data["source"] == data["source"]
+    assert machine_data["units"] == "feet"
+    assert len(machine_data["machines"]) == 9
+    assert sum(
+        machine["placement_status"] == "dwg_named"
+        for machine in machine_data["machines"]
+    ) >= 5
+    assert all(machine["crane"]["capacity"] for machine in machine_data["machines"])
+    assert any(
+        machine["crane"]["capacity"] == "5 ton"
+        for machine in machine_data["machines"]
+    )
+    assert all(machine["dwg_anchor_inches"] for machine in machine_data["machines"])
+    reveals = [machine["reveal"] for machine in machine_data["machines"]]
+    assert reveals == list(range(6, 15))
+
+    for asset in ("plant-data.js", "machine-data.js", "plant-app.js"):
         assert f'"/{asset}"' in page
         assert f'"{asset}"' in preview
         assert (ROOT / "public" / asset).is_file()
@@ -65,6 +97,9 @@ def main() -> None:
     print(f"CAD_SEGMENTS={len(data['segments'])}")
     print(f"CAD_COLUMNS={len(data['columns'])}")
     print(f"STAGES={len(required_phases)}")
+    print(f"MACHINES={len(machine_data['machines'])}")
+    print("MACHINE_REVEALS=ONE_AT_A_TIME")
+    print("CRANES=ALL_MACHINES")
     print(f"PROJECT_ID={hosting['project_id']}")
 
 

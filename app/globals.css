@@ -159,9 +159,9 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
 
 .model-legend span { display: flex; align-items: center; gap: 5px; }
 .model-legend i { width: 8px; height: 8px; border-radius: 50%; }
-.model-legend .barefoot { background: #28a6a1; }
-.model-legend .tempering { background: #e56b37; }
-.model-legend .storage { background: #69a3c8; }
+.model-legend .dwg { background: #e56b37; }
+.model-legend .correlated { background: #27817c; }
+.model-legend .crane { background: #2675a7; }
 
 .stage-panel {
   padding: 34px 30px;
@@ -201,11 +201,22 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
   margin: 16px auto 0;
   position: relative;
   padding-top: 12px;
+  overflow-x: auto;
+  scrollbar-color: #aeb3af transparent;
+  scrollbar-width: thin;
 }
 
-.timeline-progress { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #cacbc7; }
+.timeline-progress { position: absolute; top: 0; left: 0; width: max(100%, calc(var(--stage-count, 10) * 92px)); height: 2px; background: #cacbc7; }
 .timeline-progress span { display: block; width: 0; height: 100%; background: var(--orange); transition: width .45s ease; }
-.timeline ol { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; list-style: none; margin: 0; padding: 0; }
+.timeline ol {
+  display: grid;
+  grid-template-columns: repeat(var(--stage-count, 10), minmax(88px, 1fr));
+  gap: 4px;
+  min-width: calc(var(--stage-count, 10) * 92px);
+  list-style: none;
+  margin: 0;
+  padding: 0 0 7px;
+}
 .timeline li button { width: 100%; padding: 9px 4px; border: 0; background: transparent; color: #7b827e; cursor: pointer; font-size: 10px; text-transform: uppercase; letter-spacing: .055em; }
 .timeline li.active button { color: var(--orange-dark); font-weight: 800; }
 .timeline li.complete button { color: var(--teal); }
@@ -221,5 +232,5 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
   .play-button { bottom: 68px; }
   .stage-panel { min-height: 300px; border-left: 0; border-top: 1px solid #adb0ac; }
   .stage-kicker { margin-top: 36px; }
-  .timeline ol { grid-template-columns: repeat(5, 1fr); }
+  .timeline ol { grid-template-columns: repeat(var(--stage-count, 10), minmax(82px, 1fr)); }
 }

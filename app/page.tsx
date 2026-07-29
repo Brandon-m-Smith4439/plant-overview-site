@@ -18,7 +18,7 @@ export default function Home() {
           <div className="view-help">Drag to orbit · Scroll to zoom</div>
         </div>
         <aside className="stage-panel">
-          <div className="stage-count"><span id="stage-number">01</span> / 10</div>
+          <div className="stage-count"><span id="stage-number">01</span> / <span id="stage-total">19</span></div>
           <p className="stage-kicker">Construction stage</p>
           <h2 id="stage-title">Empty shell</h2>
           <p id="stage-description">
@@ -38,19 +38,11 @@ export default function Home() {
         <div className="timeline-progress"><span id="timeline-fill" /></div>
         <ol id="timeline-stages">
           <li className="active"><button type="button">Empty shell</button></li>
-          <li><button type="button">Trenches</button></li>
-          <li><button type="button">Utilities</button></li>
-          <li><button type="button">Paint</button></li>
-          <li><button type="button">Safety yellow</button></li>
-          <li><button type="button">Machines</button></li>
-          <li><button type="button">Raw glass</button></li>
-          <li><button type="button">Plant offices</button></li>
-          <li><button type="button">First production</button></li>
-          <li><button type="button">Today</button></li>
         </ol>
       </nav>
 
       <script src="/plant-data.js" />
+      <script src="/machine-data.js" />
       <script src="/plant-app.js" />
     </main>
   );

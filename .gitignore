@@ -41,3 +41,5 @@ next-env.d.ts
 # local CAD analysis cache
 __pycache__/
 *.pyc
+cad/machine-text-count.txt
+cad/plant-text.tsv

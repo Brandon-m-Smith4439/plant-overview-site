@@ -1,0 +1,261 @@
+window.PLANT_MACHINE_DATA = {
+  "source": "Monroe Archs w Updates 1-23-25 (002).dwg",
+  "units": "feet",
+  "coordinate_note": "Model x/z values are DWG x/y inches divided by 12. Anonymous equipment blocks are matched to construction photos and are explicitly marked photo_correlated.",
+  "machines": [
+    {
+      "id": "barefoot-cutting",
+      "name": "Barefoot cutting tables",
+      "short": "Barefoot",
+      "type": "cutting",
+      "reveal": 6,
+      "x": -220,
+      "z": -205,
+      "w": 54,
+      "d": 66,
+      "h": 5,
+      "color": "#267e79",
+      "placement_status": "dwg_named",
+      "dwg_labels": [
+        "Barefoot",
+        "3 x 6 Table",
+        "4 x 9 Table"
+      ],
+      "dwg_anchor_inches": [
+        -2236.0,
+        -1859.0
+      ],
+      "evidence": "Named Barefoot production area and table labels in the facility drawing.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 19
+      }
+    },
+    {
+      "id": "sq4020-waterjet",
+      "name": "SQ4020 waterjet",
+      "short": "Waterjet",
+      "type": "waterjet",
+      "reveal": 7,
+      "x": 19.4,
+      "z": -40.0,
+      "w": 27.0,
+      "d": 18.2,
+      "h": 5,
+      "color": "#347f9f",
+      "placement_status": "dwg_named",
+      "dwg_labels": [
+        "SQ4020 WATERJET MACHINE INSTALLATION DRAWING",
+        "MACHINE",
+        "WATER TANK(TABLE)",
+        "CONTROLLER"
+      ],
+      "dwg_anchor_inches": [
+        248.5,
+        -263.3
+      ],
+      "evidence": "Machine, table tanks, pump, and controller are labeled together in the DWG installation detail.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 19
+      }
+    },
+    {
+      "id": "waterjet-filtration",
+      "name": "Waterjet pump & filtration",
+      "short": "Filtration",
+      "type": "filtration",
+      "reveal": 8,
+      "x": 39.0,
+      "z": -39.0,
+      "w": 7.0,
+      "d": 10.0,
+      "h": 8,
+      "color": "#276b8b",
+      "placement_status": "dwg_named",
+      "dwg_labels": [
+        "PUMP",
+        "Abrasive removel system",
+        "WATER TANK(TABLE)",
+        "CONTROLLER"
+      ],
+      "dwg_anchor_inches": [
+        518.0,
+        -364.1
+      ],
+      "evidence": "Support equipment is named and dimensionally grouped with the SQ4020 detail in the DWG.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 19
+      }
+    },
+    {
+      "id": "kodiak-10-45",
+      "name": "Kodiak 10-45",
+      "short": "Kodiak",
+      "type": "kodiak",
+      "reveal": 9,
+      "x": 59.0,
+      "z": -114.0,
+      "w": 25.0,
+      "d": 9.0,
+      "h": 7,
+      "color": "#d4d8d5",
+      "placement_status": "photo_correlated",
+      "dwg_labels": [
+        "Anonymous equipment footprint near grid D10-E10"
+      ],
+      "dwg_anchor_inches": [
+        729.6,
+        -1109.0
+      ],
+      "evidence": "KODIAK 10-45 is readable in installation photos; its floor location is correlated to the compact DWG equipment cluster.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 20
+      }
+    },
+    {
+      "id": "denver-surface-1",
+      "name": "Denver Surface #1",
+      "short": "Denver #1",
+      "type": "denver",
+      "reveal": 10,
+      "x": 75.0,
+      "z": -103.0,
+      "w": 37.0,
+      "d": 10.0,
+      "h": 14,
+      "color": "#d9dcda",
+      "placement_status": "photo_correlated",
+      "dwg_labels": [
+        "Repeated equipment footprint at grid D10-D11",
+        "FREE AREA FOR ROLLERS REPLACEMENT"
+      ],
+      "dwg_anchor_inches": [
+        1033.4,
+        -1207.3
+      ],
+      "evidence": "Two DENVER Surface units are visible in the photos; the first is matched to the western repeated CAD footprint.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 21
+      }
+    },
+    {
+      "id": "denver-surface-2",
+      "name": "Denver Surface #2",
+      "short": "Denver #2",
+      "type": "denver",
+      "reveal": 11,
+      "x": 124.0,
+      "z": -103.0,
+      "w": 37.0,
+      "d": 10.0,
+      "h": 14,
+      "color": "#d9dcda",
+      "placement_status": "photo_correlated",
+      "dwg_labels": [
+        "Repeated equipment footprint at grid D12-D13",
+        "FREE AREA FOR ROLLERS REPLACEMENT"
+      ],
+      "dwg_anchor_inches": [
+        1614.9,
+        -1162.6
+      ],
+      "evidence": "The second DENVER Surface unit is matched to the eastern copy of the repeated CAD footprint.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 21
+      }
+    },
+    {
+      "id": "tempering-furnace",
+      "name": "Tempering furnace oven",
+      "short": "Furnace",
+      "type": "furnace",
+      "reveal": 12,
+      "x": 107.0,
+      "z": -125.0,
+      "w": 42.0,
+      "d": 12.0,
+      "h": 10,
+      "color": "#d56535",
+      "placement_status": "photo_correlated",
+      "dwg_labels": [
+        "02 GT Oven layer family",
+        "A$C50FD5648 equipment block"
+      ],
+      "dwg_anchor_inches": [
+        1490.2,
+        -1064.4
+      ],
+      "evidence": "The eight-truck oven arrival and 5-ton setting sequence are documented in the progress photos; the placement follows the DWG oven-layer block cluster.",
+      "crane": {
+        "system": "Engineered Systems bridge",
+        "capacity": "5 ton",
+        "height": 23
+      }
+    },
+    {
+      "id": "fuze-cube",
+      "name": "Fuze Cube",
+      "short": "Fuze Cube",
+      "type": "cube",
+      "reveal": 13,
+      "x": 164.0,
+      "z": -108.0,
+      "w": 16.0,
+      "d": 14.0,
+      "h": 10,
+      "color": "#486f79",
+      "placement_status": "dwg_named",
+      "dwg_labels": [
+        "Fuze Cube"
+      ],
+      "dwg_anchor_inches": [
+        1985.6,
+        -1207.4
+      ],
+      "evidence": "Fuze Cube is directly named at this location in the DWG.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 20
+      }
+    },
+    {
+      "id": "chop-saw",
+      "name": "Chop saw",
+      "short": "Chop saw",
+      "type": "saw",
+      "reveal": 14,
+      "x": 228.0,
+      "z": -163.0,
+      "w": 9.0,
+      "d": 7.0,
+      "h": 4,
+      "color": "#567985",
+      "placement_status": "dwg_named",
+      "dwg_labels": [
+        "CHOP SAW"
+      ],
+      "dwg_anchor_inches": [
+        2796.4,
+        -1907.0
+      ],
+      "evidence": "CHOP SAW is directly named beside the wire-shelving area in the DWG.",
+      "crane": {
+        "system": "GORBEL bridge",
+        "capacity": "1000 lb",
+        "height": 18
+      }
+    }
+  ]
+};

@@ -1,97 +1,57 @@
-# vinext-starter
+# Monroe Glass Plant Evolution
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Interactive 3D construction timeline for the Monroe glass plant. The horizontal
+geometry comes from the glass-production areas of:
 
-## Prerequisites
+`Monroe Archs w Updates 1-23-25 (002).dwg`
 
-- Node.js `>=22.13.0`
+The A6 Barefoot Production Line and A10 Glass Tempering Line drawing areas were
+used to isolate the plant. Front offices, breakroom, roof, parking, and other
+facility layouts are outside this model.
 
-## Quick Start
+## Experience
 
-```bash
-npm install
+The page moves through ten stages:
+
+1. Empty shell
+2. Trenches dug
+3. Utilities set
+4. Walls painted
+5. Safety yellow
+6. Machines installed
+7. First raw glass
+8. Plant-floor offices built
+9. First production
+10. Plant today
+
+The 3D viewer supports orbit, zoom, overview and floor-plan cameras, CAD and
+label toggles, direct timeline selection, Previous/Next controls, keyboard arrow
+navigation, and autoplay.
+
+## Run
+
+With Node.js 22.13 or newer:
+
+```powershell
+npm ci
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+The standalone buildless preview can also be opened at
+`public/preview.html`, or served from this folder with:
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```powershell
+py -m http.server 4173 --bind 127.0.0.1
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Then visit `http://127.0.0.1:4173/public/preview.html`.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Geometry and validation
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- `public/plant-data.js` contains the normalized CAD footprint.
+- `cad/extract_glass_plant.py` regenerates that data from the exported DXF.
+- `cad/validate_site.py` checks the CAD counts, site structure, and all stages.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Vertical heights and stage timing are interpretive. They should be refined when
+dated field photos, equipment dimensions, or construction milestones are
+confirmed.

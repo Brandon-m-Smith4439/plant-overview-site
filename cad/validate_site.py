@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     page = (ROOT / "app" / "page.tsx").read_text(encoding="utf-8")
+    preview = (ROOT / "public" / "preview.html").read_text(encoding="utf-8")
     script = (ROOT / "public" / "plant-app.js").read_text(encoding="utf-8")
     data_script = (ROOT / "public" / "plant-data.js").read_text(encoding="utf-8")
     hosting = json.loads((ROOT / ".openai" / "hosting.json").read_text(encoding="utf-8"))
@@ -57,6 +58,7 @@ def main() -> None:
 
     for asset in ("plant-data.js", "plant-app.js"):
         assert f'"/{asset}"' in page
+        assert f'"{asset}"' in preview
         assert (ROOT / "public" / asset).is_file()
 
     print("VALIDATION=PASS")

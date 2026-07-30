@@ -31,15 +31,15 @@
       title: "Walls painted",
       short: "Paint",
       era: "Interior finish",
-      description: "The plant shell changes from raw industrial surfaces to a brighter finished workspace, improving light and visibility across the production floor.",
-      details: ["Bright walls", "Improved light", "Finished shell"],
+      description: "The plant shell changes from raw industrial surfaces to a brighter finished workspace, and every structural pillar receives a full-height yellow finish.",
+      details: ["Bright walls", "Full yellow pillars", "Finished shell"],
     },
     {
       title: "Safety yellow",
       short: "Safety yellow",
       era: "Visual safety",
-      description: "Columns and impact zones receive their yellow safety finish. Aisles and equipment clearances begin to read as an organized production environment.",
-      details: ["Yellow columns", "Aisle markings", "Protected zones"],
+      description: "Aisles, impact zones, and equipment clearances are marked after the pillars have been fully painted yellow.",
+      details: ["Aisle markings", "Impact zones", "Protected clearances"],
     },
     {
       title: "Crane runways set",
@@ -51,65 +51,58 @@
     {
       title: "Barefoot tables set",
       short: "Barefoot",
-      era: "Machine 1 of 9",
+      era: "Machine 1 of 8",
       description: "The Barefoot cutting tables are placed in the western production area using the drawing’s Barefoot label and its 3 x 6 and 4 x 9 table callouts.",
       details: ["DWG named", "Cutting tables", "West production area"],
     },
     {
       title: "SQ4020 waterjet set",
       short: "Waterjet",
-      era: "Machine 2 of 9",
+      era: "Machine 2 of 8",
       description: "The SQ4020 waterjet appears at its named DWG installation detail. Its cutting table, abrasive tank, pump connection, and controller envelope follow the drawing coordinates.",
       details: ["DWG named", "SQ4020", "Cutout station"],
     },
     {
       title: "Waterjet filtration set",
       short: "Filtration",
-      era: "Machine 3 of 9",
+      era: "Machine 3 of 8",
       description: "The waterjet pump, table tanks, abrasive-removal equipment, and controller are added as their own installation step beside the SQ4020.",
       details: ["DWG named", "Pump & tanks", "Water treatment"],
     },
     {
       title: "Kodiak 10-45 set",
       short: "Kodiak",
-      era: "Machine 4 of 9",
+      era: "Machine 4 of 8",
       description: "The Kodiak 10-45 is installed beneath its 1,000-lb GORBEL bridge. The machine identity comes directly from the photos; the location is correlated to the compact CAD equipment cluster.",
       details: ["Photo identified", "CAD correlated", "GORBEL 1000 lb"],
     },
     {
       title: "Denver Surface #1 set",
       short: "Denver #1",
-      era: "Machine 5 of 9",
+      era: "Machine 5 of 8",
       description: "The first Denver Surface unit is added at the western repeated equipment footprint beside the drawing’s roller-replacement clearance.",
       details: ["Photo identified", "Repeated CAD footprint", "GORBEL 1000 lb"],
     },
     {
       title: "Denver Surface #2 set",
       short: "Denver #2",
-      era: "Machine 6 of 9",
+      era: "Machine 6 of 8",
       description: "The second Denver Surface unit is added independently at the eastern copy of the same CAD footprint, matching the paired installation seen in the photos.",
       details: ["Second unit", "Mirrored placement", "Own crane bridge"],
     },
     {
       title: "Tempering furnace set",
       short: "Furnace",
-      era: "Machine 7 of 9",
+      era: "Machine 7 of 8",
       description: "The tempering furnace oven is assembled from the multi-truck delivery beneath the yellow 5-ton bridge. Its model position follows the DWG oven-layer block cluster.",
       details: ["Oven CAD layers", "8-truck arrival", "5-ton bridge"],
     },
     {
       title: "Fuze Cube set",
       short: "Fuze Cube",
-      era: "Machine 8 of 9",
+      era: "Machine 8 of 8",
       description: "The Fuze Cube is installed at the point directly named in the facility drawing, east of the core processing line.",
       details: ["DWG named", "Exact drawing anchor", "Dedicated bridge"],
-    },
-    {
-      title: "Chop saw set",
-      short: "Chop saw",
-      era: "Machine 9 of 9",
-      description: "The chop saw completes the equipment sequence at its named location beside the wire-shelving area.",
-      details: ["DWG named", "Wire shelving area", "Final machine step"],
     },
     {
       title: "First raw glass",
@@ -143,19 +136,69 @@
 
   const bounds = data.bounds;
   const center = [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2];
+  const STORAGE_KEY = "monroe-glass-plant-layout-v3";
+  const wallSections = [
+    { id: "west", x: bounds[0], z: bounds[1], w: 3, d: bounds[3]-bounds[1], h: 24 },
+    { id: "east", x: bounds[2]-3, z: bounds[1], w: 3, d: bounds[3]-bounds[1], h: 24 },
+    { id: "south", x: bounds[0], z: bounds[1], w: bounds[2]-bounds[0], d: 3, h: 24 },
+    { id: "north-west", x: bounds[0], z: bounds[3]-3, w: 104, d: 3, h: 24 },
+    { id: "north-east", x: 174, z: bounds[3]-3, w: bounds[2]-174, d: 3, h: 24 },
+  ];
+  const defaultWalls = Object.fromEntries(wallSections.map((wall) => [wall.id,true]));
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function initialMachines() {
+    return [...equipmentData.machines, ...(equipmentData.fixtures || [])].map((machine,index) => ({
+      ...clone(machine),
+      instanceId: `${machine.id || "machine"}-${index}`,
+    }));
+  }
+
+  function loadLayout() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (saved?.version === 3 && Array.isArray(saved.machines)) {
+        return {
+          machines: saved.machines,
+          hiddenColumns: Array.isArray(saved.hiddenColumns) ? saved.hiddenColumns : [],
+          walls: { ...defaultWalls, ...(saved.walls || {}) },
+        };
+      }
+    } catch (error) {
+      console.warn("Saved layout could not be loaded.", error);
+    }
+    return { machines: initialMachines(), hiddenColumns: [], walls: { ...defaultWalls } };
+  }
+
+  const savedLayout = loadLayout();
   const state = {
     yaw: -0.72,
     pitch: 0.62,
     zoom: 1,
+    panX: 0,
+    panZ: 0,
     stage: 0,
     stageFloat: 0,
     dragging: false,
+    dragAction: "orbit",
+    draggedMachineId: null,
+    dragOffsetX: 0,
+    dragOffsetZ: 0,
     pointerX: 0,
     pointerY: 0,
     showCad: true,
     showLabels: true,
     playing: false,
     playAt: 0,
+    editing: false,
+    editorTool: "machines",
+    selectedMachineId: null,
+    clipboard: null,
+    hiddenColumns: new Set(savedLayout.hiddenColumns),
+    walls: savedLayout.walls,
   };
 
   const colors = {
@@ -173,7 +216,7 @@
     utility: "#2f7771",
   };
 
-  const machines = equipmentData.machines;
+  let machines = savedLayout.machines;
 
   const glassRacks = Array.from({ length: 6 }, (_, index) => ({
     x: 12 + index * 35,
@@ -190,6 +233,271 @@
     [145, -195, 3, 96],
   ];
 
+  function persistLayout() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 3,
+      machines,
+      hiddenColumns: [...state.hiddenColumns],
+      walls: state.walls,
+    }));
+  }
+
+  function selectedMachine() {
+    return machines.find((machine) => machine.instanceId === state.selectedMachineId) || null;
+  }
+
+  function uniqueId(prefix = "machine") {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+  }
+
+  function machineTemplate(type, requestedName) {
+    const defaults = {
+      generic: {
+        name: requestedName || "New machine",
+        short: "New machine",
+        type: "generic",
+        w: 20, d: 10, h: 8,
+        color: "#277d78",
+        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 20 },
+      },
+      aFrame: {
+        name: requestedName || "A-frame glass cart",
+        short: "A-frame",
+        type: "aFrame",
+        w: 12, d: 6, h: 9,
+        color: "#d85f34",
+        crane: null,
+      },
+      craneMachine: {
+        name: requestedName || "Crane machine",
+        short: "Crane machine",
+        type: "craneMachine",
+        w: 18, d: 14, h: 18,
+        color: "#e2b32d",
+        crane: null,
+      },
+    };
+    const template = defaults[type] || defaults.generic;
+    const offset = machines.filter((machine) => machine.custom).length * 4;
+    return {
+      id: uniqueId(type),
+      instanceId: uniqueId(type),
+      reveal: type === "aFrame" ? 14 : 6,
+      x: center[0] + state.panX - template.w/2 + offset,
+      z: center[1] + state.panZ - template.d/2 + offset,
+      placement_status: "user_added",
+      evidence: "Added in the interactive layout editor.",
+      custom: true,
+      ...template,
+    };
+  }
+
+  function updateEditorPanel() {
+    const machine = selectedMachine();
+    const panel = document.querySelector(".layout-editor");
+    if (!panel) return;
+    const selection = panel.querySelector("[data-editor-selection]");
+    if (selection) {
+      selection.textContent = machine ? machine.name : (
+        state.editorTool === "pillars"
+          ? "Click a pillar to remove or restore it."
+          : "Click a machine or cart, then drag it."
+      );
+    }
+    panel.querySelectorAll("[data-needs-selection]").forEach((control) => {
+      control.disabled = !machine;
+    });
+    panel.querySelectorAll("[data-machine-field]").forEach((input) => {
+      const field = input.dataset.machineField;
+      input.disabled = !machine;
+      input.value = machine ? (
+        field === "name" ? machine[field] : Number(machine[field]).toFixed(field === "x" || field === "z" ? 1 : 0)
+      ) : "";
+    });
+    const paste = panel.querySelector("[data-editor-action='paste']");
+    if (paste) paste.disabled = !state.clipboard;
+    panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.editorTool === state.editorTool);
+    });
+    panel.querySelectorAll("[data-wall-id]").forEach((input) => {
+      input.checked = state.walls[input.dataset.wallId] !== false;
+    });
+  }
+
+  function deleteSelectedMachine() {
+    if (!state.selectedMachineId) return;
+    machines = machines.filter((machine) => machine.instanceId !== state.selectedMachineId);
+    state.selectedMachineId = null;
+    persistLayout();
+    updateEditorPanel();
+  }
+
+  function copySelectedMachine() {
+    const machine = selectedMachine();
+    if (!machine) return;
+    state.clipboard = clone(machine);
+    updateEditorPanel();
+  }
+
+  function pasteMachine() {
+    if (!state.clipboard) return;
+    const pasted = {
+      ...clone(state.clipboard),
+      id: uniqueId(state.clipboard.type),
+      instanceId: uniqueId(state.clipboard.type),
+      name: `${state.clipboard.name} copy`,
+      x: Number(state.clipboard.x) + 8,
+      z: Number(state.clipboard.z) + 8,
+      custom: true,
+      placement_status: "user_added",
+      evidence: "Copied in the interactive layout editor.",
+    };
+    machines.push(pasted);
+    state.selectedMachineId = pasted.instanceId;
+    state.clipboard = clone(pasted);
+    persistLayout();
+    updateEditorPanel();
+  }
+
+  function setEditing(enabled) {
+    state.editing = enabled;
+    state.playing = false;
+    state.dragging = false;
+    state.draggedMachineId = null;
+    const panel = document.querySelector(".layout-editor");
+    const button = document.querySelector("[data-toggle='editor']");
+    const help = document.querySelector(".view-help");
+    const play = document.getElementById("play-timeline");
+    canvas.closest(".model-frame")?.classList.toggle("editing",enabled);
+    if (panel) panel.hidden = !enabled;
+    if (button) {
+      button.classList.toggle("active",enabled);
+      button.setAttribute("aria-pressed",String(enabled));
+    }
+    if (play) play.hidden = enabled;
+    if (help) {
+      help.textContent = enabled
+        ? "Drag machines · Pillar tool removes columns"
+        : "Drag to orbit · Shift-drag to pan · Scroll to zoom";
+    }
+    if (enabled) {
+      setStage(stages.length - 1);
+      state.stageFloat = stages.length - 1;
+      state.yaw = 0;
+      state.pitch = 1.42;
+      state.zoom = .9;
+    }
+    updateEditorPanel();
+  }
+
+  function createEditorPanel(frame) {
+    const panel = document.createElement("section");
+    panel.className = "layout-editor";
+    panel.hidden = true;
+    panel.innerHTML = `
+      <div class="editor-heading">
+        <div><p>Plant layout editor</p><h3 data-editor-selection>Select an item</h3></div>
+        <span>Auto-saved</span>
+      </div>
+      <div class="editor-tools" role="group" aria-label="Editor selection mode">
+        <button type="button" data-editor-tool="machines" class="active">Machines & carts</button>
+        <button type="button" data-editor-tool="pillars">Remove pillars</button>
+      </div>
+      <div class="editor-properties">
+        <label class="wide">Name<input data-machine-field="name" data-needs-selection type="text"></label>
+        <label>X position<input data-machine-field="x" data-needs-selection type="number" step="0.5"></label>
+        <label>Z position<input data-machine-field="z" data-needs-selection type="number" step="0.5"></label>
+        <label>Width<input data-machine-field="w" data-needs-selection type="number" min="2" step="1"></label>
+        <label>Depth<input data-machine-field="d" data-needs-selection type="number" min="2" step="1"></label>
+        <label>Height<input data-machine-field="h" data-needs-selection type="number" min="1" step="1"></label>
+      </div>
+      <div class="editor-actions">
+        <button type="button" data-editor-action="copy" data-needs-selection>Copy</button>
+        <button type="button" data-editor-action="paste" disabled>Paste</button>
+        <button type="button" data-editor-action="delete" data-needs-selection>Remove</button>
+      </div>
+      <div class="editor-add">
+        <p>Add to the 3D model</p>
+        <input type="text" id="new-machine-name" placeholder="Optional custom name">
+        <div><select id="new-machine-type">
+          <option value="generic">New machine</option>
+          <option value="aFrame">A-frame glass cart</option>
+          <option value="craneMachine">Crane machine</option>
+        </select><button type="button" data-editor-action="add">Add</button></div>
+      </div>
+      <fieldset class="wall-controls">
+        <legend>Wall sections</legend>
+        ${wallSections.map((wall) => `<label><input type="checkbox" data-wall-id="${wall.id}" checked>${wall.id.replace("-"," ")}</label>`).join("")}
+      </fieldset>
+      <div class="editor-footer">
+        <button type="button" data-editor-action="restore-pillars">Restore pillars</button>
+        <button type="button" data-editor-action="reset">Reset layout</button>
+        <button type="button" data-editor-action="done" class="primary">Done editing</button>
+      </div>
+    `;
+    frame.appendChild(panel);
+
+    panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.editorTool = button.dataset.editorTool;
+        state.selectedMachineId = null;
+        updateEditorPanel();
+      });
+    });
+    panel.querySelectorAll("[data-machine-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const machine = selectedMachine();
+        if (!machine) return;
+        const field = input.dataset.machineField;
+        if (field === "name") {
+          machine.name = input.value.trim() || machine.name;
+          machine.short = machine.name;
+        } else {
+          const value = Number(input.value);
+          if (!Number.isFinite(value)) return;
+          machine[field] = ["w","d","h"].includes(field) ? Math.max(field === "h" ? 1 : 2,value) : value;
+        }
+        persistLayout();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelector("[data-editor-action='copy']").addEventListener("click",copySelectedMachine);
+    panel.querySelector("[data-editor-action='paste']").addEventListener("click",pasteMachine);
+    panel.querySelector("[data-editor-action='delete']").addEventListener("click",deleteSelectedMachine);
+    panel.querySelector("[data-editor-action='add']").addEventListener("click",() => {
+      const type = panel.querySelector("#new-machine-type").value;
+      const requestedName = panel.querySelector("#new-machine-name").value.trim();
+      const machine = machineTemplate(type,requestedName);
+      machines.push(machine);
+      state.selectedMachineId = machine.instanceId;
+      state.editorTool = "machines";
+      panel.querySelector("#new-machine-name").value = "";
+      persistLayout();
+      updateEditorPanel();
+    });
+    panel.querySelector("[data-editor-action='restore-pillars']").addEventListener("click",() => {
+      state.hiddenColumns.clear();
+      persistLayout();
+      updateEditorPanel();
+    });
+    panel.querySelector("[data-editor-action='reset']").addEventListener("click",() => {
+      if (!window.confirm("Reset every machine, cart, pillar, and wall change?")) return;
+      machines = initialMachines();
+      state.hiddenColumns.clear();
+      state.walls = { ...defaultWalls };
+      state.selectedMachineId = null;
+      persistLayout();
+      updateEditorPanel();
+    });
+    panel.querySelector("[data-editor-action='done']").addEventListener("click",() => setEditing(false));
+    panel.querySelectorAll("[data-wall-id]").forEach((input) => {
+      input.addEventListener("change",() => {
+        state.walls[input.dataset.wallId] = input.checked;
+        persistLayout();
+      });
+    });
+  }
+
   function addControls() {
     const frame = canvas.closest(".model-frame");
     if (!frame) return;
@@ -200,8 +508,10 @@
       <button type="button" data-view="top" aria-label="View from above">Floor plan</button>
       <button type="button" data-toggle="cad" class="active" aria-pressed="true">CAD lines</button>
       <button type="button" data-toggle="labels" class="active" aria-pressed="true">Labels</button>
+      <button type="button" data-toggle="editor" aria-pressed="false">Edit layout</button>
     `;
     frame.appendChild(controls);
+    createEditorPanel(frame);
     const play = document.createElement("button");
     play.type = "button";
     play.id = "play-timeline";
@@ -220,15 +530,23 @@
           state.yaw = 0;
           state.pitch = 1.42;
           state.zoom = .9;
+          state.panX = 0;
+          state.panZ = 0;
         } else {
           state.yaw = -.72;
           state.pitch = .62;
           state.zoom = 1;
+          state.panX = 0;
+          state.panZ = 0;
         }
       });
     });
     document.querySelectorAll("[data-toggle]").forEach((button) => {
       button.addEventListener("click", () => {
+        if (button.dataset.toggle === "editor") {
+          setEditing(!state.editing);
+          return;
+        }
         const key = button.dataset.toggle === "cad" ? "showCad" : "showLabels";
         state[key] = !state[key];
         button.classList.toggle("active", state[key]);
@@ -254,8 +572,8 @@
   }
 
   function project(x, y, z) {
-    x -= center[0];
-    z -= center[1];
+    x -= center[0] + state.panX;
+    z -= center[1] + state.panZ;
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
     const rx = x * cy - z * sy;
@@ -268,6 +586,64 @@
       canvas.height * .57 - (y * cp - rz * sp) * scale,
       y * sp + rz * cp,
     ];
+  }
+
+  function canvasPoint(event) {
+    const rect = canvas.getBoundingClientRect();
+    return [
+      (event.clientX - rect.left) * canvas.width / rect.width,
+      (event.clientY - rect.top) * canvas.height / rect.height,
+    ];
+  }
+
+  function worldFromScreen(event) {
+    const [screenX,screenY] = canvasPoint(event);
+    const cy = Math.cos(state.yaw);
+    const sy = Math.sin(state.yaw);
+    const sp = Math.max(.08,Math.sin(state.pitch));
+    const scale = state.zoom * Math.min(canvas.width / 720, canvas.height / 420);
+    const rx = (screenX - canvas.width/2) / scale;
+    const rz = (screenY - canvas.height*.57) / (sp * scale);
+    return [
+      center[0] + state.panX + rx*cy + rz*sy,
+      center[1] + state.panZ - rx*sy + rz*cy,
+    ];
+  }
+
+  function machineAt(event) {
+    const [x,z] = worldFromScreen(event);
+    return machines
+      .filter((machine) => state.stageFloat >= machine.reveal - .8)
+      .filter((machine) => (
+        x >= machine.x-2 && x <= machine.x+machine.w+2 &&
+        z >= machine.z-2 && z <= machine.z+machine.d+2
+      ))
+      .sort((a,b) => a.w*a.d - b.w*b.d)[0] || null;
+  }
+
+  function columnAt(event) {
+    const [x,z] = worldFromScreen(event);
+    let nearest = null;
+    let distance = 6;
+    data.columns.slice(0,96).forEach(([columnX,columnZ],index) => {
+      const candidate = Math.hypot(columnX-x,columnZ-z);
+      if (candidate < distance) {
+        nearest = index;
+        distance = candidate;
+      }
+    });
+    return nearest;
+  }
+
+  function panCamera(deltaX,deltaY) {
+    const cy = Math.cos(state.yaw);
+    const sy = Math.sin(state.yaw);
+    const sp = Math.max(.08,Math.sin(state.pitch));
+    const scale = state.zoom * Math.min(canvas.width / 720, canvas.height / 420);
+    const rx = deltaX/scale;
+    const rz = deltaY/(sp*scale);
+    state.panX -= rx*cy + rz*sy;
+    state.panZ -= -rx*sy + rz*cy;
   }
 
   function polygon(points, fill, stroke = null, lineWidth = 1, alpha = 1) {
@@ -364,18 +740,17 @@
   function drawShell() {
     const painted = clamp(state.stageFloat - 2.35);
     const wall = painted > .5 ? colors.finished : colors.shell;
-    box({ x: bounds[0], z: bounds[1], w: 3, d: bounds[3]-bounds[1], h: 24, color: wall });
-    box({ x: bounds[2]-3, z: bounds[1], w: 3, d: bounds[3]-bounds[1], h: 24, color: wall });
-    box({ x: bounds[0], z: bounds[1], w: bounds[2]-bounds[0], d: 3, h: 24, color: wall });
-    box({ x: bounds[0], z: bounds[3]-3, w: 104, d: 3, h: 24, color: wall });
-    box({ x: 174, z: bounds[3]-3, w: bounds[2]-174, d: 3, h: 24, color: wall });
+    wallSections.forEach((section) => {
+      if (state.walls[section.id] !== false) box({ ...section, color: wall });
+    });
   }
 
   function drawColumns() {
-    const yellow = clamp(state.stageFloat - 3.25);
-    data.columns.slice(0, 96).forEach(([x,z]) => {
+    const yellow = clamp(state.stageFloat - 2.35);
+    data.columns.slice(0, 96).forEach(([x,z],index) => {
+      if (state.hiddenColumns.has(index)) return;
       box({ x:x-1.05,z:z-1.05,w:2.1,d:2.1,h:22,color:colors.steel });
-      if (yellow > .01) box({ x:x-1.16,z:z-1.16,w:2.32,d:2.32,h:7,color:colors.yellow },yellow,yellow);
+      if (yellow > .01) box({ x:x-1.16,z:z-1.16,w:2.32,d:2.32,h:22,color:colors.yellow },yellow,yellow);
     });
   }
 
@@ -410,6 +785,7 @@
   }
 
   function drawCrane(machine, machineAlpha) {
+    if (!machine.crane) return;
     const railAlpha = stageAlpha(5);
     if (railAlpha <= .01) return;
     const padding = machine.crane.capacity === "5 ton" ? 7 : 3;
@@ -483,12 +859,49 @@
     } else if (machine.type === "cube") {
       box(item,alpha,1);
       box({x:machine.x+2,z:machine.z+2,w:machine.w-4,d:machine.d-4,h:machine.h+2,color:"#668e96"},alpha,grow);
-    } else if (machine.type === "saw") {
-      box(item,alpha,1);
-      line3d([machine.x+2,machine.h+2,machine.z+1],[machine.x+6,machine.h+2,machine.z+machine.d-1],"#d8ddd9",3,alpha);
+    } else if (machine.type === "aFrame") {
+      line3d([machine.x,0,machine.z],[machine.x+machine.w,0,machine.z],machine.color,3,alpha);
+      line3d([machine.x,0,machine.z+machine.d],[machine.x+machine.w,0,machine.z+machine.d],machine.color,3,alpha);
+      line3d([machine.x,0,machine.z],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
+      line3d([machine.x,0,machine.z+machine.d],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
+      line3d([machine.x+machine.w,0,machine.z],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
+      line3d([machine.x+machine.w,0,machine.z+machine.d],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
+      polygon(
+        [[machine.x+1,.4,machine.z+1],[machine.x+machine.w/2,machine.h-.8,machine.z+machine.d/2],[machine.x+machine.w-1,.4,machine.z+1]],
+        "rgba(143,198,212,.48)",
+        "#8fc6d4",
+        1,
+        alpha
+      );
+    } else if (machine.type === "craneMachine") {
+      const top = machine.h * grow;
+      [[machine.x,machine.z],[machine.x+machine.w,machine.z],[machine.x,machine.z+machine.d],[machine.x+machine.w,machine.z+machine.d]].forEach(([x,z]) => {
+        line3d([x,0,z],[x,top,z],machine.color,4,alpha);
+      });
+      line3d([machine.x,top,machine.z],[machine.x+machine.w,top,machine.z],machine.color,5,alpha);
+      line3d([machine.x,top,machine.z+machine.d],[machine.x+machine.w,top,machine.z+machine.d],machine.color,5,alpha);
+      line3d([machine.x+machine.w*.55,top+.2,machine.z],[machine.x+machine.w*.55,top+.2,machine.z+machine.d],"#566165",5,alpha);
+      line3d([machine.x+machine.w*.55,top,machine.z+machine.d/2],[machine.x+machine.w*.55,3,machine.z+machine.d/2],"#30383b",2,alpha);
     } else {
       box(item,alpha,1);
     }
+  }
+
+  function drawSelection(machine) {
+    if (!state.editing || machine.instanceId !== state.selectedMachineId) return;
+    const padding = 2;
+    polygon(
+      [
+        [machine.x-padding,.3,machine.z-padding],
+        [machine.x+machine.w+padding,.3,machine.z-padding],
+        [machine.x+machine.w+padding,.3,machine.z+machine.d+padding],
+        [machine.x-padding,.3,machine.z+machine.d+padding],
+      ],
+      "rgba(228,109,58,.12)",
+      "#e46d3a",
+      3,
+      1
+    );
   }
 
   function drawMachines() {
@@ -497,10 +910,14 @@
       const grow = clamp(state.stageFloat - machine.reveal + 1);
       drawCrane(machine,alpha);
       drawMachineShape(machine,alpha,grow);
+      drawSelection(machine);
       if (alpha > .15) {
         const current = Math.round(state.stageFloat) === machine.reveal;
+        const source = machine.placement_status === "dwg_named"
+          ? "DWG"
+          : machine.placement_status === "user_added" ? "CUSTOM" : "PHOTO + CAD";
         label(
-          `${machine.name}${current ? ` · ${machine.placement_status === "dwg_named" ? "DWG" : "PHOTO + CAD"}` : ""}`,
+          `${machine.name}${current ? ` · ${source}` : ""}`,
           machine.x + machine.w/2,
           machine.h + 5,
           machine.z + machine.d/2,
@@ -509,8 +926,8 @@
       }
     });
 
-    const rackAlpha = stageAlpha(15);
-    const rackGrow = clamp(state.stageFloat - 14);
+    const rackAlpha = stageAlpha(14);
+    const rackGrow = clamp(state.stageFloat - 13);
     glassRacks.forEach((rack) => {
       box({ ...rack, color: colors.dark }, rackAlpha, rackGrow);
       line3d([rack.x,rack.h,rack.z],[rack.x+rack.w,rack.h,rack.z+rack.d],"#879196",1.3,rackAlpha);
@@ -519,26 +936,26 @@
   }
 
   function drawGlass(time) {
-    const alpha = stageAlpha(15);
+    const alpha = stageAlpha(14);
     glassRacks.forEach((rack,index) => {
-      const count = state.stageFloat >= 18 ? 5 : 3;
+      const count = state.stageFloat >= 17 ? 5 : 3;
       for (let panel=0; panel<count; panel++) {
         const offset = 2.4 + panel * 3.1;
         box({x:rack.x+offset,z:rack.z+1,w:.75,d:rack.d-2,h:rack.h+4,color:colors.glass},alpha,.92);
       }
     });
-    if (state.stageFloat >= 17) {
+    if (state.stageFloat >= 16) {
       const progress = (time * .000035) % 1;
       const x = 22 + progress * 144;
-      box({x,z:-106,w:1.2,d:13,h:10,color:colors.glass},stageAlpha(17),1);
+      box({x,z:-106,w:1.2,d:13,h:10,color:colors.glass},stageAlpha(16),1);
       const beacon = .55 + Math.sin(time * .008) * .35;
-      box({x:116,z:-100,w:2,d:2,h:18,color:"#d64a32"},beacon*stageAlpha(17),1);
+      box({x:116,z:-100,w:2,d:2,h:18,color:"#d64a32"},beacon*stageAlpha(16),1);
     }
   }
 
   function drawOffices() {
-    const alpha = stageAlpha(16);
-    const grow = clamp(state.stageFloat - 15);
+    const alpha = stageAlpha(15);
+    const grow = clamp(state.stageFloat - 14);
     const rooms = [
       {x:-225,z:8,w:28,d:36,h:12,color:colors.office,label:"Plant office"},
       {x:-195,z:8,w:30,d:36,h:12,color:"#c9d7d4",label:"Quality"},
@@ -549,7 +966,7 @@
   }
 
   function drawPeople(time) {
-    const alpha = stageAlpha(17);
+    const alpha = stageAlpha(16);
     const people = [[-191,-133],[30,-91],[151,-98],[98,-169],[202,-137]];
     people.forEach(([x,z],index) => {
       const bob = Math.sin(time*.004+index)*.15;
@@ -645,6 +1062,29 @@
 
   buildTimeline();
   canvas.addEventListener("pointerdown", (event) => {
+    if (state.editing) {
+      if (state.editorTool === "pillars") {
+        const columnIndex = columnAt(event);
+        if (columnIndex !== null) {
+          if (state.hiddenColumns.has(columnIndex)) state.hiddenColumns.delete(columnIndex);
+          else state.hiddenColumns.add(columnIndex);
+          persistLayout();
+          updateEditorPanel();
+        }
+        return;
+      }
+      const machine = machineAt(event);
+      state.selectedMachineId = machine?.instanceId || null;
+      updateEditorPanel();
+      if (!machine) return;
+      const [worldX,worldZ] = worldFromScreen(event);
+      state.draggedMachineId = machine.instanceId;
+      state.dragOffsetX = worldX-machine.x;
+      state.dragOffsetZ = worldZ-machine.z;
+      state.dragAction = "machine";
+    } else {
+      state.dragAction = event.shiftKey || event.button === 1 || event.button === 2 ? "pan" : "orbit";
+    }
     state.dragging = true;
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
@@ -652,16 +1092,37 @@
   });
   canvas.addEventListener("pointermove", (event) => {
     if (!state.dragging) return;
-    state.yaw += (event.clientX - state.pointerX) * .006;
-    state.pitch = clamp(state.pitch + (event.clientY - state.pointerY) * .004, .16, 1.43);
+    const deltaX = event.clientX-state.pointerX;
+    const deltaY = event.clientY-state.pointerY;
+    if (state.dragAction === "machine") {
+      const machine = selectedMachine();
+      if (machine) {
+        const [worldX,worldZ] = worldFromScreen(event);
+        machine.x = Math.round(clamp(worldX-state.dragOffsetX,bounds[0],bounds[2]-machine.w)*2)/2;
+        machine.z = Math.round(clamp(worldZ-state.dragOffsetZ,bounds[1],bounds[3]-machine.d)*2)/2;
+        updateEditorPanel();
+      }
+    } else if (state.dragAction === "pan") {
+      panCamera(deltaX,deltaY);
+    } else {
+      state.yaw -= deltaX * .006;
+      state.pitch = clamp(state.pitch - deltaY * .004, .16, 1.43);
+    }
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
   });
-  canvas.addEventListener("pointerup", () => { state.dragging = false; });
-  canvas.addEventListener("pointercancel", () => { state.dragging = false; });
+  function finishPointer() {
+    if (state.draggedMachineId) persistLayout();
+    state.dragging = false;
+    state.draggedMachineId = null;
+    state.dragAction = "orbit";
+  }
+  canvas.addEventListener("pointerup",finishPointer);
+  canvas.addEventListener("pointercancel",finishPointer);
+  canvas.addEventListener("contextmenu",(event) => event.preventDefault());
   canvas.addEventListener("wheel", (event) => {
     event.preventDefault();
-    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? .92 : 1.08), .52, 2.5);
+    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 1.08 : .92), .52, 2.5);
   }, { passive: false });
 
   document.getElementById("next-stage")?.addEventListener("click", () => setStage(state.stage + 1));
@@ -670,6 +1131,27 @@
     item.querySelector("button")?.addEventListener("click", () => setStage(index));
   });
   window.addEventListener("keydown", (event) => {
+    const typing = ["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName);
+    if (state.editing && !typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+      event.preventDefault();
+      copySelectedMachine();
+      return;
+    }
+    if (state.editing && !typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+      event.preventDefault();
+      pasteMachine();
+      return;
+    }
+    if (state.editing && !typing && (event.key === "Delete" || event.key === "Backspace")) {
+      event.preventDefault();
+      deleteSelectedMachine();
+      return;
+    }
+    if (state.editing && event.key === "Escape") {
+      setEditing(false);
+      return;
+    }
+    if (typing) return;
     if (event.key === "ArrowRight") setStage(state.stage + 1);
     if (event.key === "ArrowLeft") setStage(state.stage - 1);
   });

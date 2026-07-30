@@ -15,10 +15,10 @@ export default function Home() {
         <div className="model-frame">
           <canvas id="plant-canvas" aria-label="Interactive 3D model of the glass plant" />
           <div className="model-badge">DXF-grounded footprint</div>
-          <div className="view-help">Drag to orbit · Scroll to zoom</div>
+          <div className="view-help">Drag to orbit · Shift-drag to pan · Scroll to zoom</div>
         </div>
         <aside className="stage-panel">
-          <div className="stage-count"><span id="stage-number">01</span> / <span id="stage-total">19</span></div>
+          <div className="stage-count"><span id="stage-number">01</span> / <span id="stage-total">18</span></div>
           <p className="stage-kicker">Construction stage</p>
           <h2 id="stage-title">Empty shell</h2>
           <p id="stage-description">

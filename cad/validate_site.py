@@ -63,7 +63,6 @@ def main() -> None:
         "Denver Surface #2 set",
         "Tempering furnace set",
         "Fuze Cube set",
-        "Chop saw set",
         "First raw glass",
         "Plant offices built",
         "First production",
@@ -74,11 +73,11 @@ def main() -> None:
 
     assert machine_data["source"] == data["source"]
     assert machine_data["units"] == "feet"
-    assert len(machine_data["machines"]) == 9
+    assert len(machine_data["machines"]) == 8
     assert sum(
         machine["placement_status"] == "dwg_named"
         for machine in machine_data["machines"]
-    ) >= 5
+    ) >= 4
     assert all(machine["crane"]["capacity"] for machine in machine_data["machines"])
     assert any(
         machine["crane"]["capacity"] == "5 ton"
@@ -86,7 +85,31 @@ def main() -> None:
     )
     assert all(machine["dwg_anchor_inches"] for machine in machine_data["machines"])
     reveals = [machine["reveal"] for machine in machine_data["machines"]]
-    assert reveals == list(range(6, 15))
+    assert reveals == list(range(6, 14))
+    assert "Chop saw" not in machine_script
+
+    fixtures = machine_data["fixtures"]
+    assert sum(fixture["type"] == "aFrame" for fixture in fixtures) == 3
+    assert any(fixture["type"] == "craneMachine" for fixture in fixtures)
+
+    required_editor_features = [
+        "monroe-glass-plant-layout-v3",
+        "createEditorPanel",
+        "copySelectedMachine",
+        "pasteMachine",
+        "deleteSelectedMachine",
+        "machineTemplate",
+        "hiddenColumns",
+        "wallSections",
+        "worldFromScreen",
+        "panCamera",
+        'data-editor-tool="pillars"',
+        '<option value="aFrame">',
+        '<option value="craneMachine">',
+    ]
+    for feature in required_editor_features:
+        assert feature in script, feature
+    assert "h:22,color:colors.yellow" in script
 
     for asset in ("plant-data.js", "machine-data.js", "plant-app.js"):
         assert f'"/{asset}"' in page
@@ -98,8 +121,10 @@ def main() -> None:
     print(f"CAD_COLUMNS={len(data['columns'])}")
     print(f"STAGES={len(required_phases)}")
     print(f"MACHINES={len(machine_data['machines'])}")
+    print(f"EDITABLE_FIXTURES={len(fixtures)}")
     print("MACHINE_REVEALS=ONE_AT_A_TIME")
     print("CRANES=ALL_MACHINES")
+    print("LAYOUT_EDITOR=PERSISTENT")
     print(f"PROJECT_ID={hosting['project_id']}")
 
 

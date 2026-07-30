@@ -76,6 +76,7 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
 
 #plant-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 #plant-canvas:active { cursor: grabbing; }
+.model-frame.editing #plant-canvas { cursor: crosshair; }
 
 .model-badge, .view-help {
   position: absolute;
@@ -124,6 +125,101 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
   background: rgba(255,255,255,.14);
   color: white;
 }
+
+.layout-editor {
+  position: absolute;
+  z-index: 4;
+  top: 18px;
+  right: 18px;
+  width: min(340px, calc(100% - 36px));
+  max-height: calc(100% - 36px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 5px;
+  background: rgba(248,247,242,.96);
+  color: var(--ink);
+  box-shadow: 0 14px 40px rgba(23,32,38,.24);
+  backdrop-filter: blur(12px);
+}
+
+.layout-editor[hidden] { display: none; }
+.editor-heading { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.editor-heading p, .editor-add > p {
+  margin: 0 0 5px;
+  color: var(--teal);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.editor-heading h3 { margin: 0; font-size: 18px; line-height: 1.15; }
+.editor-heading > span { color: #78817d; font-size: 9px; white-space: nowrap; }
+
+.editor-tools, .editor-actions, .editor-footer {
+  display: flex;
+  gap: 6px;
+  margin-top: 13px;
+}
+
+.layout-editor button, .layout-editor select, .layout-editor input {
+  min-height: 34px;
+  border: 1px solid #bfc3bf;
+  border-radius: 3px;
+  background: white;
+  color: var(--ink);
+  font: 600 11px/1.2 "Segoe UI", sans-serif;
+}
+
+.layout-editor button { padding: 7px 9px; cursor: pointer; }
+.layout-editor button:hover, .layout-editor button.active { border-color: var(--teal); color: var(--teal); }
+.layout-editor button:disabled { opacity: .38; cursor: default; }
+.layout-editor button.primary { border-color: var(--orange-dark); background: var(--orange); color: white; }
+.editor-tools button, .editor-actions button { flex: 1; }
+
+.editor-properties {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.editor-properties label {
+  color: #6b7470;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.editor-properties label.wide { grid-column: 1 / -1; }
+.editor-properties input { width: 100%; margin-top: 4px; padding: 7px; }
+
+.editor-add {
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid #d4d6d1;
+}
+
+.editor-add > input { width: 100%; padding: 8px; }
+.editor-add > div { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 6px; }
+.editor-add select { min-width: 0; padding: 7px; }
+
+.wall-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 5px 10px;
+  margin: 14px 0 0;
+  padding: 10px;
+  border: 1px solid #d1d3ce;
+}
+
+.wall-controls legend { padding: 0 5px; color: #66706c; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.wall-controls label { display: flex; align-items: center; gap: 5px; color: #59635f; font-size: 10px; text-transform: capitalize; }
+.wall-controls input { min-height: auto; }
+.editor-footer { flex-wrap: wrap; }
+.editor-footer button { flex: 1 1 30%; }
+.model-frame.editing .view-help { top: auto; right: 18px; bottom: 18px; }
 
 .play-button {
   position: absolute;
@@ -227,8 +323,10 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
   .source-note { text-align: left; }
   .experience { grid-template-columns: 1fr; }
   .model-frame { min-height: 54vh; }
+  .model-frame.editing { min-height: 760px; }
   .model-controls { max-width: calc(100% - 36px); overflow-x: auto; }
   .view-help, .model-legend { display: none; }
+  .layout-editor { top: 68px; right: 12px; width: calc(100% - 24px); max-height: calc(100% - 150px); }
   .play-button { bottom: 68px; }
   .stage-panel { min-height: 300px; border-left: 0; border-top: 1px solid #adb0ac; }
   .stage-kicker { margin-top: 36px; }

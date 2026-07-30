@@ -11,7 +11,7 @@ facility layouts are outside this model.
 
 ## Experience
 
-The page moves through 19 stages. After the shell, utility, paint, and crane
+The page moves through 18 stages. After the shell, utility, paint, and crane
 runway work, the equipment is installed one machine at a time:
 
 1. Barefoot cutting tables
@@ -22,12 +22,28 @@ runway work, the equipment is installed one machine at a time:
 6. Denver Surface #2
 7. Tempering furnace oven
 8. Fuze Cube
-9. Chop saw
 
 Raw glass, plant-floor offices, first production, and the current plant follow
 the equipment sequence. Every equipment entry has a crane bridge; the processing
 machines use the blue/silver 1,000-lb GORBEL system visible in the photos, while
 the tempering furnace uses the yellow 5-ton bridge.
+
+## Layout editor
+
+Choose **Edit layout** in the viewer to switch to a top-down editing workspace.
+The editor supports:
+
+- Dragging machines, carts, and crane equipment to new positions.
+- Editing names, X/Z coordinates, width, depth, and height.
+- Copy, paste, remove, and keyboard shortcuts (`Ctrl+C`, `Ctrl+V`, `Delete`).
+- Adding generic machines, A-frame glass carts, and crane machines.
+- Removing or restoring individual pillars.
+- Turning individual exterior wall sections on or off.
+- Restoring the original layout.
+
+Layout changes are automatically stored in the browser. Orbit direction and
+scroll zoom follow the revised controls; hold Shift while dragging to pan the
+normal 3D view.
 
 The 3D viewer supports orbit, zoom, overview and floor-plan cameras, CAD and
 label toggles, direct timeline selection, Previous/Next controls, keyboard arrow

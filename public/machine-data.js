@@ -229,33 +229,72 @@ window.PLANT_MACHINE_DATA = {
         "capacity": "1000 lb",
         "height": 20
       }
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "a-frame-cart-1",
+      "name": "A-frame glass cart 1",
+      "short": "A-frame 1",
+      "type": "aFrame",
+      "reveal": 14,
+      "x": 32,
+      "z": -190,
+      "w": 12,
+      "d": 6,
+      "h": 9,
+      "color": "#d85f34",
+      "placement_status": "photo_correlated",
+      "evidence": "A-frame glass carts are visible in the completed plant and raw-glass handling photos.",
+      "crane": null
     },
     {
-      "id": "chop-saw",
-      "name": "Chop saw",
-      "short": "Chop saw",
-      "type": "saw",
+      "id": "a-frame-cart-2",
+      "name": "A-frame glass cart 2",
+      "short": "A-frame 2",
+      "type": "aFrame",
       "reveal": 14,
-      "x": 228.0,
-      "z": -163.0,
-      "w": 9.0,
-      "d": 7.0,
-      "h": 4,
-      "color": "#567985",
-      "placement_status": "dwg_named",
-      "dwg_labels": [
-        "CHOP SAW"
-      ],
-      "dwg_anchor_inches": [
-        2796.4,
-        -1907.0
-      ],
-      "evidence": "CHOP SAW is directly named beside the wire-shelving area in the DWG.",
-      "crane": {
-        "system": "GORBEL bridge",
-        "capacity": "1000 lb",
-        "height": 18
-      }
+      "x": 82,
+      "z": -190,
+      "w": 12,
+      "d": 6,
+      "h": 9,
+      "color": "#d85f34",
+      "placement_status": "photo_correlated",
+      "evidence": "A-frame glass carts are visible in the completed plant and raw-glass handling photos.",
+      "crane": null
+    },
+    {
+      "id": "a-frame-cart-3",
+      "name": "A-frame glass cart 3",
+      "short": "A-frame 3",
+      "type": "aFrame",
+      "reveal": 14,
+      "x": 132,
+      "z": -190,
+      "w": 12,
+      "d": 6,
+      "h": 9,
+      "color": "#d85f34",
+      "placement_status": "photo_correlated",
+      "evidence": "A-frame glass carts are visible in the completed plant and raw-glass handling photos.",
+      "crane": null
+    },
+    {
+      "id": "crane-machine-1",
+      "name": "Freestanding crane machine",
+      "short": "Crane machine",
+      "type": "craneMachine",
+      "reveal": 5,
+      "x": 188,
+      "z": -145,
+      "w": 18,
+      "d": 14,
+      "h": 18,
+      "color": "#e2b32d",
+      "placement_status": "user_added",
+      "evidence": "Editable crane-machine placement added to the interactive plant layout.",
+      "crane": null
     }
   ]
 };

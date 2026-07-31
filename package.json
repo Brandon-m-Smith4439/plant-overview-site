@@ -1,6 +1,6 @@
 {
-  "name": "site-creator-vinext-starter",
-  "version": "0.1.0",
+  "name": "monroe-glass-plant-evolution",
+  "version": "0.7.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -10,6 +10,8 @@
     "build": "vinext build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "validate:js": "node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
+    "export:machines": "python cad/export_machine_registry.py",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

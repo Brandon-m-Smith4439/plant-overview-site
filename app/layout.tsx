@@ -3,10 +3,13 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Monroe Glass Plant Evolution",
-  description: "Explore the Monroe glass plant as it develops from an empty shell to first production.",
+  description:
+    "Explore and edit the Monroe glass plant as it develops from an empty shell to current production.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>{children}</body>

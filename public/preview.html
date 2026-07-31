@@ -3,18 +3,49 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Monroe Glass Plant Evolution</title>
+  <meta name="description" content="Editable 3D construction timeline for the Monroe glass plant.">
+  <title>Monroe Glass Plant Evolution · v0.7.0</title>
   <link rel="stylesheet" href="../app/globals.css">
 </head>
 <body>
   <main class="site-shell">
-    <header class="masthead"><div><p class="eyebrow"><span></span> Monroe, NC · Glass Plant</p><h1>Plant evolution explorer</h1></div><p class="source-note">Grounded in <strong>Monroe Archs w Updates 1-23-25 (002).dwg</strong></p></header>
+    <header class="masthead">
+      <div>
+        <p class="eyebrow"><span></span> Monroe, NC · Glass Plant</p>
+        <h1>Plant evolution explorer</h1>
+      </div>
+      <div class="masthead-actions">
+        <nav class="site-nav" aria-label="Model tools"><a class="active" href="preview.html">Plant layout</a><a href="machine-studio.html">Machine Design Studio</a></nav>
+        <p class="source-note">Model Studio <strong>v0.7.0</strong> · Grounded in <strong>Monroe Archs w Updates 1-23-25 (002).dwg</strong></p>
+      </div>
+    </header>
+
     <section id="plant-app" class="experience" aria-label="Interactive glass plant model">
-      <div class="model-frame"><canvas id="plant-canvas"></canvas><div class="model-badge">DXF-grounded footprint</div><div class="view-help">Drag to orbit · Shift-drag to pan · Scroll to zoom</div></div>
-      <aside class="stage-panel"><div class="stage-count"><span id="stage-number">01</span> / <span id="stage-total">18</span></div><p class="stage-kicker">Construction stage</p><h2 id="stage-title">Empty shell</h2><p id="stage-description">The production floor begins as an open industrial shell, with the real glass-plant footprint and column grid taken from the facility drawing.</p><div class="stage-actions"><button id="previous-stage" type="button" disabled>Previous</button><button id="next-stage" class="primary" type="button">Next stage <span>→</span></button></div></aside>
+      <div class="model-frame">
+        <canvas id="plant-canvas" aria-label="Interactive 3D model of the Monroe glass plant"></canvas>
+        <div class="model-badge">Editable · DXF-grounded footprint</div>
+        <div class="view-help">Drag to orbit · Shift-drag to pan · Scroll to zoom</div>
+      </div>
+      <aside class="stage-panel" aria-live="polite">
+        <div class="stage-count"><span id="stage-number">01</span> / <span id="stage-total">18</span></div>
+        <p class="stage-kicker">Construction stage</p>
+        <h2 id="stage-title">Empty shell</h2>
+        <p id="stage-description">The production floor begins as an open industrial shell, with the real glass-plant footprint and column grid taken from the facility drawing.</p>
+        <div class="stage-actions">
+          <button id="previous-stage" type="button" disabled>Previous</button>
+          <button id="next-stage" class="primary" type="button">Next stage <span>→</span></button>
+        </div>
+      </aside>
     </section>
-    <nav class="timeline"><div class="timeline-progress"><span id="timeline-fill"></span></div><ol id="timeline-stages"><li class="active"><button>Empty shell</button></li></ol></nav>
+
+    <nav class="timeline" aria-label="Plant construction timeline">
+      <div class="timeline-progress"><span id="timeline-fill"></span></div>
+      <ol id="timeline-stages"><li class="active"><button type="button">Empty shell</button></li></ol>
+    </nav>
   </main>
-  <script src="plant-data.js"></script><script src="machine-data.js"></script><script src="plant-app.js"></script>
+  <script src="plant-data.js"></script>
+  <script src="machine-data.js"></script>
+  <script src="machine-designs.js"></script>
+  <script src="plant-app.js"></script>
 </body>
 </html>

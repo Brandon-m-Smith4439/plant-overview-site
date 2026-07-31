@@ -42,7 +42,7 @@ window.PLANT_MACHINE_DATA = {
       "z": -40.0,
       "w": 27.0,
       "d": 18.2,
-      "h": 5,
+      "h": 8,
       "color": "#347f9f",
       "placement_status": "dwg_named",
       "dwg_labels": [
@@ -60,7 +60,8 @@ window.PLANT_MACHINE_DATA = {
         "system": "GORBEL bridge",
         "capacity": "1000 lb",
         "height": 19
-      }
+      },
+      "reference_profile": "photo_refined_gantry_waterjet"
     },
     {
       "id": "waterjet-filtration",
@@ -94,15 +95,15 @@ window.PLANT_MACHINE_DATA = {
     },
     {
       "id": "kodiak-10-45",
-      "name": "Kodiak 10-45",
-      "short": "Kodiak",
+      "name": "KODIAK 10-45 polisher",
+      "short": "Polisher",
       "type": "kodiak",
       "reveal": 9,
       "x": 59.0,
       "z": -114.0,
       "w": 25.0,
       "d": 9.0,
-      "h": 7,
+      "h": 8,
       "color": "#d4d8d5",
       "placement_status": "photo_correlated",
       "dwg_labels": [
@@ -117,7 +118,8 @@ window.PLANT_MACHINE_DATA = {
         "system": "GORBEL bridge",
         "capacity": "1000 lb",
         "height": 20
-      }
+      },
+      "reference_profile": "hhh_kodiak_10_45"
     },
     {
       "id": "denver-surface-1",
@@ -145,7 +147,8 @@ window.PLANT_MACHINE_DATA = {
         "system": "GORBEL bridge",
         "capacity": "1000 lb",
         "height": 21
-      }
+      },
+      "reference_profile": "denver_surface_vertical_cnc"
     },
     {
       "id": "denver-surface-2",
@@ -173,7 +176,8 @@ window.PLANT_MACHINE_DATA = {
         "system": "GORBEL bridge",
         "capacity": "1000 lb",
         "height": 21
-      }
+      },
+      "reference_profile": "denver_surface_vertical_cnc"
     },
     {
       "id": "tempering-furnace",
@@ -201,20 +205,21 @@ window.PLANT_MACHINE_DATA = {
         "system": "Engineered Systems bridge",
         "capacity": "5 ton",
         "height": 23
-      }
+      },
+      "reference_profile": "photo_refined_tempering_line"
     },
     {
       "id": "fuze-cube",
-      "name": "Fuze Cube",
-      "short": "Fuze Cube",
+      "name": "Diamon-Fusion FuseCube",
+      "short": "FuseCube",
       "type": "cube",
       "reveal": 13,
       "x": 164.0,
       "z": -108.0,
       "w": 16.0,
       "d": 14.0,
-      "h": 10,
-      "color": "#486f79",
+      "h": 12,
+      "color": "#285b91",
       "placement_status": "dwg_named",
       "dwg_labels": [
         "Fuze Cube"
@@ -228,7 +233,8 @@ window.PLANT_MACHINE_DATA = {
         "system": "GORBEL bridge",
         "capacity": "1000 lb",
         "height": 20
-      }
+      },
+      "reference_profile": "dfi_fusecube"
     }
   ],
   "fixtures": [

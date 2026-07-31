@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Build editable component-based machine models for the Monroe glass plant.">
+  <title>Machine Design Studio · v0.7.0</title>
+  <link rel="stylesheet" href="../app/globals.css">
+</head>
+<body>
+  <main class="machine-studio-shell">
+    <header class="studio-topbar">
+      <div class="studio-brand">
+        <a class="studio-back-link" href="preview.html" aria-label="Return to plant layout">←</a>
+        <div>
+          <p>Monroe Glass Plant</p>
+          <h1>Machine Design Studio</h1>
+        </div>
+      </div>
+      <div class="studio-top-actions" role="toolbar" aria-label="Design commands">
+        <span id="save-state" class="studio-save-state">Auto-saved</span>
+        <button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+        <button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+        <span class="studio-toolbar-divider"></span>
+        <button id="duplicate-component" type="button" title="Duplicate selected part (Ctrl+D)">Duplicate</button>
+        <button id="delete-component" type="button" class="danger-subtle" title="Delete selected part">Delete</button>
+        <a href="preview.html">Plant layout</a>
+      </div>
+    </header>
+
+    <section class="machine-studio-workspace" aria-label="Machine design editor">
+      <aside class="studio-browser-panel">
+        <div class="studio-tabs" role="tablist" aria-label="Design browser">
+          <button type="button" role="tab" data-browser-tab="designs" class="active" aria-selected="true">Designs</button>
+          <button type="button" role="tab" data-browser-tab="parts" aria-selected="false">Parts</button>
+        </div>
+
+        <section data-browser-panel="designs">
+          <div class="studio-panel-heading"><p>Design library</p><strong id="design-count">0 designs</strong></div>
+          <label class="studio-field studio-search-field">Search designs<input id="design-search" type="search" placeholder="Search designs"></label>
+          <div id="design-list" class="design-list" aria-label="Available machine designs"></div>
+          <div class="studio-button-grid">
+            <button id="new-design" type="button">New</button>
+            <button id="duplicate-design" type="button">Duplicate</button>
+            <button id="reset-design" type="button">Reset preset</button>
+            <button id="delete-design" type="button">Delete custom</button>
+          </div>
+          <div class="studio-button-grid compact">
+            <button id="export-design" type="button">Export JSON</button>
+            <button id="import-design" type="button">Import JSON</button>
+            <input id="import-design-file" type="file" accept="application/json,.json" hidden>
+          </div>
+          <fieldset class="assignment-panel">
+            <legend>Use in plant layout</legend>
+            <label class="studio-field">Plant object<select id="machine-assignment"><option value="">Choose a machine…</option></select></label>
+            <div class="assignment-actions">
+              <button id="apply-machine" type="button" class="primary">Apply to object</button>
+              <button id="apply-type" type="button">Apply to matching type</button>
+              <button id="clear-machine-design" type="button">Use built-in model</button>
+            </div>
+            <p id="assignment-status" class="studio-help">Assignments save directly to the plant layout stored in this browser.</p>
+          </fieldset>
+        </section>
+
+        <section data-browser-panel="parts" hidden>
+          <div class="studio-panel-heading"><p>Object tree</p><strong id="component-count">0 parts</strong></div>
+          <label class="studio-field studio-search-field">Search parts<input id="component-search" type="search" placeholder="Search components"></label>
+          <div id="component-list" class="component-list" aria-label="Machine design components"></div>
+          <div class="component-add-panel">
+            <p>Add primitive</p>
+            <div>
+              <button type="button" data-add-component="box"><span>▣</span>Box</button>
+              <button type="button" data-add-component="glassPanel"><span>◇</span>Glass</button>
+              <button type="button" data-add-component="beam"><span>╱</span>Beam</button>
+              <button type="button" data-add-component="rollerBed"><span>≡</span>Rollers</button>
+              <button type="button" data-add-component="wheel"><span>◉</span>Wheel</button>
+            </div>
+          </div>
+          <div class="parts-order-actions">
+            <button id="move-component-up" type="button">Move up</button>
+            <button id="move-component-down" type="button">Move down</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="design-viewport-panel">
+        <div class="viewport-commandbar">
+          <div role="group" aria-label="Camera views" class="view-buttons">
+            <button type="button" data-design-view="iso" class="active" title="Isometric view (0)">Iso</button>
+            <button type="button" data-design-view="front" title="Front view (1)">Front</button>
+            <button type="button" data-design-view="side" title="Right view (2)">Right</button>
+            <button type="button" data-design-view="top" title="Top view (3)">Top</button>
+            <button type="button" data-design-view="fit" title="Fit model (F)">Fit</button>
+          </div>
+          <div class="snap-controls">
+            <label class="studio-switch"><input id="snap-enabled" type="checkbox" checked><span>Snap</span></label>
+            <label>Step<select id="snap-step"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5" selected>0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+          </div>
+        </div>
+
+        <div class="viewport-toolrail" role="toolbar" aria-label="Transform tools">
+          <button type="button" data-design-mode="select" class="active" title="Select (V)"><span>↖</span><small>Select</small></button>
+          <button type="button" data-design-mode="move" title="Move (M)"><span>✣</span><small>Move</small></button>
+          <button type="button" data-design-mode="rotate" title="Rotate (R)"><span>⟳</span><small>Rotate</small></button>
+          <button type="button" data-design-mode="scale" title="Scale (S)"><span>⤢</span><small>Scale</small></button>
+          <button type="button" data-design-mode="pan" title="Pan view (H)"><span>✋</span><small>Pan</small></button>
+        </div>
+
+        <canvas id="machine-design-canvas" aria-label="Interactive 3D preview of the selected machine design"></canvas>
+
+        <div class="orientation-cube" aria-label="Quick camera orientation">
+          <button type="button" data-design-view="top">TOP</button>
+          <div><button type="button" data-design-view="front">FRONT</button><button type="button" data-design-view="side">RIGHT</button></div>
+        </div>
+        <div class="viewport-statusbar">
+          <span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span>
+          <span>Right-drag orbit · Middle-drag pan · Wheel zoom · Double-click focus</span>
+        </div>
+        <div id="design-toast" class="design-toast" role="status" aria-live="polite"></div>
+      </section>
+
+      <aside class="studio-inspector-panel">
+        <div class="studio-tabs inspector-tabs" role="tablist" aria-label="Inspector">
+          <button type="button" role="tab" data-inspector-tab="object" class="active" aria-selected="true">Object</button>
+          <button type="button" role="tab" data-inspector-tab="design" aria-selected="false">Design</button>
+        </div>
+
+        <section data-inspector-panel="object">
+          <div class="studio-panel-heading"><p>Selected component</p><span id="selected-component-type">Nothing selected</span></div>
+          <div id="empty-component-state" class="inspector-empty">
+            <strong>Select a part in the viewport or Parts list.</strong>
+            <p>Use Move, Rotate, or Scale after selecting a component. Transform controls always stay above the model. Colored handles match the X, Y, and Z axes.</p>
+          </div>
+          <section id="component-properties" class="component-properties" hidden>
+            <label class="studio-field">Component name<input data-component-field="name" type="text"></label>
+            <div class="inspector-row two">
+              <label class="studio-field">Type<select data-component-field="type"><option value="box">Box</option><option value="glassPanel">Glass panel</option><option value="beam">Beam</option><option value="rollerBed">Roller bed</option><option value="wheel">Wheel</option></select></label>
+              <label class="studio-field">Color<input data-component-field="color" type="color"></label>
+            </div>
+            <div class="visibility-row">
+              <label class="studio-switch"><input data-component-check="visible" type="checkbox"><span>Visible</span></label>
+              <label class="studio-field compact-field">Opacity<input data-component-field="opacity" type="number" min="0.05" max="1" step="0.05"></label>
+            </div>
+
+            <fieldset class="transform-section">
+              <legend>Position</legend>
+              <div class="axis-fields">
+                <label class="axis-x-field">X<input data-component-field="x" type="number" step="0.1"></label>
+                <label class="axis-y-field">Y<input data-component-field="y" type="number" step="0.1"></label>
+                <label class="axis-z-field">Z<input data-component-field="z" type="number" step="0.1"></label>
+              </div>
+              <button id="center-component" type="button" class="full-width-button">Center on design base</button>
+            </fieldset>
+
+            <fieldset class="transform-section">
+              <legend>Rotation</legend>
+              <div class="axis-fields rotation-axis-fields">
+                <label class="axis-x-field">X<input data-component-field="rotationX" type="number" step="1"></label>
+                <label class="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1"></label>
+                <label class="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1"></label>
+              </div>
+              <div class="rotation-row rotation-actions">
+                <label class="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis"><option value="x">X axis</option><option value="y" selected>Y axis</option><option value="z">Z axis</option></select></label>
+                <button id="rotate-negative" type="button">−90°</button>
+                <button id="rotate-positive" type="button">+90°</button>
+                <button id="reset-rotation" type="button">Reset all</button>
+              </div>
+              <p class="transform-help">Use the red, green, and blue rings in Rotate mode for X, Y, and Z rotation.</p>
+            </fieldset>
+
+            <fieldset class="transform-section">
+              <legend>Size</legend>
+              <div class="axis-fields size-fields">
+                <label data-for-component="box glassPanel rollerBed wheel" class="axis-x-field">Width<input data-component-field="w" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="box glassPanel wheel" class="axis-y-field">Height<input data-component-field="h" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="box glassPanel rollerBed wheel" class="axis-z-field">Depth<input data-component-field="d" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="beam rollerBed">Thickness<input data-component-field="thickness" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="rollerBed">Roller count<input data-component-field="count" type="number" min="2" step="1"></label>
+              </div>
+              <p class="transform-help scale-help"><strong>Scale tool:</strong> drag a colored square to resize only that local axis. Wheels now have independent width, height, and axle-depth dimensions. Drag the orange center handle to scale every axis together.</p>
+            </fieldset>
+
+            <fieldset class="transform-section" data-for-component="beam">
+              <legend>Beam endpoint</legend>
+              <div class="axis-fields">
+                <label class="axis-x-field">End X<input data-component-field="x2" type="number" step="0.1"></label>
+                <label class="axis-y-field">End Y<input data-component-field="y2" type="number" step="0.1"></label>
+                <label class="axis-z-field">End Z<input data-component-field="z2" type="number" step="0.1"></label>
+              </div>
+            </fieldset>
+          </section>
+        </section>
+
+        <section data-inspector-panel="design" hidden>
+          <div class="studio-panel-heading"><p>Design properties</p><span>Reusable preset</span></div>
+          <div class="design-properties-grid">
+            <label class="studio-field wide">Design name<input id="design-name" type="text"></label>
+            <label class="studio-field wide">Machine type<input id="design-machine-type" type="text"></label>
+            <fieldset class="transform-section wide">
+              <legend>Design envelope</legend>
+              <div class="axis-fields size-fields">
+                <label class="axis-x-field">Width<input id="design-base-w" type="number" min="0.5" step="0.5"></label>
+                <label class="axis-z-field">Depth<input id="design-base-d" type="number" min="0.5" step="0.5"></label>
+                <label class="axis-y-field">Height<input id="design-base-h" type="number" min="0.5" step="0.5"></label>
+              </div>
+              <button id="fit-envelope" type="button" class="full-width-button">Fit envelope around parts</button>
+            </fieldset>
+            <label class="studio-field wide">Description<textarea id="design-description" rows="4"></textarea></label>
+          </div>
+        </section>
+      </aside>
+    </section>
+
+    <script src="machine-designs.js"></script>
+    <script src="machine-design-studio.js"></script>
+  </main>
+</body>
+</html>

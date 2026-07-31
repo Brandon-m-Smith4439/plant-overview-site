@@ -5,7 +5,7 @@
   if (!canvas || !data || !equipmentData) return;
 
   const ctx = canvas.getContext("2d");
-  const stages = [
+  const defaultStages = [
     {
       title: "Empty shell",
       short: "Empty shell",
@@ -134,46 +134,271 @@
     },
   ];
 
-  const bounds = data.bounds;
-  const center = [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2];
-  const STORAGE_KEY = "monroe-glass-plant-layout-v3";
-  const wallSections = [
-    { id: "west", x: bounds[0], z: bounds[1], w: 3, d: bounds[3]-bounds[1], h: 24 },
-    { id: "east", x: bounds[2]-3, z: bounds[1], w: 3, d: bounds[3]-bounds[1], h: 24 },
-    { id: "south", x: bounds[0], z: bounds[1], w: bounds[2]-bounds[0], d: 3, h: 24 },
-    { id: "north-west", x: bounds[0], z: bounds[3]-3, w: 104, d: 3, h: 24 },
-    { id: "north-east", x: 174, z: bounds[3]-3, w: bounds[2]-174, d: 3, h: 24 },
-  ];
-  const defaultWalls = Object.fromEntries(wallSections.map((wall) => [wall.id,true]));
+  const cadBounds = data.bounds;
+  const defaultFloor = {
+    centerX: (cadBounds[0] + cadBounds[2]) / 2,
+    centerZ: (cadBounds[1] + cadBounds[3]) / 2,
+    width: cadBounds[2] - cadBounds[0],
+    length: cadBounds[3] - cadBounds[1],
+  };
+  const STORAGE_KEY = "monroe-glass-plant-layout-v6";
+  const LEGACY_STORAGE_KEY = "monroe-glass-plant-layout-v5";
+  const OLDER_STORAGE_KEY = "monroe-glass-plant-layout-v4";
+  const OLDEST_STORAGE_KEY = "monroe-glass-plant-layout-v3";
+  const BACKUP_STORAGE_KEY = "monroe-glass-plant-layout-v6-backup";
+  const MIGRATION_BACKUP_KEY = "monroe-glass-plant-layout-v5-before-v0.4";
+  const DESIGN_STORAGE_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
+  const APP_VERSION = "0.7.0";
+  const WALL_IDS = ["west", "east", "south", "north-west", "north-east"];
+  const defaultWalls = Object.fromEntries(WALL_IDS.map((id) => [id, true]));
+  const defaultDesignLibrary = window.PLANT_MACHINE_DESIGNS || {};
+
+  function normalizeFloor(value) {
+    return {
+      centerX: Number.isFinite(Number(value?.centerX)) ? Number(value.centerX) : defaultFloor.centerX,
+      centerZ: Number.isFinite(Number(value?.centerZ)) ? Number(value.centerZ) : defaultFloor.centerZ,
+      width: Math.max(40, Number(value?.width) || defaultFloor.width),
+      length: Math.max(40, Number(value?.length) || defaultFloor.length),
+    };
+  }
+
+  function loadDesignLibrary() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DESIGN_STORAGE_KEY) || "null");
+      const overrides = saved?.designs && typeof saved.designs === "object" ? saved.designs : {};
+      return { ...clone(defaultDesignLibrary), ...clone(overrides) };
+    } catch (error) {
+      console.warn("Machine design overrides could not be loaded.", error);
+      return clone(defaultDesignLibrary);
+    }
+  }
+
+  function floorBounds() {
+    return [
+      floor.centerX - floor.width / 2,
+      floor.centerZ - floor.length / 2,
+      floor.centerX + floor.width / 2,
+      floor.centerZ + floor.length / 2,
+    ];
+  }
+
+  function modelCenter() {
+    return [floor.centerX, floor.centerZ];
+  }
+
+  function wallSections() {
+    const bounds = floorBounds();
+    const openingStart = Math.min(bounds[2] - 20, bounds[0] + Math.max(70, floor.width * 0.22));
+    const openingEnd = Math.min(bounds[2], openingStart + Math.max(36, floor.width * 0.14));
+    return [
+      { id: "west", x: bounds[0], z: bounds[1], w: 3, d: floor.length, h: 24 },
+      { id: "east", x: bounds[2] - 3, z: bounds[1], w: 3, d: floor.length, h: 24 },
+      { id: "south", x: bounds[0], z: bounds[1], w: floor.width, d: 3, h: 24 },
+      { id: "north-west", x: bounds[0], z: bounds[3] - 3, w: Math.max(3, openingStart - bounds[0]), d: 3, h: 24 },
+      { id: "north-east", x: openingEnd, z: bounds[3] - 3, w: Math.max(3, bounds[2] - openingEnd), d: 3, h: 24 },
+    ];
+  }
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
   }
 
-  function initialMachines() {
-    return [...equipmentData.machines, ...(equipmentData.fixtures || [])].map((machine,index) => ({
+  function objectCategory(type) {
+    if (["glassRack", "room", "person"].includes(type)) return "support";
+    return "equipment";
+  }
+
+  function defaultDesignForType(type) {
+    if (type === "aFrame") return "aframe-cart-standard";
+    if (type === "aFrameTruck") return "aframe-truck-standard";
+    return "";
+  }
+
+  function normalizeMachine(machine, index = 0) {
+    const normalized = {
       ...clone(machine),
-      instanceId: `${machine.id || "machine"}-${index}`,
+      id: machine.id || uniqueId(machine.type || "object"),
+      instanceId: machine.instanceId || `${machine.id || machine.type || "object"}-${index}`,
+      name: machine.name || "Untitled object",
+      short: machine.short || machine.name || "Object",
+      type: machine.type || "genericBox",
+      x: Number(machine.x) || 0,
+      z: Number(machine.z) || 0,
+      w: Math.max(0.5, Number(machine.w) || 10),
+      d: Math.max(0.5, Number(machine.d) || 10),
+      h: Math.max(0.5, Number(machine.h) || 5),
+      rotation: Number(machine.rotation) || 0,
+      reveal: Number.isFinite(Number(machine.reveal)) ? Number(machine.reveal) : 0,
+      retire: Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99,
+      color: machine.color || "#277d78",
+      visible: machine.visible !== false,
+      locked: machine.locked === true,
+      showLabel: machine.showLabel !== false,
+      category: machine.category || objectCategory(machine.type),
+      designId: machine.designId || defaultDesignForType(machine.type),
+      collisionMode: machine.collisionMode || (["bridgeCrane", "craneMachine", "person"].includes(machine.type) ? "ignore" : "solid"),
+    };
+    if (normalized.crane) {
+      normalized.crane = {
+        system: normalized.crane.system || "GORBEL bridge",
+        capacity: normalized.crane.capacity || "1000 lb",
+        height: Math.max(4, Number(normalized.crane.height) || 20),
+      };
+    }
+    return normalized;
+  }
+
+  function supportObjects() {
+    const racks = Array.from({ length: 6 }, (_, index) => ({
+      id: `raw-glass-rack-${index + 1}`,
+      instanceId: `raw-glass-rack-${index + 1}`,
+      name: `Raw glass rack ${index + 1}`,
+      short: `Rack ${index + 1}`,
+      type: "glassRack",
+      reveal: 14,
+      x: 12 + index * 35,
+      z: -210,
+      w: 23,
+      d: 9,
+      h: 12,
+      color: "#303b40",
+      placement_status: "photo_correlated",
+      evidence: "Editable raw-glass storage rack based on the current plant layout.",
+    }));
+    const rooms = [
+      { id: "plant-office", name: "Plant office", x: -225, z: 8, w: 28, d: 36, h: 12, color: "#d8d2c5" },
+      { id: "quality-office", name: "Quality", x: -195, z: 8, w: 30, d: 36, h: 12, color: "#c9d7d4" },
+      { id: "team-room", name: "Team room", x: -163, z: 8, w: 25, d: 36, h: 12, color: "#d8d2c5" },
+    ].map((room) => ({
+      ...room,
+      instanceId: room.id,
+      short: room.name,
+      type: "room",
+      reveal: 15,
+      placement_status: "photo_correlated",
+      evidence: "Editable plant-floor support space.",
+    }));
+    const people = [[-191,-133],[30,-91],[151,-98],[98,-169],[202,-137]].map(([x,z], index) => ({
+      id: `team-member-${index + 1}`,
+      instanceId: `team-member-${index + 1}`,
+      name: `Team member ${index + 1}`,
+      short: `Person ${index + 1}`,
+      type: "person",
+      reveal: 16,
+      x,
+      z,
+      w: 1.6,
+      d: 1.6,
+      h: 6.5,
+      color: index % 2 ? "#dd6735" : "#1e7b78",
+      placement_status: "illustrative",
+      evidence: "Editable illustrative production team marker.",
+    }));
+    return [...racks, ...rooms, ...people];
+  }
+
+  function normalizeMachines(items) {
+    return (Array.isArray(items) ? items : []).map((item,index) => normalizeMachine(item,index));
+  }
+
+  function mergeSupportObjects(items) {
+    const result = normalizeMachines(items);
+    const ids = new Set(result.map((item) => item.id));
+    supportObjects().forEach((item,index) => {
+      if (!ids.has(item.id)) result.push(normalizeMachine(item,result.length + index));
+    });
+    return result;
+  }
+
+  function initialMachines() {
+    return mergeSupportObjects([
+      ...equipmentData.machines,
+      ...(equipmentData.fixtures || []),
+    ]);
+  }
+
+  function normalizeStages(stageList) {
+    const source = Array.isArray(stageList) && stageList.length ? stageList : defaultStages;
+    return source.map((stage,index) => ({
+      id: stage.id || `stage-${index + 1}`,
+      title: stage.title || `Stage ${index + 1}`,
+      short: stage.short || stage.title || `Stage ${index + 1}`,
+      era: stage.era || "Project phase",
+      dateLabel: stage.dateLabel || "",
+      description: stage.description || "",
+      details: Array.isArray(stage.details) ? stage.details : [],
     }));
   }
 
   function loadLayout() {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (saved?.version === 3 && Array.isArray(saved.machines)) {
+      const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (current?.version === 6 && Array.isArray(current.machines)) {
         return {
-          machines: saved.machines,
-          hiddenColumns: Array.isArray(saved.hiddenColumns) ? saved.hiddenColumns : [],
-          walls: { ...defaultWalls, ...(saved.walls || {}) },
+          machines: normalizeMachines(current.machines),
+          stages: normalizeStages(current.stages),
+          floor: normalizeFloor(current.floor),
+          hiddenColumns: Array.isArray(current.hiddenColumns) ? current.hiddenColumns : [],
+          walls: { ...defaultWalls, ...(current.walls || {}) },
+          playbackSpeed: Number(current.playbackSpeed) || 1,
+        };
+      }
+      const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      const legacy = JSON.parse(legacyRaw || "null");
+      if (legacy?.version === 5 && Array.isArray(legacy.machines)) {
+        if (legacyRaw && !localStorage.getItem(MIGRATION_BACKUP_KEY)) {
+          localStorage.setItem(MIGRATION_BACKUP_KEY, legacyRaw);
+        }
+        return {
+          machines: normalizeMachines(legacy.machines),
+          stages: normalizeStages(legacy.stages),
+          floor: normalizeFloor(legacy.floor),
+          hiddenColumns: Array.isArray(legacy.hiddenColumns) ? legacy.hiddenColumns : [],
+          walls: { ...defaultWalls, ...(legacy.walls || {}) },
+          playbackSpeed: Number(legacy.playbackSpeed) || 1,
+        };
+      }
+      const older = JSON.parse(localStorage.getItem(OLDER_STORAGE_KEY) || "null");
+      if (older?.version === 4 && Array.isArray(older.machines)) {
+        return {
+          machines: normalizeMachines(older.machines),
+          stages: normalizeStages(older.stages),
+          floor: normalizeFloor(older.floor),
+          hiddenColumns: Array.isArray(older.hiddenColumns) ? older.hiddenColumns : [],
+          walls: { ...defaultWalls, ...(older.walls || {}) },
+          playbackSpeed: Number(older.playbackSpeed) || 1,
+        };
+      }
+      const oldest = JSON.parse(localStorage.getItem(OLDEST_STORAGE_KEY) || "null");
+      if (oldest?.version === 3 && Array.isArray(oldest.machines)) {
+        return {
+          machines: mergeSupportObjects(oldest.machines),
+          stages: normalizeStages(defaultStages),
+          floor: normalizeFloor(oldest.floor),
+          hiddenColumns: Array.isArray(oldest.hiddenColumns) ? oldest.hiddenColumns : [],
+          walls: { ...defaultWalls, ...(oldest.walls || {}) },
+          playbackSpeed: 1,
         };
       }
     } catch (error) {
       console.warn("Saved layout could not be loaded.", error);
     }
-    return { machines: initialMachines(), hiddenColumns: [], walls: { ...defaultWalls } };
+    return {
+      machines: initialMachines(),
+      stages: normalizeStages(defaultStages),
+      floor: normalizeFloor(defaultFloor),
+      hiddenColumns: [],
+      walls: { ...defaultWalls },
+      playbackSpeed: 1,
+    };
   }
 
   const savedLayout = loadLayout();
+  let stages = savedLayout.stages;
+  let machines = savedLayout.machines;
+  let floor = savedLayout.floor;
+  let designLibrary = loadDesignLibrary();
+
   const state = {
     yaw: -0.72,
     pitch: 0.62,
@@ -195,6 +420,14 @@
     playAt: 0,
     editing: false,
     editorTool: "machines",
+    editorInteraction: "select",
+    snapSize: 0.5,
+    spacePressed: false,
+    playbackSpeed: savedLayout.playbackSpeed,
+    history: [],
+    future: [],
+    dragSnapshot: null,
+    dragMoved: false,
     selectedMachineId: null,
     clipboard: null,
     hiddenColumns: new Set(savedLayout.hiddenColumns),
@@ -216,16 +449,6 @@
     utility: "#2f7771",
   };
 
-  let machines = savedLayout.machines;
-
-  const glassRacks = Array.from({ length: 6 }, (_, index) => ({
-    x: 12 + index * 35,
-    z: -210,
-    w: 23,
-    d: 9,
-    h: 12,
-  }));
-
   const trenches = [
     [-211, -99, 385, 3],
     [-90, -195, 3, 145],
@@ -233,17 +456,235 @@
     [145, -195, 3, 96],
   ];
 
-  function persistLayout() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      version: 3,
-      machines,
+  function snapshotLayout() {
+    return {
+      machines: clone(machines),
+      stages: clone(stages),
+      floor: clone(floor),
       hiddenColumns: [...state.hiddenColumns],
-      walls: state.walls,
-    }));
+      walls: clone(state.walls),
+      playbackSpeed: state.playbackSpeed,
+    };
+  }
+
+  function pushHistory(snapshot = snapshotLayout()) {
+    state.history.push(snapshot);
+    if (state.history.length > 60) state.history.shift();
+    state.future.length = 0;
+    updateHistoryButtons();
+  }
+
+  function restoreSnapshot(snapshot) {
+    machines = normalizeMachines(snapshot.machines || []);
+    stages = normalizeStages(snapshot.stages);
+    floor = normalizeFloor(snapshot.floor);
+    state.hiddenColumns = new Set(snapshot.hiddenColumns || []);
+    state.walls = { ...defaultWalls, ...(snapshot.walls || {}) };
+    state.playbackSpeed = Number(snapshot.playbackSpeed) || 1;
+    state.stage = clamp(state.stage, 0, stages.length - 1);
+    state.stageFloat = state.stage;
+    state.selectedMachineId = machines.some((item) => item.instanceId === state.selectedMachineId)
+      ? state.selectedMachineId
+      : null;
+    buildTimeline();
+    setStage(state.stage);
+    updateEditorPanel();
+    persistLayout();
+  }
+
+  function undoLayout() {
+    const snapshot = state.history.pop();
+    if (!snapshot) return;
+    state.future.push(snapshotLayout());
+    restoreSnapshot(snapshot);
+    showToast("Undid the last layout change.");
+    updateHistoryButtons();
+  }
+
+  function redoLayout() {
+    const snapshot = state.future.pop();
+    if (!snapshot) return;
+    state.history.push(snapshotLayout());
+    restoreSnapshot(snapshot);
+    showToast("Restored the layout change.");
+    updateHistoryButtons();
+  }
+
+  function persistLayout() {
+    try {
+      const previous = localStorage.getItem(STORAGE_KEY);
+      if (previous) localStorage.setItem(BACKUP_STORAGE_KEY, previous);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        version: 6,
+        appVersion: APP_VERSION,
+        machines,
+        stages,
+        floor,
+        hiddenColumns: [...state.hiddenColumns],
+        walls: state.walls,
+        playbackSpeed: state.playbackSpeed,
+      }));
+    } catch (error) {
+      console.warn("Layout changes could not be saved to browser storage.", error);
+    }
   }
 
   function selectedMachine() {
     return machines.find((machine) => machine.instanceId === state.selectedMachineId) || null;
+  }
+
+  function collisionCandidates() {
+    return machines.filter((machine) => (
+      machine.visible !== false &&
+      machine.collisionMode === "solid" &&
+      stageAlpha(machine.reveal, machine.retire) > 0.08
+    ));
+  }
+
+  function rectangleAxes(points) {
+    const axes = [];
+    for (let index = 0; index < 2; index += 1) {
+      const current = points[index];
+      const next = points[(index + 1) % points.length];
+      const edgeX = next[0] - current[0];
+      const edgeZ = next[2] - current[2];
+      const length = Math.hypot(edgeX, edgeZ) || 1;
+      axes.push([-edgeZ / length, edgeX / length]);
+    }
+    return axes;
+  }
+
+  function projectRectangle(points, axis) {
+    const values = points.map((point) => point[0] * axis[0] + point[2] * axis[1]);
+    return [Math.min(...values), Math.max(...values)];
+  }
+
+  function machinesOverlap(first, second, padding = 0.15) {
+    const firstPoints = footprint(first, -padding, 0);
+    const secondPoints = footprint(second, -padding, 0);
+    const axes = [...rectangleAxes(firstPoints), ...rectangleAxes(secondPoints)];
+    return axes.every((axis) => {
+      const a = projectRectangle(firstPoints, axis);
+      const b = projectRectangle(secondPoints, axis);
+      return a[1] > b[0] && b[1] > a[0];
+    });
+  }
+
+  function overlapPairs() {
+    const candidates = collisionCandidates();
+    const pairs = [];
+    for (let firstIndex = 0; firstIndex < candidates.length; firstIndex += 1) {
+      for (let secondIndex = firstIndex + 1; secondIndex < candidates.length; secondIndex += 1) {
+        const first = candidates[firstIndex];
+        const second = candidates[secondIndex];
+        if (machinesOverlap(first, second)) pairs.push([first, second]);
+      }
+    }
+    return pairs;
+  }
+
+  function overlapIds() {
+    const ids = new Set();
+    overlapPairs().forEach(([first, second]) => {
+      ids.add(first.instanceId);
+      ids.add(second.instanceId);
+    });
+    return ids;
+  }
+
+  function selectedHasOverlap(machine, ignoreId = null) {
+    return collisionCandidates().some((candidate) => (
+      candidate.instanceId !== machine.instanceId &&
+      candidate.instanceId !== ignoreId &&
+      machinesOverlap(machine, candidate)
+    ));
+  }
+
+  function findOpenPosition(machine, startX = machine.x, startZ = machine.z) {
+    const bounds = floorBounds();
+    const snap = Math.max(0.25, Number(state.snapSize) || 0.5);
+    const original = { x: machine.x, z: machine.z };
+    const maxRing = 80;
+    for (let ring = 0; ring <= maxRing; ring += 1) {
+      const radius = ring * snap;
+      const candidates = ring === 0 ? [[0, 0]] : [];
+      if (ring > 0) {
+        for (let step = -ring; step <= ring; step += 1) {
+          candidates.push([step * snap, -radius], [step * snap, radius]);
+          if (Math.abs(step) !== ring) candidates.push([-radius, step * snap], [radius, step * snap]);
+        }
+      }
+      for (const [deltaX, deltaZ] of candidates) {
+        machine.x = clamp(startX + deltaX, bounds[0], bounds[2] - machine.w);
+        machine.z = clamp(startZ + deltaZ, bounds[1], bounds[3] - machine.d);
+        if (!selectedHasOverlap(machine)) return { x: machine.x, z: machine.z };
+      }
+    }
+    machine.x = original.x;
+    machine.z = original.z;
+    return null;
+  }
+
+  function separateSelectedObject() {
+    const machine = selectedMachine();
+    if (!machine) return;
+    if (machine.collisionMode !== "solid") {
+      showToast("This object is configured to ignore collision checks.");
+      return;
+    }
+    if (!selectedHasOverlap(machine)) {
+      showToast(`${machine.name} is not overlapping another solid object.`);
+      return;
+    }
+    pushHistory();
+    const position = findOpenPosition(machine);
+    if (!position) {
+      state.history.pop();
+      updateHistoryButtons();
+      showToast("No nearby open position was found.");
+      return;
+    }
+    persistLayout();
+    updateEditorPanel();
+    showToast(`Moved ${machine.name} to the nearest open space.`);
+  }
+
+  function resolveAllOverlaps() {
+    const pairsBefore = overlapPairs();
+    if (!pairsBefore.length) {
+      showToast("No solid-object overlaps were found.");
+      return;
+    }
+    pushHistory();
+    let moved = 0;
+    const protectedIds = new Set();
+    for (const [first, second] of pairsBefore) {
+      if (!machinesOverlap(first, second)) continue;
+      const candidate = second.locked || protectedIds.has(second.instanceId) ? first : second;
+      if (candidate.locked) continue;
+      const position = findOpenPosition(candidate);
+      if (position) {
+        moved += 1;
+        protectedIds.add(candidate.instanceId);
+      }
+    }
+    persistLayout();
+    updateEditorPanel();
+    showToast(moved ? `Separated ${moved} overlapping object${moved === 1 ? "" : "s"}.` : "Overlaps involve locked objects and were not moved.");
+  }
+
+  function selectNextOverlap() {
+    const pairs = overlapPairs();
+    if (!pairs.length) {
+      showToast("No solid-object overlaps were found.");
+      return;
+    }
+    const flattened = [...new Set(pairs.flat().map((machine) => machine.instanceId))];
+    const currentIndex = flattened.indexOf(state.selectedMachineId);
+    state.selectedMachineId = flattened[(currentIndex + 1) % flattened.length];
+    state.editorTool = "machines";
+    focusSelectedMachine();
+    updateEditorPanel();
   }
 
   function uniqueId(prefix = "machine") {
@@ -254,66 +695,354 @@
     const defaults = {
       generic: {
         name: requestedName || "New machine",
-        short: "New machine",
+        short: requestedName || "New machine",
         type: "generic",
         w: 20, d: 10, h: 8,
         color: "#277d78",
         crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 20 },
       },
+      genericBox: {
+        name: requestedName || "General box",
+        short: requestedName || "General box",
+        type: "genericBox",
+        w: 12, d: 12, h: 8,
+        color: "#67757a",
+        crane: null,
+      },
+      cutting: {
+        name: requestedName || "Barefoot cutting tables",
+        short: requestedName || "Cutting tables",
+        type: "cutting",
+        w: 54, d: 66, h: 5,
+        color: "#267e79",
+        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 19 },
+      },
+      waterjet: {
+        name: requestedName || "SQ4020 waterjet",
+        short: requestedName || "Waterjet",
+        type: "waterjet",
+        w: 27, d: 18, h: 8,
+        color: "#347f9f",
+        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 19 },
+      },
+      filtration: {
+        name: requestedName || "Waterjet pump & filtration",
+        short: requestedName || "Filtration",
+        type: "filtration",
+        w: 7, d: 10, h: 8,
+        color: "#276b8b",
+        crane: null,
+      },
+      kodiak: {
+        name: requestedName || "KODIAK 10-45 polisher",
+        short: requestedName || "Polisher",
+        type: "kodiak",
+        w: 25, d: 9, h: 8,
+        color: "#d4d8d5",
+        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 20 },
+      },
+      denver: {
+        name: requestedName || "Denver Surface CNC",
+        short: requestedName || "Denver CNC",
+        type: "denver",
+        w: 37, d: 10, h: 14,
+        color: "#d9dcda",
+        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 21 },
+      },
+      washer: {
+        name: requestedName || "Zafferani glass washer",
+        short: requestedName || "Washer",
+        type: "washer",
+        w: 22, d: 9, h: 12,
+        color: "#bfc7c5",
+        crane: null,
+      },
+      furnace: {
+        name: requestedName || "Tempering furnace",
+        short: requestedName || "Tempering",
+        type: "furnace",
+        w: 42, d: 12, h: 10,
+        color: "#d56535",
+        crane: { system: "Engineered Systems bridge", capacity: "5 ton", height: 23 },
+      },
+      cube: {
+        name: requestedName || "Diamon-Fusion FuseCube",
+        short: requestedName || "Diamon Fusion",
+        type: "cube",
+        w: 16, d: 14, h: 12,
+        color: "#285b91",
+        crane: null,
+      },
+      wrapping: {
+        name: requestedName || "Glass wrapping station",
+        short: requestedName || "Wrapping",
+        type: "wrapping",
+        w: 26, d: 12, h: 8,
+        color: "#aeb8b5",
+        crane: null,
+      },
+      shipping: {
+        name: requestedName || "Shipping glass rack",
+        short: requestedName || "Shipping",
+        type: "shipping",
+        w: 24, d: 10, h: 12,
+        color: "#d9dedb",
+        crane: null,
+      },
       aFrame: {
         name: requestedName || "A-frame glass cart",
-        short: "A-frame",
+        short: requestedName || "A-frame",
         type: "aFrame",
         w: 12, d: 6, h: 9,
         color: "#d85f34",
         crane: null,
+        designId: "aframe-cart-standard",
+      },
+      aFrameTruck: {
+        name: requestedName || "A-frame glass truck",
+        short: requestedName || "A-frame truck",
+        type: "aFrameTruck",
+        w: 20, d: 8, h: 11,
+        color: "#d85f34",
+        crane: null,
+        designId: "aframe-truck-standard",
       },
       craneMachine: {
-        name: requestedName || "Crane machine",
-        short: "Crane machine",
+        name: requestedName || "Freestanding gantry crane",
+        short: requestedName || "Gantry crane",
         type: "craneMachine",
         w: 18, d: 14, h: 18,
         color: "#e2b32d",
         crane: null,
       },
+      bridgeCrane: {
+        name: requestedName || "Overhead bridge crane",
+        short: requestedName || "Bridge crane",
+        type: "bridgeCrane",
+        w: 36, d: 22, h: 21,
+        color: "#2675a7",
+        crane: null,
+      },
+      glassRack: {
+        name: requestedName || "Raw glass rack",
+        short: requestedName || "Glass rack",
+        type: "glassRack",
+        w: 23, d: 9, h: 12,
+        color: "#303b40",
+        crane: null,
+      },
+      room: {
+        name: requestedName || "Plant room",
+        short: requestedName || "Room",
+        type: "room",
+        w: 24, d: 20, h: 12,
+        color: "#d8d2c5",
+        crane: null,
+      },
+      person: {
+        name: requestedName || "Team member",
+        short: requestedName || "Person",
+        type: "person",
+        w: 1.6, d: 1.6, h: 6.5,
+        color: "#1e7b78",
+        crane: null,
+      },
     };
-    const template = defaults[type] || defaults.generic;
+    const template = defaults[type] || defaults.genericBox;
     const offset = machines.filter((machine) => machine.custom).length * 4;
-    return {
+    return normalizeMachine({
       id: uniqueId(type),
       instanceId: uniqueId(type),
-      reveal: type === "aFrame" ? 14 : 6,
-      x: center[0] + state.panX - template.w/2 + offset,
-      z: center[1] + state.panZ - template.d/2 + offset,
+      reveal: state.stage,
+      retire: 99,
+      x: modelCenter()[0] + state.panX - template.w/2 + offset,
+      z: modelCenter()[1] + state.panZ - template.d/2 + offset,
+      rotation: 0,
+      visible: true,
+      locked: false,
+      showLabel: true,
       placement_status: "user_added",
       evidence: "Added in the interactive layout editor.",
       custom: true,
       ...template,
-    };
+    });
+  }
+
+  function updateHistoryButtons() {
+    document.querySelectorAll("[data-editor-action='undo']").forEach((button) => {
+      button.disabled = state.history.length === 0;
+    });
+    document.querySelectorAll("[data-editor-action='redo']").forEach((button) => {
+      button.disabled = state.future.length === 0;
+    });
+  }
+
+  function currentStage() {
+    return stages[state.stage] || stages[0];
+  }
+
+  function showToast(message) {
+    let toast = document.querySelector(".plant-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.className = "plant-toast";
+      toast.setAttribute("role", "status");
+      toast.setAttribute("aria-live", "polite");
+      canvas.closest(".model-frame")?.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("visible");
+    window.clearTimeout(showToast.timeoutId);
+    showToast.timeoutId = window.setTimeout(() => toast.classList.remove("visible"), 2200);
+  }
+
+  function focusSelectedMachine() {
+    const machine = selectedMachine();
+    if (!machine) return;
+    state.panX = machine.x + machine.w / 2 - modelCenter()[0];
+    state.panZ = machine.z + machine.d / 2 - modelCenter()[1];
+    state.zoom = Math.max(state.zoom, clamp(70 / Math.max(machine.w, machine.d), 1.1, 2.5));
+    showToast(`Focused on ${machine.name}.`);
+  }
+
+  function nudgeSelectedMachine(deltaX = 0, deltaZ = 0, deltaRotation = 0) {
+    const machine = selectedMachine();
+    if (!machine || machine.locked) {
+      if (machine?.locked) showToast(`${machine.name} is locked.`);
+      return;
+    }
+    pushHistory();
+    const snap = Math.max(0.1, Number(state.snapSize) || 0.5);
+    const bounds = floorBounds();
+    machine.x = clamp(machine.x + deltaX * snap, bounds[0], bounds[2] - machine.w);
+    machine.z = clamp(machine.z + deltaZ * snap, bounds[1], bounds[3] - machine.d);
+    machine.rotation = Math.round((Number(machine.rotation) + deltaRotation + 360) % 360);
+    persistLayout();
+    updateEditorPanel();
+  }
+
+  function updateEditorHelp() {
+    const frame = canvas.closest(".model-frame");
+    frame?.classList.toggle("editor-navigating", state.editing && state.editorInteraction === "navigate");
+    const help = document.querySelector(".view-help");
+    if (!help) return;
+    if (!state.editing) {
+      help.textContent = "Drag to orbit · Shift-drag to pan · Scroll to zoom";
+      return;
+    }
+    help.textContent = state.editorInteraction === "navigate"
+      ? "Navigate: drag to orbit · Shift/Space-drag to pan · scroll to zoom"
+      : "Edit: drag an object · drag empty floor to pan · Alt/right-drag to orbit";
   }
 
   function updateEditorPanel() {
     const machine = selectedMachine();
     const panel = document.querySelector(".layout-editor");
     if (!panel) return;
+
+    panel.querySelectorAll("[data-editor-section]").forEach((section) => {
+      section.hidden = section.dataset.editorSection !== state.editorTool;
+    });
+
     const selection = panel.querySelector("[data-editor-selection]");
     if (selection) {
-      selection.textContent = machine ? machine.name : (
-        state.editorTool === "pillars"
-          ? "Click a pillar to remove or restore it."
-          : "Click a machine or cart, then drag it."
-      );
+      if (state.editorTool === "timeline") selection.textContent = currentStage()?.title || "Timeline";
+      else if (state.editorTool === "pillars") selection.textContent = "Structure controls";
+      else selection.textContent = machine ? machine.name : "Select any model object";
     }
+
     panel.querySelectorAll("[data-needs-selection]").forEach((control) => {
       control.disabled = !machine;
     });
+
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       const field = input.dataset.machineField;
       input.disabled = !machine;
-      input.value = machine ? (
-        field === "name" ? machine[field] : Number(machine[field]).toFixed(field === "x" || field === "z" ? 1 : 0)
-      ) : "";
+      if (input.dataset.stageSelect !== undefined) {
+        const includeNever = input.dataset.allowNever !== undefined;
+        input.innerHTML = stages.map((stage,index) => (
+          `<option value="${index}">${String(index + 1).padStart(2,"0")} · ${escapeHtml(stage.short)}</option>`
+        )).join("") + (includeNever ? `<option value="99">Never</option>` : "");
+      }
+      if (!machine) {
+        input.value = "";
+        return;
+      }
+      const value = machine[field];
+      if (["name", "type", "color", "collisionMode"].includes(field)) input.value = value ?? "";
+      else input.value = String(Number(value ?? 0));
     });
+
+    panel.querySelectorAll("[data-machine-check]").forEach((input) => {
+      const field = input.dataset.machineCheck;
+      input.disabled = !machine;
+      input.checked = machine ? machine[field] !== false : false;
+      if (field === "locked") input.checked = machine?.locked === true;
+    });
+
+    const designPicker = panel.querySelector("[data-design-picker]");
+    if (designPicker) {
+      const availableDesigns = Object.values(designLibrary)
+        .filter((design) => design && Array.isArray(design.components))
+        .sort((first, second) => String(first.name).localeCompare(String(second.name)));
+      designPicker.innerHTML = `<option value="">Built-in object model</option>${availableDesigns.map((design) => (
+        `<option value="${escapeHtml(design.id)}">${escapeHtml(design.name)}${design.machineType ? ` · ${escapeHtml(design.machineType)}` : ""}</option>`
+      )).join("")}`;
+      designPicker.disabled = !machine;
+      designPicker.value = machine?.designId || "";
+    }
+
+    panel.querySelectorAll("[data-floor-field]").forEach((input) => {
+      input.value = String(floor[input.dataset.floorField]);
+    });
+
+    const overlaps = overlapPairs();
+    const overlapSummary = panel.querySelector("[data-overlap-summary]");
+    if (overlapSummary) {
+      overlapSummary.textContent = overlaps.length
+        ? `${overlaps.length} solid-object overlap${overlaps.length === 1 ? "" : "s"} detected.`
+        : "No solid-object overlaps detected.";
+      overlapSummary.classList.toggle("warning", overlaps.length > 0);
+    }
+    const separateButton = panel.querySelector("[data-editor-action='separate-selected']");
+    if (separateButton) separateButton.disabled = !machine || machine.collisionMode !== "solid" || !selectedHasOverlap(machine);
+
+    const craneToggle = panel.querySelector("[data-crane-toggle]");
+    if (craneToggle) {
+      craneToggle.disabled = !machine || machine.type === "bridgeCrane" || machine.type === "craneMachine";
+      craneToggle.checked = Boolean(machine?.crane);
+    }
+    panel.querySelectorAll("[data-crane-field]").forEach((input) => {
+      const field = input.dataset.craneField;
+      input.disabled = !machine?.crane;
+      input.value = machine?.crane ? machine.crane[field] ?? "" : "";
+    });
+
+    const stage = currentStage();
+    panel.querySelectorAll("[data-floor-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const field = input.dataset.floorField;
+        const value = Number(input.value);
+        if (!Number.isFinite(value)) return;
+        pushHistory();
+        floor[field] = ["width", "length"].includes(field) ? Math.max(40, value) : value;
+        persistLayout();
+        updateEditorPanel();
+        showToast("Floor dimensions updated.");
+      });
+    });
+
+    panel.querySelectorAll("[data-stage-field]").forEach((input) => {
+      const field = input.dataset.stageField;
+      input.value = field === "details" ? (stage?.details || []).join(", ") : stage?.[field] || "";
+    });
+    const earlier = panel.querySelector("[data-editor-action='stage-earlier']");
+    const later = panel.querySelector("[data-editor-action='stage-later']");
+    const remove = panel.querySelector("[data-editor-action='stage-delete']");
+    if (earlier) earlier.disabled = state.stage <= 0;
+    if (later) later.disabled = state.stage >= stages.length - 1;
+    if (remove) remove.disabled = stages.length <= 2;
+
     const paste = panel.querySelector("[data-editor-action='paste']");
     if (paste) paste.disabled = !state.clipboard;
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
@@ -322,14 +1051,38 @@
     panel.querySelectorAll("[data-wall-id]").forEach((input) => {
       input.checked = state.walls[input.dataset.wallId] !== false;
     });
+
+    const objectSearch = panel.querySelector("[data-object-search]");
+    const objectPicker = panel.querySelector("[data-object-picker]");
+    if (objectPicker) {
+      const query = objectSearch?.value.trim().toLowerCase() || "";
+      const filteredObjects = machines
+        .filter((item) => !query || `${item.name} ${item.type}`.toLowerCase().includes(query))
+        .sort((first, second) => first.name.localeCompare(second.name));
+      objectPicker.innerHTML = `<option value="">Choose an object…</option>${filteredObjects.map((item) => (
+        `<option value="${escapeHtml(item.instanceId)}">${escapeHtml(item.name)}${item.locked ? " · locked" : ""}${item.visible === false ? " · hidden" : ""}</option>`
+      )).join("")}`;
+      objectPicker.value = machine?.instanceId || "";
+    }
+    panel.querySelectorAll("[data-editor-mode]").forEach((button) => {
+      const active = button.dataset.editorMode === state.editorInteraction;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const snapSelect = panel.querySelector("[data-editor-snap]");
+    if (snapSelect) snapSelect.value = String(state.snapSize);
+    updateEditorHelp();
+    updateHistoryButtons();
   }
 
   function deleteSelectedMachine() {
     if (!state.selectedMachineId) return;
+    pushHistory();
     machines = machines.filter((machine) => machine.instanceId !== state.selectedMachineId);
     state.selectedMachineId = null;
     persistLayout();
     updateEditorPanel();
+    showToast("Object removed.");
   }
 
   function copySelectedMachine() {
@@ -337,26 +1090,152 @@
     if (!machine) return;
     state.clipboard = clone(machine);
     updateEditorPanel();
+    showToast("Object copied.");
   }
 
   function pasteMachine() {
     if (!state.clipboard) return;
-    const pasted = {
+    pushHistory();
+    const pasted = normalizeMachine({
       ...clone(state.clipboard),
       id: uniqueId(state.clipboard.type),
       instanceId: uniqueId(state.clipboard.type),
       name: `${state.clipboard.name} copy`,
+      short: `${state.clipboard.short || state.clipboard.name} copy`,
       x: Number(state.clipboard.x) + 8,
       z: Number(state.clipboard.z) + 8,
       custom: true,
+      locked: false,
       placement_status: "user_added",
       evidence: "Copied in the interactive layout editor.",
-    };
+    }, machines.length);
     machines.push(pasted);
     state.selectedMachineId = pasted.instanceId;
     state.clipboard = clone(pasted);
     persistLayout();
     updateEditorPanel();
+    showToast("Object pasted.");
+  }
+
+  function swapStageReferences(first, second) {
+    machines.forEach((machine) => {
+      ["reveal", "retire"].forEach((field) => {
+        if (machine[field] === first) machine[field] = second;
+        else if (machine[field] === second) machine[field] = first;
+      });
+    });
+  }
+
+  function moveCurrentStage(direction) {
+    const target = state.stage + direction;
+    if (target < 0 || target >= stages.length) return;
+    pushHistory();
+    [stages[state.stage], stages[target]] = [stages[target], stages[state.stage]];
+    swapStageReferences(state.stage, target);
+    state.stage = target;
+    state.stageFloat = target;
+    persistLayout();
+    buildTimeline();
+    setStage(target);
+    updateEditorPanel();
+    showToast("Timeline stage moved.");
+  }
+
+  function addTimelineStage() {
+    pushHistory();
+    const insertAt = state.stage + 1;
+    machines.forEach((machine) => {
+      if (machine.reveal >= insertAt) machine.reveal += 1;
+      if (machine.retire >= insertAt && machine.retire < 99) machine.retire += 1;
+    });
+    stages.splice(insertAt, 0, {
+      id: uniqueId("stage"),
+      title: "New project stage",
+      short: "New stage",
+      era: "Custom phase",
+      dateLabel: "",
+      description: "Describe what changed during this phase of the plant project.",
+      details: ["Custom stage"],
+    });
+    state.stage = insertAt;
+    state.stageFloat = insertAt;
+    persistLayout();
+    buildTimeline();
+    setStage(insertAt);
+    updateEditorPanel();
+    showToast("New timeline stage added.");
+  }
+
+  function deleteTimelineStage() {
+    if (stages.length <= 2) return;
+    pushHistory();
+    const removed = state.stage;
+    stages.splice(removed, 1);
+    machines.forEach((machine) => {
+      if (machine.reveal === removed) machine.reveal = Math.max(0, removed - 1);
+      else if (machine.reveal > removed) machine.reveal -= 1;
+      if (machine.retire === removed) machine.retire = Math.max(machine.reveal, removed - 1);
+      else if (machine.retire > removed && machine.retire < 99) machine.retire -= 1;
+    });
+    state.stage = clamp(removed, 0, stages.length - 1);
+    state.stageFloat = state.stage;
+    persistLayout();
+    buildTimeline();
+    setStage(state.stage);
+    updateEditorPanel();
+    showToast("Timeline stage removed.");
+  }
+
+  function exportLayout() {
+    const payload = {
+      version: 6,
+      appVersion: APP_VERSION,
+      exportedAt: new Date().toISOString(),
+      source: equipmentData.source,
+      machines,
+      stages,
+      floor,
+      hiddenColumns: [...state.hiddenColumns],
+      walls: state.walls,
+      playbackSpeed: state.playbackSpeed,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `monroe-glass-plant-layout-v${APP_VERSION}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    showToast("Layout JSON exported.");
+  }
+
+  async function importLayout(file) {
+    if (!file) return;
+    try {
+      const payload = JSON.parse(await file.text());
+      if (!Array.isArray(payload.machines) || !Array.isArray(payload.stages)) {
+        throw new Error("The selected file is not a plant layout export.");
+      }
+      pushHistory();
+      machines = normalizeMachines(payload.machines);
+      stages = normalizeStages(payload.stages);
+      floor = normalizeFloor(payload.floor);
+      state.hiddenColumns = new Set(payload.hiddenColumns || []);
+      state.walls = { ...defaultWalls, ...(payload.walls || {}) };
+      state.playbackSpeed = Number(payload.playbackSpeed) || 1;
+      state.stage = clamp(state.stage, 0, stages.length - 1);
+      state.stageFloat = state.stage;
+      state.selectedMachineId = null;
+      persistLayout();
+      buildTimeline();
+      setStage(state.stage);
+      updateEditorPanel();
+      showToast("Layout imported successfully.");
+    } catch (error) {
+      console.error(error);
+      window.alert(error instanceof Error ? error.message : "The layout file could not be imported.");
+    }
   }
 
   function setEditing(enabled) {
@@ -366,72 +1245,216 @@
     state.draggedMachineId = null;
     const panel = document.querySelector(".layout-editor");
     const button = document.querySelector("[data-toggle='editor']");
-    const help = document.querySelector(".view-help");
     const play = document.getElementById("play-timeline");
     canvas.closest(".model-frame")?.classList.toggle("editing",enabled);
+    canvas.closest(".experience")?.classList.toggle("editing-layout",enabled);
     if (panel) panel.hidden = !enabled;
     if (button) {
       button.classList.toggle("active",enabled);
       button.setAttribute("aria-pressed",String(enabled));
+      button.textContent = enabled ? "Close editor" : "Edit layout";
     }
     if (play) play.hidden = enabled;
-    if (help) {
-      help.textContent = enabled
-        ? "Drag machines · Pillar tool removes columns"
-        : "Drag to orbit · Shift-drag to pan · Scroll to zoom";
-    }
     if (enabled) {
       setStage(stages.length - 1);
       state.stageFloat = stages.length - 1;
-      state.yaw = 0;
-      state.pitch = 1.42;
-      state.zoom = .9;
     }
+    updateEditorHelp();
     updateEditorPanel();
   }
 
   function createEditorPanel(frame) {
+    const typeOptions = [
+      ["generic", "Generic machine"],
+      ["genericBox", "General box"],
+      ["aFrame", "A-frame glass cart"],
+      ["aFrameTruck", "A-frame glass truck"],
+      ["craneMachine", "Freestanding gantry crane"],
+      ["bridgeCrane", "Overhead bridge crane"],
+      ["glassRack", "Raw glass rack"],
+      ["room", "Office / room"],
+      ["person", "Team member marker"],
+      ["cutting", "Barefoot cutting table"],
+      ["waterjet", "Waterjet"],
+      ["filtration", "Filtration equipment"],
+      ["kodiak", "Kodiak"],
+      ["denver", "Denver Surface CNC"],
+      ["washer", "Zafferani glass washer"],
+      ["furnace", "Tempering furnace"],
+      ["cube", "Diamon-Fusion FuseCube"],
+      ["wrapping", "Glass wrapping station"],
+      ["shipping", "Shipping glass rack"],
+    ];
+    const typeMarkup = typeOptions.map(([value,labelText]) => `<option value="${value}">${labelText}</option>`).join("");
     const panel = document.createElement("section");
     panel.className = "layout-editor";
     panel.hidden = true;
     panel.innerHTML = `
       <div class="editor-heading">
-        <div><p>Plant layout editor</p><h3 data-editor-selection>Select an item</h3></div>
-        <span>Auto-saved</span>
+        <div><p>Plant model studio · v${APP_VERSION}</p><h3 data-editor-selection>Select an item</h3></div>
+        <span>Saved locally</span>
+      </div>
+      <div class="editor-history" role="group" aria-label="Layout history">
+        <button type="button" data-editor-action="undo" disabled>↶ Undo</button>
+        <button type="button" data-editor-action="redo" disabled>↷ Redo</button>
       </div>
       <div class="editor-tools" role="group" aria-label="Editor selection mode">
-        <button type="button" data-editor-tool="machines" class="active">Machines & carts</button>
-        <button type="button" data-editor-tool="pillars">Remove pillars</button>
+        <button type="button" data-editor-tool="machines" class="active">Objects</button>
+        <button type="button" data-editor-tool="pillars">Structure</button>
+        <button type="button" data-editor-tool="timeline">Timeline</button>
       </div>
-      <div class="editor-properties">
-        <label class="wide">Name<input data-machine-field="name" data-needs-selection type="text"></label>
-        <label>X position<input data-machine-field="x" data-needs-selection type="number" step="0.5"></label>
-        <label>Z position<input data-machine-field="z" data-needs-selection type="number" step="0.5"></label>
-        <label>Width<input data-machine-field="w" data-needs-selection type="number" min="2" step="1"></label>
-        <label>Depth<input data-machine-field="d" data-needs-selection type="number" min="2" step="1"></label>
-        <label>Height<input data-machine-field="h" data-needs-selection type="number" min="1" step="1"></label>
+
+      <div data-editor-section="machines">
+        <div class="editor-object-browser">
+          <label>Find an object<input type="search" data-object-search placeholder="Search machines, rooms, racks…"></label>
+          <label>Object list<select data-object-picker><option value="">Choose an object…</option></select></label>
+          <button type="button" data-editor-action="focus" data-needs-selection>Focus selected</button>
+        </div>
+        <div class="editor-navigation">
+          <div class="editor-mode-switch" role="group" aria-label="Editor interaction mode">
+            <button type="button" data-editor-mode="select" class="active" aria-pressed="true">Select & move</button>
+            <button type="button" data-editor-mode="navigate" aria-pressed="false">Navigate view</button>
+          </div>
+          <label>Movement snap<select data-editor-snap>
+            <option value="0.1">0.1 ft</option>
+            <option value="0.5">0.5 ft</option>
+            <option value="1">1 ft</option>
+            <option value="2">2 ft</option>
+            <option value="5">5 ft</option>
+          </select></label>
+        </div>
+        <div class="editor-nudge" role="group" aria-label="Nudge selected object">
+          <button type="button" data-nudge="x-negative" data-needs-selection>← X</button>
+          <button type="button" data-nudge="z-negative" data-needs-selection>↑ Z</button>
+          <button type="button" data-nudge="z-positive" data-needs-selection>↓ Z</button>
+          <button type="button" data-nudge="x-positive" data-needs-selection>X →</button>
+          <button type="button" data-nudge="rotate-negative" data-needs-selection>↶ 5°</button>
+          <button type="button" data-nudge="rotate-positive" data-needs-selection>5° ↷</button>
+        </div>
+        <div class="editor-properties">
+          <label class="wide">Name<input data-machine-field="name" data-needs-selection type="text"></label>
+          <label class="wide">Object type<select data-machine-field="type" data-needs-selection>${typeMarkup}</select></label>
+          <label>X position<input data-machine-field="x" data-needs-selection type="number" step="0.5"></label>
+          <label>Z position<input data-machine-field="z" data-needs-selection type="number" step="0.5"></label>
+          <label>Rotation °<input data-machine-field="rotation" data-needs-selection type="number" step="5"></label>
+          <label>Width<input data-machine-field="w" data-needs-selection type="number" min="0.5" step="0.5"></label>
+          <label>Depth<input data-machine-field="d" data-needs-selection type="number" min="0.5" step="0.5"></label>
+          <label>Height<input data-machine-field="h" data-needs-selection type="number" min="0.5" step="0.5"></label>
+          <label>Appears at<select data-machine-field="reveal" data-stage-select data-needs-selection></select></label>
+          <label>Disappears after<select data-machine-field="retire" data-stage-select data-allow-never data-needs-selection></select></label>
+          <label>Color<input data-machine-field="color" data-needs-selection type="color"></label>
+          <label>Collision check<select data-machine-field="collisionMode" data-needs-selection>
+            <option value="solid">Solid · warn on overlap</option>
+            <option value="ignore">Ignore overlaps</option>
+          </select></label>
+          <label class="wide">Design preset<select data-design-picker data-needs-selection></select></label>
+        </div>
+        <div class="machine-design-actions">
+          <button type="button" data-editor-action="machine-studio">Open Machine Design Studio</button>
+          <span>Edit cabinets, rollers, beams, wheels, glass panels, colors, and component dimensions on a dedicated page.</span>
+        </div>
+        <div class="overlap-tools">
+          <p data-overlap-summary>No solid-object overlaps detected.</p>
+          <div>
+            <button type="button" data-editor-action="find-overlap">Find overlap</button>
+            <button type="button" data-editor-action="separate-selected" data-needs-selection>Separate selected</button>
+            <button type="button" data-editor-action="resolve-overlaps">Resolve all</button>
+          </div>
+        </div>
+        <div class="editor-checks">
+          <label><input type="checkbox" data-machine-check="visible"> Visible</label>
+          <label><input type="checkbox" data-machine-check="showLabel"> Label</label>
+          <label><input type="checkbox" data-machine-check="locked"> Lock position</label>
+        </div>
+        <fieldset class="crane-controls">
+          <legend>Attached overhead crane</legend>
+          <label class="crane-toggle"><input type="checkbox" data-crane-toggle> Enable attached crane</label>
+          <div>
+            <label>System<input type="text" data-crane-field="system"></label>
+            <label>Capacity<input type="text" data-crane-field="capacity"></label>
+            <label>Rail height<input type="number" min="4" step="0.5" data-crane-field="height"></label>
+          </div>
+        </fieldset>
+        <div class="editor-actions">
+          <button type="button" data-editor-action="copy" data-needs-selection>Copy</button>
+          <button type="button" data-editor-action="paste" disabled>Paste</button>
+          <button type="button" data-editor-action="delete" data-needs-selection>Remove</button>
+        </div>
+        <div class="editor-add">
+          <p>Add to the 3D model</p>
+          <input type="text" id="new-machine-name" placeholder="Optional custom name">
+          <div><select id="new-machine-type">
+            <optgroup label="Photo-refined machines">
+              <option value="kodiak">KODIAK 10-45 polisher</option>
+              <option value="waterjet">SQ4020 waterjet</option>
+              <option value="denver">Denver Surface CNC</option>
+              <option value="washer">Zafferani glass washer</option>
+              <option value="furnace">Tempering furnace</option>
+              <option value="cube">Diamon-Fusion FuseCube</option>
+              <option value="wrapping">Glass wrapping station</option>
+              <option value="shipping">Shipping glass rack</option>
+            </optgroup>
+            <optgroup label="General objects">
+              <option value="generic">Generic machine</option>
+              <option value="genericBox">General box</option>
+              <option value="aFrame">A-frame glass cart</option>
+              <option value="aFrameTruck">A-frame glass truck</option>
+              <option value="craneMachine">Freestanding gantry crane</option>
+              <option value="bridgeCrane">Overhead bridge crane</option>
+              <option value="glassRack">Raw glass rack</option>
+              <option value="room">Office / room</option>
+              <option value="person">Team member marker</option>
+            </optgroup>
+          </select><button type="button" data-editor-action="add">Add</button></div>
+        </div>
       </div>
-      <div class="editor-actions">
-        <button type="button" data-editor-action="copy" data-needs-selection>Copy</button>
-        <button type="button" data-editor-action="paste" disabled>Paste</button>
-        <button type="button" data-editor-action="delete" data-needs-selection>Remove</button>
+
+      <div data-editor-section="pillars" hidden>
+        <div class="editor-callout">Click any yellow pillar in the model to remove or restore it. Floor dimensions resize the editable plant slab without changing your placed objects.</div>
+        <fieldset class="floor-controls">
+          <legend>Floor layout dimensions</legend>
+          <div>
+            <label>Width (ft)<input type="number" min="40" step="5" data-floor-field="width"></label>
+            <label>Length (ft)<input type="number" min="40" step="5" data-floor-field="length"></label>
+            <label>Center X<input type="number" step="1" data-floor-field="centerX"></label>
+            <label>Center Z<input type="number" step="1" data-floor-field="centerZ"></label>
+          </div>
+          <div class="floor-actions">
+            <button type="button" data-editor-action="floor-fit">Fit floor around objects</button>
+            <button type="button" data-editor-action="floor-cad">Restore CAD floor size</button>
+          </div>
+        </fieldset>
+        <fieldset class="wall-controls">
+          <legend>Exterior wall sections</legend>
+          ${wallSections().map((wall) => `<label><input type="checkbox" data-wall-id="${wall.id}" checked>${wall.id.replace("-"," ")}</label>`).join("")}
+        </fieldset>
+        <button class="editor-wide-button" type="button" data-editor-action="restore-pillars">Restore every pillar</button>
       </div>
-      <div class="editor-add">
-        <p>Add to the 3D model</p>
-        <input type="text" id="new-machine-name" placeholder="Optional custom name">
-        <div><select id="new-machine-type">
-          <option value="generic">New machine</option>
-          <option value="aFrame">A-frame glass cart</option>
-          <option value="craneMachine">Crane machine</option>
-        </select><button type="button" data-editor-action="add">Add</button></div>
+
+      <div class="timeline-editor" data-editor-section="timeline" hidden>
+        <div class="editor-properties">
+          <label class="wide">Stage title<input data-stage-field="title" type="text"></label>
+          <label>Short label<input data-stage-field="short" type="text"></label>
+          <label>Phase<input data-stage-field="era" type="text"></label>
+          <label>Date / period<input data-stage-field="dateLabel" type="text" placeholder="Example: January 2025"></label>
+          <label class="wide">Description<textarea data-stage-field="description" rows="4"></textarea></label>
+          <label class="wide">Detail chips<input data-stage-field="details" type="text" placeholder="Separate details with commas"></label>
+        </div>
+        <div class="editor-actions timeline-actions">
+          <button type="button" data-editor-action="stage-earlier">← Earlier</button>
+          <button type="button" data-editor-action="stage-later">Later →</button>
+        </div>
+        <div class="editor-actions timeline-actions">
+          <button type="button" data-editor-action="stage-add">Add after</button>
+          <button type="button" data-editor-action="stage-delete">Delete stage</button>
+        </div>
       </div>
-      <fieldset class="wall-controls">
-        <legend>Wall sections</legend>
-        ${wallSections.map((wall) => `<label><input type="checkbox" data-wall-id="${wall.id}" checked>${wall.id.replace("-"," ")}</label>`).join("")}
-      </fieldset>
+
       <div class="editor-footer">
-        <button type="button" data-editor-action="restore-pillars">Restore pillars</button>
-        <button type="button" data-editor-action="reset">Reset layout</button>
+        <button type="button" data-editor-action="export">Export layout</button>
+        <button type="button" data-editor-action="import">Import layout</button>
+        <input type="file" data-layout-file accept="application/json,.json" hidden>
+        <button type="button" data-editor-action="reset">Reset project</button>
         <button type="button" data-editor-action="done" class="primary">Done editing</button>
       </div>
     `;
@@ -440,33 +1463,155 @@
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {
         state.editorTool = button.dataset.editorTool;
-        state.selectedMachineId = null;
+        if (state.editorTool !== "machines") state.selectedMachineId = null;
         updateEditorPanel();
       });
     });
+
+    const objectSearch = panel.querySelector("[data-object-search]");
+    objectSearch?.addEventListener("input", updateEditorPanel);
+    panel.querySelector("[data-object-picker]")?.addEventListener("change", (event) => {
+      state.selectedMachineId = event.target.value || null;
+      state.editorTool = "machines";
+      updateEditorPanel();
+    });
+    panel.querySelector("[data-editor-action='focus']")?.addEventListener("click", focusSelectedMachine);
+    panel.querySelector("[data-design-picker]")?.addEventListener("change", (event) => {
+      const machine = selectedMachine();
+      if (!machine) return;
+      pushHistory();
+      machine.designId = event.target.value || "";
+      persistLayout();
+      updateEditorPanel();
+      showToast(machine.designId ? "Custom design applied." : "Built-in model restored.");
+    });
+    panel.querySelector("[data-editor-action='machine-studio']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      const standalone = /preview\.html$/i.test(window.location.pathname);
+      const target = standalone ? "machine-studio.html" : "/machine-studio";
+      const query = machine ? `?machine=${encodeURIComponent(machine.instanceId)}` : "";
+      window.open(`${target}${query}`, "_blank", "noopener");
+    });
+    panel.querySelector("[data-editor-action='find-overlap']")?.addEventListener("click", selectNextOverlap);
+    panel.querySelector("[data-editor-action='separate-selected']")?.addEventListener("click", separateSelectedObject);
+    panel.querySelector("[data-editor-action='resolve-overlaps']")?.addEventListener("click", resolveAllOverlaps);
+    panel.querySelectorAll("[data-editor-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.editorInteraction = button.dataset.editorMode;
+        updateEditorPanel();
+      });
+    });
+    panel.querySelector("[data-editor-snap]")?.addEventListener("change", (event) => {
+      state.snapSize = Number(event.target.value) || 0.5;
+      updateEditorPanel();
+    });
+    panel.querySelectorAll("[data-nudge]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.nudge;
+        if (action === "x-negative") nudgeSelectedMachine(-1,0,0);
+        else if (action === "x-positive") nudgeSelectedMachine(1,0,0);
+        else if (action === "z-negative") nudgeSelectedMachine(0,-1,0);
+        else if (action === "z-positive") nudgeSelectedMachine(0,1,0);
+        else if (action === "rotate-negative") nudgeSelectedMachine(0,0,-5);
+        else if (action === "rotate-positive") nudgeSelectedMachine(0,0,5);
+      });
+    });
+
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
         if (!machine) return;
         const field = input.dataset.machineField;
-        if (field === "name") {
-          machine.name = input.value.trim() || machine.name;
-          machine.short = machine.name;
+        pushHistory();
+        if (["name", "type", "color", "collisionMode"].includes(field)) {
+          const value = input.value.trim();
+          if (field === "name") {
+            machine.name = value || machine.name;
+            machine.short = machine.name;
+          } else if (field === "type") {
+            machine.type = value;
+            machine.category = objectCategory(value);
+            const suggestedDesign = defaultDesignForType(value);
+            if (suggestedDesign) machine.designId = suggestedDesign;
+          } else if (field === "collisionMode") {
+            machine.collisionMode = value === "ignore" ? "ignore" : "solid";
+          } else if (/^#[0-9a-f]{6}$/i.test(value)) machine.color = value;
         } else {
           const value = Number(input.value);
           if (!Number.isFinite(value)) return;
-          machine[field] = ["w","d","h"].includes(field) ? Math.max(field === "h" ? 1 : 2,value) : value;
+          if (["w","d","h"].includes(field)) machine[field] = Math.max(.5,value);
+          else if (field === "reveal") machine[field] = clamp(Math.round(value),0,stages.length-1);
+          else if (field === "retire") machine[field] = value >= 99 ? 99 : clamp(Math.round(value),machine.reveal,stages.length-1);
+          else machine[field] = value;
         }
         persistLayout();
         updateEditorPanel();
       });
     });
+
+    panel.querySelectorAll("[data-machine-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const machine = selectedMachine();
+        if (!machine) return;
+        pushHistory();
+        machine[input.dataset.machineCheck] = input.checked;
+        persistLayout();
+        updateEditorPanel();
+      });
+    });
+
+    panel.querySelector("[data-crane-toggle]").addEventListener("change", (event) => {
+      const machine = selectedMachine();
+      if (!machine) return;
+      pushHistory();
+      machine.crane = event.target.checked
+        ? { system: "GORBEL bridge", capacity: "1000 lb", height: Math.max(machine.h + 4, 20) }
+        : null;
+      persistLayout();
+      updateEditorPanel();
+    });
+
+    panel.querySelectorAll("[data-crane-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const machine = selectedMachine();
+        if (!machine?.crane) return;
+        pushHistory();
+        const field = input.dataset.craneField;
+        machine.crane[field] = field === "height" ? Math.max(4, Number(input.value) || 20) : input.value.trim();
+        persistLayout();
+        updateEditorPanel();
+      });
+    });
+
+    panel.querySelectorAll("[data-stage-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const stage = currentStage();
+        if (!stage) return;
+        pushHistory();
+        const field = input.dataset.stageField;
+        stage[field] = field === "details"
+          ? input.value.split(",").map((item) => item.trim()).filter(Boolean)
+          : input.value.trim();
+        persistLayout();
+        buildTimeline();
+        setStage(state.stage);
+        updateEditorPanel();
+      });
+    });
+
+    panel.querySelector("[data-editor-action='undo']").addEventListener("click",undoLayout);
+    panel.querySelector("[data-editor-action='redo']").addEventListener("click",redoLayout);
     panel.querySelector("[data-editor-action='copy']").addEventListener("click",copySelectedMachine);
     panel.querySelector("[data-editor-action='paste']").addEventListener("click",pasteMachine);
     panel.querySelector("[data-editor-action='delete']").addEventListener("click",deleteSelectedMachine);
+    panel.querySelector("[data-editor-action='stage-earlier']").addEventListener("click",() => moveCurrentStage(-1));
+    panel.querySelector("[data-editor-action='stage-later']").addEventListener("click",() => moveCurrentStage(1));
+    panel.querySelector("[data-editor-action='stage-add']").addEventListener("click",addTimelineStage);
+    panel.querySelector("[data-editor-action='stage-delete']").addEventListener("click",deleteTimelineStage);
     panel.querySelector("[data-editor-action='add']").addEventListener("click",() => {
       const type = panel.querySelector("#new-machine-type").value;
       const requestedName = panel.querySelector("#new-machine-name").value.trim();
+      pushHistory();
       const machine = machineTemplate(type,requestedName);
       machines.push(machine);
       state.selectedMachineId = machine.instanceId;
@@ -474,28 +1619,89 @@
       panel.querySelector("#new-machine-name").value = "";
       persistLayout();
       updateEditorPanel();
+      showToast(`${machine.name} added.`);
     });
+    panel.querySelector("[data-editor-action='floor-fit']")?.addEventListener("click", () => {
+      const visible = machines.filter((machine) => machine.visible !== false);
+      if (!visible.length) return;
+      pushHistory();
+      const padding = 20;
+      const minX = Math.min(...visible.map((machine) => machine.x)) - padding;
+      const minZ = Math.min(...visible.map((machine) => machine.z)) - padding;
+      const maxX = Math.max(...visible.map((machine) => machine.x + machine.w)) + padding;
+      const maxZ = Math.max(...visible.map((machine) => machine.z + machine.d)) + padding;
+      floor = normalizeFloor({ centerX: (minX + maxX) / 2, centerZ: (minZ + maxZ) / 2, width: maxX - minX, length: maxZ - minZ });
+      persistLayout();
+      updateEditorPanel();
+      showToast("Floor fitted around visible objects.");
+    });
+    panel.querySelector("[data-editor-action='floor-cad']")?.addEventListener("click", () => {
+      pushHistory();
+      floor = normalizeFloor(defaultFloor);
+      persistLayout();
+      updateEditorPanel();
+      showToast("CAD floor dimensions restored.");
+    });
+
     panel.querySelector("[data-editor-action='restore-pillars']").addEventListener("click",() => {
+      pushHistory();
       state.hiddenColumns.clear();
       persistLayout();
       updateEditorPanel();
+      showToast("All pillars restored.");
     });
     panel.querySelector("[data-editor-action='reset']").addEventListener("click",() => {
-      if (!window.confirm("Reset every machine, cart, pillar, and wall change?")) return;
+      if (!window.confirm("Reset every object, timeline stage, pillar, and wall change?")) return;
+      pushHistory();
       machines = initialMachines();
+      stages = normalizeStages(defaultStages);
+      floor = normalizeFloor(defaultFloor);
       state.hiddenColumns.clear();
       state.walls = { ...defaultWalls };
       state.selectedMachineId = null;
+      state.stage = 0;
+      state.stageFloat = 0;
       persistLayout();
+      buildTimeline();
+      setStage(0);
       updateEditorPanel();
+      showToast("Project reset to the supplied baseline.");
+    });
+    panel.querySelector("[data-editor-action='export']").addEventListener("click",exportLayout);
+    const fileInput = panel.querySelector("[data-layout-file]");
+    panel.querySelector("[data-editor-action='import']").addEventListener("click",() => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      await importLayout(fileInput.files?.[0]);
+      fileInput.value = "";
     });
     panel.querySelector("[data-editor-action='done']").addEventListener("click",() => setEditing(false));
     panel.querySelectorAll("[data-wall-id]").forEach((input) => {
       input.addEventListener("change",() => {
+        pushHistory();
         state.walls[input.dataset.wallId] = input.checked;
         persistLayout();
       });
     });
+    updateEditorPanel();
+  }
+
+  async function toggleModelFullscreen(frame) {
+    try {
+      if (document.fullscreenElement === frame) await document.exitFullscreen();
+      else await frame.requestFullscreen();
+    } catch (error) {
+      console.warn("Full-screen mode could not be opened.", error);
+      showToast("Full-screen mode is unavailable in this browser.");
+    }
+  }
+
+  function updateFullscreenControl(frame) {
+    const button = frame.querySelector("[data-toggle='fullscreen']");
+    if (!button) return;
+    const active = document.fullscreenElement === frame;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.textContent = active ? "Exit full screen" : "Full screen";
   }
 
   function addControls() {
@@ -508,6 +1714,7 @@
       <button type="button" data-view="top" aria-label="View from above">Floor plan</button>
       <button type="button" data-toggle="cad" class="active" aria-pressed="true">CAD lines</button>
       <button type="button" data-toggle="labels" class="active" aria-pressed="true">Labels</button>
+      <button type="button" data-toggle="fullscreen" aria-pressed="false">Full screen</button>
       <button type="button" data-toggle="editor" aria-pressed="false">Edit layout</button>
     `;
     frame.appendChild(controls);
@@ -547,17 +1754,72 @@
           setEditing(!state.editing);
           return;
         }
+        if (button.dataset.toggle === "fullscreen") {
+          toggleModelFullscreen(frame);
+          return;
+        }
         const key = button.dataset.toggle === "cad" ? "showCad" : "showLabels";
         state[key] = !state[key];
         button.classList.toggle("active", state[key]);
         button.setAttribute("aria-pressed", String(state[key]));
       });
     });
+    document.addEventListener("fullscreenchange", () => updateFullscreenControl(frame));
+    updateFullscreenControl(frame);
     play.addEventListener("click", () => {
       state.playing = !state.playing;
-      state.playAt = performance.now() + 2500;
+      state.playAt = performance.now() + 1200 / state.playbackSpeed;
       play.classList.toggle("active", state.playing);
       play.innerHTML = state.playing ? `<span>Ⅱ</span> Pause progress` : `<span>▶</span> Play progress`;
+    });
+  }
+
+  function addTimelineToolbar() {
+    const timeline = document.querySelector(".timeline");
+    if (!timeline || timeline.querySelector(".timeline-toolbar")) return;
+    const toolbar = document.createElement("div");
+    toolbar.className = "timeline-toolbar";
+    toolbar.innerHTML = `
+      <label class="timeline-scrubber-label" for="timeline-scrubber">
+        <span>Scrub timeline</span>
+        <input id="timeline-scrubber" type="range" min="0" max="${Math.max(0, stages.length - 1)}" value="${state.stage}" step="1">
+      </label>
+      <label class="timeline-speed-label" for="timeline-speed">
+        <span>Playback</span>
+        <select id="timeline-speed">
+          <option value="0.5">0.5×</option>
+          <option value="1">1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+      <button type="button" data-open-timeline-editor>Edit timeline</button>
+    `;
+    timeline.prepend(toolbar);
+    if (!timeline.querySelector(".timeline-track-scroll")) {
+      const trackScroll = document.createElement("div");
+      trackScroll.className = "timeline-track-scroll";
+      const progress = timeline.querySelector(".timeline-progress");
+      const stageList = timeline.querySelector("#timeline-stages");
+      if (progress && stageList) {
+        progress.before(trackScroll);
+        trackScroll.append(progress,stageList);
+      }
+    }
+    const scrubber = toolbar.querySelector("#timeline-scrubber");
+    scrubber.addEventListener("input", () => setStage(Number(scrubber.value)));
+    const speed = toolbar.querySelector("#timeline-speed");
+    speed.value = String(state.playbackSpeed);
+    speed.addEventListener("change", () => {
+      state.playbackSpeed = Number(speed.value) || 1;
+      persistLayout();
+      showToast(`Playback speed set to ${state.playbackSpeed}×.`);
+    });
+    toolbar.querySelector("[data-open-timeline-editor]").addEventListener("click", () => {
+      if (!state.editing) setEditing(true);
+      state.editorTool = "timeline";
+      state.selectedMachineId = null;
+      updateEditorPanel();
     });
   }
 
@@ -572,8 +1834,8 @@
   }
 
   function project(x, y, z) {
-    x -= center[0] + state.panX;
-    z -= center[1] + state.panZ;
+    x -= modelCenter()[0] + state.panX;
+    z -= modelCenter()[1] + state.panZ;
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
     const rx = x * cy - z * sy;
@@ -605,19 +1867,78 @@
     const rx = (screenX - canvas.width/2) / scale;
     const rz = (screenY - canvas.height*.57) / (sp * scale);
     return [
-      center[0] + state.panX + rx*cy + rz*sy,
-      center[1] + state.panZ - rx*sy + rz*cy,
+      modelCenter()[0] + state.panX + rx*cy + rz*sy,
+      modelCenter()[1] + state.panZ - rx*sy + rz*cy,
     ];
+  }
+
+  function angleRadians(item) {
+    return (Number(item.rotation) || 0) * Math.PI / 180;
+  }
+
+  function localPoint(item, localX, y, localZ) {
+    const angle = angleRadians(item);
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const centeredX = localX - item.w / 2;
+    const centeredZ = localZ - item.d / 2;
+    return [
+      item.x + item.w / 2 + centeredX * cosine - centeredZ * sine,
+      y,
+      item.z + item.d / 2 + centeredX * sine + centeredZ * cosine,
+    ];
+  }
+
+  function footprint(item, padding = 0, y = 0) {
+    return [
+      localPoint(item, -padding, y, -padding),
+      localPoint(item, item.w + padding, y, -padding),
+      localPoint(item, item.w + padding, y, item.d + padding),
+      localPoint(item, -padding, y, item.d + padding),
+    ];
+  }
+
+  function localBox(parent, localX, localZ, width, depth, height, color, baseY = 0) {
+    const centerPoint = localPoint(parent, localX + width / 2, baseY, localZ + depth / 2);
+    return {
+      x: centerPoint[0] - width / 2,
+      y: baseY,
+      z: centerPoint[2] - depth / 2,
+      w: width,
+      d: depth,
+      h: height,
+      color,
+      rotation: Number(parent.rotation) || 0,
+    };
+  }
+
+  function localLine(parent, start, end, color, width = 1, alpha = 1) {
+    line3d(
+      localPoint(parent, start[0], start[1], start[2]),
+      localPoint(parent, end[0], end[1], end[2]),
+      color,
+      width,
+      alpha
+    );
+  }
+
+  function pointInsideMachine(machine, x, z, padding = 2) {
+    const angle = -angleRadians(machine);
+    const centerX = machine.x + machine.w / 2;
+    const centerZ = machine.z + machine.d / 2;
+    const deltaX = x - centerX;
+    const deltaZ = z - centerZ;
+    const localX = deltaX * Math.cos(angle) - deltaZ * Math.sin(angle) + machine.w / 2;
+    const localZ = deltaX * Math.sin(angle) + deltaZ * Math.cos(angle) + machine.d / 2;
+    return localX >= -padding && localX <= machine.w + padding && localZ >= -padding && localZ <= machine.d + padding;
   }
 
   function machineAt(event) {
     const [x,z] = worldFromScreen(event);
     return machines
-      .filter((machine) => state.stageFloat >= machine.reveal - .8)
-      .filter((machine) => (
-        x >= machine.x-2 && x <= machine.x+machine.w+2 &&
-        z >= machine.z-2 && z <= machine.z+machine.d+2
-      ))
+      .filter((machine) => machine.visible !== false)
+      .filter((machine) => stageAlpha(machine.reveal, machine.retire) > .08)
+      .filter((machine) => pointInsideMachine(machine,x,z))
       .sort((a,b) => a.w*a.d - b.w*b.d)[0] || null;
   }
 
@@ -667,20 +1988,67 @@
   }
 
   function shade(hex, amount) {
-    const value = parseInt(hex.slice(1), 16);
+    const safeHex = /^#[0-9a-f]{6}$/i.test(hex) ? hex : "#67757a";
+    const value = parseInt(safeHex.slice(1), 16);
     const channel = (shift) => Math.max(0, Math.min(255, ((value >> shift) & 255) + Math.round(255 * amount)));
     return `rgb(${channel(16)},${channel(8)},${channel(0)})`;
   }
 
+  function rotateVector3(vector, rotationX = 0, rotationY = 0, rotationZ = 0) {
+    let [x, y, z] = vector;
+    const radians = (value) => (Number(value) || 0) * Math.PI / 180;
+    let cosine = Math.cos(radians(rotationX));
+    let sine = Math.sin(radians(rotationX));
+    [y, z] = [y * cosine - z * sine, y * sine + z * cosine];
+    cosine = Math.cos(radians(rotationY));
+    sine = Math.sin(radians(rotationY));
+    [x, z] = [x * cosine - z * sine, x * sine + z * cosine];
+    cosine = Math.cos(radians(rotationZ));
+    sine = Math.sin(radians(rotationZ));
+    [x, y] = [x * cosine - y * sine, x * sine + y * cosine];
+    return [x, y, z];
+  }
+
+  function boxVertices3d(item, grow = 1) {
+    const baseY = Number(item.y) || 0;
+    const width = Math.max(.01, Number(item.w) || .01);
+    const depth = Math.max(.01, Number(item.d) || .01);
+    const height = Math.max(.01, (Number(item.h) || .01) * grow);
+    const center = [item.x + width / 2, baseY + height / 2, item.z + depth / 2];
+    const rotationX = Number(item.rotationX) || 0;
+    const rotationY = Number.isFinite(Number(item.rotationY)) ? Number(item.rotationY) : Number(item.rotation) || 0;
+    const rotationZ = Number(item.rotationZ) || 0;
+    return [
+      [-width/2,-height/2,-depth/2],[width/2,-height/2,-depth/2],[width/2,-height/2,depth/2],[-width/2,-height/2,depth/2],
+      [-width/2,height/2,-depth/2],[width/2,height/2,-depth/2],[width/2,height/2,depth/2],[-width/2,height/2,depth/2],
+    ].map((offset) => {
+      const rotated = rotateVector3(offset, rotationX, rotationY, rotationZ);
+      return [center[0] + rotated[0], center[1] + rotated[1], center[2] + rotated[2]];
+    });
+  }
+
   function box(item, alpha = 1, grow = 1) {
-    const { x, z, w, d, h, color } = item;
-    const height = h * grow;
-    const base = [[x,0,z],[x+w,0,z],[x+w,0,z+d],[x,0,z+d]];
-    const top = base.map(([px,,pz]) => [px,height,pz]);
-    polygon([base[0],base[1],top[1],top[0]], shade(color,-.12), null, 1, alpha);
-    polygon([base[1],base[2],top[2],top[1]], shade(color,-.22), null, 1, alpha);
-    polygon([base[2],base[3],top[3],top[2]], shade(color,-.18), null, 1, alpha);
-    polygon(top, color, "rgba(20,30,34,.28)", 1, alpha);
+    if (alpha <= 0.01) return;
+    const vertices = boxVertices3d(item, grow);
+    const faceDefinitions = [
+      { indices:[0,1,5,4], fill:shade(item.color,-.12) },
+      { indices:[1,2,6,5], fill:shade(item.color,-.22) },
+      { indices:[2,3,7,6], fill:shade(item.color,-.18) },
+      { indices:[3,0,4,7], fill:shade(item.color,-.08) },
+      { indices:[3,2,1,0], fill:shade(item.color,-.28) },
+      { indices:[4,5,6,7], fill:item.color, stroke:"rgba(20,30,34,.28)" },
+    ];
+    faceDefinitions
+      .map((face) => {
+        const points = face.indices.map((index) => vertices[index]);
+        return {
+          ...face,
+          points,
+          depth: points.reduce((sum, point) => sum + project(...point)[2], 0) / points.length,
+        };
+      })
+      .sort((first, second) => first.depth - second.depth)
+      .forEach((face) => polygon(face.points, face.fill, face.stroke || "rgba(20,30,34,.12)", .7, alpha));
   }
 
   function line3d(start, end, color, width = 1, alpha = 1) {
@@ -697,23 +2065,72 @@
     ctx.restore();
   }
 
-  function label(text, x, y, z, color) {
+  let labelRects = [];
+
+  function rectanglesIntersect(first, second) {
+    return !(
+      first.right <= second.left ||
+      first.left >= second.right ||
+      first.bottom <= second.top ||
+      first.top >= second.bottom
+    );
+  }
+
+  function label(text, x, y, z, color, priority = false) {
     if (!state.showLabels) return;
     const point = project(x, y, z);
     ctx.save();
     ctx.font = `600 ${Math.max(10, canvas.width / 115)}px "Segoe UI", sans-serif`;
     const width = ctx.measureText(text).width + 16;
-    ctx.fillStyle = "rgba(24,32,37,.82)";
-    ctx.fillRect(point[0] - width / 2, point[1] - 25, width, 20);
+    const height = 20;
+    const offsets = priority ? [0, -24, 24, -48, 48, -72] : [0, -24, 24, -48, 48];
+    let rectangle = null;
+    let drawY = point[1] - 25;
+    for (const offset of offsets) {
+      const candidateY = point[1] - 25 + offset;
+      const candidate = {
+        left: point[0] - width / 2,
+        right: point[0] + width / 2,
+        top: candidateY,
+        bottom: candidateY + height,
+      };
+      if (!labelRects.some((used) => rectanglesIntersect(candidate, used))) {
+        rectangle = candidate;
+        drawY = candidateY;
+        break;
+      }
+    }
+    if (!rectangle && !priority) {
+      ctx.restore();
+      return;
+    }
+    rectangle ||= {
+      left: point[0] - width / 2,
+      right: point[0] + width / 2,
+      top: drawY,
+      bottom: drawY + height,
+    };
+    labelRects.push(rectangle);
+    if (Math.abs(drawY - (point[1] - 25)) > 1) {
+      ctx.beginPath();
+      ctx.moveTo(point[0], point[1] - 4);
+      ctx.lineTo(point[0], drawY + height);
+      ctx.strokeStyle = "rgba(34,48,52,.38)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(24,32,37,.86)";
+    ctx.fillRect(rectangle.left, drawY, width, height);
     ctx.fillStyle = color;
-    ctx.fillRect(point[0] - width / 2, point[1] - 25, 3, 20);
+    ctx.fillRect(rectangle.left, drawY, 3, height);
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
-    ctx.fillText(text, point[0], point[1] - 11);
+    ctx.fillText(text, point[0], drawY + 14);
     ctx.restore();
   }
 
   function drawFloor() {
+    const bounds = floorBounds();
     polygon(
       [[bounds[0],0,bounds[1]],[bounds[2],0,bounds[1]],[bounds[2],0,bounds[3]],[bounds[0],0,bounds[3]]],
       colors.floor,
@@ -740,18 +2157,24 @@
   function drawShell() {
     const painted = clamp(state.stageFloat - 2.35);
     const wall = painted > .5 ? colors.finished : colors.shell;
-    wallSections.forEach((section) => {
+    wallSections().forEach((section) => {
       if (state.walls[section.id] !== false) box({ ...section, color: wall });
     });
   }
 
-  function drawColumns() {
+  function drawColumn(index) {
+    const column = data.columns[index];
+    if (!column || state.hiddenColumns.has(index)) return;
+    const [x,z] = column;
     const yellow = clamp(state.stageFloat - 2.35);
-    data.columns.slice(0, 96).forEach(([x,z],index) => {
-      if (state.hiddenColumns.has(index)) return;
-      box({ x:x-1.05,z:z-1.05,w:2.1,d:2.1,h:22,color:colors.steel });
-      if (yellow > .01) box({ x:x-1.16,z:z-1.16,w:2.32,d:2.32,h:22,color:colors.yellow },yellow,yellow);
-    });
+    box({ x:x-1.05,z:z-1.05,w:2.1,d:2.1,h:22,color:colors.steel });
+    if (yellow > .01) {
+      box({ x:x-1.16,z:z-1.16,w:2.32,d:2.32,h:22,color:colors.yellow },yellow,yellow);
+    }
+  }
+
+  function sceneDepth(x,z) {
+    return project(x,0,z)[2];
   }
 
   function drawTrenches() {
@@ -790,189 +2213,458 @@
     if (railAlpha <= .01) return;
     const padding = machine.crane.capacity === "5 ton" ? 7 : 3;
     const height = machine.crane.height;
-    const left = machine.x - padding;
-    const right = machine.x + machine.w + padding;
-    const near = machine.z - padding;
-    const far = machine.z + machine.d + padding;
     const runway = machine.crane.capacity === "5 ton" ? "#555f61" : "#2572a4";
     const bridge = machine.crane.capacity === "5 ton" ? "#e4b52d" : "#cdd3d3";
     const support = "#dcaf28";
 
-    line3d([left,height,near],[right,height,near],runway,machine.crane.capacity === "5 ton" ? 4 : 3,railAlpha);
-    line3d([left,height,far],[right,height,far],runway,machine.crane.capacity === "5 ton" ? 4 : 3,railAlpha);
-    [[left,near],[right,near],[left,far],[right,far]].forEach(([x,z]) => {
-      line3d([x,0,z],[x,height,z],support,2.2,railAlpha * .72);
+    localLine(machine,[-padding,height,-padding],[machine.w+padding,height,-padding],runway,machine.crane.capacity === "5 ton" ? 4 : 3,railAlpha);
+    localLine(machine,[-padding,height,machine.d+padding],[machine.w+padding,height,machine.d+padding],runway,machine.crane.capacity === "5 ton" ? 4 : 3,railAlpha);
+    [[-padding,-padding],[machine.w+padding,-padding],[-padding,machine.d+padding],[machine.w+padding,machine.d+padding]].forEach(([x,z]) => {
+      localLine(machine,[x,0,z],[x,height,z],support,2.2,railAlpha * .72);
     });
 
     if (machineAlpha <= .01) return;
-    const bridgeX = machine.x + machine.w * .56;
-    line3d([bridgeX,height+.2,near],[bridgeX,height+.2,far],bridge,machine.crane.capacity === "5 ton" ? 5 : 3.5,machineAlpha);
-    line3d(
-      [bridgeX-1.2,height+.65,machine.z+machine.d/2],
-      [bridgeX+1.2,height+.65,machine.z+machine.d/2],
-      machine.crane.capacity === "5 ton" ? "#333b3e" : colors.orange,
-      5,
-      machineAlpha
-    );
-    line3d(
-      [bridgeX,height,machine.z+machine.d/2],
-      [bridgeX,machine.h+1.2,machine.z+machine.d/2],
-      "#33383a",
-      1.7,
-      machineAlpha
-    );
+    const bridgeX = machine.w * .56;
+    localLine(machine,[bridgeX,height+.2,-padding],[bridgeX,height+.2,machine.d+padding],bridge,machine.crane.capacity === "5 ton" ? 5 : 3.5,machineAlpha);
+    localLine(machine,[bridgeX-1.2,height+.65,machine.d/2],[bridgeX+1.2,height+.65,machine.d/2],machine.crane.capacity === "5 ton" ? "#333b3e" : colors.orange,5,machineAlpha);
+    localLine(machine,[bridgeX,height,machine.d/2],[bridgeX,machine.h+1.2,machine.d/2],"#33383a",1.7,machineAlpha);
   }
 
-  function drawMachineShape(machine, alpha, grow) {
-    const item = { ...machine, h: machine.h * grow };
+  function drawRollerBed(machine, startX, endX, nearZ, farZ, y, spacing, color, alpha, width = 1.5) {
+    const usable = Math.max(0, endX - startX);
+    for (let offset = 0; offset <= usable; offset += Math.max(0.75, spacing)) {
+      localLine(machine,[startX + offset,y,nearZ],[startX + offset,y,farZ],color,width,alpha);
+    }
+  }
+
+  function drawControlConsole(machine, localX, localZ, width, depth, height, baseY, alpha) {
+    box(localBox(machine,localX,localZ,width,depth,height,"#e4e8e5",baseY),alpha,1);
+    box(localBox(machine,localX + width*.12,localZ-.08,width*.76,.16,height*.34,"#26363d",baseY + height*.48),alpha,1);
+    box(localBox(machine,localX + width*.22,localZ-.13,width*.56,.12,height*.18,"#51a8c6",baseY + height*.56),alpha*.95,1);
+  }
+
+  function scaledComponentBox(machine, component, design) {
+    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
+    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
+    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
+    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
+    const width = Math.max(.02, Number(component.w) * scaleX);
+    const depth = Math.max(.02, Number(component.d) * scaleZ);
+    const height = Math.max(.02, Number(component.h) * scaleY);
+    const localCenterX = (Number(component.x) + Number(component.w) / 2) * scaleX;
+    const localCenterZ = (Number(component.z) + Number(component.d) / 2) * scaleZ;
+    const worldCenter = localPoint(machine, localCenterX, 0, localCenterZ);
+    return {
+      x: worldCenter[0] - width / 2,
+      z: worldCenter[2] - depth / 2,
+      y: Number(component.y) * scaleY,
+      w: width,
+      d: depth,
+      h: height,
+      color: component.color || machine.color,
+      rotationX: Number(component.rotationX) || 0,
+      rotationY: (Number(machine.rotation) || 0) + (Number.isFinite(Number(component.rotationY)) ? Number(component.rotationY) : Number(component.rotation) || 0),
+      rotationZ: Number(component.rotationZ) || 0,
+      rotation: (Number(machine.rotation) || 0) + (Number.isFinite(Number(component.rotationY)) ? Number(component.rotationY) : Number(component.rotation) || 0),
+    };
+  }
+
+  function drawDesignWheel(machine, component, design, alpha) {
+    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
+    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
+    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
+    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
+    const point = project(...localPoint(
+      machine,
+      Number(component.x) * scaleX,
+      Number(component.y) * scaleY,
+      Number(component.z) * scaleZ,
+    ));
+    const wheelWidth = Number(component.w || component.size || 1.2) * scaleX;
+    const wheelHeight = Number(component.h || component.size || 1.2) * scaleY;
+    const radiusX = Math.max(2.4, wheelWidth * state.zoom * 1.5);
+    const radiusY = Math.max(2.0, wheelHeight * state.zoom * 0.95);
+    ctx.save();
+    ctx.globalAlpha = alpha * (Number(component.opacity) || 1);
+    ctx.fillStyle = component.color || "#20272a";
+    ctx.beginPath();
+    ctx.ellipse(point[0], point[1], radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function designComponentRotation(component) {
+    return [
+      Number(component.rotationX) || 0,
+      Number.isFinite(Number(component.rotationY)) ? Number(component.rotationY) : Number(component.rotation) || 0,
+      Number(component.rotationZ) || 0,
+    ];
+  }
+
+  function rotatedDesignPoint(component, point, center) {
+    const offset = [point[0]-center[0], point[1]-center[1], point[2]-center[2]];
+    const rotated = rotateVector3(offset, ...designComponentRotation(component));
+    return [center[0]+rotated[0], center[1]+rotated[1], center[2]+rotated[2]];
+  }
+
+  function drawCustomDesign(machine, alpha, grow) {
+    const design = machine.designId ? designLibrary[machine.designId] : null;
+    if (!design || !Array.isArray(design.components)) return false;
+    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
+    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
+    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
+    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
+    const visibleComponents = design.components.filter((component) => component.visible !== false);
+    visibleComponents.forEach((component) => {
+      const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0.05, 1);
+      if (component.type === "box" || component.type === "glassPanel") {
+        box(scaledComponentBox(machine, component, design), componentAlpha, grow);
+      } else if (component.type === "beam") {
+        const start = [Number(component.x), Number(component.y), Number(component.z)];
+        const end = [Number(component.x2), Number(component.y2), Number(component.z2)];
+        const center = [(start[0]+end[0])/2,(start[1]+end[1])/2,(start[2]+end[2])/2];
+        const rotatedStart = rotatedDesignPoint(component,start,center);
+        const rotatedEnd = rotatedDesignPoint(component,end,center);
+        localLine(machine,
+          [rotatedStart[0] * scaleX, rotatedStart[1] * scaleY * grow, rotatedStart[2] * scaleZ],
+          [rotatedEnd[0] * scaleX, rotatedEnd[1] * scaleY * grow, rotatedEnd[2] * scaleZ],
+          component.color || machine.color,
+          Math.max(.5, Number(component.thickness) || 2),
+          componentAlpha,
+        );
+      } else if (component.type === "rollerBed") {
+        const count = Math.max(2, Math.round(Number(component.count) || 10));
+        const width = Number(component.w) * scaleX;
+        const depth = Number(component.d) * scaleZ;
+        for (let index = 0; index < count; index += 1) {
+          const ratio = count === 1 ? 0 : index / (count - 1);
+          const localX = Number(component.x) + Number(component.w) * ratio;
+          const start = [localX, Number(component.y), Number(component.z)];
+          const end = [localX, Number(component.y), Number(component.z) + Number(component.d)];
+          const center = [Number(component.x)+Number(component.w)/2,Number(component.y),Number(component.z)+Number(component.d)/2];
+          const rotatedStart = rotatedDesignPoint(component,start,center);
+          const rotatedEnd = rotatedDesignPoint(component,end,center);
+          const roundedWidth = Math.max(.6, Number(component.thickness) || 1.5);
+          ctx.save();
+          ctx.lineCap = "round";
+          localLine(machine,
+            [rotatedStart[0] * scaleX, rotatedStart[1] * scaleY * grow, rotatedStart[2] * scaleZ],
+            [rotatedEnd[0] * scaleX, rotatedEnd[1] * scaleY * grow, rotatedEnd[2] * scaleZ],
+            component.color || "#c7d0cd",
+            roundedWidth,
+            componentAlpha,
+          );
+          ctx.restore();
+        }
+      } else if (component.type === "wheel") {
+        drawDesignWheel(machine, component, design, componentAlpha);
+      }
+    });
+    return true;
+  }
+
+  function drawMachineShape(machine, alpha, grow, time) {
+    if (drawCustomDesign(machine, alpha, grow)) return;
+    const topHeight = machine.h * grow;
     if (machine.type === "cutting") {
-      box(item,alpha,1);
-      for (let offset=7; offset<machine.w; offset+=9) {
-        line3d([machine.x+offset,machine.h+.15,machine.z+3],[machine.x+offset,machine.h+.15,machine.z+machine.d-3],"#b8cfca",1,alpha);
+      box(localBox(machine,0,0,machine.w,machine.d,1.25*grow,shade(machine.color,-.08)),alpha,1);
+      box(localBox(machine,1,1,Math.max(.5,machine.w-2),Math.max(.5,machine.d-2),.42*grow,"#96c4c8",1.24*grow),alpha*.9,1);
+      for (let offset=5; offset<machine.w; offset+=7) {
+        localLine(machine,[offset,1.72*grow,2],[offset,1.72*grow,machine.d-2],"#d8e5e2",1,alpha*.75);
       }
+      for (let offset=6; offset<machine.d; offset+=9) {
+        localLine(machine,[2,1.74*grow,offset],[machine.w-2,1.74*grow,offset],"#56777a",.8,alpha*.58);
+      }
+      drawControlConsole(machine,Math.max(1,machine.w-6),1,4.6,3.2,4.4*grow,1.2*grow,alpha);
     } else if (machine.type === "waterjet") {
-      box({ ...item, h: 3.5 * grow },alpha,1);
-      box({x:machine.x+2,z:machine.z+2,w:machine.w*.48,d:machine.d-4,h:2.2*grow,color:"#58777e"},alpha,1);
-      box({x:machine.x+machine.w-5,z:machine.z+2,w:3.5,d:3.5,h:8*grow,color:"#38494e"},alpha,1);
+      const basinHeight = Math.max(.8,3.2*grow);
+      box(localBox(machine,0,0,machine.w,machine.d,basinHeight,shade(machine.color,-.05)),alpha,1);
+      box(localBox(machine,1.1,1.1,Math.max(.5,machine.w-2.2),Math.max(.5,machine.d-2.2),.28*grow,"#7fc3cf",basinHeight-.08),alpha*.92,1);
+      localLine(machine,[.7,basinHeight+.18,.7],[machine.w-.7,basinHeight+.18,.7],"#d8dedc",3,alpha);
+      localLine(machine,[.7,basinHeight+.18,machine.d-.7],[machine.w-.7,basinHeight+.18,machine.d-.7],"#d8dedc",3,alpha);
+      localLine(machine,[1.2,basinHeight+.25,1.1],[1.2,basinHeight+.25,machine.d-1.1],"#174c79",3.2,alpha);
+      localLine(machine,[machine.w-1.2,basinHeight+.25,1.1],[machine.w-1.2,basinHeight+.25,machine.d-1.1],"#174c79",3.2,alpha);
+      const gantryZ = machine.d*.58;
+      localLine(machine,[1.3,basinHeight,gantryZ],[1.3,7.4*grow,gantryZ],"#c8cecb",4,alpha);
+      localLine(machine,[machine.w-1.3,basinHeight,gantryZ],[machine.w-1.3,7.4*grow,gantryZ],"#c8cecb",4,alpha);
+      localLine(machine,[1.3,7.2*grow,gantryZ],[machine.w-1.3,7.2*grow,gantryZ],"#d5d9d6",6,alpha);
+      const headX = machine.w*.58;
+      box(localBox(machine,headX-.7,gantryZ-.55,1.4,1.1,2.1*grow,"#3a4a50",5.1*grow),alpha,1);
+      localLine(machine,[headX,5.2*grow,gantryZ],[headX,basinHeight+.5,gantryZ],"#b2c5c7",1.5,alpha);
+      localLine(machine,[headX+.7,7.7*grow,gantryZ],[machine.w-2,8.4*grow,machine.d*.16],"#e5bd2d",2.4,alpha*.9);
+      drawControlConsole(machine,Math.max(.5,machine.w-4.5),.35,3.6,2.6,5.2*grow,basinHeight,alpha);
     } else if (machine.type === "filtration") {
-      box(item,alpha,1);
-      [1.4,3.8].forEach((offset) => {
-        box({x:machine.x+offset,z:machine.z+1,w:1.7,d:machine.d-2,h:10*grow,color:"#438a9f"},alpha,1);
-      });
+      box(localBox(machine,0,0,machine.w,machine.d,1.2*grow,shade(machine.color,-.16)),alpha,1);
+      const tankWidth = Math.max(.8,(machine.w-1.5)/3);
+      for (let index=0; index<3; index++) {
+        box(localBox(machine,.35 + index*tankWidth,.8,tankWidth*.72,Math.max(.5,machine.d-1.6),Math.max(1,7.2*grow),index === 1 ? "#438a9f" : "#5f99aa",1.1*grow),alpha,1);
+      }
+      localLine(machine,[.5,8.4*grow,1],[machine.w-.5,8.4*grow,1],"#cfd6d4",2,alpha);
+      localLine(machine,[machine.w*.5,8.4*grow,1],[machine.w*.5,2*grow,machine.d-.5],"#cfd6d4",1.5,alpha);
     } else if (machine.type === "kodiak") {
-      box({ ...item, h: 4.5 * grow },alpha,1);
-      box({x:machine.x+2,z:machine.z+1,w:machine.w-4,d:2.2,h:7*grow,color:"#eef0ed"},alpha,1);
-      box({x:machine.x+machine.w*.58,z:machine.z+1,w:6,d:machine.d-2,h:8.2*grow,color:"#495b60"},alpha,1);
+      box(localBox(machine,0,0,machine.w,machine.d,1.05*grow,"#313b3f"),alpha,1);
+      box(localBox(machine,.35,.35,Math.max(.5,machine.w-.7),Math.max(.5,machine.d-.7),2.8*grow,"#ecefeb",1.0*grow),alpha,1);
+      box(localBox(machine,.5,.55,Math.max(.5,machine.w-.9),1.15,1.0*grow,"#7d8988",3.55*grow),alpha,1);
+      drawRollerBed(machine,1,machine.w-1,.4,2.0,4.72*grow,1.4,"#c5cfcc",alpha,1.1);
+      const motorCount = 10;
+      const motorStep = (machine.w-2) / motorCount;
+      for (let index=0; index<motorCount; index++) {
+        const motorX = 1 + index*motorStep + motorStep*.12;
+        box(localBox(machine,motorX,machine.d*.58,motorStep*.7,Math.max(.6,machine.d*.28),2.15*grow,"#144783",.55*grow),alpha,1);
+        box(localBox(machine,motorX + motorStep*.12,machine.d*.55,motorStep*.46,.45,.48*grow,"#e0e5e2",2.7*grow),alpha,1);
+      }
+      box(localBox(machine,machine.w*.54,.25,machine.w*.3,2.05,3.7*grow,"#d8ddda",4.3*grow),alpha,1);
+      drawControlConsole(machine,machine.w*.72,.05,machine.w*.18,1.7,3.3*grow,4.5*grow,alpha);
+      for (let offset=1.5; offset<machine.w; offset+=5) {
+        localLine(machine,[offset,0,.4],[offset,-.45,.4],"#1f272a",2.2,alpha);
+        localLine(machine,[offset,0,machine.d-.4],[offset,-.45,machine.d-.4],"#1f272a",2.2,alpha);
+      }
     } else if (machine.type === "denver") {
-      box({ ...item, d: 3.2, h: 13 * grow },alpha,1);
-      box({x:machine.x+2,z:machine.z+3.2,w:machine.w-4,d:2.2,h:3*grow,color:"#7f8d8d"},alpha,1);
-      for (let offset=4; offset<machine.w-2; offset+=4) {
-        line3d([machine.x+offset,3*grow,machine.z+3.2],[machine.x+offset,3*grow,machine.z+5.4],"#d3d6d3",1.2,alpha);
+      box(localBox(machine,0,0,machine.w,machine.d,1.0*grow,"#4d585b"),alpha,1);
+      box(localBox(machine,.5,machine.d*.42,Math.max(.5,machine.w-1),machine.d*.28,2.3*grow,"#909c9b",1.0*grow),alpha,1);
+      drawRollerBed(machine,1,machine.w-1,machine.d*.34,machine.d*.78,3.4*grow,2.3,"#d7ddda",alpha,1.4);
+      const towerX = machine.w*.45;
+      const towerWidth = Math.max(4,machine.w*.15);
+      box(localBox(machine,towerX,machine.d*.08,towerWidth,machine.d*.84,Math.max(2,topHeight),"#151d22"),alpha,1);
+      box(localBox(machine,towerX-.9,machine.d*.12,.9,machine.d*.76,Math.max(2,topHeight*.94),"#edf0ed",.2*grow),alpha,1);
+      box(localBox(machine,towerX+towerWidth,machine.d*.12,.9,machine.d*.76,Math.max(2,topHeight*.94),"#edf0ed",.2*grow),alpha,1);
+      box(localBox(machine,towerX+towerWidth*.14,machine.d*.02,towerWidth*.72,.24,topHeight*.52,"#253139",topHeight*.23),alpha*.94,1);
+      localLine(machine,[towerX+towerWidth*.5,topHeight*.18,machine.d*.02],[towerX+towerWidth*.5,topHeight*.87,machine.d*.02],"#6888a8",3.2,alpha);
+      drawControlConsole(machine,Math.max(.4,machine.w-4.2),.25,3.6,2.3,4.1*grow,2.4*grow,alpha);
+      localLine(machine,[.8,4.1*grow,machine.d-.2],[machine.w-.8,4.1*grow,machine.d-.2],"#d9b126",2,alpha*.8);
+      for (let offset=1; offset<machine.w; offset+=6) {
+        localLine(machine,[offset,0,machine.d-.15],[offset,4.1*grow,machine.d-.15],"#d9b126",1.2,alpha*.72);
       }
+    } else if (machine.type === "washer") {
+      box(localBox(machine,0,0,machine.w,machine.d,1.2*grow,"#318d98"),alpha,1);
+      const enclosureX = machine.w*.24;
+      const enclosureWidth = machine.w*.52;
+      box(localBox(machine,enclosureX,.5,enclosureWidth,Math.max(.5,machine.d-1),Math.max(2,topHeight),"#c7cdcb",1.0*grow),alpha,1);
+      localLine(machine,[machine.w*.5,1.5*grow,.38],[machine.w*.5,topHeight*.9,.38],"#6f7877",1.1,alpha);
+      localLine(machine,[enclosureX+1,topHeight*.7,.35],[enclosureX+enclosureWidth-1,topHeight*.7,.35],"#eef1ef",1.1,alpha);
+      box(localBox(machine,enclosureX+.7,.2,enclosureWidth*.24,.22,1.25*grow,"#26518c",topHeight*.45),alpha,1);
+      drawRollerBed(machine,.4,enclosureX,.75,machine.d-.75,3.0*grow,1.6,"#d1d9d6",alpha,1.2);
+      drawRollerBed(machine,enclosureX+enclosureWidth,machine.w-.4,.75,machine.d-.75,3.0*grow,1.6,"#d1d9d6",alpha,1.2);
     } else if (machine.type === "furnace") {
-      box(item,alpha,1);
-      box({x:machine.x-8,z:machine.z+2,w:8,d:machine.d-4,h:3.4*grow,color:"#7f8988"},alpha,1);
-      box({x:machine.x+machine.w,z:machine.z+2,w:10,d:machine.d-4,h:3.4*grow,color:"#7f8988"},alpha,1);
-      for (let offset=-6; offset<machine.w+9; offset+=4) {
-        line3d([machine.x+offset,3.7*grow,machine.z+2],[machine.x+offset,3.7*grow,machine.z+machine.d-2],"#d2d4cf",1,alpha);
+      box(localBox(machine,0,0,machine.w,machine.d,1.4*grow,"#343d40"),alpha,1);
+      drawRollerBed(machine,.5,machine.w-.5,1,machine.d-1,3.05*grow,1.5,"#d9493f",alpha,2.2);
+      const hoodX = machine.w*.2;
+      const hoodWidth = machine.w*.6;
+      box(localBox(machine,hoodX,.8,hoodWidth,Math.max(.5,machine.d-1.6),5.6*grow,"#e8e9e5",3.2*grow),alpha,1);
+      box(localBox(machine,hoodX-.25,1.5,.35,Math.max(.5,machine.d-3),3.9*grow,"#30383b",3.6*grow),alpha,1);
+      box(localBox(machine,hoodX+hoodWidth-.1,1.5,.35,Math.max(.5,machine.d-3),3.9*grow,"#30383b",3.6*grow),alpha,1);
+      for (let offset=hoodX+3; offset<hoodX+hoodWidth; offset+=5) {
+        box(localBox(machine,offset,.9,1.2,1.2,1.8*grow,"#b8bfbd",8.4*grow),alpha,1);
       }
+      drawControlConsole(machine,Math.max(.5,machine.w-4.3),.3,3.7,2.5,4.2*grow,3.0*grow,alpha);
     } else if (machine.type === "cube") {
-      box(item,alpha,1);
-      box({x:machine.x+2,z:machine.z+2,w:machine.w-4,d:machine.d-4,h:machine.h+2,color:"#668e96"},alpha,grow);
-    } else if (machine.type === "aFrame") {
-      line3d([machine.x,0,machine.z],[machine.x+machine.w,0,machine.z],machine.color,3,alpha);
-      line3d([machine.x,0,machine.z+machine.d],[machine.x+machine.w,0,machine.z+machine.d],machine.color,3,alpha);
-      line3d([machine.x,0,machine.z],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
-      line3d([machine.x,0,machine.z+machine.d],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
-      line3d([machine.x+machine.w,0,machine.z],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
-      line3d([machine.x+machine.w,0,machine.z+machine.d],[machine.x+machine.w/2,machine.h,machine.z+machine.d/2],machine.color,3,alpha);
-      polygon(
-        [[machine.x+1,.4,machine.z+1],[machine.x+machine.w/2,machine.h-.8,machine.z+machine.d/2],[machine.x+machine.w-1,.4,machine.z+1]],
-        "rgba(143,198,212,.48)",
-        "#8fc6d4",
-        1,
-        alpha
-      );
-    } else if (machine.type === "craneMachine") {
-      const top = machine.h * grow;
-      [[machine.x,machine.z],[machine.x+machine.w,machine.z],[machine.x,machine.z+machine.d],[machine.x+machine.w,machine.z+machine.d]].forEach(([x,z]) => {
-        line3d([x,0,z],[x,top,z],machine.color,4,alpha);
+      box(localBox(machine,0,0,machine.w,machine.d,Math.max(2,topHeight),"#285b91"),alpha,1);
+      box(localBox(machine,machine.w*.15,-.08,machine.w*.7,.2,topHeight*.84,"#1d4b7d",topHeight*.08),alpha,1);
+      box(localBox(machine,machine.w*.2,-.14,machine.w*.22,.12,topHeight*.2,"#152d3b",topHeight*.58),alpha,1);
+      drawControlConsole(machine,machine.w*.64,-.18,machine.w*.22,.32,topHeight*.28,topHeight*.47,alpha);
+      for (let offset=machine.w*.18; offset<machine.w*.82; offset+=Math.max(.8,machine.w*.09)) {
+        localLine(machine,[offset,topHeight*.2,-.18],[offset,topHeight*.34,-.18],"#9bb7c2",.8,alpha*.75);
+      }
+      box(localBox(machine,machine.w*.42,machine.d*.34,machine.w*.18,machine.d*.18,topHeight*.36,"#27445d",topHeight),alpha,1);
+    } else if (machine.type === "wrapping") {
+      box(localBox(machine,0,0,machine.w,machine.d,1.0*grow,"#5f696b"),alpha,1);
+      drawRollerBed(machine,.5,machine.w-.5,.6,machine.d-.6,3.4*grow,1.5,"#aeb9b6",alpha,1.8);
+      [[.5,.5],[machine.w-.5,.5],[.5,machine.d-.5],[machine.w-.5,machine.d-.5]].forEach(([x,z]) => {
+        localLine(machine,[x,0,z],[x,3.3*grow,z],"#d9ddda",2.3,alpha);
       });
-      line3d([machine.x,top,machine.z],[machine.x+machine.w,top,machine.z],machine.color,5,alpha);
-      line3d([machine.x,top,machine.z+machine.d],[machine.x+machine.w,top,machine.z+machine.d],machine.color,5,alpha);
-      line3d([machine.x+machine.w*.55,top+.2,machine.z],[machine.x+machine.w*.55,top+.2,machine.z+machine.d],"#566165",5,alpha);
-      line3d([machine.x+machine.w*.55,top,machine.z+machine.d/2],[machine.x+machine.w*.55,3,machine.z+machine.d/2],"#30383b",2,alpha);
+      box(localBox(machine,1,machine.d*.58,3.6,2.6,2.2*grow,"#24568b",3.5*grow),alpha,1);
+      localLine(machine,[machine.w*.22,6.5*grow,machine.d*.05],[machine.w*.78,6.5*grow,machine.d*.05],"#8f9896",3,alpha);
+      localLine(machine,[machine.w*.28,6.5*grow,machine.d*.05],[machine.w*.28,3.7*grow,machine.d*.05],"#8f9896",2,alpha);
+      localLine(machine,[machine.w*.72,6.5*grow,machine.d*.05],[machine.w*.72,3.7*grow,machine.d*.05],"#8f9896",2,alpha);
+      drawControlConsole(machine,Math.max(.5,machine.w-3.8),.15,3.2,2.1,3.8*grow,3.3*grow,alpha);
+    } else if (machine.type === "shipping") {
+      box(localBox(machine,0,0,machine.w,machine.d,1.3*grow,"#333a3c"),alpha,1);
+      const cabWidth = machine.w*.3;
+      box(localBox(machine,0,.8,cabWidth,Math.max(.5,machine.d-1.6),4.3*grow,"#e1e5e2",1.2*grow),alpha,1);
+      box(localBox(machine,cabWidth*.15,.55,cabWidth*.65,.3,1.5*grow,"#8fc6d4",3.5*grow),alpha*.9,1);
+      const rackStart = cabWidth+.6;
+      const peak = Math.max(3,topHeight);
+      localLine(machine,[rackStart,1.3*grow,.5],[machine.w-.5,1.3*grow,.5],"#cfd5d2",3,alpha);
+      localLine(machine,[rackStart,1.3*grow,machine.d-.5],[machine.w-.5,1.3*grow,machine.d-.5],"#cfd5d2",3,alpha);
+      for (let offset=rackStart; offset<=machine.w-.5; offset+=Math.max(3,(machine.w-rackStart)/5)) {
+        localLine(machine,[offset,1.3*grow,.5],[offset,peak,machine.d/2],"#cfd5d2",2,alpha);
+        localLine(machine,[offset,1.3*grow,machine.d-.5],[offset,peak,machine.d/2],"#cfd5d2",2,alpha);
+      }
+      for (let panel=0; panel<4; panel++) {
+        const offset = rackStart+1.2+panel*Math.max(1.4,(machine.w-rackStart-3)/3);
+        box(localBox(machine,Math.min(offset,machine.w-1.3),1.2,.45,Math.max(.5,machine.d-2.4),Math.max(2,machine.h*.72*grow),colors.glass,1.45*grow),alpha*.72,1);
+      }
+      [[cabWidth*.25,.2],[cabWidth*.75,.2],[machine.w*.65,.2],[machine.w*.88,.2]].forEach(([x,z]) => {
+        box(localBox(machine,x-.55,z,.95,1.2,1.0*grow,"#1d2224",-.15),alpha,1);
+      });
+    } else if (machine.type === "aFrame" || machine.type === "aFrameTruck") {
+      const isTruck = machine.type === "aFrameTruck";
+      const peak = [machine.w/2,topHeight,machine.d/2];
+      box(localBox(machine,0,0,machine.w,machine.d,.75,machine.color,.1),alpha,1);
+      localLine(machine,[0,1,0],[machine.w,1,0],machine.color,isTruck ? 4 : 3,alpha);
+      localLine(machine,[0,1,machine.d],[machine.w,1,machine.d],machine.color,isTruck ? 4 : 3,alpha);
+      const braceCount = isTruck ? 5 : 4;
+      for (let index = 0; index < braceCount; index += 1) {
+        const x = .5 + (machine.w - 1) * (braceCount === 1 ? 0 : index / (braceCount - 1));
+        localLine(machine,[x,1,.6],[x,topHeight,machine.d/2],machine.color,isTruck ? 3 : 2.5,alpha);
+        localLine(machine,[x,1,machine.d-.6],[x,topHeight,machine.d/2],machine.color,isTruck ? 3 : 2.5,alpha);
+      }
+      localLine(machine,[.5,topHeight,machine.d/2],[machine.w-.5,topHeight,machine.d/2],machine.color,isTruck ? 4 : 3,alpha);
+      box(localBox(machine,1,1.4,.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
+      box(localBox(machine,1,1.4,machine.d-Math.max(.4,machine.d*.12)-.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
+      const wheelXs = isTruck ? [1.5,machine.w/2,machine.w-1.5] : [1,machine.w-1];
+      wheelXs.forEach((x) => {
+        [0.7,machine.d-.7].forEach((z) => {
+          const point = project(...localPoint(machine,x,.2,z));
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = "#20272a";
+          ctx.beginPath();
+          ctx.ellipse(point[0],point[1],Math.max(3,canvas.width/330),Math.max(2,canvas.width/500),0,0,Math.PI*2);
+          ctx.fill();
+          ctx.restore();
+        });
+      });
+      if (isTruck) {
+        localLine(machine,[-4,1.2,machine.d/2],[0,1.2,machine.d/2],"#4e5a5c",3,alpha);
+        localLine(machine,[-4,1.2,machine.d/2-.7],[-4,1.2,machine.d/2+.7],"#4e5a5c",3,alpha);
+      } else {
+        localLine(machine,[.2,1,machine.d-.15],[.2,5.5,machine.d-.15],"#4e5a5c",2.4,alpha);
+        localLine(machine,[.2,5.5,machine.d-.15],[2.5,5.5,machine.d-.15],"#4e5a5c",2.4,alpha);
+      }
+    } else if (machine.type === "craneMachine" || machine.type === "bridgeCrane") {
+      const beamColor = machine.type === "bridgeCrane" ? "#566165" : machine.color;
+      [[0,0],[machine.w,0],[0,machine.d],[machine.w,machine.d]].forEach(([x,z]) => {
+        localLine(machine,[x,0,z],[x,topHeight,z],machine.color,4,alpha);
+      });
+      localLine(machine,[0,topHeight,0],[machine.w,topHeight,0],machine.color,5,alpha);
+      localLine(machine,[0,topHeight,machine.d],[machine.w,topHeight,machine.d],machine.color,5,alpha);
+      const bridgeX = machine.w*.55;
+      localLine(machine,[bridgeX,topHeight+.2,0],[bridgeX,topHeight+.2,machine.d],beamColor,5,alpha);
+      localLine(machine,[bridgeX,topHeight,machine.d/2],[bridgeX,Math.min(3,topHeight*.4),machine.d/2],"#30383b",2,alpha);
+      if (machine.type === "bridgeCrane") {
+        localLine(machine,[bridgeX-1.2,topHeight+.55,machine.d/2],[bridgeX+1.2,topHeight+.55,machine.d/2],colors.orange,5,alpha);
+      }
+    } else if (machine.type === "glassRack") {
+      const peak = Math.max(2,topHeight);
+      localLine(machine,[0,0,0],[machine.w,0,0],machine.color,3,alpha);
+      localLine(machine,[0,0,machine.d],[machine.w,0,machine.d],machine.color,3,alpha);
+      for (let offset=0; offset<=machine.w; offset+=Math.max(4,machine.w/4)) {
+        localLine(machine,[offset,0,0],[offset,peak,machine.d/2],machine.color,2.5,alpha);
+        localLine(machine,[offset,0,machine.d],[offset,peak,machine.d/2],machine.color,2.5,alpha);
+      }
+      const panelCount = state.stageFloat >= stages.length - 1 ? 5 : 3;
+      for (let panel=0; panel<panelCount; panel++) {
+        const offset = 2.2 + panel * Math.max(1.3,(machine.w-5)/Math.max(1,panelCount-1));
+        box(localBox(machine,Math.min(offset,machine.w-1),1,.55,Math.max(.5,machine.d-2),(machine.h+4)*grow,colors.glass),alpha*.82,1);
+      }
+    } else if (machine.type === "room") {
+      box(machine,alpha,grow);
+      box(localBox(machine,machine.w*.38,-.08,Math.max(3,machine.w*.22),.18,Math.min(8,topHeight*.72),"#596365"),alpha,1);
+      localLine(machine,[2,Math.min(topHeight*.62,7),-.12],[machine.w-2,Math.min(topHeight*.62,7),-.12],"#8fc6d4",3,alpha*.75);
+    } else if (machine.type === "person") {
+      const bob = Math.sin(time*.004 + machine.x*.1) * .12;
+      const bodyHeight = Math.max(.5,(machine.h-1.2)*grow+bob);
+      box(localBox(machine,machine.w*.18,machine.d*.18,machine.w*.64,machine.d*.64,bodyHeight,machine.color),alpha,1);
+      box(localBox(machine,machine.w*.25,machine.d*.25,machine.w*.5,machine.d*.5,Math.max(.4,1.1*grow),"#e6b993",bodyHeight),alpha,1);
+    } else if (machine.type === "generic") {
+      box(machine,alpha,grow);
+      box(localBox(machine,machine.w*.12,machine.d*.12,machine.w*.76,machine.d*.2,1.2*grow,shade(machine.color,.12),Math.max(0,topHeight-.2)),alpha,1);
+      localLine(machine,[machine.w*.2,topHeight+.12,machine.d*.72],[machine.w*.8,topHeight+.12,machine.d*.72],"#d9e1de",2,alpha);
     } else {
-      box(item,alpha,1);
+      box(machine,alpha,grow);
     }
   }
 
   function drawSelection(machine) {
     if (!state.editing || machine.instanceId !== state.selectedMachineId) return;
-    const padding = 2;
-    polygon(
-      [
-        [machine.x-padding,.3,machine.z-padding],
-        [machine.x+machine.w+padding,.3,machine.z-padding],
-        [machine.x+machine.w+padding,.3,machine.z+machine.d+padding],
-        [machine.x-padding,.3,machine.z+machine.d+padding],
-      ],
-      "rgba(228,109,58,.12)",
-      "#e46d3a",
-      3,
-      1
-    );
+    polygon(footprint(machine,2,.3),"rgba(228,109,58,.12)","#e46d3a",3,1);
+    const centerPoint = localPoint(machine,machine.w/2,.4,machine.d/2);
+    const directionPoint = localPoint(machine,machine.w/2,.4,-5);
+    line3d(centerPoint,directionPoint,"#e46d3a",2.5,1);
   }
 
-  function drawMachines() {
-    machines.forEach((machine) => {
-      const alpha = stageAlpha(machine.reveal);
-      const grow = clamp(state.stageFloat - machine.reveal + 1);
-      drawCrane(machine,alpha);
-      drawMachineShape(machine,alpha,grow);
-      drawSelection(machine);
-      if (alpha > .15) {
-        const current = Math.round(state.stageFloat) === machine.reveal;
-        const source = machine.placement_status === "dwg_named"
-          ? "DWG"
-          : machine.placement_status === "user_added" ? "CUSTOM" : "PHOTO + CAD";
-        label(
-          `${machine.name}${current ? ` · ${source}` : ""}`,
-          machine.x + machine.w/2,
-          machine.h + 5,
-          machine.z + machine.d/2,
-          current ? colors.orange : colors.teal
-        );
+  function drawOverlapIndicator(machine, overlappingIds) {
+    if (!state.editing || !overlappingIds.has(machine.instanceId)) return;
+    polygon(footprint(machine, .6, .18), "rgba(190,55,45,.12)", "#c33a32", 2.2, 1);
+  }
+
+  function visibleMachineEntries() {
+    return machines.flatMap((machine) => {
+      if (machine.visible === false) return [];
+      const alpha = stageAlpha(machine.reveal,machine.retire);
+      if (alpha <= .01) return [];
+      return [{
+        kind: "machine",
+        machine,
+        alpha,
+        grow: clamp(state.stageFloat - machine.reveal + 1),
+        depth: sceneDepth(machine.x+machine.w/2,machine.z+machine.d/2),
+      }];
+    });
+  }
+
+  function visibleColumnEntries() {
+    return data.columns.slice(0,96).flatMap(([x,z],index) => (
+      state.hiddenColumns.has(index)
+        ? []
+        : [{ kind: "column", index, depth: sceneDepth(x,z) }]
+    ));
+  }
+
+  // The viewer is drawn on a 2D canvas, so there is no hardware depth buffer.
+  // Columns and equipment must therefore share one painter-order list. Drawing
+  // all columns first made front columns disappear behind equipment, while the
+  // old outline pass made rear columns show through solid machines. Sorting both
+  // object types together gives the expected result: rear columns are covered by
+  // machinery and front columns remain visible without any see-through outline.
+  function drawSceneObjects(time) {
+    const overlappingIds = state.editing ? overlapIds() : new Set();
+    const machineEntries = visibleMachineEntries();
+    const sceneEntries = [...visibleColumnEntries(), ...machineEntries]
+      .sort((first,second) => first.depth-second.depth);
+
+    sceneEntries.forEach((entry) => {
+      if (entry.kind === "column") {
+        drawColumn(entry.index);
+        return;
       }
+      drawCrane(entry.machine,entry.alpha);
+      drawMachineShape(entry.machine,entry.alpha,entry.grow,time);
     });
 
-    const rackAlpha = stageAlpha(14);
-    const rackGrow = clamp(state.stageFloat - 13);
-    glassRacks.forEach((rack) => {
-      box({ ...rack, color: colors.dark }, rackAlpha, rackGrow);
-      line3d([rack.x,rack.h,rack.z],[rack.x+rack.w,rack.h,rack.z+rack.d],"#879196",1.3,rackAlpha);
+    // Editor marks and labels are UI overlays, so draw them after the physical
+    // scene. This keeps selection feedback readable without changing occlusion.
+    machineEntries.forEach(({ machine, alpha }) => {
+      drawOverlapIndicator(machine, overlappingIds);
+      drawSelection(machine);
+      if (alpha <= .15 || machine.showLabel === false) return;
+      const current = Math.round(state.stageFloat) === machine.reveal;
+      const source = machine.placement_status === "dwg_named"
+        ? "DWG"
+        : machine.placement_status === "user_added" ? "CUSTOM" : machine.placement_status === "illustrative" ? "ILLUSTRATIVE" : "PHOTO + CAD";
+      label(
+        `${machine.name}${current ? ` · ${source}` : ""}`,
+        machine.x + machine.w/2,
+        machine.h + 5,
+        machine.z + machine.d/2,
+        current ? colors.orange : colors.teal,
+        machine.instanceId === state.selectedMachineId || current
+      );
     });
-    if (rackAlpha > .2) label("Raw glass storage", 113, 15, -197, colors.blue);
   }
 
   function drawGlass(time) {
-    const alpha = stageAlpha(14);
-    glassRacks.forEach((rack,index) => {
-      const count = state.stageFloat >= 17 ? 5 : 3;
-      for (let panel=0; panel<count; panel++) {
-        const offset = 2.4 + panel * 3.1;
-        box({x:rack.x+offset,z:rack.z+1,w:.75,d:rack.d-2,h:rack.h+4,color:colors.glass},alpha,.92);
-      }
-    });
     if (state.stageFloat >= 16) {
       const progress = (time * .000035) % 1;
       const x = 22 + progress * 144;
-      box({x,z:-106,w:1.2,d:13,h:10,color:colors.glass},stageAlpha(16),1);
+      box({x,z:-106,w:1.2,d:13,h:10,color:colors.glass,rotation:0},stageAlpha(16),1);
       const beacon = .55 + Math.sin(time * .008) * .35;
-      box({x:116,z:-100,w:2,d:2,h:18,color:"#d64a32"},beacon*stageAlpha(16),1);
+      box({x:116,z:-100,w:2,d:2,h:18,color:"#d64a32",rotation:0},beacon*stageAlpha(16),1);
     }
-  }
-
-  function drawOffices() {
-    const alpha = stageAlpha(15);
-    const grow = clamp(state.stageFloat - 14);
-    const rooms = [
-      {x:-225,z:8,w:28,d:36,h:12,color:colors.office,label:"Plant office"},
-      {x:-195,z:8,w:30,d:36,h:12,color:"#c9d7d4",label:"Quality"},
-      {x:-163,z:8,w:25,d:36,h:12,color:"#d8d2c5",label:"Team room"},
-    ];
-    rooms.forEach((room) => box(room,alpha,grow));
-    if (alpha > .35) label("Plant-floor support", -181, 16, 27, colors.teal);
-  }
-
-  function drawPeople(time) {
-    const alpha = stageAlpha(16);
-    const people = [[-191,-133],[30,-91],[151,-98],[98,-169],[202,-137]];
-    people.forEach(([x,z],index) => {
-      const bob = Math.sin(time*.004+index)*.15;
-      box({x:x-.65,z:z-.65,w:1.3,d:1.3,h:5.4+bob,color:index%2?colors.orange:colors.teal},alpha,1);
-      box({x:x-.45,z:z-.45,w:.9,d:.9,h:6.5+bob,color:"#e6b993"},alpha,1);
-    });
   }
 
   function updateCanvasSize() {
@@ -991,26 +2683,35 @@
     state.stageFloat += (state.stage - state.stageFloat) * .07;
     if (state.playing && time > state.playAt) {
       setStage(state.stage >= stages.length - 1 ? 0 : state.stage + 1);
-      state.playAt = time + (state.stage === 0 ? 1600 : 3400);
+      const baseDelay = state.stage === 0 ? 1600 : 3400;
+      state.playAt = time + baseDelay / state.playbackSpeed;
     }
     ctx.clearRect(0,0,canvas.width,canvas.height);
     const gradient = ctx.createLinearGradient(0,0,0,canvas.height);
-    gradient.addColorStop(0,"#e8e8e2");
-    gradient.addColorStop(.65,"#cbd0cd");
-    gradient.addColorStop(1,"#aeb6b3");
+    gradient.addColorStop(0,"#eef1ee");
+    gradient.addColorStop(.58,"#cfd5d1");
+    gradient.addColorStop(1,"#aab4b0");
     ctx.fillStyle = gradient;
     ctx.fillRect(0,0,canvas.width,canvas.height);
+    labelRects = [];
     drawFloor();
     drawCad();
     drawTrenches();
     drawSafety();
     drawShell();
-    drawColumns();
-    drawMachines();
+    drawSceneObjects(time);
     drawGlass(time);
-    drawOffices();
-    drawPeople(time);
     requestAnimationFrame(draw);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "'": "&#39;",
+      '"': "&quot;",
+    })[character]);
   }
 
   function buildTimeline() {
@@ -1019,14 +2720,22 @@
     if (total) total.textContent = String(stages.length).padStart(2,"0");
     if (!timeline) return;
     timeline.innerHTML = stages.map((stage,index) => (
-      `<li${index === 0 ? ` class="active"` : ""}><button type="button">${stage.short}</button></li>`
+      `<li${index === state.stage ? ` class="active"` : ""}><button type="button" title="${escapeHtml(stage.title)}">${escapeHtml(stage.short)}</button></li>`
     )).join("");
     timeline.style.setProperty("--stage-count", String(stages.length));
     timeline.closest(".timeline")?.style.setProperty("--stage-count", String(stages.length));
+    timeline.querySelectorAll("li").forEach((item,index) => {
+      item.querySelector("button")?.addEventListener("click", () => setStage(index));
+    });
+    const scrubber = document.getElementById("timeline-scrubber");
+    if (scrubber) {
+      scrubber.max = String(Math.max(0, stages.length - 1));
+      scrubber.value = String(state.stage);
+    }
   }
 
   function setStage(index) {
-    state.stage = clamp(index, 0, stages.length - 1);
+    state.stage = clamp(Math.round(index), 0, stages.length - 1);
     const stage = stages[state.stage];
     const number = document.getElementById("stage-number");
     const title = document.getElementById("stage-title");
@@ -1038,34 +2747,54 @@
     if (title) title.textContent = stage.title;
     if (description) {
       description.textContent = stage.description;
+      let date = document.querySelector(".stage-date");
+      if (!date) {
+        date = document.createElement("p");
+        date.className = "stage-date";
+        title?.before(date);
+      }
+      date.textContent = stage.dateLabel || "Timeline stage";
+      date.hidden = !stage.dateLabel;
       let details = document.querySelector(".stage-details");
       if (!details) {
         details = document.createElement("div");
         details.className = "stage-details";
         description.after(details);
       }
-      details.innerHTML = `<p>${stage.era}</p><ul>${stage.details.map((detail) => `<li>${detail}</li>`).join("")}</ul>`;
+      details.innerHTML = `<p>${escapeHtml(stage.era)}</p><ul>${stage.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}</ul>`;
     }
     if (previous) previous.disabled = state.stage === 0;
     if (next) {
       next.disabled = state.stage === stages.length - 1;
       next.innerHTML = state.stage === stages.length - 1 ? `Current plant <span>✓</span>` : `Next stage <span>→</span>`;
     }
-    if (fill) fill.style.width = `${state.stage / (stages.length - 1) * 100}%`;
-    document.querySelectorAll("#timeline-stages li").forEach((item,index) => {
-      item.classList.toggle("active", index === state.stage);
-      item.classList.toggle("complete", index < state.stage);
+    if (fill) fill.style.width = `${stages.length > 1 ? state.stage / (stages.length - 1) * 100 : 100}%`;
+    document.querySelectorAll("#timeline-stages li").forEach((item,itemIndex) => {
+      item.classList.toggle("active", itemIndex === state.stage);
+      item.classList.toggle("complete", itemIndex < state.stage);
       const button = item.querySelector("button");
-      if (button) button.setAttribute("aria-current", index === state.stage ? "step" : "false");
+      if (button) button.setAttribute("aria-current", itemIndex === state.stage ? "step" : "false");
     });
+    const scrubber = document.getElementById("timeline-scrubber");
+    if (scrubber) scrubber.value = String(state.stage);
+    if (state.editing && state.editorTool === "timeline") updateEditorPanel();
   }
 
   buildTimeline();
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.button > 2) return;
+    const wantsPan = event.shiftKey || event.button === 1 || state.spacePressed;
+    const wantsOrbit = event.altKey || event.button === 2;
+    state.pointerX = event.clientX;
+    state.pointerY = event.clientY;
+
     if (state.editing) {
-      if (state.editorTool === "pillars") {
+      if (state.editorTool === "timeline") return;
+      const navigating = state.editorInteraction === "navigate" || wantsPan || wantsOrbit;
+      if (state.editorTool === "pillars" && !navigating) {
         const columnIndex = columnAt(event);
         if (columnIndex !== null) {
+          pushHistory();
           if (state.hiddenColumns.has(columnIndex)) state.hiddenColumns.delete(columnIndex);
           else state.hiddenColumns.add(columnIndex);
           persistLayout();
@@ -1073,21 +2802,32 @@
         }
         return;
       }
-      const machine = machineAt(event);
-      state.selectedMachineId = machine?.instanceId || null;
-      updateEditorPanel();
-      if (!machine) return;
-      const [worldX,worldZ] = worldFromScreen(event);
-      state.draggedMachineId = machine.instanceId;
-      state.dragOffsetX = worldX-machine.x;
-      state.dragOffsetZ = worldZ-machine.z;
-      state.dragAction = "machine";
+      if (navigating) {
+        state.dragAction = wantsPan ? "pan" : "orbit";
+      } else {
+        const machine = machineAt(event);
+        state.selectedMachineId = machine?.instanceId || null;
+        updateEditorPanel();
+        if (machine) {
+          if (machine.locked) {
+            showToast(`${machine.name} is locked. Clear “Lock position” to drag it.`);
+            return;
+          }
+          const [worldX,worldZ] = worldFromScreen(event);
+          state.draggedMachineId = machine.instanceId;
+          state.dragOffsetX = worldX-machine.x;
+          state.dragOffsetZ = worldZ-machine.z;
+          state.dragAction = "machine";
+          state.dragSnapshot = snapshotLayout();
+          state.dragMoved = false;
+        } else {
+          state.dragAction = "pan";
+        }
+      }
     } else {
-      state.dragAction = event.shiftKey || event.button === 1 || event.button === 2 ? "pan" : "orbit";
+      state.dragAction = wantsPan ? "pan" : "orbit";
     }
     state.dragging = true;
-    state.pointerX = event.clientX;
-    state.pointerY = event.clientY;
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener("pointermove", (event) => {
@@ -1098,8 +2838,13 @@
       const machine = selectedMachine();
       if (machine) {
         const [worldX,worldZ] = worldFromScreen(event);
-        machine.x = Math.round(clamp(worldX-state.dragOffsetX,bounds[0],bounds[2]-machine.w)*2)/2;
-        machine.z = Math.round(clamp(worldZ-state.dragOffsetZ,bounds[1],bounds[3]-machine.d)*2)/2;
+        const snap = Math.max(0.1, Number(state.snapSize) || 0.5);
+        const bounds = floorBounds();
+        const nextX = Math.round(clamp(worldX-state.dragOffsetX,bounds[0],bounds[2]-machine.w)/snap)*snap;
+        const nextZ = Math.round(clamp(worldZ-state.dragOffsetZ,bounds[1],bounds[3]-machine.d)/snap)*snap;
+        if (nextX !== machine.x || nextZ !== machine.z) state.dragMoved = true;
+        machine.x = nextX;
+        machine.z = nextZ;
         updateEditorPanel();
       }
     } else if (state.dragAction === "pan") {
@@ -1112,9 +2857,14 @@
     state.pointerY = event.clientY;
   });
   function finishPointer() {
-    if (state.draggedMachineId) persistLayout();
+    if (state.draggedMachineId && state.dragMoved && state.dragSnapshot) {
+      pushHistory(state.dragSnapshot);
+      persistLayout();
+    }
     state.dragging = false;
     state.draggedMachineId = null;
+    state.dragSnapshot = null;
+    state.dragMoved = false;
     state.dragAction = "orbit";
   }
   canvas.addEventListener("pointerup",finishPointer);
@@ -1125,19 +2875,42 @@
     state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 1.08 : .92), .52, 2.5);
   }, { passive: false });
 
+  window.addEventListener("focus", () => { designLibrary = loadDesignLibrary(); });
+  window.addEventListener("storage", (event) => {
+    if (event.key === DESIGN_STORAGE_KEY) designLibrary = loadDesignLibrary();
+  });
+
   document.getElementById("next-stage")?.addEventListener("click", () => setStage(state.stage + 1));
   document.getElementById("previous-stage")?.addEventListener("click", () => setStage(state.stage - 1));
-  document.querySelectorAll("#timeline-stages li").forEach((item,index) => {
-    item.querySelector("button")?.addEventListener("click", () => setStage(index));
-  });
   window.addEventListener("keydown", (event) => {
     const typing = ["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName);
-    if (state.editing && !typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+    if (!typing && event.code === "Space") {
+      state.spacePressed = true;
+      event.preventDefault();
+    }
+    if (!typing && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "f") {
+      const frame = canvas.closest(".model-frame");
+      if (frame) toggleModelFullscreen(frame);
+      return;
+    }
+    const modifier = event.ctrlKey || event.metaKey;
+    if (state.editing && !typing && modifier && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redoLayout();
+      else undoLayout();
+      return;
+    }
+    if (state.editing && !typing && modifier && event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      redoLayout();
+      return;
+    }
+    if (state.editing && !typing && modifier && event.key.toLowerCase() === "c") {
       event.preventDefault();
       copySelectedMachine();
       return;
     }
-    if (state.editing && !typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+    if (state.editing && !typing && modifier && event.key.toLowerCase() === "v") {
       event.preventDefault();
       pasteMachine();
       return;
@@ -1155,9 +2928,18 @@
     if (event.key === "ArrowRight") setStage(state.stage + 1);
     if (event.key === "ArrowLeft") setStage(state.stage - 1);
   });
+  window.addEventListener("keyup", (event) => {
+    if (event.code === "Space") state.spacePressed = false;
+  });
+  window.addEventListener("blur", () => {
+    state.spacePressed = false;
+    finishPointer();
+  });
+
   window.addEventListener("resize", updateCanvasSize);
 
   addControls();
+  addTimelineToolbar();
   setStage(0);
   requestAnimationFrame(draw);
 })();

@@ -1,6 +1,22 @@
 # Machine Design Studio
 
-The Machine Design Studio builds reusable visual machine models from editable primitives. Version 0.7.0 builds on the slicer-style editor and keeps the same basic workflow used by modern slicers: choose an object, choose a transform tool, manipulate it in the center viewport, and use the inspector for exact values.
+The Machine Design Studio builds reusable visual machine models from editable primitives. Version 0.9.0 builds on the slicer-style editor and keeps the same basic workflow used by modern slicers: choose an object, choose a transform tool, manipulate it in the center viewport, and use the inspector for exact values.
+
+
+## Depth-correct viewport
+
+Version 0.8.0 replaces painter-style face ordering with a WebGL depth buffer. The viewport now decides visibility per pixel rather than by an average depth for an entire face. This is especially important when a large base crosses the depth range of rollers, rails, cabinets, wheels, or controls.
+
+The renderer now provides:
+
+- Correct opaque occlusion between all component types.
+- Closed boxes, beams, wheels, and cylindrical rollers from every camera angle.
+- No camera-facing face removal, preventing sides from disappearing while orbiting.
+- Depth-tested component edges and structural lines.
+- Separate transparent rendering for glass panels.
+- A transparent 2D overlay for gizmos, selection boxes, and other editor controls.
+
+Component order in the Parts list remains an organizational tool; it no longer determines which solid object appears in front.
 
 ## Workspace layout
 
@@ -107,10 +123,10 @@ Transform controls are a separate overlay. Gizmo hit testing runs before model p
 ## Storage and compatibility
 
 - Machine designs: `monroe-glass-machine-designs-v1`
-- Machine-design payload: version 3
+- Machine-design payload: version 4
 - Plant layout: `monroe-glass-plant-layout-v6`
 
-Version 0.7.0 intentionally keeps the same storage keys. Version 1 and 2 design payloads and legacy `rotation` values load automatically, with legacy rotation treated as Y-axis rotation. Existing assignments, machine positions, added objects, floor dimensions, timeline edits, walls, and hidden pillars remain available when the updated site is opened from the same browser and address.
+Version 0.9.0 keeps the same storage keys while extending the design payload with optional animation metadata. Version 1, 2, and 3 design payloads and legacy `rotation` values load automatically, with legacy rotation treated as Y-axis rotation. Existing assignments, machine positions, added objects, floor dimensions, timeline edits, walls, and hidden pillars remain available when the updated site is opened from the same browser and address.
 
 ## Scope
 
@@ -124,3 +140,10 @@ The editor is intended for recognizable block models and plant-layout communicat
 - Roller beds render as closed cylindrical rollers with circular end caps.
 - Wheels use independent width, height, and axle-depth dimensions and can be scaled on one local axis at a time.
 - Legacy wheel `size` values migrate automatically to the new three-dimension format.
+
+
+## Part animations
+
+Select a component and use **Part animation** in the Object inspector. Supported motions are back-and-forth, continuous loop, X/Y/Z rotation, vertical bob, axis-specific pulse, and blink. **Amount** controls travel distance, rotation per cycle, or pulse percentage; **Speed** is cycles per second; **Phase** offsets related parts. The preview button in the viewport command bar pauses the design at its base pose for editing.
+
+The built-in library now includes editable presets for cranes, A-frame carts and trucks, raw-glass racks, rooms, team members, the Barefoot cutting line, and filtration equipment in addition to the production machines.

@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.9.0 - Scene assets and animation authoring
+
+- Added editable Design Studio presets for cutting tables, filtration equipment, general boxes, freestanding cranes, overhead bridge cranes, raw-glass racks, plant rooms, and team members.
+- Replaced the hard-coded final-stage glass and beacon motion with ordinary scene objects that can be selected, moved, copied, hidden, removed, or recreated.
+- Added scene animation presets for vertical glass flow, moving material boxes, walking team members, shuttle carts, and blinking status beacons.
+- Added per-object motion controls for path direction, amount, speed, phase, looping, back-and-forth motion, rotation, bobbing, pulsing, and blinking.
+- Added pause/preview controls so animated objects can be placed at their base positions.
+- Added part-level animation authoring to Machine Design Studio, including preview, axis selection, amount, speed, and phase.
+- Added live custom-design animation support in the main plant model.
+- Preserved the existing layout storage key and schema so moved and user-added objects remain in place.
+
+## [0.8.2] - 2026-07-31
+
+### Fixed
+
+- Kept the WebGL scene canvas locked to the exact same viewport rectangle as the transparent interaction canvas when the docked layout editor opens, closes, resizes, or switches to the mobile stacked layout.
+- Prevented machines from visually shifting away from their labels, selection outlines, overlap indicators, and pointer hitboxes while editing.
+- Removed pillar-cap z-fighting by replacing the stacked steel and yellow pillar volumes with one closed pillar whose size and color interpolate through the paint stage.
+
+### Compatibility
+
+- Plant layout schema remains version 6.
+- Machine design storage remains payload version 3.
+- Existing layouts, machine positions, custom designs, assignments, floor dimensions, walls, pillars, and timeline edits are preserved.
+
+### Validation
+
+- Public JavaScript files pass syntax validation.
+- Added a static rendering regression test that verifies desktop/mobile canvas alignment rules, live scene-canvas box synchronization, and single-volume pillar rendering.
+- Machine registry JSON and generated machine data remain valid.
+
+## [0.8.1] - 2026-07-31
+
+### Added
+
+- Linked Machine Design Studio sessions to individual plant objects.
+- Saved design changes now update the assigned machine in open plant-layout tabs through browser storage events and BroadcastChannel synchronization.
+- Added automatic machine-specific design copies so editing one existing machine does not unintentionally modify every machine using the same preset.
+
+## [0.8.0] - 2026-07-31
+
+### Changed
+
+- Replaced the Machine Design Studio painter-style surface ordering with a WebGL depth-buffer renderer.
+- Moved the plant layout scene to the same shared depth renderer so walls, machines, pillars, floors, cranes, and custom machine parts use per-pixel occlusion.
+- Kept labels, transform gizmos, selection outlines, and editor feedback on a separate transparent interface canvas.
+- Removed CAD-line rendering and the CAD-lines control from the plant viewer.
+
+### Fixed
+
+- Large platform and cabinet surfaces no longer cover smaller components that are physically above or in front of them.
+- Closed objects retain every side face while the camera orbits; faces no longer disappear because of winding or painter-order changes.
+- Parts behind a solid machine component no longer paint through the component in front.
+- Plant exterior walls are now fully opaque in the rendered scene and correctly hide equipment behind them.
+- Structural and machine edge lines remain depth-tested instead of appearing through solid geometry.
+- Transparent glass is blended after opaque geometry while still respecting the opaque depth buffer.
+
+### Compatibility
+
+- Plant layout schema remains version 6.
+- Machine design storage remains payload version 3.
+- Existing layouts, custom designs, assignments, machine positions, floor dimensions, walls, pillars, and timeline edits are preserved.
+- A Canvas 2D fallback remains available when WebGL is unavailable.
+
+### Validation
+
+- All public JavaScript files pass `node --check`.
+- The shared depth renderer passed a mocked WebGL geometry test covering opaque triangles, transparent triangles, polygon edges, and depth-tested lines.
+- Machine registry JSON and generated machine data remain unchanged.
+
 ## 0.7.0 - 2026-07-30
 
 ### Fixed

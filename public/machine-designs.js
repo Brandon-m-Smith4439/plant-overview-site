@@ -174,6 +174,162 @@
         ]),
       ],
     },
+
+    "generic-box-standard": {
+      id: "generic-box-standard",
+      name: "General equipment box",
+      machineType: "genericBox",
+      description: "Closed configurable equipment enclosure with a raised base, service doors, vents, and a status panel.",
+      base: { w: 12, d: 12, h: 8 },
+      components: [
+        box("base", "Raised base", 0, 0, 0, 12, 0.7, 12, "#3f4a4e"),
+        box("cabinet", "Main enclosure", 0.4, 0.7, 0.4, 11.2, 7.3, 11.2, "#67757a"),
+        box("left-door", "Left service door", 1.1, 1.4, 0.16, 4.4, 5.7, 0.22, "#77858a"),
+        box("right-door", "Right service door", 6.5, 1.4, 0.16, 4.4, 5.7, 0.22, "#718085"),
+        box("status", "Status panel", 8.3, 5.5, -0.08, 2.2, 1.1, 0.18, "#3f9fb8"),
+        ...Array.from({ length: 5 }, (_, index) => beam(
+          `vent-${index}`, "Vent slot", 1.4 + index * 1.6, 1.1, 11.85, 2.4 + index * 1.6, 1.1, 11.85, "#2f3a3e", 0.55,
+        )),
+      ],
+    },
+    "cutting-standard": {
+      id: "cutting-standard",
+      name: "Barefoot cutting line",
+      machineType: "cutting",
+      description: "Paired low cutting tables with glass surfaces, moving bridge rails, operator control, and service cabinets.",
+      base: { w: 54, d: 66, h: 7 },
+      components: [
+        box("left-base", "Left cutting table base", 0, 0, 0, 25.5, 2.3, 66, "#267e79"),
+        box("right-base", "Right cutting table base", 28.5, 0, 0, 25.5, 2.3, 66, "#267e79"),
+        glass("left-glass", "Left cutting surface", 0.8, 2.3, 0.8, 23.9, 0.35, 64.4, { opacity: 0.72 }),
+        glass("right-glass", "Right cutting surface", 29.3, 2.3, 0.8, 23.9, 0.35, 64.4, { opacity: 0.72 }),
+        beam("left-bridge", "Left cutter bridge", 2, 5.2, 22, 23.5, 5.2, 22, "#d9e2df", 3, {
+          animationType: "oscillate", animationAxis: "z", animationAmount: 34, animationSpeed: 0.035,
+        }),
+        beam("right-bridge", "Right cutter bridge", 30.5, 5.2, 42, 52, 5.2, 42, "#d9e2df", 3, {
+          animationType: "oscillate", animationAxis: "z", animationAmount: 34, animationSpeed: 0.035, animationPhase: 180,
+        }),
+        box("console", "Operator console", 23, 2.6, -1.5, 6, 4.4, 4, "#e4e8e5"),
+        box("screen", "Touchscreen", 24.1, 4.1, -1.72, 3.8, 1.5, 0.2, "#4aa5c2"),
+      ],
+    },
+    "filtration-standard": {
+      id: "filtration-standard",
+      name: "Waterjet filtration skid",
+      machineType: "filtration",
+      description: "Pump and filtration skid with paired tanks, plumbing manifold, control cabinet, and service base.",
+      base: { w: 7, d: 10, h: 9 },
+      components: [
+        box("skid", "Skid base", 0, 0, 0, 7, 0.7, 10, "#344147"),
+        box("pump", "Pump cabinet", 0.4, 0.7, 0.5, 2.2, 4.2, 9, "#276b8b"),
+        box("tank-a", "Filter tank A", 3, 0.7, 0.8, 1.55, 8.1, 3.6, "#438a9f"),
+        box("tank-b", "Filter tank B", 5, 0.7, 0.8, 1.55, 8.1, 3.6, "#438a9f"),
+        beam("manifold", "Upper manifold", 3.2, 8.2, 2.6, 6.35, 8.2, 2.6, "#b8c7c8", 1.1),
+        beam("return", "Return pipe", 3.2, 6.8, 7.6, 6.35, 6.8, 7.6, "#b8c7c8", 1.1),
+        box("controls", "Control box", 3.1, 1, 5.2, 3.4, 3.2, 4.1, "#e1e6e4"),
+        box("screen", "Status screen", 3.75, 2.1, 5.02, 2.1, 1.1, 0.18, "#49a4bf"),
+      ],
+    },
+    "crane-machine-standard": {
+      id: "crane-machine-standard",
+      name: "Freestanding gantry crane",
+      machineType: "craneMachine",
+      description: "Four-post freestanding gantry with runway rails, moving bridge, trolley, hook line, and base plates.",
+      base: { w: 18, d: 14, h: 18 },
+      components: [
+        ...[[0,0],[18,0],[0,14],[18,14]].flatMap(([x,z], index) => [
+          box(`plate-${index}`, "Base plate", x - 0.55, 0, z - 0.55, 1.1, 0.3, 1.1, "#4e5759"),
+          beam(`post-${index}`, "Support post", x, 0.3, z, x, 17, z, "#e2b32d", 3.2),
+        ]),
+        beam("runway-front", "Front runway", 0, 17, 0, 18, 17, 0, "#e2b32d", 4.2),
+        beam("runway-rear", "Rear runway", 0, 17, 14, 18, 17, 14, "#e2b32d", 4.2),
+        beam("bridge", "Moving bridge", 10, 17.35, 0, 10, 17.35, 14, "#596365", 4.6, {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 10, animationSpeed: 0.09,
+        }),
+        box("trolley", "Crane trolley", 8.8, 16.8, 5.6, 2.4, 1.1, 2.8, "#dd6735", {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 10, animationSpeed: 0.09,
+        }),
+        beam("hook-line", "Hook line", 10, 16.8, 7, 10, 5.5, 7, "#30383b", 1.2, {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 10, animationSpeed: 0.09,
+        }),
+        box("hook", "Hook block", 9.55, 4.6, 6.55, 0.9, 1.1, 0.9, "#30383b", {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 10, animationSpeed: 0.09,
+        }),
+      ],
+    },
+    "bridge-crane-standard": {
+      id: "bridge-crane-standard",
+      name: "Overhead bridge crane",
+      machineType: "bridgeCrane",
+      description: "Overhead runway frame with structural columns, twin runway beams, traveling bridge, trolley, and suspended hook.",
+      base: { w: 36, d: 22, h: 21 },
+      components: [
+        ...[[0,0],[36,0],[0,22],[36,22]].map(([x,z], index) => beam(`column-${index}`, "Crane column", x, 0, z, x, 20, z, "#d8aa28", 3.4)),
+        beam("runway-a", "Runway A", 0, 20, 0, 36, 20, 0, "#2675a7", 4.5),
+        beam("runway-b", "Runway B", 0, 20, 22, 36, 20, 22, "#2675a7", 4.5),
+        beam("bridge", "Bridge beam", 18, 20.35, 0, 18, 20.35, 22, "#cfd5d2", 5, {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 24, animationSpeed: 0.05,
+        }),
+        box("trolley", "Trolley", 16.7, 19.8, 9.3, 2.6, 1.2, 3.4, "#dd6735", {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 24, animationSpeed: 0.05,
+        }),
+        beam("cable", "Hoist cable", 18, 19.8, 11, 18, 7, 11, "#30383b", 1.25, {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 24, animationSpeed: 0.05,
+        }),
+        box("hook", "Hook block", 17.45, 6, 10.45, 1.1, 1.4, 1.1, "#30383b", {
+          animationType: "oscillate", animationAxis: "x", animationAmount: 24, animationSpeed: 0.05,
+        }),
+      ],
+    },
+    "glass-rack-standard": {
+      id: "glass-rack-standard",
+      name: "Raw glass storage rack",
+      machineType: "glassRack",
+      description: "Fixed A-frame raw-glass rack with repeated braces, padded lower rails, stop posts, and loaded glass lites.",
+      base: { w: 23, d: 9, h: 12 },
+      components: [
+        beam("left-base", "Left base rail", 0, 0.5, 0.7, 23, 0.5, 0.7, "#303b40", 3.2),
+        beam("right-base", "Right base rail", 0, 0.5, 8.3, 23, 0.5, 8.3, "#303b40", 3.2),
+        ...[0.7, 6.1, 11.5, 16.9, 22.3].flatMap((x, index) => [
+          beam(`brace-a-${index}`, "Rack brace", x, 0.5, 0.8, x, 11.6, 4.5, "#303b40", 2.4),
+          beam(`brace-b-${index}`, "Rack brace", x, 0.5, 8.2, x, 11.6, 4.5, "#303b40", 2.4),
+        ]),
+        beam("ridge", "Top ridge", 0.7, 11.6, 4.5, 22.3, 11.6, 4.5, "#303b40", 3),
+        ...[2.5, 6.5, 10.5, 14.5, 18.5].map((x, index) => glass(`lite-${index}`, `Stored glass lite ${index + 1}`, x, 1, 1.2, 0.35, 9.4, 6.6, { opacity: 0.6 })),
+      ],
+    },
+    "room-standard": {
+      id: "room-standard",
+      name: "Plant office or support room",
+      machineType: "room",
+      description: "Enclosed floor office with opaque walls, entry door, windows, ceiling cap, and simple interior furnishings.",
+      base: { w: 24, d: 20, h: 12 },
+      components: [
+        box("room-shell", "Opaque room shell", 0, 0, 0, 24, 12, 20, "#d8d2c5"),
+        box("door", "Entry door", 9.5, 0, -0.18, 5, 8.2, 0.25, "#596365"),
+        glass("window-left", "Left window", 1.8, 5.3, -0.3, 6.4, 3.8, 0.2, { opacity: 0.38 }),
+        glass("window-right", "Right window", 15.8, 5.3, -0.3, 6.4, 3.8, 0.2, { opacity: 0.38 }),
+        box("desk-a", "Desk A", 2.2, 0.2, 3, 7, 2.6, 3.2, "#8f7d66"),
+        box("desk-b", "Desk B", 14.8, 0.2, 12.5, 7, 2.6, 3.2, "#8f7d66"),
+      ],
+    },
+    "team-member-standard": {
+      id: "team-member-standard",
+      name: "Plant team member",
+      machineType: "person",
+      description: "Editable team-member figure with head, torso, safety vest, hard hat, arms, and legs.",
+      base: { w: 2.2, d: 1.8, h: 6.5 },
+      components: [
+        box("torso", "Torso", 0.55, 2.5, 0.35, 1.1, 2.25, 1.1, "#1e7b78"),
+        box("vest", "Safety vest", 0.48, 3.05, 0.18, 1.24, 1.2, 0.2, "#e3ad28"),
+        box("head", "Head", 0.68, 4.75, 0.48, 0.84, 0.9, 0.84, "#e6b993"),
+        box("hard-hat", "Hard hat", 0.58, 5.56, 0.38, 1.04, 0.32, 1.04, "#e3ad28"),
+        beam("left-arm", "Left arm", 0.55, 4.25, 0.9, 0.1, 2.65, 0.9, "#1e7b78", 1.1),
+        beam("right-arm", "Right arm", 1.65, 4.25, 0.9, 2.1, 2.65, 0.9, "#1e7b78", 1.1),
+        beam("left-leg", "Left leg", 0.82, 2.5, 0.9, 0.55, 0, 0.9, "#26363d", 1.15),
+        beam("right-leg", "Right leg", 1.38, 2.5, 0.9, 1.65, 0, 0.9, "#26363d", 1.15),
+      ],
+    },
     "aframe-cart-standard": {
       id: "aframe-cart-standard",
       name: "A-frame glass cart",

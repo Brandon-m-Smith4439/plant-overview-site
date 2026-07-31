@@ -899,8 +899,12 @@ body {
   min-height: 720px;
 }
 
-.model-frame.editing #plant-canvas {
+.model-frame.editing #plant-canvas,
+.model-frame.editing .plant-depth-canvas {
   width: calc(100% - var(--plant-editor-width));
+}
+
+.model-frame.editing #plant-canvas {
   cursor: crosshair;
 }
 
@@ -1045,7 +1049,8 @@ body {
   .model-frame.editing {
     min-height: 920px;
   }
-  .model-frame.editing #plant-canvas {
+  .model-frame.editing #plant-canvas,
+  .model-frame.editing .plant-depth-canvas {
     width: 100%;
     height: 48%;
   }
@@ -2171,4 +2176,139 @@ body {
 
 #machine-design-canvas {
   outline: none;
+}
+
+/* v0.8.0 hardware depth-buffer rendering layers */
+.model-frame,
+.design-viewport-panel {
+  isolation: isolate;
+}
+
+.model-frame {
+  background:
+    linear-gradient(180deg, #eef1ee 0%, #cfd5d1 58%, #aab4b0 100%);
+}
+
+.design-viewport-panel {
+  background:
+    linear-gradient(180deg, #f1f4f2 0%, #d3dad6 58%, #aeb9b4 100%);
+}
+
+.depth-scene-canvas {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#plant-canvas,
+#machine-design-canvas {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+.model-badge,
+.view-help,
+.model-controls,
+.layout-editor,
+.play-button,
+.model-legend,
+.viewport-commandbar,
+.viewport-toolrail,
+.orientation-cube,
+.viewport-statusbar,
+.design-toast {
+  z-index: 5;
+}
+
+
+/* v0.9.0 scene and machine animation editors */
+.object-animation-controls {
+  margin: 14px 0 0;
+  padding: 12px;
+  border: 1px solid #d1d3ce;
+  border-radius: 4px;
+  background: rgba(255,255,255,.62);
+}
+.object-animation-controls legend {
+  padding: 0 5px;
+  color: #66706c;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.animation-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.animation-preview-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.animation-preview-row button.active,
+#preview-design-animations.active {
+  border-color: var(--teal);
+  background: rgba(18,109,107,.1);
+  color: var(--teal);
+}
+.animation-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 7px;
+}
+.animation-control-grid label {
+  color: #6b7470;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.animation-control-grid input,
+.animation-control-grid select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 7px;
+}
+.object-animation-controls > p {
+  margin: 9px 0 0;
+  color: #6d7672;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.animation-section {
+  border-color: rgba(18,109,107,.35);
+  background: rgba(18,109,107,.035);
+}
+.animation-fields label {
+  color: #66706c;
+  font-size: 10px;
+  font-weight: 700;
+}
+.animation-fields input { margin-top: 4px; }
+#preview-design-animations {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #aeb6b2;
+  border-radius: 4px;
+  background: #fff;
+  color: #344046;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+@media (max-width: 650px) {
+  .animation-control-grid { grid-template-columns: 1fr; }
+  .animation-preview-row { align-items: stretch; flex-direction: column; }
 }

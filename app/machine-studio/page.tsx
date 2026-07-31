@@ -73,6 +73,7 @@ export default function MachineStudio() {
               <button type="button" data-design-view="fit" title="Fit model (F)">Fit</button>
             </div>
             <div className="snap-controls">
+              <button id="preview-design-animations" type="button" className="active">Pause animations</button>
               <label className="studio-switch"><input id="snap-enabled" type="checkbox" defaultChecked /><span>Snap</span></label>
               <label>Step<select id="snap-step" defaultValue="0.5"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
             </div>
@@ -105,6 +106,16 @@ export default function MachineStudio() {
               <fieldset className="transform-section"><legend>Position</legend><div className="axis-fields"><label className="axis-x-field">X<input data-component-field="x" type="number" step="0.1" /></label><label className="axis-y-field">Y<input data-component-field="y" type="number" step="0.1" /></label><label className="axis-z-field">Z<input data-component-field="z" type="number" step="0.1" /></label></div><button id="center-component" type="button" className="full-width-button">Center on design base</button></fieldset>
               <fieldset className="transform-section"><legend>Rotation</legend><div className="axis-fields rotation-axis-fields"><label className="axis-x-field">X<input data-component-field="rotationX" type="number" step="1" /></label><label className="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1" /></label><label className="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1" /></label></div><div className="rotation-row rotation-actions"><label className="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis" defaultValue="y"><option value="x">X axis</option><option value="y">Y axis</option><option value="z">Z axis</option></select></label><button id="rotate-negative" type="button">−90°</button><button id="rotate-positive" type="button">+90°</button><button id="reset-rotation" type="button">Reset all</button></div><p className="transform-help">Use the red, green, and blue rings in Rotate mode for X, Y, and Z rotation.</p></fieldset>
               <fieldset className="transform-section"><legend>Size</legend><div className="axis-fields size-fields"><label data-for-component="box glassPanel rollerBed wheel" className="axis-x-field">Width<input data-component-field="w" type="number" min="0.02" step="0.1" /></label><label data-for-component="box glassPanel wheel" className="axis-y-field">Height<input data-component-field="h" type="number" min="0.02" step="0.1" /></label><label data-for-component="box glassPanel rollerBed wheel" className="axis-z-field">Depth<input data-component-field="d" type="number" min="0.02" step="0.1" /></label><label data-for-component="beam rollerBed">Thickness<input data-component-field="thickness" type="number" min="0.02" step="0.1" /></label><label data-for-component="rollerBed">Roller count<input data-component-field="count" type="number" min="2" step="1" /></label></div><p className="transform-help scale-help"><strong>Scale tool:</strong> drag a colored square to resize only that local axis. Wheels now have independent width, height, and axle-depth dimensions. Drag the orange center handle to scale every axis together.</p></fieldset>
+              <fieldset className="transform-section animation-section">
+                <legend>Part animation</legend>
+                <label className="studio-switch"><input data-component-check="animationEnabled" type="checkbox" /><span>Animation enabled</span></label>
+                <div className="inspector-row two">
+                  <label className="studio-field">Motion<select data-component-field="animationType"><option value="none">None</option><option value="oscillate">Back and forth</option><option value="loop">Continuous loop</option><option value="spin">Continuous rotation</option><option value="bob">Bob vertically</option><option value="pulse">Pulse size</option><option value="blink">Blink</option></select></label>
+                  <label className="studio-field">Axis<select data-component-field="animationAxis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option><option value="all">All</option></select></label>
+                </div>
+                <div className="axis-fields animation-fields"><label>Amount<input data-component-field="animationAmount" type="number" step="0.5" /></label><label>Speed<input data-component-field="animationSpeed" type="number" min="0" step="0.01" /></label><label>Phase °<input data-component-field="animationPhase" type="number" step="5" /></label></div>
+                <p className="transform-help">Back-and-forth and loop amounts use design units. Spin uses degrees per cycle. Pulse uses a percentage. Phase offsets related parts.</p>
+              </fieldset>
               <fieldset className="transform-section" data-for-component="beam"><legend>Beam endpoint</legend><div className="axis-fields"><label className="axis-x-field">End X<input data-component-field="x2" type="number" step="0.1" /></label><label className="axis-y-field">End Y<input data-component-field="y2" type="number" step="0.1" /></label><label className="axis-z-field">End Z<input data-component-field="z2" type="number" step="0.1" /></label></div></fieldset>
             </section>
           </section>
@@ -119,6 +130,7 @@ export default function MachineStudio() {
           </section>
         </aside>
       </section>
+      <script src="/depth-scene-renderer.js" />
       <script src="/machine-designs.js" />
       <script src="/machine-design-studio.js" />
     </main>

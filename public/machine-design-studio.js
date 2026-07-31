@@ -5,9 +5,17 @@
   if (!canvas) return;
 
   const ctx = canvas.getContext("2d");
+  const sceneCanvas = window.createDepthCanvas?.(canvas, "depth-scene-canvas machine-depth-canvas") || null;
+  const depthRenderer = sceneCanvas && window.createDepthSceneRenderer
+    ? window.createDepthSceneRenderer(sceneCanvas)
+    : { available: false, beginFrame() {}, addPolygon() {}, addLine() {}, render() {} };
   const DESIGN_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
   const LAYOUT_KEY = "monroe-glass-plant-layout-v6";
   const LEGACY_LAYOUT_KEY = "monroe-glass-plant-layout-v5";
+  const SYNC_CHANNEL_NAME = "monroe-glass-plant-sync-v1";
+  const syncChannel = typeof window.BroadcastChannel === "function"
+    ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
+    : null;
   const defaults = clone(window.PLANT_MACHINE_DESIGNS || {});
   const builtinIds = new Set(Object.keys(defaults));
   const AXIS_COLORS = { x: "#d94b45", y: "#3f9a65", z: "#3d7fc4" };
@@ -41,6 +49,28 @@
     })[character]);
   }
 
+
+  function broadcastProjectUpdate(type, detail = {}) {
+    if (!syncChannel) return;
+    try {
+      syncChannel.postMessage({
+        source: "machine-design-studio",
+        type,
+        at: Date.now(),
+        ...detail,
+      });
+    } catch (error) {
+      console.warn("Project update could not be broadcast.", error);
+    }
+  }
+
+  function safeId(value) {
+    return String(value || "machine")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "machine";
+  }
+
   function normalizeComponent(component, index = 0) {
     const supported = ["box", "glassPanel", "beam", "rollerBed", "wheel"];
     const type = supported.includes(component?.type) ? component.type : "box";
@@ -59,6 +89,14 @@
         ? Number(component.rotationY)
         : Number(component?.rotation) || 0,
       rotationZ: Number(component?.rotationZ) || 0,
+      animationEnabled: component?.animationEnabled !== false,
+      animationType: ["none", "oscillate", "loop", "spin", "bob", "pulse", "blink"].includes(component?.animationType)
+        ? component.animationType
+        : "none",
+      animationAxis: ["x", "y", "z", "all"].includes(component?.animationAxis) ? component.animationAxis : "x",
+      animationAmount: Number.isFinite(Number(component?.animationAmount)) ? Number(component.animationAmount) : 10,
+      animationSpeed: Math.max(0, Number.isFinite(Number(component?.animationSpeed)) ? Number(component.animationSpeed) : 0.1),
+      animationPhase: Number.isFinite(Number(component?.animationPhase)) ? Number(component.animationPhase) : 0,
     };
     // Keep the legacy Y-rotation field so existing plant layouts and older
     // exported designs continue to load without losing orientation.
@@ -138,8 +176,89 @@
   let plantLayout = loadLayout();
   const queryMachineId = new URLSearchParams(window.location.search).get("machine");
   const queryMachine = plantLayout.machines.find((machine) => machine.instanceId === queryMachineId);
-  const initialDesignId = queryMachine?.designId && library[queryMachine.designId]
-    ? queryMachine.designId
+
+  function recommendedDesignId(machine) {
+    if (!machine) return "";
+    const preferred = {
+      generic: "generic-machine",
+      genericBox: "generic-box-standard",
+      cutting: "cutting-standard",
+      filtration: "filtration-standard",
+      craneMachine: "crane-machine-standard",
+      bridgeCrane: "bridge-crane-standard",
+      room: "room-standard",
+      person: "team-member-standard",
+      kodiak: "kodiak-standard",
+      waterjet: "waterjet-standard",
+      denver: "denver-standard",
+      washer: "washer-standard",
+      furnace: "furnace-standard",
+      cube: "fusecube-standard",
+      wrapping: "wrapping-standard",
+      shipping: "shipping-standard",
+      glassRack: "glass-rack-standard",
+      aFrame: "aframe-cart-standard",
+      aFrameTruck: "aframe-truck-standard",
+    }[machine.type];
+    if (preferred && library[preferred]) return preferred;
+    const matching = Object.values(library).find((design) => design.machineType === machine.type);
+    return matching?.id || "";
+  }
+
+  function fallbackDesignForMachine(machine) {
+    const w = Math.max(0.5, Number(machine?.w) || 20);
+    const d = Math.max(0.5, Number(machine?.d) || 10);
+    const h = Math.max(0.5, Number(machine?.h) || 8);
+    const color = validColor(machine?.color, "#68777a");
+    const components = [
+      { id: uniqueId("box"), name: "Main body", type: "box", x: 0, y: 0, z: 0, w, h, d, color, opacity: 1, visible: true, rotationX: 0, rotationY: 0, rotationZ: 0 },
+    ];
+    if (machine?.type === "cutting") {
+      components[0].h = Math.max(0.5, h * 0.72);
+      components.push({ id: uniqueId("glassPanel"), name: "Cutting table surface", type: "glassPanel", x: w * 0.03, y: h * 0.72, z: d * 0.03, w: w * 0.94, h: Math.max(0.12, h * 0.08), d: d * 0.94, color: "#8fc6d4", opacity: 0.65, visible: true, rotationX: 0, rotationY: 0, rotationZ: 0 });
+    } else if (machine?.type === "filtration") {
+      components[0].w = w * 0.42;
+      components.push({ id: uniqueId("box"), name: "Filter tank", type: "box", x: w * 0.52, y: 0, z: d * 0.08, w: w * 0.2, h, d: d * 0.84, color: "#438a9f", opacity: 1, visible: true, rotationX: 0, rotationY: 0, rotationZ: 0 });
+      components.push({ id: uniqueId("box"), name: "Pump tank", type: "box", x: w * 0.76, y: 0, z: d * 0.08, w: w * 0.2, h, d: d * 0.84, color: "#438a9f", opacity: 1, visible: true, rotationX: 0, rotationY: 0, rotationZ: 0 });
+    }
+    return normalizeDesign({
+      id: uniqueId("starter-design"),
+      name: `${machine?.name || "Machine"} editable starter`,
+      machineType: machine?.type || "generic",
+      description: "Editable starter generated from the current plant object's dimensions and color.",
+      base: { w, d, h },
+      custom: true,
+      components,
+    });
+  }
+
+  function linkedDesignId(machine) {
+    if (!machine) return "";
+    if (machine.designId && library[machine.designId] && !builtinIds.has(machine.designId)) return machine.designId;
+    const sourceId = machine.designId && library[machine.designId] ? machine.designId : recommendedDesignId(machine);
+    const source = sourceId && library[sourceId] ? library[sourceId] : fallbackDesignForMachine(machine);
+    const stableId = `machine-${safeId(machine.instanceId)}-design`;
+    if (!library[stableId]) {
+      library[stableId] = normalizeDesign({
+        ...clone(source),
+        id: stableId,
+        name: `${machine.name || source.name} custom`,
+        machineType: machine.type || source.machineType,
+        description: `Live-linked design for ${machine.name || "this plant object"}.`,
+        custom: true,
+        sourceDesignId: sourceId || null,
+        components: source.components.map((component) => ({
+          ...clone(component),
+          id: uniqueId(component.type),
+        })),
+      }, stableId);
+    }
+    machine.designId = stableId;
+    return stableId;
+  }
+
+  const initialDesignId = queryMachine
+    ? linkedDesignId(queryMachine)
     : Object.keys(library)[0] || "";
 
   const state = {
@@ -165,6 +284,9 @@
     hoverHandle: null,
     browserTab: "designs",
     inspectorTab: "object",
+    previewAnimations: true,
+    lastFrameTime: 0,
+    linkedMachineId: queryMachine?.instanceId || null,
   };
 
   function currentDesign() {
@@ -182,15 +304,33 @@
     Object.entries(library).forEach(([id, design]) => {
       designs[id] = { ...clone(design), updatedAt: new Date().toISOString() };
     });
-    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: 3, updatedAt: new Date().toISOString(), designs }));
+    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: 4, updatedAt: new Date().toISOString(), designs }));
+    broadcastProjectUpdate("design-library-updated", { designId: state?.designId || null });
     if (saveState) window.setTimeout(() => { saveState.textContent = "Auto-saved"; }, 180);
   }
 
   function saveLayout() {
     plantLayout.version = 6;
-    plantLayout.appVersion = "0.7.0";
+    plantLayout.appVersion = "0.9.0";
     delete plantLayout.sourceKey;
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(plantLayout));
+    broadcastProjectUpdate("layout-updated", { machineId: state?.linkedMachineId || null });
+  }
+
+  function syncLinkedMachineToCurrentDesign() {
+    if (!state.linkedMachineId || !state.designId) return;
+    const machine = plantLayout.machines.find((item) => item.instanceId === state.linkedMachineId);
+    if (!machine) return;
+    if (machine.designId !== state.designId) {
+      machine.designId = state.designId;
+      saveLayout();
+    }
+  }
+
+  if (queryMachine && state.designId) {
+    queryMachine.designId = state.designId;
+    saveLibrary();
+    saveLayout();
   }
 
   function snapshot() {
@@ -215,6 +355,7 @@
     state.designId = item.designId;
     state.componentId = item.componentId;
     saveLibrary();
+    syncLinkedMachineToCurrentDesign();
     updateInterface();
   }
 
@@ -255,6 +396,7 @@
     if (!design) return;
     design.updatedAt = new Date().toISOString();
     saveLibrary();
+    syncLinkedMachineToCurrentDesign();
     updateInterface();
     if (message) showToast(message);
   }
@@ -285,6 +427,12 @@
       opacity: type === "glassPanel" ? 0.55 : 1,
       visible: true,
       rotation: 0,
+      animationEnabled: true,
+      animationType: "none",
+      animationAxis: "x",
+      animationAmount: 10,
+      animationSpeed: 0.1,
+      animationPhase: 0,
     };
     if (["box", "glassPanel"].includes(type)) {
       Object.assign(common, { w: base.w * 0.5, h: base.h * 0.5, d: type === "glassPanel" ? 0.25 : base.d * 0.5 });
@@ -304,6 +452,7 @@
     state.componentId = library[id].components[0]?.id || null;
     state.history.length = 0;
     state.future.length = 0;
+    syncLinkedMachineToCurrentDesign();
     fitView();
     updateInterface();
   }
@@ -519,7 +668,7 @@
       <div class="component-tree-row ${component.id === state.componentId ? "active" : ""}" data-component-row="${escapeHtml(component.id)}">
         <button type="button" class="component-visibility" data-toggle-component="${escapeHtml(component.id)}" title="${component.visible === false ? "Show" : "Hide"} component" aria-label="${component.visible === false ? "Show" : "Hide"} ${escapeHtml(component.name)}">${component.visible === false ? "○" : "●"}</button>
         <button type="button" class="component-select" data-component-id="${escapeHtml(component.id)}">
-          <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} · ${escapeHtml(component.type)}</small></span>
+          <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} · ${escapeHtml(component.type)}${component.animationType && component.animationType !== "none" ? ` · animated` : ""}</small></span>
         </button>
       </div>
     `).join("") || `<p class="studio-empty">No parts match this search.</p>`;
@@ -578,7 +727,9 @@
     const machine = machines.find((item) => item.instanceId === select.value);
     if (status) {
       status.textContent = machine
-        ? `${machine.name} currently uses ${machine.designId && library[machine.designId] ? library[machine.designId].name : "its built-in model"}.`
+        ? (machine.instanceId === state.linkedMachineId
+          ? `${machine.name} is live-linked to ${machine.designId && library[machine.designId] ? library[machine.designId].name : "the current design"}. Every saved change updates the plant model automatically.`
+          : `${machine.name} currently uses ${machine.designId && library[machine.designId] ? library[machine.designId].name : "its built-in model"}.`)
         : "Assignments save directly to the plant layout stored in this browser.";
     }
   }
@@ -646,6 +797,12 @@
 
   function polygon(points, fill, stroke = null, lineWidth = 1, alpha = 1) {
     if (alpha <= 0.01) return;
+    if (depthRenderer.available) {
+      depthRenderer.addPolygon(points, fill, alpha, stroke, lineWidth, {
+        transparent: alpha < 0.985,
+      });
+      return;
+    }
     const projected = points.map((point) => project(...point));
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -658,6 +815,10 @@
   }
 
   function line3d(start, end, color, width = 1, alpha = 1) {
+    if (depthRenderer.available) {
+      depthRenderer.addLine(start, end, color, width, alpha);
+      return;
+    }
     const a = project(...start);
     const b = project(...end);
     ctx.save();
@@ -777,12 +938,10 @@
     return crossProduct(vectorBetween(points[0], points[1]), vectorBetween(points[0], points[2]));
   }
 
-  function faceIsVisible(points, alpha = 1) {
-    // Transparent panels need both sides. Opaque convex parts only need the
-    // camera-facing surface; omitting hidden faces prevents rear faces from
-    // incorrectly painting over neighboring geometry.
-    if (alpha < 0.985) return true;
-    return dotProduct(faceNormal(points), cameraVector()) > 0.000001;
+  function faceIsVisible() {
+    // The WebGL depth buffer now resolves hidden surfaces. Keep every closed
+    // face available so no side disappears because of winding or camera angle.
+    return true;
   }
 
   function pointDistance(first, second) {
@@ -1057,6 +1216,34 @@
 
   function buildWheelPrimitives(component, order) {
     return buildCylinderPrimitives(component, wheelVertices(component, 20), order, component.color, component.opacity);
+  }
+
+
+  function animatedComponent(component, time) {
+    if (!state.previewAnimations || component.animationEnabled === false || !component.animationType || component.animationType === "none") return component;
+    const animated = clone(component);
+    const speed = Math.max(0, Number(component.animationSpeed) || 0.1);
+    const phase = (Number(component.animationPhase) || 0) / 360;
+    const cycle = time / 1000 * speed + phase;
+    const wrapped = ((cycle % 1) + 1) % 1;
+    const sine = Math.sin(cycle * Math.PI * 2);
+    const amount = Number(component.animationAmount) || 0;
+    const axis = component.animationAxis || "x";
+    const offset = component.animationType === "loop" ? (wrapped - 0.5) * amount : sine * amount / 2;
+    if (["oscillate", "loop"].includes(component.animationType)) {
+      translateComponent(animated, axis === "x" || axis === "all" ? offset : 0, axis === "y" || axis === "all" ? offset : 0, axis === "z" || axis === "all" ? offset : 0);
+    } else if (component.animationType === "bob") translateComponent(animated, 0, offset, 0);
+    else if (component.animationType === "spin") {
+      const field = axis === "x" ? "rotationX" : axis === "z" ? "rotationZ" : "rotationY";
+      animated[field] = (Number(animated[field]) || 0) + cycle * (amount || 360);
+      if (field === "rotationY") animated.rotation = animated.rotationY;
+    } else if (component.animationType === "pulse") {
+      const factor = Math.max(0.08, 1 + sine * amount / 200);
+      scaleComponent(animated, factor, axis === "all" ? "center" : axis, component);
+    } else if (component.animationType === "blink") {
+      animated.opacity = (Number(animated.opacity) || 1) * (sine > -0.15 ? 1 : 0.08);
+    }
+    return animated;
   }
 
   function buildComponentPrimitives(component, order) {
@@ -1366,37 +1553,35 @@
     }
   }
 
-  function draw() {
+  function draw(time) {
+    state.lastFrameTime = time;
     updateCanvasSize();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, "#f1f4f2");
-    gradient.addColorStop(0.58, "#d3dad6");
-    gradient.addColorStop(1, "#aeb9b4");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    depthRenderer.beginFrame(canvas.width, canvas.height, project);
     drawGrid();
 
     const design = currentDesign();
-    const components = design?.components || [];
+    const sourceComponents = design?.components || [];
+    const components = sourceComponents.map((component) => animatedComponent(component, time));
     state.renderPrimitives = components.flatMap((component, index) => buildComponentPrimitives(component, index));
     state.renderPrimitives.sort((first, second) => {
       const depthDifference = first.depth - second.depth;
       if (Math.abs(depthDifference) > 0.00001) return depthDifference;
-      // At nearly identical depth, opaque fills are established before translucent
-      // surfaces and edge lines, which prevents unstable frame-to-frame flashing.
       const firstLayer = first.kind === "line" ? 2 : first.alpha < 0.985 ? 1 : 0;
       const secondLayer = second.kind === "line" ? 2 : second.alpha < 0.985 ? 1 : 0;
       return firstLayer - secondLayer || first.order - second.order;
     });
     state.hitPrimitives = state.renderPrimitives;
     state.drawnComponents = components.map((component, index) => ({
-      component,
+      component: sourceComponents[index],
+      renderedComponent: component,
       depth: project(...componentCenter(component))[2],
       order: index,
     })).sort((first, second) => first.depth - second.depth || first.order - second.order);
     state.renderPrimitives.forEach(drawPrimitive);
-    drawSelectionOverlay(selectedComponent());
+    depthRenderer.render();
+    const selectedRendered = state.drawnComponents.find((entry) => entry.component?.id === state.componentId)?.renderedComponent || selectedComponent();
+    drawSelectionOverlay(selectedRendered);
     drawGizmo();
     requestAnimationFrame(draw);
   }
@@ -1688,6 +1873,12 @@
   document.getElementById("snap-step")?.addEventListener("change", (event) => {
     state.snapStep = Math.max(0.01, Number(event.target.value) || 0.5);
   });
+  document.getElementById("preview-design-animations")?.addEventListener("click", (event) => {
+    state.previewAnimations = !state.previewAnimations;
+    event.currentTarget.classList.toggle("active", state.previewAnimations);
+    event.currentTarget.textContent = state.previewAnimations ? "Pause animations" : "Play animations";
+    showToast(state.previewAnimations ? "Animation preview started." : "Animation preview paused at each part's base position.");
+  });
 
   document.getElementById("design-search")?.addEventListener("input", updateDesignList);
   document.getElementById("component-search")?.addEventListener("input", updateComponentList);
@@ -1743,12 +1934,13 @@
       if (!component) return;
       pushHistory();
       const field = input.dataset.componentField;
-      if (["name", "type", "color"].includes(field)) {
+      if (["name", "type", "color", "animationType", "animationAxis"].includes(field)) {
         if (field === "type") {
           const replacement = normalizeComponent({ ...component, type: input.value, id: component.id, name: component.name });
           const index = currentDesign().components.findIndex((item) => item.id === component.id);
           currentDesign().components[index] = replacement;
         } else if (field === "color") component.color = validColor(input.value, component.color);
+        else if (["animationType", "animationAxis"].includes(field)) component[field] = input.value;
         else component.name = input.value.trim() || component.name;
       } else {
         const number = Number(input.value);
@@ -1759,6 +1951,7 @@
         }
         else if (field === "count") component.count = Math.max(2, Math.round(number));
         else if (field === "opacity") component.opacity = clamp(number, 0.05, 1);
+        else if (field === "animationSpeed") component.animationSpeed = Math.max(0, number);
         else if (["rotationX", "rotationY", "rotationZ"].includes(field)) {
           component[field] = number;
           if (field === "rotationY") component.rotation = number;
@@ -1851,6 +2044,7 @@
     const design = currentDesign();
     if (!machine || !design) { showToast("Choose a plant object first."); return; }
     machine.designId = design.id;
+    state.linkedMachineId = machine.instanceId;
     saveLayout();
     updateAssignmentPanel();
     showToast(`${design.name} applied to ${machine.name}.`);
@@ -1860,6 +2054,7 @@
     const source = plantLayout.machines.find((item) => item.instanceId === id);
     const design = currentDesign();
     if (!source || !design) { showToast("Choose a plant object first."); return; }
+    state.linkedMachineId = source.instanceId;
     let count = 0;
     plantLayout.machines.forEach((machine) => {
       if (machine.type === source.type) { machine.designId = design.id; count += 1; }
@@ -1873,6 +2068,7 @@
     const machine = plantLayout.machines.find((item) => item.instanceId === id);
     if (!machine) { showToast("Choose a plant object first."); return; }
     machine.designId = "";
+    if (state.linkedMachineId === machine.instanceId) state.linkedMachineId = null;
     saveLayout();
     updateAssignmentPanel();
     showToast(`${machine.name} returned to its built-in model.`);
@@ -1881,7 +2077,7 @@
   document.getElementById("export-design")?.addEventListener("click", () => {
     const design = currentDesign();
     if (!design) return;
-    const blob = new Blob([JSON.stringify({ version: 3, exportedAt: new Date().toISOString(), design }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 4, exportedAt: new Date().toISOString(), design }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -1955,6 +2151,7 @@
     fitView();
     updateInterface();
   }
+  window.addEventListener("pagehide", () => syncChannel?.close());
   setTool("select");
   requestAnimationFrame(draw);
 })();

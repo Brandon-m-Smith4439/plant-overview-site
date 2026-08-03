@@ -43,14 +43,52 @@ for (const mode of ["loop", "pingPong", "spin", "bob", "pulse", "blink"]) {
 
 assert.ok(!plantApp.includes("function drawGlass(time)"), "Legacy hard-coded production glass animation still exists.");
 assert.ok(plantApp.includes("sceneAnimationsInitialized: true"), "Animation initialization/removal marker is not persisted.");
-assert.ok(plantApp.includes("loadAnimationAwareMachines"), "Saved animation removals are not protected.");
+assert.ok(plantApp.includes("loadSceneAwareMachines"), "Saved animation removals are not protected.");
 assert.ok(plantApp.includes("animatedComponent" ) || plantApp.includes("animateDesignComponent"), "Plant design component animation support is missing.");
 
 for (const markup of [html, page]) {
   assert.ok(markup.includes("preview-design-animations"), "Design animation preview control is missing.");
   assert.ok(markup.includes("animationAmount") && markup.includes("animationSpeed"), "Part animation inspector fields are missing.");
+  assert.ok(markup.includes("animationPauseSeconds"), "Part animation pause control is missing.");
 }
-assert.ok(studio.includes("JSON.stringify({ version: 4"), "Machine design payload version was not advanced to 4.");
+assert.ok(studio.includes("JSON.stringify({ version: 6"), "Machine design payload version was not advanced to 6.");
 assert.ok(studio.includes("animatedComponent"), "Design Studio animation preview engine is missing.");
+assert.ok(plantApp.includes("animationPauseSeconds"), "Scene animation pause timing is missing.");
+assert.ok(plantApp.includes("pauseSeconds * 2"), "Back-and-forth animations do not pause at both endpoints.");
+assert.ok(studio.includes("componentAnimationWave"), "Design Studio pause-aware animation timing is missing.");
+assert.ok(plantApp.includes('axis === "all") transform.rotation[0]') && plantApp.includes('axis === "all") transform.rotation[2]'), "Scene spin animation does not rotate all axes.");
+assert.ok(studio.includes('axis === "all") animated.rotationX') && studio.includes('axis === "all") animated.rotationZ'), "Machine-part spin animation does not rotate all axes.");
+assert.ok(plantApp.includes('select-production-glass'), "Moving-glass quick selection is missing from the layout editor.");
+assert.ok(plantApp.includes('machine.rotation = machine.rotationY'), "Y-axis nudge rotation is not synchronized with the all-axis rotation fields.");
+for (const markup of [html, page]) {
+  assert.ok(markup.includes("select-all-components"), "Select entire machine control is missing.");
+}
+assert.ok(studio.includes("selectAllComponents") && studio.includes("rotateSelectionTogether") && studio.includes("scaleSelectionTogether"), "Whole-machine transform support is incomplete.");
+function extractFunction(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `${name} was not found.`);
+  const bodyStart = source.indexOf("{", start);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    else if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  throw new Error(`${name} could not be parsed.`);
+}
+
+const timingSandbox = { Math, Number };
+vm.createContext(timingSandbox);
+vm.runInContext(`${extractFunction(plantApp, "animationWave")}; this.animationWave = animationWave;`, timingSandbox);
+const pausedPingPong = { animationMode: "pingPong", animationSpeed: 1, animationPauseSeconds: 2, animationPhase: 0 };
+assert.ok(Math.abs(timingSandbox.animationWave(pausedPingPong, 250).pingPong - 0.5) < 1e-9, "Back-and-forth motion did not reach the positive endpoint.");
+assert.ok(Math.abs(timingSandbox.animationWave(pausedPingPong, 1500).pingPong - 0.5) < 1e-9, "Back-and-forth motion did not remain paused at the positive endpoint.");
+assert.ok(Math.abs(timingSandbox.animationWave(pausedPingPong, 3500).pingPong + 0.5) < 1e-9, "Back-and-forth motion did not remain paused at the negative endpoint.");
+assert.ok(Math.abs(timingSandbox.animationWave(pausedPingPong, 5000).pingPong) < 1e-9, "Back-and-forth motion did not resume at the next cycle.");
+const pausedLoop = { animationMode: "loop", animationSpeed: 1, animationPauseSeconds: 2, animationPhase: 0 };
+assert.equal(timingSandbox.animationWave(pausedLoop, 1500).wrapped, 1, "Loop animation did not pause after completing its movement.");
+assert.equal(timingSandbox.animationWave(pausedLoop, 3000).wrapped, 0, "Loop animation did not resume after the pause duration.");
 
 console.log("Scene and machine animation regression checks passed.");

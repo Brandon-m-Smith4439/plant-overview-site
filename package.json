@@ -1,6 +1,6 @@
 {
   "name": "monroe-glass-plant-evolution",
-  "version": "0.9.0",
+  "version": "0.10.1",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -14,7 +14,12 @@
     "export:machines": "python cad/export_machine_registry.py",
     "db:generate": "drizzle-kit generate",
     "validate:rendering": "node tests/validate-layout-rendering.mjs",
-    "validate:animations": "node tests/validate-animations.mjs"
+    "validate:animations": "node tests/validate-animations.mjs",
+    "validate:floor": "node tests/validate-floor-features.mjs",
+    "validate:wheels": "node tests/validate-wheel-occlusion.mjs",
+    "validate:selection": "node tests/validate-multi-selection.mjs",
+    "validate:motion-groups": "node tests/validate-motion-groups.mjs",
+    "validate:designer": "node tests/validate-designer-shapes.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

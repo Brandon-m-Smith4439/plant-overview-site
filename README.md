@@ -1,144 +1,103 @@
 # Monroe Glass Plant Evolution
 
-Current project version: **0.9.0**
+Current project version: **0.10.1**
 
-An interactive and editable 3D construction timeline for the Monroe, North Carolina glass plant. The horizontal plant geometry is grounded in the glass-production areas of:
+Interactive 3D construction timeline and editable plant-layout model for the Monroe glass plant. The horizontal footprint is grounded in `Monroe Archs w Updates 1-23-25 (002).dwg`; machine detail, vertical dimensions, and photo-correlated placements remain editable interpretations.
 
-`Monroe Archs w Updates 1-23-25 (002).dwg`
+## Version 0.10.1
 
-The application uses an in-browser WebGL depth renderer with a transparent Canvas 2D interface layer. Plant layouts and reusable machine designs are stored locally in the browser and can be exported as JSON backups.
+Motion assemblies now use a true parent/child hierarchy instead of applying every animation channel to every object. Choose a **Motion parent** in the Plant Layout and attach the other selected objects to it. The parent carries its children, while each child continues to play its own animation in the parent’s moving coordinate space.
 
-## Version 0.9.0 highlights
+Example: a bridge can travel back and forth on Z while an attached trolley travels on X. The bridge only moves on Z; the trolley inherits the bridge’s Z motion and simultaneously moves on X without detaching. Nested parent/child chains are supported, so a tool head can inherit trolley motion, which already inherits bridge motion.
 
-### Complete scene-asset design library
+Merged items in Machine Design Studio now use the same principle. The **Attachment parent** child drives the complete merged assembly, while every other child retains its individual animation. The active part at merge time becomes the initial attachment parent, and it can be changed later in the merged item’s Animation section.
 
-Machine Design Studio now includes editable presets for the production machines and the supporting scene objects:
+## Version 0.10.0
 
-- Barefoot cutting line and filtration equipment
-- Freestanding gantry cranes and overhead bridge cranes
-- A-frame glass carts and the A-frame glass truck
-- Raw-glass racks and general boxes
-- Plant rooms and offices
-- Team-member markers
-- Waterjet, Kodiak, Denver, washer, furnace, FuseCube, wrapping, and shipping equipment
+Machine Design Studio now uses a cleaner slicer-style workflow without removing advanced controls:
 
-Opening an existing plant object in Machine Design Studio creates or reuses a linked design. Saved design changes continue to update that object in the Plant Layout automatically.
+- Compact design and assignment actions
+- Focused parts tree and categorized shape picker
+- Collapsible transform, dimension, animation, and machine-property sections
+- Local and World transform orientation
+- Corrected beam length and cross-section scaling
+- Closed depth-tested beam geometry in the Plant Layout
+- New cylinder, sphere/ellipsoid, cone/hopper, and wedge/ramp shapes
 
-### Editable scene animations
+The complete primitive library is:
 
-The former hard-coded final-stage production motion is now represented by ordinary editable scene objects. Animation objects can be selected, moved, renamed, copied, hidden, deleted, or added again from the layout editor.
+- Box / cabinet
+- Cylinder / tank / post
+- Sphere / ellipsoid / indicator
+- Cone / hopper
+- Wedge / ramp / sloped guard
+- Glass panel
+- Rectangular beam
+- Circular roller bed
+- Wheel / caster
+- Merged component group
 
-Included animation presets:
+Every primitive supports movement, X/Y/Z rotation, independent X/Y/Z scaling, color, opacity, visibility, duplication, grouping, and part animation. Local transforms follow the part’s current orientation; World transforms follow the fixed design grid. For beams, local X changes length, local Y changes height, and local Z changes width.
 
-- Vertical glass moving continuously from left to right
-- Material box moving back and forth
-- Walking team member
-- Shuttle glass cart
-- Blinking status beacon
+## Plant Layout
 
-Each object can use loop, ping-pong, spin, bob, pulse, or blink motion with editable axis, distance, speed, and phase. Editing mode pauses animations at their base positions by default so placement remains predictable; **Preview motion** turns them back on while editing.
+Choose **Edit layout** to open the docked editor. The current system supports:
 
-### Machine-part animation authoring
+- Moving, resizing, rotating, renaming, hiding, locking, copying, and deleting scene objects
+- Multi-selection with Shift/Ctrl/Command-click
+- Collective color changes and grouped movement
+- Hierarchical motion assemblies with a selectable parent and independently animated children
+- Machines, cranes, A-frame carts and trucks, glass racks, rooms, team members, general boxes, and floor features
+- Editable safety lines, utility trenches, drains, floor width, floor length, and floor position
+- Editable appearance/disappearance stages and timeline stages
+- Local-axis scene animation direction, pauses, speed, phase, and travel distance
+- Layout import/export, undo/redo, browser persistence, and live Machine Design Studio synchronization
 
-Machine Design Studio now has a compact **Part animation** section. A selected component can oscillate, loop, rotate, bob, pulse, or blink. Axis, amount, speed, and phase are editable, and the viewport has a Preview/Pause control. Animated custom designs play automatically when assigned to a plant object.
+## Machine Design Studio
 
-### Compatibility and preservation
+Open `/machine-studio` or `public/machine-studio.html`.
 
-- Plant layout storage remains `monroe-glass-plant-layout-v6` with schema 6.
-- Machine design storage remains `monroe-glass-machine-designs-v1`; payload version advances to 4.
-- Existing moved machines, added objects, custom designs, assignments, floor dimensions, timeline edits, walls, and hidden pillars remain available.
-- Default production animations are inserted once for an older layout. After that, deleting them is permanent because the saved layout records that animation initialization has completed.
+Typical workflow:
 
-## Plant layout editor
+1. Duplicate the closest supplied design.
+2. Open **Parts** and select a component.
+3. Choose Select, Move, Rotate, Scale, or Pan.
+4. Keep **Local** selected when editing a rotated part; switch to **World** for grid alignment.
+5. Use the colored handles for visual edits and the inspector for exact values.
+6. Merge related parts when they should stay connected. Select the intended motion parent last before merging, or change the merged item’s Attachment parent afterward.
+7. Fit the design envelope around the finished machine.
+8. Assign the design to one plant object or every matching object type.
 
-Choose **Edit layout** to open the docked editor. On desktop the model remains visible beside the editor, including in browser full-screen mode.
+Opening a plant object directly in Machine Design Studio creates or reuses a machine-linked design. Saved changes update that object in the Plant Layout using browser storage events and a same-origin broadcast channel.
 
-### Navigation
+## Timeline and animations
 
-- **Select & move**: drag an object to move it; drag empty floor to pan.
-- **Navigate view**: drag to orbit.
-- Shift-drag or Space-drag pans.
-- Alt-drag or right-drag orbits while editing.
-- Scroll zooms.
-- **Focus selected** centers the camera on the current object.
+The project contains 18 initial construction stages. Timeline Studio can rename, insert, delete, reorder, and describe stages.
 
-### Object properties
+Scene and machine-part animations support:
 
-Every editable object can have:
+- Back-and-forth movement
+- Continuous loop movement
+- X/Y/Z or all-axis spin
+- Vertical bob
+- Axis-specific pulse
+- Blink
+- Adjustable amount, speed, pause duration, and phase
 
-- Name and object type
-- X/Z position and rotation
-- Width, depth, and height
-- Appearance and disappearance stages
-- Color, visibility, label, and position lock
-- Collision mode
-- Built-in or component-based design preset
-- Optional attached overhead crane
+Attached scene objects retain their own animation settings while inheriting the motion of their parent and every ancestor. Parent motion is not incorrectly driven by child animation.
 
-### Addable objects
+## Storage compatibility
 
-- Photo-refined production machine presets
-- Generic machine and general box
-- A-frame glass cart
-- A-frame glass truck
-- Raw-glass rack and shipping rack
-- Office or room
-- Team-member marker
-- Freestanding gantry crane
-- Overhead bridge crane
-- Moving vertical glass
-- Moving material box
-- Walking team member
-- Shuttle glass cart
-- Blinking status beacon
+- Plant layout key: `monroe-glass-plant-layout-v6`
+- Plant layout schema: 6
+- Machine design key: `monroe-glass-machine-designs-v1`
+- Machine design payload: 6
 
-### Scene animation controls
+The storage keys remain unchanged. Existing moved machines, added objects, custom designs, assignments, animations, floor features, floor dimensions, timeline edits, walls, and hidden pillars remain available when the updated project is opened from the same browser profile and website address.
 
-Select an object and open **Object animation** to enable or disable motion, choose a motion type and axis, and set its amount, speed, and phase. **Pause animations** freezes every animated object at its editable base position. Animation objects use the same copy, paste, remove, lock, visibility, appearance-stage, and timeline controls as normal scene objects.
+Export the current layout JSON before a major update to create a portable backup.
 
-## Timeline studio
-
-Choose **Edit timeline** or open **Edit layout → Timeline** to:
-
-- Rename stages and timeline labels
-- Edit phase, date, description, and detail chips
-- Insert, delete, or reorder stages
-- Assign object appearance and disappearance stages
-- Scrub through the project
-- Adjust autoplay speed
-
-Object stage references are remapped when stages are inserted, removed, or reordered.
-
-## Controls
-
-| Control | Action |
-|---|---|
-| Drag | Orbit normally; move objects in Select & move mode |
-| Drag empty floor while editing | Pan |
-| Shift-drag or Space-drag | Pan |
-| Alt-drag or right-drag | Orbit while editing |
-| Mouse wheel | Zoom |
-| `F` | Enter or exit model full screen |
-| `Ctrl+C` / `Ctrl+V` | Copy / paste selected object |
-| `Delete` or `Backspace` | Remove selected object or machine component |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
-| `Esc` | Leave layout edit mode |
-| Left / Right Arrow | Previous / next timeline stage |
-
-## Validation
-
-Run the browser-script and rendering regression checks with:
-
-```powershell
-npm run validate:js
-npm run validate:rendering
-npm run validate:animations
-```
-
-The rendering regression test protects the docked editor canvas alignment and the single-volume pillar paint transition. The animation regression test verifies the expanded preset library, editable scene motions, machine-part animation controls, payload compatibility, and permanent removal behavior.
-
-## Running the application
+## Run
 
 Use Node.js 22.13 or newer:
 
@@ -147,11 +106,7 @@ npm ci
 npm run dev
 ```
 
-Then open the local address shown by the development server.
-
-### Standalone previews
-
-From the project root:
+Standalone preview:
 
 ```powershell
 py -m http.server 4173 --bind 127.0.0.1
@@ -159,56 +114,35 @@ py -m http.server 4173 --bind 127.0.0.1
 
 Open:
 
-- Plant layout: `http://127.0.0.1:4173/public/preview.html`
+- Plant Layout: `http://127.0.0.1:4173/public/preview.html`
 - Machine Design Studio: `http://127.0.0.1:4173/public/machine-studio.html`
-
-## Important files
-
-- `public/plant-data.js` — normalized CAD footprint
-- `cad/machine_registry.json` — baseline machine placement and evidence
-- `public/machine-data.js` — browser-ready registry generated from the JSON file
-- `public/plant-app.js` — plant rendering, timeline, editor, collision tools, floor configuration, and persistence
-- `public/machine-designs.js` — supplied component-based machine design presets
-- `public/machine-design-studio.js` — dedicated machine design editor
-- `app/machine-studio/page.tsx` — routed Machine Design Studio page
-- `app/globals.css` — shared application styling
-- `docs/MODEL_REFERENCES.md` — machine research and accuracy notes
-- `docs/MACHINE_DESIGN_STUDIO.md` — machine component design guide
 
 ## Validation
 
-Validate all browser JavaScript:
-
 ```powershell
 npm run validate:js
+npm run validate:rendering
+npm run validate:animations
+npm run validate:floor
+npm run validate:wheels
+npm run validate:selection
+npm run validate:motion-groups
+npm run validate:designer
 ```
 
-Regenerate machine registry data:
+## Important files
 
-```powershell
-npm run export:machines
-```
+- `public/plant-app.js` — plant rendering, timeline, layout editor, animations, floor features, and persistence
+- `public/machine-design-studio.js` — machine component editor
+- `public/machine-designs.js` — supplied component-based design presets
+- `public/depth-scene-renderer.js` — shared WebGL depth renderer
+- `public/plant-data.js` — normalized CAD footprint
+- `cad/machine_registry.json` — baseline machine placements and evidence
+- `cad/export_machine_registry.py` — regenerates `public/machine-data.js`
+- `app/globals.css` — shared Plant Layout and Design Studio styling
+- `docs/MACHINE_DESIGN_STUDIO.md` — detailed designer controls and workflow
+- `docs/MODEL_REFERENCES.md` — machine research and modeling references
 
-## Applying this update archive
+## Scope
 
-Extract the versioned folder over the existing `plant-overview-site` project. Files that were not supplied remain untouched, including `.openai/hosting.json`, `build/sites-vite-plugin.ts`, `app/chatgpt-auth.ts`, the original `package-lock.json`, and other existing CAD utilities and public assets.
-
-The original `package-lock.json` was not supplied, so this archive does not replace it. Run `npm install` in the normal development environment to update the lockfile, or provide the existing lockfile for a controlled update.
-
-## Accuracy limits
-
-The models are visual planning blocks, not engineering, foundation, clearance, rigging, or vendor installation drawings. Horizontal anchors are drawing-grounded where documented. Heights and detailed equipment profiles should be refined with surveyed dimensions and vendor drawings when available.
-
-
-## v0.7.0 rendering update
-
-The Machine Design Studio now subdivides large surfaces for more accurate depth ordering, removes hidden opaque back faces, and uses stable edge ordering. Roller beds use cylindrical rollers instead of rectangular bars. Wheel components expose independent width, height, and axle-depth dimensions, including axis-specific scaling. Existing saved designs are migrated automatically.
-
-
-## Scene assets and animations
-
-The layout editor treats animations as normal scene objects. Add them from **Edit layout → Objects → Add to the 3D model → Animations**. Each animation can be moved, resized, rotated, copied, hidden, removed, and assigned to timeline stages. Available starters include moving vertical glass, a material box, a walking team member, a shuttle cart, and a blinking status beacon.
-
-Select any object to configure motion type, axis, travel amount, speed, and phase. The editor pauses animations while opening so objects can be positioned at their base coordinates; use **Preview animations** to test the result.
-
-Machine Design Studio also supports part-level animation. Individual cabinets, beams, rollers, wheels, glass panels, and other parts can move, rotate, bob, pulse, or blink. Saved changes continue to update a live-linked machine in the Plant Layout.
+This project is intended for recognizable block models, planning, communication, and construction-progress visualization. It is not a substitute for surveyed as-built geometry, vendor CAD assemblies, certified clearances, structural calculations, or rigging plans.

@@ -1,6 +1,37 @@
 # Machine Design Studio
 
-The Machine Design Studio builds reusable visual machine models from editable primitives. Version 0.9.0 builds on the slicer-style editor and keeps the same basic workflow used by modern slicers: choose an object, choose a transform tool, manipulate it in the center viewport, and use the inspector for exact values.
+## Hierarchical motion in v0.10.1
+
+The editor keeps the same three-area slicer workflow and now supports true parent/child animation inside merged items. Secondary actions remain condensed into collapsible sections. The left panel focuses on designs and parts, the center viewport contains camera and transform controls, and the right inspector contains exact part or machine settings.
+
+Transforms default to **Local** mode. Local mode follows the selected part's current orientation; World mode follows the fixed design grid. This applies to move, rotate, and scale handles.
+
+### Shape library
+
+- Box / cabinet
+- Cylinder / tank / post
+- Sphere / ellipsoid / indicator
+- Cone / hopper
+- Wedge / ramp / sloped guard
+- Glass panel
+- Rectangular beam
+- Circular roller bed
+- Wheel / caster
+- Merged groups
+
+Each primitive supports independent X/Y/Z movement, rotation, and scaling. Beam scaling uses local X for length, local Y for height, and local Z for width.
+
+
+## Merged items and hierarchical motion
+
+Shift-click, Ctrl-click, or Command-click parts in the viewport or object tree to create an arbitrary part selection. Choose **Merge selected** to turn those parts into one compound item. The active part becomes the initial **Attachment parent**. Its animation carries the complete merged assembly. Every other child retains its own animation after inheriting the parent movement. Choose **Separate merged** to restore the parts.
+
+For example, make a bridge part move on Z and a trolley part move on X. Select the trolley first and the bridge last, then merge. The bridge becomes the attachment parent: it moves the complete assembly on Z while the trolley also travels on X relative to the moving bridge. Change the parent at any time from **Part → Animation → Attachment parent**.
+
+In Plant Layout, multi-select scene objects, choose a **Motion parent**, and select **Attach to parent**. Children inherit the parent’s motion but do not drive the parent. Nested attachments are supported for multi-stage mechanisms.
+
+
+The Machine Design Studio builds reusable visual machine models from editable primitives. Version 0.10.1 builds on the slicer-style editor and keeps the same basic workflow used by modern slicers: choose an object, choose a transform tool, manipulate it in the center viewport, and use the inspector for exact values.
 
 
 ## Depth-correct viewport
@@ -100,7 +131,7 @@ A rotatable repeated-roller component with configurable width, depth, count, and
 
 ### Wheel
 
-A closed multi-sided wheel detail for casters and truck wheels. It can be rotated on all three axes.
+A closed multi-sided wheel detail for casters and truck wheels. It can be rotated on all three axes and scaled independently by width, height, and axle depth. When a design is shown in the Plant Layout, wheel faces use the same WebGL depth buffer as the rest of the machine, so a wheel below or behind a cabinet is correctly hidden instead of painting through the body.
 
 ## Recommended modeling workflow
 
@@ -123,10 +154,10 @@ Transform controls are a separate overlay. Gizmo hit testing runs before model p
 ## Storage and compatibility
 
 - Machine designs: `monroe-glass-machine-designs-v1`
-- Machine-design payload: version 4
+- Machine-design payload: version 6
 - Plant layout: `monroe-glass-plant-layout-v6`
 
-Version 0.9.0 keeps the same storage keys while extending the design payload with optional animation metadata. Version 1, 2, and 3 design payloads and legacy `rotation` values load automatically, with legacy rotation treated as Y-axis rotation. Existing assignments, machine positions, added objects, floor dimensions, timeline edits, walls, and hidden pillars remain available when the updated site is opened from the same browser and address.
+Version 0.10.1 keeps the same storage keys while extending the design payload with optional animation metadata. Version 1 through 5 design payloads and legacy `rotation` values load automatically, with legacy rotation treated as Y-axis rotation. Existing assignments, machine positions, added objects, floor dimensions, timeline edits, walls, and hidden pillars remain available when the updated site is opened from the same browser and address.
 
 ## Scope
 
@@ -144,6 +175,23 @@ The editor is intended for recognizable block models and plant-layout communicat
 
 ## Part animations
 
-Select a component and use **Part animation** in the Object inspector. Supported motions are back-and-forth, continuous loop, X/Y/Z rotation, vertical bob, axis-specific pulse, and blink. **Amount** controls travel distance, rotation per cycle, or pulse percentage; **Speed** is cycles per second; **Phase** offsets related parts. The preview button in the viewport command bar pauses the design at its base pose for editing.
+Select a component and use **Part animation** in the Object inspector. Supported motions are back-and-forth, continuous loop, X/Y/Z rotation, vertical bob, axis-specific pulse, and blink. **Amount** controls travel distance, rotation per cycle, or pulse percentage; **Speed** is cycles per second; **Pause after cycle** holds the motion before it resumes; **Phase** offsets related parts. Back-and-forth motion pauses at both endpoints. Other modes pause after each completed cycle. The preview button in the viewport command bar pauses the design at its base pose for editing.
 
 The built-in library now includes editable presets for cranes, A-frame carts and trucks, raw-glass racks, rooms, team members, the Barefoot cutting line, and filtration equipment in addition to the production machines.
+
+
+## Selecting the entire machine
+
+Open the **Parts** tab and choose **Select entire machine**, or press `Ctrl+A` while the viewport is active. The combined transform gizmo is placed at the center of all parts. Move, Rotate, and Scale then affect every component together. Axis scale changes only the selected world axis; the center scale handle changes all axes uniformly. Clicking an individual component returns to single-part editing.
+
+## All-axis animation rotation
+
+For a part animation set Motion to **Continuous rotation** and choose X, Y, Z, or All. All now rotates all three axes together. Scene animation objects in the Plant Layout also support X/Y/Z base orientation and all-axis spin.
+## Scene paths and floor features
+
+The Plant Layout editor, rather than Machine Design Studio, controls whole-object travel paths and floor-layout objects. Translation animations use the scene object's local X, Y, or Z axis, so the object's X/Y/Z rotation also rotates the direction of travel. Safety lines, trenches, and square drains are edited as normal scene objects from **Edit layout → Objects**.
+
+
+## Plant Layout multi-selection
+
+The Plant Layout editor supports Shift-click, Ctrl-click, and Command-click selection of multiple scene objects. The collective color control updates the complete selection. Focus, nudge, Y rotation, and removal also operate on the selected group. Object-specific design, crane, collision-separation, and animation controls remain single-object operations and are disabled until the selection is reduced to one object.

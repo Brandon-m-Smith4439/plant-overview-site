@@ -156,7 +156,7 @@
   const syncChannel = typeof window.BroadcastChannel === "function"
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
-  const APP_VERSION = "0.9.0";
+  const APP_VERSION = "0.10.1";
   const WALL_IDS = ["west", "east", "south", "north-west", "north-east"];
   const defaultWalls = Object.fromEntries(WALL_IDS.map((id) => [id, true]));
   const defaultDesignLibrary = window.PLANT_MACHINE_DESIGNS || {};
@@ -215,8 +215,13 @@
     return ["animatedGlass", "animatedBox", "animatedPerson", "animatedCart", "animatedBeacon"].includes(type);
   }
 
+  function isFloorFeatureType(type) {
+    return ["safetyLine", "trench", "floorDrain"].includes(type);
+  }
+
   function objectCategory(type) {
     if (isAnimationType(type)) return "animation";
+    if (isFloorFeatureType(type)) return "floor";
     if (["glassRack", "room", "person"].includes(type)) return "support";
     return "equipment";
   }
@@ -247,7 +252,7 @@
 
   function animationDefaults(type) {
     const defaults = {
-      animatedGlass: { animationMode: "loop", animationAxis: "x", animationDistance: 144, animationSpeed: 0.035, animationPhase: 0 },
+      animatedGlass: { animationMode: "pingPong", animationAxis: "x", animationDistance: 144, animationSpeed: 0.035, animationPhase: 0 },
       animatedBox: { animationMode: "pingPong", animationAxis: "x", animationDistance: 30, animationSpeed: 0.12, animationPhase: 0 },
       animatedPerson: { animationMode: "pingPong", animationAxis: "z", animationDistance: 18, animationSpeed: 0.08, animationPhase: 0 },
       animatedCart: { animationMode: "pingPong", animationAxis: "x", animationDistance: 36, animationSpeed: 0.07, animationPhase: 0 },
@@ -269,7 +274,10 @@
       w: Math.max(0.5, Number(machine.w) || 10),
       d: Math.max(0.5, Number(machine.d) || 10),
       h: Math.max(0.5, Number(machine.h) || 5),
-      rotation: Number(machine.rotation) || 0,
+      rotationX: Number(machine.rotationX) || 0,
+      rotationY: Number.isFinite(Number(machine.rotationY)) ? Number(machine.rotationY) : Number(machine.rotation) || 0,
+      rotationZ: Number(machine.rotationZ) || 0,
+      rotation: Number.isFinite(Number(machine.rotationY)) ? Number(machine.rotationY) : Number(machine.rotation) || 0,
       reveal: Number.isFinite(Number(machine.reveal)) ? Number(machine.reveal) : 0,
       retire: Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99,
       color: machine.color || "#277d78",
@@ -295,6 +303,11 @@
       animationPhase: Number.isFinite(Number(machine.animationPhase))
         ? Number(machine.animationPhase)
         : animationDefaults(machine.type).animationPhase,
+      animationPauseSeconds: Math.max(0, Number.isFinite(Number(machine.animationPauseSeconds))
+        ? Number(machine.animationPauseSeconds)
+        : 0),
+      animationGroupId: typeof machine.animationGroupId === "string" ? machine.animationGroupId : "",
+      motionParentId: typeof machine.motionParentId === "string" ? machine.motionParentId : "",
     };
     if (normalized.crane) {
       normalized.crane = {
@@ -381,7 +394,7 @@
         placement_status: "illustrative",
         evidence: "Editable production-flow animation replacing the former hard-coded final-stage motion.",
         animationEnabled: true,
-        animationMode: "loop",
+        animationMode: "pingPong",
         animationAxis: "x",
         animationDistance: 144,
         animationSpeed: 0.035,
@@ -415,6 +428,80 @@
     ];
   }
 
+  function defaultFloorFeatureObjects() {
+    const trenchSpecs = [
+      [-211, -99, 385, 3],
+      [-90, -195, 3, 145],
+      [43, -195, 3, 96],
+      [145, -195, 3, 96],
+    ];
+    const safetySpecs = [
+      [-222,-205,86,4],[-136,-205,4,121],[-132,-88,315,4],[179,-205,4,121],
+      [0,-124,170,3],[0,-153,170,3],
+    ];
+    const trenches = trenchSpecs.map(([x,z,w,d], index) => ({
+      id: `utility-trench-${index + 1}`,
+      instanceId: `utility-trench-${index + 1}`,
+      name: `Utility trench ${index + 1}`,
+      short: `Trench ${index + 1}`,
+      type: "trench",
+      reveal: 1,
+      retire: 2,
+      x, z, w, d,
+      h: 0.22,
+      color: "#4a3a31",
+      showLabel: false,
+      collisionMode: "ignore",
+      placement_status: "dwg_named",
+      evidence: "Editable utility trench derived from the original construction sequence.",
+    }));
+    const safetyLines = safetySpecs.map(([x,z,w,d], index) => ({
+      id: `safety-line-${index + 1}`,
+      instanceId: `safety-line-${index + 1}`,
+      name: `Safety yellow line ${index + 1}`,
+      short: `Safety line ${index + 1}`,
+      type: "safetyLine",
+      reveal: 4,
+      retire: 99,
+      x, z, w, d,
+      h: 0.08,
+      color: "#e3ad28",
+      showLabel: false,
+      collisionMode: "ignore",
+      placement_status: "dwg_named",
+      evidence: "Editable safety marking based on the original plant-floor lane layout.",
+    }));
+    const drains = [{
+      id: "floor-drain-1",
+      instanceId: "floor-drain-1",
+      name: "Square floor drain 1",
+      short: "Floor drain",
+      type: "floorDrain",
+      reveal: 2,
+      retire: 99,
+      x: 40.5,
+      z: -111.5,
+      w: 3,
+      d: 3,
+      h: 0.18,
+      color: "#465155",
+      showLabel: false,
+      collisionMode: "ignore",
+      placement_status: "user_added",
+      evidence: "Editable square floor-drain model added to the plant layout.",
+    }];
+    return [...trenches, ...safetyLines, ...drains];
+  }
+
+  function mergeDefaultFloorFeatureObjects(items) {
+    const result = normalizeMachines(items);
+    const ids = new Set(result.map((item) => item.id));
+    defaultFloorFeatureObjects().forEach((item, index) => {
+      if (!ids.has(item.id)) result.push(normalizeMachine(item, result.length + index));
+    });
+    return result;
+  }
+
   function mergeDefaultAnimationObjects(items) {
     const result = normalizeMachines(items);
     const ids = new Set(result.map((item) => item.id));
@@ -424,15 +511,19 @@
     return result;
   }
 
-  function loadAnimationAwareMachines(layout, includeSupportObjects = false) {
-    const base = includeSupportObjects
+  function loadSceneAwareMachines(layout, includeSupportObjects = false) {
+    let base = includeSupportObjects
       ? mergeSupportObjects(layout?.machines || [])
       : normalizeMachines(layout?.machines || []);
-    // Existing v0.9+ layouts carry this flag. Once initialized, deleted animation
-    // objects stay deleted instead of being silently recreated on the next load.
-    return layout?.sceneAnimationsInitialized === true
-      ? base
-      : mergeDefaultAnimationObjects(base);
+    // Once initialized, user-deleted scene objects stay deleted instead of being
+    // silently recreated on the next load.
+    if (layout?.sceneAnimationsInitialized !== true) base = mergeDefaultAnimationObjects(base);
+    if (layout?.floorFeaturesInitialized !== true) base = mergeDefaultFloorFeatureObjects(base);
+    return base;
+  }
+
+  function defaultSceneMachines() {
+    return mergeDefaultFloorFeatureObjects(mergeDefaultAnimationObjects(initialMachines()));
   }
 
   function mergeSupportObjects(items) {
@@ -469,7 +560,7 @@
       const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
       if (current?.version === 6 && Array.isArray(current.machines)) {
         return {
-          machines: loadAnimationAwareMachines(current),
+          machines: loadSceneAwareMachines(current),
           stages: normalizeStages(current.stages),
           floor: normalizeFloor(current.floor),
           hiddenColumns: Array.isArray(current.hiddenColumns) ? current.hiddenColumns : [],
@@ -484,7 +575,7 @@
           localStorage.setItem(MIGRATION_BACKUP_KEY, legacyRaw);
         }
         return {
-          machines: loadAnimationAwareMachines(legacy),
+          machines: loadSceneAwareMachines(legacy),
           stages: normalizeStages(legacy.stages),
           floor: normalizeFloor(legacy.floor),
           hiddenColumns: Array.isArray(legacy.hiddenColumns) ? legacy.hiddenColumns : [],
@@ -495,7 +586,7 @@
       const older = JSON.parse(localStorage.getItem(OLDER_STORAGE_KEY) || "null");
       if (older?.version === 4 && Array.isArray(older.machines)) {
         return {
-          machines: loadAnimationAwareMachines(older),
+          machines: loadSceneAwareMachines(older),
           stages: normalizeStages(older.stages),
           floor: normalizeFloor(older.floor),
           hiddenColumns: Array.isArray(older.hiddenColumns) ? older.hiddenColumns : [],
@@ -506,7 +597,7 @@
       const oldest = JSON.parse(localStorage.getItem(OLDEST_STORAGE_KEY) || "null");
       if (oldest?.version === 3 && Array.isArray(oldest.machines)) {
         return {
-          machines: loadAnimationAwareMachines(oldest, true),
+          machines: loadSceneAwareMachines(oldest, true),
           stages: normalizeStages(defaultStages),
           floor: normalizeFloor(oldest.floor),
           hiddenColumns: Array.isArray(oldest.hiddenColumns) ? oldest.hiddenColumns : [],
@@ -518,7 +609,7 @@
       console.warn("Saved layout could not be loaded.", error);
     }
     return {
-      machines: mergeDefaultAnimationObjects(initialMachines()),
+      machines: defaultSceneMachines(),
       stages: normalizeStages(defaultStages),
       floor: normalizeFloor(defaultFloor),
       hiddenColumns: [],
@@ -563,10 +654,11 @@
     dragSnapshot: null,
     dragMoved: false,
     selectedMachineId: null,
+    selectedMachineIds: new Set(),
     clipboard: null,
     hiddenColumns: new Set(savedLayout.hiddenColumns),
     walls: savedLayout.walls,
-    previewObjectAnimations: true,
+    previewObjectAnimations: false,
     lastFrameTime: 0,
   };
 
@@ -617,13 +709,6 @@
     utility: "#2f7771",
   };
 
-  const trenches = [
-    [-211, -99, 385, 3],
-    [-90, -195, 3, 145],
-    [43, -195, 3, 96],
-    [145, -195, 3, 96],
-  ];
-
   function snapshotLayout() {
     return {
       machines: clone(machines),
@@ -651,9 +736,12 @@
     state.playbackSpeed = Number(snapshot.playbackSpeed) || 1;
     state.stage = clamp(state.stage, 0, stages.length - 1);
     state.stageFloat = state.stage;
-    state.selectedMachineId = machines.some((item) => item.instanceId === state.selectedMachineId)
+    const availableIds = new Set(machines.map((item) => item.instanceId));
+    state.selectedMachineIds = new Set([...state.selectedMachineIds].filter((id) => availableIds.has(id)));
+    state.selectedMachineId = availableIds.has(state.selectedMachineId)
       ? state.selectedMachineId
-      : null;
+      : [...state.selectedMachineIds].at(-1) || null;
+    if (state.selectedMachineId) state.selectedMachineIds.add(state.selectedMachineId);
     buildTimeline();
     setStage(state.stage);
     updateEditorPanel();
@@ -686,6 +774,7 @@
         version: 6,
         appVersion: APP_VERSION,
         sceneAnimationsInitialized: true,
+        floorFeaturesInitialized: true,
         machines,
         stages,
         floor,
@@ -698,8 +787,156 @@
     }
   }
 
+  function normalizeSelection() {
+    const availableIds = new Set(machines.map((machine) => machine.instanceId));
+    state.selectedMachineIds = new Set([...state.selectedMachineIds].filter((id) => availableIds.has(id)));
+    if (state.selectedMachineId && availableIds.has(state.selectedMachineId)) {
+      state.selectedMachineIds.add(state.selectedMachineId);
+    } else {
+      state.selectedMachineId = [...state.selectedMachineIds].at(-1) || null;
+    }
+  }
+
   function selectedMachine() {
+    normalizeSelection();
     return machines.find((machine) => machine.instanceId === state.selectedMachineId) || null;
+  }
+
+  function selectedMachines() {
+    normalizeSelection();
+    return machines.filter((machine) => state.selectedMachineIds.has(machine.instanceId));
+  }
+
+  function machineById(instanceId) {
+    return machines.find((machine) => machine.instanceId === instanceId) || null;
+  }
+
+  function animationGroupMembers(groupId) {
+    if (!groupId) return [];
+    return machines.filter((machine) => machine.animationGroupId === groupId);
+  }
+
+  function motionChildren(instanceId) {
+    if (!instanceId) return [];
+    return machines.filter((machine) => machine.motionParentId === instanceId);
+  }
+
+  function motionRoot(machine) {
+    if (!machine) return null;
+    let current = machine;
+    const visited = new Set([current.instanceId]);
+    while (current.motionParentId) {
+      const parent = machineById(current.motionParentId);
+      if (!parent || visited.has(parent.instanceId)) break;
+      visited.add(parent.instanceId);
+      current = parent;
+    }
+    return current;
+  }
+
+  function motionDescendants(instanceId, visited = new Set()) {
+    if (!instanceId || visited.has(instanceId)) return [];
+    visited.add(instanceId);
+    const result = [];
+    motionChildren(instanceId).forEach((child) => {
+      if (visited.has(child.instanceId)) return;
+      result.push(child, ...motionDescendants(child.instanceId, visited));
+    });
+    return result;
+  }
+
+  function motionAssemblyMembers(machine) {
+    if (!machine) return [];
+    if (machine.animationGroupId && !machine.motionParentId) {
+      const legacyMembers = animationGroupMembers(machine.animationGroupId);
+      if (legacyMembers.length > 1) return legacyMembers;
+    }
+    const root = motionRoot(machine);
+    return root ? [root, ...motionDescendants(root.instanceId)] : [machine];
+  }
+
+  function selectionIdsForObject(instanceId) {
+    const machine = machineById(instanceId);
+    return motionAssemblyMembers(machine).map((item) => item.instanceId);
+  }
+
+  function setSingleSelection(instanceId) {
+    const ids = selectionIdsForObject(instanceId);
+    state.selectedMachineId = instanceId || null;
+    state.selectedMachineIds = new Set(ids);
+  }
+
+  function toggleMachineSelection(instanceId) {
+    if (!instanceId) return;
+    const ids = selectionIdsForObject(instanceId);
+    const removing = ids.every((id) => state.selectedMachineIds.has(id));
+    ids.forEach((id) => {
+      if (removing) state.selectedMachineIds.delete(id);
+      else state.selectedMachineIds.add(id);
+    });
+    if (removing && ids.includes(state.selectedMachineId)) {
+      state.selectedMachineId = [...state.selectedMachineIds].at(-1) || null;
+    } else if (!removing) {
+      state.selectedMachineId = instanceId;
+    }
+  }
+
+  function clearMachineSelection() {
+    state.selectedMachineId = null;
+    state.selectedMachineIds.clear();
+  }
+
+  function joinSelectedAnimationObjects() {
+    const selection = selectedMachines();
+    if (selection.length < 2) {
+      showToast("Select at least two objects to create an attached motion assembly.");
+      return;
+    }
+    const picker = document.querySelector("[data-motion-parent-picker]");
+    const parentId = picker?.value || state.selectedMachineId || selection.at(-1)?.instanceId;
+    const parent = selection.find((machine) => machine.instanceId === parentId);
+    if (!parent) {
+      showToast("Choose which selected object should carry the other objects.");
+      return;
+    }
+    pushHistory();
+    const selectedIds = new Set(selection.map((machine) => machine.instanceId));
+    // Detach the chosen parent from any selected ancestor first. This allows a
+    // hierarchy to be re-rooted without creating a cycle.
+    parent.motionParentId = "";
+    selection.forEach((machine) => { machine.animationGroupId = ""; });
+    // Attach only the roots of the other selected assemblies. Existing child
+    // relationships below those roots stay intact, which makes nested chains
+    // such as bridge -> trolley -> tool head possible through the UI.
+    const rootsToAttach = selection.filter((machine) => (
+      machine.instanceId !== parent.instanceId &&
+      (!machine.motionParentId || !selectedIds.has(machine.motionParentId))
+    ));
+    rootsToAttach.forEach((machine) => { machine.motionParentId = parent.instanceId; });
+    state.selectedMachineIds = new Set([parent, ...motionDescendants(parent.instanceId)].map((machine) => machine.instanceId));
+    state.selectedMachineId = parent.instanceId;
+    persistLayout();
+    updateEditorPanel();
+    showToast(`${parent.name} is now the motion parent. Attached objects inherit its animation and keep their own animation.`);
+  }
+
+  function unjoinSelectedAnimationObjects() {
+    const selection = selectedMachines();
+    const legacyGroups = new Set(selection.map((machine) => machine.animationGroupId).filter(Boolean));
+    const hasHierarchy = selection.some((machine) => machine.motionParentId || motionChildren(machine.instanceId).length);
+    if (!legacyGroups.size && !hasHierarchy) {
+      showToast("The current selection is not part of an attached motion assembly.");
+      return;
+    }
+    pushHistory();
+    const selectionIds = new Set(selection.map((machine) => machine.instanceId));
+    machines.forEach((machine) => {
+      if (selectionIds.has(machine.instanceId)) machine.motionParentId = "";
+      if (legacyGroups.has(machine.animationGroupId)) machine.animationGroupId = "";
+    });
+    persistLayout();
+    updateEditorPanel();
+    showToast("Motion assembly separated. Every object keeps its individual animation settings.");
   }
 
   function collisionCandidates() {
@@ -850,7 +1087,7 @@
     }
     const flattened = [...new Set(pairs.flat().map((machine) => machine.instanceId))];
     const currentIndex = flattened.indexOf(state.selectedMachineId);
-    state.selectedMachineId = flattened[(currentIndex + 1) % flattened.length];
+    setSingleSelection(flattened[(currentIndex + 1) % flattened.length]);
     state.editorTool = "machines";
     focusSelectedMachine();
     updateEditorPanel();
@@ -1017,6 +1254,36 @@
         crane: null,
         designId: "team-member-standard",
       },
+      safetyLine: {
+        name: requestedName || "Safety yellow line",
+        short: requestedName || "Safety line",
+        type: "safetyLine",
+        w: 40, d: 3, h: 0.08,
+        color: "#e3ad28",
+        crane: null,
+        showLabel: false,
+        collisionMode: "ignore",
+      },
+      trench: {
+        name: requestedName || "Utility trench",
+        short: requestedName || "Trench",
+        type: "trench",
+        w: 40, d: 3, h: 0.22,
+        color: "#4a3a31",
+        crane: null,
+        showLabel: false,
+        collisionMode: "ignore",
+      },
+      floorDrain: {
+        name: requestedName || "Square floor drain",
+        short: requestedName || "Floor drain",
+        type: "floorDrain",
+        w: 3, d: 3, h: 0.18,
+        color: "#465155",
+        crane: null,
+        showLabel: false,
+        collisionMode: "ignore",
+      },
       animatedGlass: {
         name: requestedName || "Moving vertical glass",
         short: requestedName || "Moving glass",
@@ -1139,28 +1406,38 @@
   }
 
   function focusSelectedMachine() {
-    const machine = selectedMachine();
-    if (!machine) return;
-    state.panX = machine.x + machine.w / 2 - modelCenter()[0];
-    state.panZ = machine.z + machine.d / 2 - modelCenter()[1];
-    state.zoom = Math.max(state.zoom, clamp(70 / Math.max(machine.w, machine.d), 1.1, 2.5));
-    showToast(`Focused on ${machine.name}.`);
+    const selection = selectedMachines();
+    if (!selection.length) return;
+    const minX = Math.min(...selection.map((machine) => machine.x));
+    const maxX = Math.max(...selection.map((machine) => machine.x + machine.w));
+    const minZ = Math.min(...selection.map((machine) => machine.z));
+    const maxZ = Math.max(...selection.map((machine) => machine.z + machine.d));
+    state.panX = (minX + maxX) / 2 - modelCenter()[0];
+    state.panZ = (minZ + maxZ) / 2 - modelCenter()[1];
+    state.zoom = Math.max(state.zoom, clamp(70 / Math.max(maxX - minX, maxZ - minZ, 1), 1.1, 2.5));
+    showToast(selection.length === 1 ? `Focused on ${selection[0].name}.` : `Focused on ${selection.length} selected objects.`);
   }
 
   function nudgeSelectedMachine(deltaX = 0, deltaZ = 0, deltaRotation = 0) {
-    const machine = selectedMachine();
-    if (!machine || machine.locked) {
-      if (machine?.locked) showToast(`${machine.name} is locked.`);
+    const selection = selectedMachines();
+    if (!selection.length) return;
+    const movable = selection.filter((machine) => !machine.locked);
+    if (!movable.length) {
+      showToast(selection.length === 1 ? `${selection[0].name} is locked.` : "All selected objects are locked.");
       return;
     }
     pushHistory();
     const snap = Math.max(0.1, Number(state.snapSize) || 0.5);
     const bounds = floorBounds();
-    machine.x = clamp(machine.x + deltaX * snap, bounds[0], bounds[2] - machine.w);
-    machine.z = clamp(machine.z + deltaZ * snap, bounds[1], bounds[3] - machine.d);
-    machine.rotation = Math.round((Number(machine.rotation) + deltaRotation + 360) % 360);
+    movable.forEach((machine) => {
+      machine.x = clamp(machine.x + deltaX * snap, bounds[0], bounds[2] - machine.w);
+      machine.z = clamp(machine.z + deltaZ * snap, bounds[1], bounds[3] - machine.d);
+      machine.rotationY = Math.round((Number(machine.rotationY ?? machine.rotation) + deltaRotation + 360) % 360);
+      machine.rotation = machine.rotationY;
+    });
     persistLayout();
     updateEditorPanel();
+    if (movable.length !== selection.length) showToast(`Moved ${movable.length} objects; locked objects were left in place.`);
   }
 
   function updateEditorHelp() {
@@ -1179,6 +1456,8 @@
 
   function updateEditorPanel() {
     const machine = selectedMachine();
+    const selectionItems = selectedMachines();
+    const selectionCount = selectionItems.length;
     const panel = document.querySelector(".layout-editor");
     if (!panel) return;
 
@@ -1190,16 +1469,16 @@
     if (selection) {
       if (state.editorTool === "timeline") selection.textContent = currentStage()?.title || "Timeline";
       else if (state.editorTool === "pillars") selection.textContent = "Structure controls";
-      else selection.textContent = machine ? machine.name : "Select any model object";
+      else selection.textContent = selectionCount > 1 ? `${selectionCount} objects selected` : (machine ? machine.name : "Select any model object");
     }
 
     panel.querySelectorAll("[data-needs-selection]").forEach((control) => {
-      control.disabled = !machine;
+      control.disabled = selectionCount === 0;
     });
 
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       const field = input.dataset.machineField;
-      input.disabled = !machine;
+      input.disabled = !machine || selectionCount > 1;
       if (input.dataset.stageSelect !== undefined) {
         const includeNever = input.dataset.allowNever !== undefined;
         input.innerHTML = stages.map((stage,index) => (
@@ -1210,25 +1489,33 @@
         input.value = "";
         return;
       }
+      if (selectionCount > 1 && field === "color") {
+        input.disabled = false;
+        input.value = selectionItems[0]?.color || "#277d78";
+        return;
+      }
       const value = machine[field];
       if (["name", "type", "color", "collisionMode"].includes(field)) input.value = value ?? "";
       else input.value = String(Number(value ?? 0));
     });
 
+    const depthLabel = panel.querySelector("[data-depth-label]");
+    if (depthLabel) depthLabel.textContent = machine && isFloorFeatureType(machine.type) ? "Length" : "Depth";
+
     panel.querySelectorAll("[data-machine-check]").forEach((input) => {
       const field = input.dataset.machineCheck;
-      input.disabled = !machine;
+      input.disabled = !machine || selectionCount > 1;
       input.checked = machine ? machine[field] !== false : false;
       if (field === "locked") input.checked = machine?.locked === true;
     });
 
     panel.querySelectorAll("[data-animation-field]").forEach((input) => {
       const field = input.dataset.animationField;
-      input.disabled = !machine;
+      input.disabled = !machine || selectionCount > 1;
       input.value = machine ? String(machine[field] ?? "") : "";
     });
     panel.querySelectorAll("[data-animation-check]").forEach((input) => {
-      input.disabled = !machine;
+      input.disabled = !machine || selectionCount > 1;
       input.checked = Boolean(machine?.[input.dataset.animationCheck]);
     });
     const previewAnimations = panel.querySelector("[data-editor-action='preview-animations']");
@@ -1245,8 +1532,51 @@
       designPicker.innerHTML = `<option value="">Built-in object model</option>${availableDesigns.map((design) => (
         `<option value="${escapeHtml(design.id)}">${escapeHtml(design.name)}${design.machineType ? ` · ${escapeHtml(design.machineType)}` : ""}</option>`
       )).join("")}`;
-      designPicker.disabled = !machine;
+      designPicker.disabled = !machine || selectionCount > 1;
       designPicker.value = machine?.designId || "";
+    }
+
+    const multiSelectionPanel = panel.querySelector("[data-multi-selection]");
+    if (multiSelectionPanel) multiSelectionPanel.hidden = selectionCount < 2;
+    const multiSelectionSummary = panel.querySelector("[data-multi-selection-summary]");
+    if (multiSelectionSummary) {
+      const hierarchyRoot = motionRoot(machine);
+      const attached = selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
+      multiSelectionSummary.textContent = selectionCount === 1
+        ? "1 object selected. Shift-click or Ctrl-click other objects to add them."
+        : attached && hierarchyRoot
+          ? `${selectionCount} attached objects selected. Motion parent: ${hierarchyRoot.name}.`
+          : `${selectionCount} objects selected. Choose a motion parent before attaching them.`;
+    }
+    const groupColor = panel.querySelector("[data-group-color]");
+    if (groupColor) {
+      groupColor.disabled = selectionCount === 0;
+      groupColor.value = selectionItems[0]?.color || "#277d78";
+    }
+    const motionParentPicker = panel.querySelector("[data-motion-parent-picker]");
+    if (motionParentPicker) {
+      const previousValue = motionParentPicker.value;
+      motionParentPicker.innerHTML = selectionItems.map((item) => (
+        `<option value="${escapeHtml(item.instanceId)}">${escapeHtml(item.name)}</option>`
+      )).join("");
+      const existingRootId = motionRoot(machine)?.instanceId || "";
+      const preferredParent = selectionItems.some((item) => item.instanceId === previousValue)
+        ? previousValue
+        : (selectionItems.some((item) => item.instanceId === existingRootId)
+          ? existingRootId
+          : (selectionItems.some((item) => item.instanceId === state.selectedMachineId)
+            ? state.selectedMachineId
+            : selectionItems[0]?.instanceId || ""));
+      motionParentPicker.value = preferredParent;
+      motionParentPicker.disabled = selectionCount < 2;
+    }
+    const joinMotionButton = panel.querySelector("[data-editor-action='join-animation-group']");
+    if (joinMotionButton) joinMotionButton.disabled = selectionCount < 2;
+    const unjoinMotionButton = panel.querySelector("[data-editor-action='unjoin-animation-group']");
+    if (unjoinMotionButton) {
+      const groupIds = new Set(selectionItems.map((item) => item.animationGroupId).filter(Boolean));
+      const hierarchyLinked = selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
+      unjoinMotionButton.disabled = groupIds.size === 0 && !hierarchyLinked;
     }
 
     panel.querySelectorAll("[data-floor-field]").forEach((input) => {
@@ -1262,16 +1592,16 @@
       overlapSummary.classList.toggle("warning", overlaps.length > 0);
     }
     const separateButton = panel.querySelector("[data-editor-action='separate-selected']");
-    if (separateButton) separateButton.disabled = !machine || machine.collisionMode !== "solid" || !selectedHasOverlap(machine);
+    if (separateButton) separateButton.disabled = selectionCount !== 1 || !machine || machine.collisionMode !== "solid" || !selectedHasOverlap(machine);
 
     const craneToggle = panel.querySelector("[data-crane-toggle]");
     if (craneToggle) {
-      craneToggle.disabled = !machine || machine.type === "bridgeCrane" || machine.type === "craneMachine";
+      craneToggle.disabled = selectionCount !== 1 || !machine || machine.type === "bridgeCrane" || machine.type === "craneMachine";
       craneToggle.checked = Boolean(machine?.crane);
     }
     panel.querySelectorAll("[data-crane-field]").forEach((input) => {
       const field = input.dataset.craneField;
-      input.disabled = !machine?.crane;
+      input.disabled = selectionCount !== 1 || !machine?.crane;
       input.value = machine?.crane ? machine.crane[field] ?? "" : "";
     });
 
@@ -1302,6 +1632,12 @@
 
     const paste = panel.querySelector("[data-editor-action='paste']");
     if (paste) paste.disabled = !state.clipboard;
+    const copyButton = panel.querySelector("[data-editor-action='copy']");
+    if (copyButton) copyButton.disabled = selectionCount !== 1;
+    const machineStudioButton = panel.querySelector("[data-editor-action='machine-studio']");
+    if (machineStudioButton) machineStudioButton.disabled = selectionCount !== 1;
+    const reverseAnimationButton = panel.querySelector("[data-editor-action='reverse-animation-path']");
+    if (reverseAnimationButton) reverseAnimationButton.disabled = selectionCount !== 1;
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.classList.toggle("active", button.dataset.editorTool === state.editorTool);
     });
@@ -1317,9 +1653,9 @@
         .filter((item) => !query || `${item.name} ${item.type}`.toLowerCase().includes(query))
         .sort((first, second) => first.name.localeCompare(second.name));
       objectPicker.innerHTML = `<option value="">Choose an object…</option>${filteredObjects.map((item) => (
-        `<option value="${escapeHtml(item.instanceId)}">${escapeHtml(item.name)}${item.locked ? " · locked" : ""}${item.visible === false ? " · hidden" : ""}</option>`
+        `<option value="${escapeHtml(item.instanceId)}">${isFloorFeatureType(item.type) ? "Floor · " : ""}${escapeHtml(item.name)}${item.locked ? " · locked" : ""}${item.visible === false ? " · hidden" : ""}</option>`
       )).join("")}`;
-      objectPicker.value = machine?.instanceId || "";
+      objectPicker.value = selectionCount === 1 ? (machine?.instanceId || "") : "";
     }
     panel.querySelectorAll("[data-editor-mode]").forEach((button) => {
       const active = button.dataset.editorMode === state.editorInteraction;
@@ -1333,13 +1669,15 @@
   }
 
   function deleteSelectedMachine() {
-    if (!state.selectedMachineId) return;
+    const selection = selectedMachines();
+    if (!selection.length) return;
     pushHistory();
-    machines = machines.filter((machine) => machine.instanceId !== state.selectedMachineId);
-    state.selectedMachineId = null;
+    const ids = new Set(selection.map((machine) => machine.instanceId));
+    machines = machines.filter((machine) => !ids.has(machine.instanceId));
+    clearMachineSelection();
     persistLayout();
     updateEditorPanel();
-    showToast("Object removed.");
+    showToast(selection.length === 1 ? "Object removed." : `${selection.length} objects removed.`);
   }
 
   function copySelectedMachine() {
@@ -1363,11 +1701,13 @@
       z: Number(state.clipboard.z) + 8,
       custom: true,
       locked: false,
+      animationGroupId: "",
+      motionParentId: "",
       placement_status: "user_added",
       evidence: "Copied in the interactive layout editor.",
     }, machines.length);
     machines.push(pasted);
-    state.selectedMachineId = pasted.instanceId;
+    setSingleSelection(pasted.instanceId);
     state.clipboard = clone(pasted);
     persistLayout();
     updateEditorPanel();
@@ -1450,6 +1790,7 @@
       exportedAt: new Date().toISOString(),
       source: equipmentData.source,
       sceneAnimationsInitialized: true,
+      floorFeaturesInitialized: true,
       machines,
       stages,
       floor,
@@ -1476,9 +1817,7 @@
         throw new Error("The selected file is not a plant layout export.");
       }
       pushHistory();
-      machines = payload.sceneAnimationsInitialized === true
-        ? normalizeMachines(payload.machines)
-        : mergeDefaultAnimationObjects(payload.machines);
+      machines = loadSceneAwareMachines(payload);
       stages = normalizeStages(payload.stages);
       floor = normalizeFloor(payload.floor);
       state.hiddenColumns = new Set(payload.hiddenColumns || []);
@@ -1486,7 +1825,7 @@
       state.playbackSpeed = Number(payload.playbackSpeed) || 1;
       state.stage = clamp(state.stage, 0, stages.length - 1);
       state.stageFloat = state.stage;
-      state.selectedMachineId = null;
+      clearMachineSelection();
       persistLayout();
       buildTimeline();
       setStage(state.stage);
@@ -1546,6 +1885,9 @@
       ["cube", "Diamon-Fusion FuseCube"],
       ["wrapping", "Glass wrapping station"],
       ["shipping", "Shipping glass rack"],
+      ["safetyLine", "Safety yellow floor line"],
+      ["trench", "Utility trench"],
+      ["floorDrain", "Square floor drain"],
       ["animatedGlass", "Animation · vertical glass"],
       ["animatedBox", "Animation · moving box"],
       ["animatedPerson", "Animation · walking team member"],
@@ -1575,7 +1917,28 @@
         <div class="editor-object-browser">
           <label>Find an object<input type="search" data-object-search placeholder="Search machines, rooms, racks…"></label>
           <label>Object list<select data-object-picker><option value="">Choose an object…</option></select></label>
-          <button type="button" data-editor-action="focus" data-needs-selection>Focus selected</button>
+          <div class="object-browser-actions">
+            <button type="button" data-editor-action="focus" data-needs-selection>Focus selected</button>
+            <button type="button" data-editor-action="select-production-glass">Select moving glass</button>
+            <button type="button" data-editor-action="select-floor-feature">Select floor feature</button>
+          </div>
+          <p class="object-browser-help">Shift-click, Ctrl-click, or Command-click models to select multiple objects.</p>
+        </div>
+        <div class="multi-selection-panel" data-multi-selection hidden>
+          <div>
+            <strong>Multiple selection</strong>
+            <p data-multi-selection-summary>Shift-click or Ctrl-click objects in the model to select them together.</p>
+          </div>
+          <label>Selected color<input type="color" data-group-color value="#277d78"></label>
+          <div class="motion-parent-control">
+            <label>Motion parent<select data-motion-parent-picker></select></label>
+            <p>The parent carries the attached objects. Every child keeps playing its own animation inside the parent’s moving coordinate space.</p>
+          </div>
+          <div class="motion-group-actions">
+            <button type="button" data-editor-action="join-animation-group">Attach to parent</button>
+            <button type="button" data-editor-action="unjoin-animation-group">Separate motion</button>
+          </div>
+          <button type="button" data-editor-action="clear-selection">Clear selection</button>
         </div>
         <div class="editor-navigation">
           <div class="editor-mode-switch" role="group" aria-label="Editor interaction mode">
@@ -1595,17 +1958,19 @@
           <button type="button" data-nudge="z-negative" data-needs-selection>↑ Z</button>
           <button type="button" data-nudge="z-positive" data-needs-selection>↓ Z</button>
           <button type="button" data-nudge="x-positive" data-needs-selection>X →</button>
-          <button type="button" data-nudge="rotate-negative" data-needs-selection>↶ 5°</button>
-          <button type="button" data-nudge="rotate-positive" data-needs-selection>5° ↷</button>
+          <button type="button" data-nudge="rotate-negative" data-needs-selection>↶ Y 5°</button>
+          <button type="button" data-nudge="rotate-positive" data-needs-selection>Y 5° ↷</button>
         </div>
         <div class="editor-properties">
           <label class="wide">Name<input data-machine-field="name" data-needs-selection type="text"></label>
           <label class="wide">Object type<select data-machine-field="type" data-needs-selection>${typeMarkup}</select></label>
           <label>X position<input data-machine-field="x" data-needs-selection type="number" step="0.5"></label>
           <label>Z position<input data-machine-field="z" data-needs-selection type="number" step="0.5"></label>
-          <label>Rotation °<input data-machine-field="rotation" data-needs-selection type="number" step="5"></label>
+          <label>Rotation X°<input data-machine-field="rotationX" data-needs-selection type="number" step="5"></label>
+          <label>Rotation Y°<input data-machine-field="rotationY" data-needs-selection type="number" step="5"></label>
+          <label>Rotation Z°<input data-machine-field="rotationZ" data-needs-selection type="number" step="5"></label>
           <label>Width<input data-machine-field="w" data-needs-selection type="number" min="0.5" step="0.5"></label>
-          <label>Depth<input data-machine-field="d" data-needs-selection type="number" min="0.5" step="0.5"></label>
+          <label><span data-depth-label>Depth</span><input data-machine-field="d" data-needs-selection type="number" min="0.5" step="0.5"></label>
           <label>Height<input data-machine-field="h" data-needs-selection type="number" min="0.5" step="0.5"></label>
           <label>Appears at<select data-machine-field="reveal" data-stage-select data-needs-selection></select></label>
           <label>Disappears after<select data-machine-field="retire" data-stage-select data-allow-never data-needs-selection></select></label>
@@ -1663,9 +2028,11 @@
             </select></label>
             <label>Distance / amount<input data-animation-field="animationDistance" type="number" step="0.5"></label>
             <label>Speed (cycles/sec)<input data-animation-field="animationSpeed" type="number" min="0" step="0.01"></label>
+            <label>Pause after movement (sec)<input data-animation-field="animationPauseSeconds" type="number" min="0" step="0.1"></label>
             <label>Phase offset °<input data-animation-field="animationPhase" type="number" step="5"></label>
           </div>
-          <p>The current object position is the animation center. Pause animations while placing the object, then preview to test the path.</p>
+          <button type="button" data-editor-action="reverse-animation-path" data-needs-selection>Reverse movement direction</button>
+          <p>The current object position is the animation center. Movement axes are local to the object, so rotating the object on X, Y, or Z rotates the direction of travel. Spin can rotate around X, Y, Z, or all three axes. Pause after movement holds back-and-forth animations at each end and holds other animations after each completed cycle. Animations pause automatically while editing unless Preview animations is enabled.</p>
         </fieldset>
         <div class="editor-actions">
           <button type="button" data-editor-action="copy" data-needs-selection>Copy</button>
@@ -1686,8 +2053,13 @@
               <option value="wrapping">Glass wrapping station</option>
               <option value="shipping">Shipping glass rack</option>
             </optgroup>
+            <optgroup label="Floor features">
+              <option value="safetyLine">Safety yellow floor line</option>
+              <option value="trench">Utility trench</option>
+              <option value="floorDrain">Square floor drain</option>
+            </optgroup>
             <optgroup label="Animations">
-              <option value="animatedGlass">Vertical glass · left to right</option>
+              <option value="animatedGlass">Vertical glass · back and forth</option>
               <option value="animatedBox">Material box · back and forth</option>
               <option value="animatedPerson">Team member · walking path</option>
               <option value="animatedCart">Material cart · shuttle path</option>
@@ -1709,7 +2081,7 @@
       </div>
 
       <div data-editor-section="pillars" hidden>
-        <div class="editor-callout">Click any yellow pillar in the model to remove or restore it. Floor dimensions resize the editable plant slab without changing your placed objects.</div>
+        <div class="editor-callout">Click any yellow pillar to remove or restore it. Safety lines, trenches, and floor drains are regular selectable objects in the Objects tab, where their position, rotation, width, length, and timeline visibility can be edited.</div>
         <fieldset class="floor-controls">
           <legend>Floor layout dimensions</legend>
           <div>
@@ -1762,7 +2134,7 @@
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {
         state.editorTool = button.dataset.editorTool;
-        if (state.editorTool !== "machines") state.selectedMachineId = null;
+        if (state.editorTool !== "machines") clearMachineSelection();
         updateEditorPanel();
       });
     });
@@ -1770,11 +2142,63 @@
     const objectSearch = panel.querySelector("[data-object-search]");
     objectSearch?.addEventListener("input", updateEditorPanel);
     panel.querySelector("[data-object-picker]")?.addEventListener("change", (event) => {
-      state.selectedMachineId = event.target.value || null;
+      setSingleSelection(event.target.value || null);
       state.editorTool = "machines";
+      const machine = selectedMachine();
+      if (machine && stageAlpha(machine.reveal, machine.retire) <= .08) {
+        setStage(Math.min(stages.length - 1, Math.max(0, Number(machine.reveal) || 0)));
+      }
       updateEditorPanel();
     });
     panel.querySelector("[data-editor-action='focus']")?.addEventListener("click", focusSelectedMachine);
+    panel.querySelector("[data-editor-action='select-production-glass']")?.addEventListener("click", () => {
+      const movingGlass = machines.find((item) => item.id === "production-glass-animation")
+        || machines.find((item) => item.type === "animatedGlass");
+      if (!movingGlass) {
+        showToast("No moving-glass animation is currently in the scene.");
+        return;
+      }
+      state.editorTool = "machines";
+      setSingleSelection(movingGlass.instanceId);
+      state.previewObjectAnimations = false;
+      setStage(Math.min(stages.length - 1, Math.max(0, Number(movingGlass.reveal) || 0)));
+      focusSelectedMachine();
+      updateEditorPanel();
+      showToast("Moving glass selected. Its path, speed, size, position, and rotation are ready to edit.");
+    });
+    panel.querySelector("[data-editor-action='select-floor-feature']")?.addEventListener("click", () => {
+      const floorFeatures = machines.filter((item) => isFloorFeatureType(item.type));
+      if (!floorFeatures.length) {
+        showToast("No editable floor features are currently in the scene.");
+        return;
+      }
+      const currentIndex = floorFeatures.findIndex((item) => item.instanceId === state.selectedMachineId);
+      const target = floorFeatures[(currentIndex + 1) % floorFeatures.length];
+      state.editorTool = "machines";
+      state.editorInteraction = "select";
+      setSingleSelection(target.instanceId);
+      setStage(Math.min(stages.length - 1, Math.max(0, Number(target.reveal) || 0)));
+      focusSelectedMachine();
+      updateEditorPanel();
+      showToast(`${target.name} selected. Position, width, length, and rotation are ready to edit.`);
+    });
+    panel.querySelector("[data-editor-action='join-animation-group']")?.addEventListener("click", joinSelectedAnimationObjects);
+    panel.querySelector("[data-editor-action='unjoin-animation-group']")?.addEventListener("click", unjoinSelectedAnimationObjects);
+    panel.querySelector("[data-group-color]")?.addEventListener("change", (event) => {
+      const selection = selectedMachines();
+      const color = String(event.target.value || "");
+      if (!selection.length || !/^#[0-9a-f]{6}$/i.test(color)) return;
+      pushHistory();
+      selection.forEach((machine) => { machine.color = color; });
+      persistLayout();
+      updateEditorPanel();
+      showToast(`Applied ${color.toUpperCase()} to ${selection.length} selected object${selection.length === 1 ? "" : "s"}.`);
+    });
+    panel.querySelector("[data-editor-action='clear-selection']")?.addEventListener("click", () => {
+      clearMachineSelection();
+      updateEditorPanel();
+    });
+
     panel.querySelector("[data-design-picker]")?.addEventListener("change", (event) => {
       const machine = selectedMachine();
       if (!machine) return;
@@ -1819,9 +2243,18 @@
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
+        const selection = selectedMachines();
         if (!machine) return;
         const field = input.dataset.machineField;
         pushHistory();
+        if (field === "color" && selection.length > 1) {
+          const color = input.value.trim();
+          if (/^#[0-9a-f]{6}$/i.test(color)) selection.forEach((item) => { item.color = color; });
+          persistLayout();
+          updateEditorPanel();
+          showToast(`Updated the color of ${selection.length} selected objects.`);
+          return;
+        }
         if (["name", "type", "color", "collisionMode"].includes(field)) {
           const value = input.value.trim();
           if (field === "name") {
@@ -1837,6 +2270,21 @@
                 animationEnabled: true,
                 collisionMode: "ignore",
               });
+            } else if (isFloorFeatureType(value)) {
+              machine.animationEnabled = false;
+              machine.animationMode = "none";
+              machine.collisionMode = "ignore";
+              machine.showLabel = false;
+              if (value === "safetyLine") {
+                machine.h = 0.08;
+                machine.color = "#e3ad28";
+              } else if (value === "trench") {
+                machine.h = 0.22;
+                machine.color = "#4a3a31";
+              } else {
+                machine.h = 0.18;
+                machine.color = "#465155";
+              }
             }
           } else if (field === "collisionMode") {
             machine.collisionMode = value === "ignore" ? "ignore" : "solid";
@@ -1847,7 +2295,10 @@
           if (["w","d","h"].includes(field)) machine[field] = Math.max(.5,value);
           else if (field === "reveal") machine[field] = clamp(Math.round(value),0,stages.length-1);
           else if (field === "retire") machine[field] = value >= 99 ? 99 : clamp(Math.round(value),machine.reveal,stages.length-1);
-          else machine[field] = value;
+          else {
+            machine[field] = value;
+            if (field === "rotationY") machine.rotation = value;
+          }
         }
         persistLayout();
         updateEditorPanel();
@@ -1875,7 +2326,7 @@
         else {
           const value = Number(input.value);
           if (!Number.isFinite(value)) return;
-          machine[field] = field === "animationSpeed" ? Math.max(0, value) : value;
+          machine[field] = ["animationSpeed", "animationPauseSeconds"].includes(field) ? Math.max(0, value) : value;
         }
         persistLayout();
         updateEditorPanel();
@@ -1895,6 +2346,15 @@
       state.previewObjectAnimations = !state.previewObjectAnimations;
       updateEditorPanel();
       showToast(state.previewObjectAnimations ? "Animation preview started." : "Animations paused at their base positions.");
+    });
+    panel.querySelector("[data-editor-action='reverse-animation-path']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      if (!machine) return;
+      pushHistory();
+      machine.animationDistance = -(Number(machine.animationDistance) || 0);
+      persistLayout();
+      updateEditorPanel();
+      showToast("Animation direction reversed.");
     });
 
     panel.querySelector("[data-crane-toggle]").addEventListener("change", (event) => {
@@ -1951,7 +2411,7 @@
       pushHistory();
       const machine = machineTemplate(type,requestedName);
       machines.push(machine);
-      state.selectedMachineId = machine.instanceId;
+      setSingleSelection(machine.instanceId);
       state.editorTool = "machines";
       panel.querySelector("#new-machine-name").value = "";
       persistLayout();
@@ -1990,12 +2450,12 @@
     panel.querySelector("[data-editor-action='reset']").addEventListener("click",() => {
       if (!window.confirm("Reset every object, timeline stage, pillar, and wall change?")) return;
       pushHistory();
-      machines = mergeDefaultAnimationObjects(initialMachines());
+      machines = defaultSceneMachines();
       stages = normalizeStages(defaultStages);
       floor = normalizeFloor(defaultFloor);
       state.hiddenColumns.clear();
       state.walls = { ...defaultWalls };
-      state.selectedMachineId = null;
+      clearMachineSelection();
       state.stage = 0;
       state.stageFloat = 0;
       persistLayout();
@@ -2155,7 +2615,7 @@
     toolbar.querySelector("[data-open-timeline-editor]").addEventListener("click", () => {
       if (!state.editing) setEditing(true);
       state.editorTool = "timeline";
-      state.selectedMachineId = null;
+      clearMachineSelection();
       updateEditorPanel();
     });
   }
@@ -2253,6 +2713,50 @@
     line3d(
       localPoint(parent, start[0], start[1], start[2]),
       localPoint(parent, end[0], end[1], end[2]),
+      color,
+      width,
+      alpha
+    );
+  }
+
+  function objectRotation(parent) {
+    return [
+      Number(parent.rotationX) || 0,
+      Number.isFinite(Number(parent.rotationY)) ? Number(parent.rotationY) : Number(parent.rotation) || 0,
+      Number(parent.rotationZ) || 0,
+    ];
+  }
+
+  function localPoint3d(parent, localX, localY, localZ) {
+    const baseY = Number(parent.renderY ?? parent.y) || 0;
+    const center = [parent.x + parent.w / 2, baseY + parent.h / 2, parent.z + parent.d / 2];
+    const offset = [localX - parent.w / 2, localY - parent.h / 2, localZ - parent.d / 2];
+    const rotated = rotateVector3(offset, ...objectRotation(parent));
+    return [center[0] + rotated[0], center[1] + rotated[1], center[2] + rotated[2]];
+  }
+
+  function localBox3d(parent, localX, localZ, width, depth, height, color, baseY = 0) {
+    const center = localPoint3d(parent, localX + width / 2, baseY + height / 2, localZ + depth / 2);
+    const [rotationX, rotationY, rotationZ] = objectRotation(parent);
+    return {
+      x: center[0] - width / 2,
+      y: center[1] - height / 2,
+      z: center[2] - depth / 2,
+      w: width,
+      d: depth,
+      h: height,
+      color,
+      rotationX,
+      rotationY,
+      rotationZ,
+      rotation: rotationY,
+    };
+  }
+
+  function localLine3d(parent, start, end, color, width = 1, alpha = 1) {
+    line3d(
+      localPoint3d(parent, start[0], start[1], start[2]),
+      localPoint3d(parent, end[0], end[1], end[2]),
       color,
       width,
       alpha
@@ -2427,6 +2931,37 @@
       .forEach((face) => polygon(face.points, face.fill, face.stroke || "rgba(20,30,34,.12)", .7, alpha));
   }
 
+  function drawCylinder3d({ radiusX, radiusY, halfDepth, color, alpha = 1, pointFromLocal, segments = 18 }) {
+    if (alpha <= 0.01 || typeof pointFromLocal !== "function") return;
+    const count = Math.max(8, Math.round(Number(segments) || 18));
+    const front = [];
+    const back = [];
+    for (let index = 0; index < count; index += 1) {
+      const angle = index / count * Math.PI * 2;
+      const x = Math.cos(angle) * Math.max(.01, Number(radiusX) || .01);
+      const y = Math.sin(angle) * Math.max(.01, Number(radiusY) || .01);
+      front.push(pointFromLocal([x, y, -Math.max(.01, Number(halfDepth) || .01)]));
+      back.push(pointFromLocal([x, y, Math.max(.01, Number(halfDepth) || .01)]));
+    }
+
+    // Caps and every curved side segment are sent through the shared depth
+    // renderer. Wheels therefore write to and test against the same depth
+    // buffer as cabinets, floors, walls, and the rest of the machine.
+    polygon([...front].reverse(), shade(color, -.22), "rgba(15,25,28,.22)", .65, alpha);
+    polygon(back, color, "rgba(15,25,28,.22)", .65, alpha);
+    for (let index = 0; index < count; index += 1) {
+      const next = (index + 1) % count;
+      const light = -.08 - .16 * (.5 + .5 * Math.cos(index / count * Math.PI * 2));
+      polygon(
+        [front[index], front[next], back[next], back[index]],
+        shade(color, light),
+        "rgba(15,25,28,.16)",
+        .5,
+        alpha,
+      );
+    }
+  }
+
   function line3d(start, end, color, width = 1, alpha = 1) {
     if (depthRenderer.available) {
       depthRenderer.addLine(start, end, color, width, alpha);
@@ -2574,36 +3109,6 @@
     return project(x,0,z)[2];
   }
 
-  function drawTrenches() {
-    const alpha = stageAlpha(1, 2.3);
-    trenches.forEach(([x,z,w,d]) => {
-      polygon([[x,.15,z],[x+w,.15,z],[x+w,.15,z+d],[x,.15,z+d]], "#4a3a31", "#cb8f55", 1.1, alpha);
-      if (state.stageFloat >= 1.7) {
-        const alongX = w > d;
-        line3d(
-          [x + (alongX ? 0 : w/2), .22, z + (alongX ? d/2 : 0)],
-          [x + (alongX ? w : w/2), .22, z + (alongX ? d/2 : d)],
-          colors.utility,
-          3,
-          clamp(state.stageFloat - 1.7)
-        );
-      }
-    });
-    const utilityAlpha = stageAlpha(2);
-    [[-90,-99],[43,-109],[145,-109],[-211,-99]].forEach(([x,z]) => {
-      box({x:x-1.4,z:z-1.4,w:2.8,d:2.8,h:.45,color:colors.utility},utilityAlpha);
-    });
-  }
-
-  function drawSafety() {
-    const alpha = stageAlpha(4);
-    const lanes = [
-      [-222,-205,86,4],[-136,-205,4,121],[-132,-88,315,4],[179,-205,4,121],
-      [0,-124,170,3],[0,-153,170,3],
-    ];
-    lanes.forEach(([x,z,w,d]) => polygon([[x,.18,z],[x+w,.18,z],[x+w,.18,z+d],[x,.18,z+d]],colors.yellow,null,1,alpha*.82));
-  }
-
   function drawCrane(machine, machineAlpha) {
     if (!machine.crane) return;
     const railAlpha = stageAlpha(5);
@@ -2641,42 +3146,207 @@
   }
 
 
-  function animateDesignComponent(component, time) {
+  function componentAnimationWave(component, time) {
+    const speed = Math.max(0, Number(component.animationSpeed) || 0);
+    const pauseSeconds = Math.max(0, Number(component.animationPauseSeconds) || 0);
+    const phase = ((Number(component.animationPhase) || 0) / 360 + 1) % 1;
+    if (speed <= 0) return { cycle: 0, wrapped: 0, sine: 0, pingPong: 0 };
+    const activeDuration = 1 / speed;
+    const elapsed = Math.max(0, time / 1000 + phase * activeDuration);
+    if (component.animationType === "oscillate") {
+      const quarterDuration = activeDuration / 4;
+      const totalDuration = activeDuration + pauseSeconds * 2;
+      const localTime = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+      let position;
+      if (localTime < quarterDuration) position = Math.sin(localTime / quarterDuration * Math.PI / 2);
+      else if (localTime < quarterDuration + pauseSeconds) position = 1;
+      else if (localTime < quarterDuration + pauseSeconds + activeDuration / 2) {
+        const progress = (localTime - quarterDuration - pauseSeconds) / (activeDuration / 2);
+        position = Math.sin(Math.PI / 2 + progress * Math.PI);
+      } else if (localTime < quarterDuration + pauseSeconds * 2 + activeDuration / 2) position = -1;
+      else {
+        const progress = (localTime - quarterDuration - pauseSeconds * 2 - activeDuration / 2) / quarterDuration;
+        position = Math.sin(Math.PI * 1.5 + progress * Math.PI / 2);
+      }
+      return { cycle: elapsed / totalDuration, wrapped: (position + 1) / 2, sine: position, pingPong: position / 2 };
+    }
+    const totalDuration = activeDuration + pauseSeconds;
+    const localTime = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+    const wrapped = localTime < activeDuration ? localTime / activeDuration : 1;
+    const cycle = Math.floor(elapsed / totalDuration) + wrapped;
+    return { cycle, wrapped, sine: Math.sin(wrapped * Math.PI * 2), pingPong: wrapped - 0.5 };
+  }
+
+  function designComponentPoints(component) {
+    if (component.type === "group") return (component.children || []).flatMap(designComponentPoints);
+    if (component.type === "beam") {
+      return [[Number(component.x), Number(component.y), Number(component.z)], [Number(component.x2), Number(component.y2), Number(component.z2)]];
+    }
+    const width = Number(component.w || component.size || 0);
+    const height = Number(component.h || component.size || component.thickness || 0);
+    const depth = Number(component.d || component.size || 0);
+    return [
+      [Number(component.x), Number(component.y), Number(component.z)],
+      [Number(component.x) + width, Number(component.y) + height, Number(component.z) + depth],
+    ];
+  }
+
+  function designGroupCenter(children) {
+    const points = children.flatMap(designComponentPoints);
+    if (!points.length) return [0,0,0];
+    return [
+      (Math.min(...points.map((point) => point[0])) + Math.max(...points.map((point) => point[0]))) / 2,
+      (Math.min(...points.map((point) => point[1])) + Math.max(...points.map((point) => point[1]))) / 2,
+      (Math.min(...points.map((point) => point[2])) + Math.max(...points.map((point) => point[2]))) / 2,
+    ];
+  }
+
+  function translateDesignComponent(component, dx, dy, dz) {
+    if (component.type === "group") {
+      (component.children || []).forEach((child) => translateDesignComponent(child, dx, dy, dz));
+      return;
+    }
+    component.x = Number(component.x) + dx;
+    component.y = Number(component.y) + dy;
+    component.z = Number(component.z) + dz;
+    if (component.type === "beam") {
+      component.x2 = Number(component.x2) + dx;
+      component.y2 = Number(component.y2) + dy;
+      component.z2 = Number(component.z2) + dz;
+    }
+  }
+
+  function rotateDesignComponentAround(component, pivot, rotationX, rotationY, rotationZ) {
+    if (component.type === "group") {
+      (component.children || []).forEach((child) => rotateDesignComponentAround(child, pivot, rotationX, rotationY, rotationZ));
+      return;
+    }
+    const rotatePoint = (point) => {
+      const offset = [point[0] - pivot[0], point[1] - pivot[1], point[2] - pivot[2]];
+      const rotated = rotateVector3(offset, rotationX, rotationY, rotationZ);
+      return [pivot[0] + rotated[0], pivot[1] + rotated[1], pivot[2] + rotated[2]];
+    };
+    if (component.type === "beam") {
+      [component.x, component.y, component.z] = rotatePoint([Number(component.x), Number(component.y), Number(component.z)]);
+      [component.x2, component.y2, component.z2] = rotatePoint([Number(component.x2), Number(component.y2), Number(component.z2)]);
+    } else {
+      const width = Number(component.w || component.size || 0);
+      const height = Number(component.h || component.size || component.thickness || 0);
+      const depth = Number(component.d || component.size || 0);
+      const center = rotatePoint([Number(component.x) + width / 2, Number(component.y) + height / 2, Number(component.z) + depth / 2]);
+      component.x = center[0] - width / 2;
+      component.y = center[1] - height / 2;
+      component.z = center[2] - depth / 2;
+    }
+    component.rotationX = (Number(component.rotationX) || 0) + rotationX;
+    component.rotationY = (Number(component.rotationY ?? component.rotation) || 0) + rotationY;
+    component.rotationZ = (Number(component.rotationZ) || 0) + rotationZ;
+    component.rotation = component.rotationY;
+  }
+
+  function scaleDesignComponentAround(component, pivot, scaleX, scaleY, scaleZ) {
+    if (component.type === "group") {
+      (component.children || []).forEach((child) => scaleDesignComponentAround(child, pivot, scaleX, scaleY, scaleZ));
+      return;
+    }
+    const scalePoint = (point) => [
+      pivot[0] + (point[0] - pivot[0]) * scaleX,
+      pivot[1] + (point[1] - pivot[1]) * scaleY,
+      pivot[2] + (point[2] - pivot[2]) * scaleZ,
+    ];
+    if (component.type === "beam") {
+      [component.x, component.y, component.z] = scalePoint([Number(component.x), Number(component.y), Number(component.z)]);
+      [component.x2, component.y2, component.z2] = scalePoint([Number(component.x2), Number(component.y2), Number(component.z2)]);
+      if (scaleX === scaleY && scaleY === scaleZ) component.thickness = Math.max(.02, Number(component.thickness) * scaleX);
+      return;
+    }
+    const width = Number(component.w || component.size || 0);
+    const height = Number(component.h || component.size || component.thickness || 0);
+    const depth = Number(component.d || component.size || 0);
+    const center = scalePoint([Number(component.x) + width / 2, Number(component.y) + height / 2, Number(component.z) + depth / 2]);
+    if (["box", "glassPanel", "wheel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
+      component.w = Math.max(.02, width * scaleX);
+      component.h = Math.max(.02, height * scaleY);
+      component.d = Math.max(.02, depth * scaleZ);
+      if (component.type === "wheel") component.size = Math.max(component.w, component.h);
+    } else if (component.type === "rollerBed") {
+      component.w = Math.max(.02, width * scaleX);
+      component.d = Math.max(.02, depth * scaleZ);
+      component.thickness = Math.max(.02, Number(component.thickness) * scaleY);
+    }
+    const newWidth = Number(component.w || component.size || 0);
+    const newHeight = Number(component.h || component.size || component.thickness || 0);
+    const newDepth = Number(component.d || component.size || 0);
+    component.x = center[0] - newWidth / 2;
+    component.y = center[1] - newHeight / 2;
+    component.z = center[2] - newDepth / 2;
+  }
+
+  function multiplyDesignOpacity(component, factor) {
+    if (component.type === "group") {
+      (component.children || []).forEach((child) => multiplyDesignOpacity(child, factor));
+      return;
+    }
+    component.opacity = (Number(component.opacity) || 1) * factor;
+  }
+
+  function flattenDesignComponents(components) {
+    return components.flatMap((component) => component.type === "group"
+      ? flattenDesignComponents(component.children || [])
+      : [component]);
+  }
+
+  function animateDesignComponentSelf(component, time) {
     if (
       component.animationEnabled === false ||
       !component.animationType ||
       component.animationType === "none" ||
       (state.editing && !state.previewObjectAnimations)
-    ) return component;
+    ) return clone(component);
     const animated = clone(component);
-    const speed = Math.max(0, Number(component.animationSpeed) || 0.1);
-    const phase = (Number(component.animationPhase) || 0) / 360;
-    const cycle = time / 1000 * speed + phase;
-    const wrapped = ((cycle % 1) + 1) % 1;
-    const sine = Math.sin(cycle * Math.PI * 2);
+    const { cycle, wrapped, sine, pingPong } = componentAnimationWave(component, time);
     const amount = Number(component.animationAmount) || 0;
     const axis = component.animationAxis || "x";
-    const offset = component.animationType === "loop" ? (wrapped - 0.5) * amount : sine * amount / 2;
-    const translate = (dx,dy,dz) => {
-      animated.x = Number(animated.x) + dx;
-      animated.y = Number(animated.y) + dy;
-      animated.z = Number(animated.z) + dz;
-      if (animated.type === "beam") {
-        animated.x2 = Number(animated.x2) + dx;
-        animated.y2 = Number(animated.y2) + dy;
-        animated.z2 = Number(animated.z2) + dz;
-      }
-    };
+    const offset = component.animationType === "loop"
+      ? (wrapped - 0.5) * amount
+      : component.animationType === "oscillate"
+        ? pingPong * amount
+        : sine * amount / 2;
+    const translate = (dx,dy,dz) => translateDesignComponent(animated, dx, dy, dz);
     if (["oscillate", "loop"].includes(component.animationType)) {
       translate(axis === "x" || axis === "all" ? offset : 0, axis === "y" || axis === "all" ? offset : 0, axis === "z" || axis === "all" ? offset : 0);
     } else if (component.animationType === "bob") translate(0, offset, 0);
     else if (component.animationType === "spin") {
-      const field = axis === "x" ? "rotationX" : axis === "z" ? "rotationZ" : "rotationY";
-      animated[field] = (Number(animated[field]) || 0) + cycle * (amount || 360);
-      if (field === "rotationY") animated.rotation = animated.rotationY;
+      const spin = cycle * (amount || 360);
+      if (animated.type === "group") {
+        const pivot = designGroupCenter(animated.children || []);
+        rotateDesignComponentAround(
+          animated,
+          pivot,
+          axis === "x" || axis === "all" ? spin : 0,
+          axis === "y" || axis === "all" ? spin : 0,
+          axis === "z" || axis === "all" ? spin : 0,
+        );
+      } else {
+        if (axis === "x" || axis === "all") animated.rotationX = (Number(animated.rotationX) || 0) + spin;
+        if (axis === "y" || axis === "all") {
+          animated.rotationY = (Number(animated.rotationY ?? animated.rotation) || 0) + spin;
+          animated.rotation = animated.rotationY;
+        }
+        if (axis === "z" || axis === "all") animated.rotationZ = (Number(animated.rotationZ) || 0) + spin;
+      }
     } else if (component.animationType === "pulse") {
       const factor = Math.max(0.08, 1 + sine * amount / 200);
-      if (["box", "glassPanel"].includes(animated.type)) {
+      if (animated.type === "group") {
+        const pivot = designGroupCenter(animated.children || []);
+        scaleDesignComponentAround(
+          animated,
+          pivot,
+          axis === "x" || axis === "all" ? factor : 1,
+          axis === "y" || axis === "all" ? factor : 1,
+          axis === "z" || axis === "all" ? factor : 1,
+        );
+      } else if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(animated.type)) {
         const centerX = Number(component.x) + Number(component.w) / 2;
         const centerY = Number(component.y) + Number(component.h) / 2;
         const centerZ = Number(component.z) + Number(component.d) / 2;
@@ -2714,9 +3384,73 @@
         if (axis === "all") animated.thickness = Math.max(.1, Number(component.thickness) * factor);
       }
     } else if (component.animationType === "blink") {
-      animated.opacity = (Number(animated.opacity) || 1) * (sine > -0.15 ? 1 : 0.08);
+      const factor = sine > -0.15 ? 1 : 0.08;
+      if (animated.type === "group") multiplyDesignOpacity(animated, factor);
+      else animated.opacity = (Number(animated.opacity) || 1) * factor;
     }
     return animated;
+  }
+
+  function designComponentBounds(component) {
+    const points = designComponentPoints(component);
+    return {
+      minX: Math.min(...points.map((point) => point[0])),
+      maxX: Math.max(...points.map((point) => point[0])),
+      minY: Math.min(...points.map((point) => point[1])),
+      maxY: Math.max(...points.map((point) => point[1])),
+      minZ: Math.min(...points.map((point) => point[2])),
+      maxZ: Math.max(...points.map((point) => point[2])),
+    };
+  }
+
+  function designComponentAnimationDelta(component, animated) {
+    const baseCenter = designGroupCenter([component]);
+    const animatedCenter = designGroupCenter([animated]);
+    const baseBounds = designComponentBounds(component);
+    const animatedBounds = designComponentBounds(animated);
+    const ratio = (next, base) => Math.abs(base) > .0001 ? next / base : 1;
+    return {
+      translation: animatedCenter.map((value, index) => value - baseCenter[index]),
+      rotation: [
+        (Number(animated.rotationX) || 0) - (Number(component.rotationX) || 0),
+        (Number(animated.rotationY ?? animated.rotation) || 0) - (Number(component.rotationY ?? component.rotation) || 0),
+        (Number(animated.rotationZ) || 0) - (Number(component.rotationZ) || 0),
+      ],
+      scale: [
+        ratio(animatedBounds.maxX - animatedBounds.minX, baseBounds.maxX - baseBounds.minX),
+        ratio(animatedBounds.maxY - animatedBounds.minY, baseBounds.maxY - baseBounds.minY),
+        ratio(animatedBounds.maxZ - animatedBounds.minZ, baseBounds.maxZ - baseBounds.minZ),
+      ],
+      alpha: Math.max(.01, Number(animated.opacity ?? 1) / Math.max(.01, Number(component.opacity ?? 1))),
+    };
+  }
+
+  function applyInheritedDesignTransform(component, transform, pivot) {
+    const rendered = clone(component);
+    scaleDesignComponentAround(rendered, pivot, ...transform.scale);
+    rotateDesignComponentAround(rendered, pivot, ...transform.rotation);
+    translateDesignComponent(rendered, ...transform.translation);
+    if (Math.abs(transform.alpha - 1) > .0001) multiplyDesignOpacity(rendered, transform.alpha);
+    return rendered;
+  }
+
+  function animateDesignComponent(component, time) {
+    if (component.type !== "group") return animateDesignComponentSelf(component, time);
+    const children = component.children || [];
+    if (!children.length) return animateDesignComponentSelf(component, time);
+    const driver = children.find((child) => child.id === component.motionDriverId)
+      || children.find((child) => child.animationEnabled !== false && child.animationType && child.animationType !== "none")
+      || children[0];
+    const driverAnimated = animateDesignComponentSelf(driver, time);
+    const inheritedTransform = designComponentAnimationDelta(driver, driverAnimated);
+    const driverPivot = designGroupCenter([driver]);
+    const animatedGroup = clone(component);
+    animatedGroup.motionDriverId = driver.id;
+    animatedGroup.children = children.map((child) => {
+      const ownAnimated = child.id === driver.id ? clone(child) : animateDesignComponent(child, time);
+      return applyInheritedDesignTransform(ownAnimated, inheritedTransform, driverPivot);
+    });
+    return animateDesignComponentSelf(animatedGroup, time);
   }
 
   function scaledComponentBox(machine, component, design) {
@@ -2745,31 +3479,39 @@
     };
   }
 
-  function drawDesignWheel(machine, component, design, alpha) {
+  function drawDesignWheel(machine, component, design, alpha, grow = 1) {
     const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
     const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
     const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
     const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
-    const point = project(...localPoint(
-      machine,
+    const center = [
       Number(component.x) * scaleX,
-      Number(component.y) * scaleY,
+      Number(component.y) * scaleY * grow,
       Number(component.z) * scaleZ,
-    ));
-    const wheelWidth = Number(component.w || component.size || 1.2) * scaleX;
-    const wheelHeight = Number(component.h || component.size || 1.2) * scaleY;
-    const radiusX = Math.max(2.4, wheelWidth * state.zoom * 1.5);
-    const radiusY = Math.max(2.0, wheelHeight * state.zoom * 0.95);
-    ctx.save();
-    ctx.globalAlpha = alpha * (Number(component.opacity) || 1);
-    ctx.fillStyle = component.color || "#20272a";
-    ctx.beginPath();
-    ctx.ellipse(point[0], point[1], radiusX, radiusY, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.25)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
+    ];
+    const radiusX = Math.max(.025, Number(component.w || component.size || 1.2) * scaleX / 2);
+    const radiusY = Math.max(.025, Number(component.h || component.size || 1.2) * scaleY * grow / 2);
+    const halfDepth = Math.max(.02, Number(component.d || component.size * .64 || .75) * scaleZ / 2);
+    const rotation = designComponentRotation(component);
+    const pointFromWheelSpace = (offset) => {
+      const rotated = rotateVector3(offset, ...rotation);
+      return localPoint3d(
+        machine,
+        center[0] + rotated[0],
+        center[1] + rotated[1],
+        center[2] + rotated[2],
+      );
+    };
+    drawCylinder3d({
+      center,
+      radiusX,
+      radiusY,
+      halfDepth,
+      color: component.color || "#20272a",
+      alpha,
+      pointFromLocal: pointFromWheelSpace,
+      segments: 20,
+    });
   }
 
   function designComponentRotation(component) {
@@ -2786,6 +3528,145 @@
     return [center[0]+rotated[0], center[1]+rotated[1], center[2]+rotated[2]];
   }
 
+  function designPointToWorld(machine, component, design, point, grow = 1) {
+    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
+    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
+    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
+    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
+    const center = [
+      Number(component.x) + Number(component.w || 0) / 2,
+      Number(component.y) + Number(component.h || 0) / 2,
+      Number(component.z) + Number(component.d || 0) / 2,
+    ];
+    const rotated = rotatedDesignPoint(component, point, center);
+    return localPoint3d(machine, rotated[0] * scaleX, rotated[1] * scaleY * grow, rotated[2] * scaleZ);
+  }
+
+  function drawClosedPrism(vertices, color, alpha) {
+    const faces = [
+      [0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0],[0,1,2,3],[4,7,6,5],
+    ];
+    const shades = [-.12,-.22,-.18,-.08,-.28,0];
+    faces.forEach((indices,index) => polygon(
+      indices.map((vertexIndex) => vertices[vertexIndex]),
+      shades[index] ? shade(color, shades[index]) : color,
+      "rgba(20,30,34,.16)",
+      .55,
+      alpha,
+    ));
+  }
+
+  function designBeamVertices(component) {
+    const center = [
+      (Number(component.x)+Number(component.x2))/2,
+      (Number(component.y)+Number(component.y2))/2,
+      (Number(component.z)+Number(component.z2))/2,
+    ];
+    const start = rotatedDesignPoint(component,[Number(component.x),Number(component.y),Number(component.z)],center);
+    const end = rotatedDesignPoint(component,[Number(component.x2),Number(component.y2),Number(component.z2)],center);
+    const direction = [end[0]-start[0],end[1]-start[1],end[2]-start[2]];
+    const length = Math.max(.0001,Math.hypot(...direction));
+    const forward = direction.map((value)=>value/length);
+    const helper = Math.abs(forward[1]) < .88 ? [0,1,0] : [1,0,0];
+    let side = [
+      forward[1]*helper[2]-forward[2]*helper[1],
+      forward[2]*helper[0]-forward[0]*helper[2],
+      forward[0]*helper[1]-forward[1]*helper[0],
+    ];
+    const sideLength = Math.max(.0001,Math.hypot(...side));
+    side = side.map((value)=>value/sideLength);
+    const up = [
+      side[1]*forward[2]-side[2]*forward[1],
+      side[2]*forward[0]-side[0]*forward[2],
+      side[0]*forward[1]-side[1]*forward[0],
+    ];
+    const halfSide = Math.max(.03,Number(component.thicknessZ || component.thickness || 2)*.08);
+    const halfUp = Math.max(.03,Number(component.thicknessY || component.thickness || 2)*.08);
+    const corner=(point,sideSign,upSign)=>[
+      point[0]+side[0]*halfSide*sideSign+up[0]*halfUp*upSign,
+      point[1]+side[1]*halfSide*sideSign+up[1]*halfUp*upSign,
+      point[2]+side[2]*halfSide*sideSign+up[2]*halfUp*upSign,
+    ];
+    return [
+      corner(start,-1,-1),corner(start,1,-1),corner(start,1,1),corner(start,-1,1),
+      corner(end,-1,-1),corner(end,1,-1),corner(end,1,1),corner(end,-1,1),
+    ];
+  }
+
+  function drawDesignBeam(machine, component, design, alpha, grow) {
+    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
+    const scaleX = machine.w / Math.max(.01,Number(base.w)||machine.w);
+    const scaleY = machine.h / Math.max(.01,Number(base.h)||machine.h);
+    const scaleZ = machine.d / Math.max(.01,Number(base.d)||machine.d);
+    const vertices = designBeamVertices(component).map((point)=>localPoint3d(
+      machine,point[0]*scaleX,point[1]*scaleY*grow,point[2]*scaleZ,
+    ));
+    drawClosedPrism(vertices,component.color || machine.color,alpha);
+  }
+
+  function drawDesignCylinder(machine, component, design, alpha, grow, topScale = 1) {
+    const count = Math.max(8,Math.min(48,Math.round(Number(component.segments)||20)));
+    const center = [
+      Number(component.x)+Number(component.w)/2,
+      Number(component.y)+Number(component.h)/2,
+      Number(component.z)+Number(component.d)/2,
+    ];
+    const rings=[];
+    for (const layer of [-1,1]) {
+      const scale = layer < 0 ? 1 : topScale;
+      rings.push(Array.from({length:count},(_,index)=>{
+        const angle=index/count*Math.PI*2;
+        const point=[
+          center[0]+Math.cos(angle)*Number(component.w)/2*scale,
+          center[1]+layer*Number(component.h)/2,
+          center[2]+Math.sin(angle)*Number(component.d)/2*scale,
+        ];
+        return designPointToWorld(machine,component,design,point,grow);
+      }));
+    }
+    polygon([...rings[0]].reverse(),shade(component.color,-.22),"rgba(15,25,28,.18)",.5,alpha);
+    if (topScale > .001) polygon(rings[1],component.color,"rgba(15,25,28,.18)",.5,alpha);
+    for (let index=0;index<count;index+=1) {
+      const next=(index+1)%count;
+      const sidePoints = topScale > .001
+        ? [rings[0][index],rings[0][next],rings[1][next],rings[1][index]]
+        : [rings[0][index],rings[0][next],rings[1][index]];
+      polygon(sidePoints,shade(component.color,-.08-.15*(.5+.5*Math.cos(index/count*Math.PI*2))),"rgba(15,25,28,.12)",.4,alpha);
+    }
+  }
+
+  function drawDesignSphere(machine, component, design, alpha, grow) {
+    const longitude=Math.max(10,Math.min(36,Math.round(Number(component.segments)||20)));
+    const latitude=Math.max(6,Math.round(longitude/2));
+    const center=[Number(component.x)+Number(component.w)/2,Number(component.y)+Number(component.h)/2,Number(component.z)+Number(component.d)/2];
+    const rings=[];
+    for (let lat=0;lat<=latitude;lat+=1) {
+      const phi=-Math.PI/2+lat/latitude*Math.PI;
+      rings.push(Array.from({length:longitude},(_,lon)=>{
+        const theta=lon/longitude*Math.PI*2;
+        return designPointToWorld(machine,component,design,[
+          center[0]+Math.cos(phi)*Math.cos(theta)*Number(component.w)/2,
+          center[1]+Math.sin(phi)*Number(component.h)/2,
+          center[2]+Math.cos(phi)*Math.sin(theta)*Number(component.d)/2,
+        ],grow);
+      }));
+    }
+    for (let lat=0;lat<latitude;lat+=1) for (let lon=0;lon<longitude;lon+=1) {
+      const next=(lon+1)%longitude;
+      polygon([rings[lat][lon],rings[lat][next],rings[lat+1][next],rings[lat+1][lon]],shade(component.color,-.2+.2*(lat+1)/latitude),"rgba(15,25,28,.1)",.3,alpha);
+    }
+  }
+
+  function drawDesignWedge(machine, component, design, alpha, grow) {
+    const x=Number(component.x),y=Number(component.y),z=Number(component.z),w=Number(component.w),h=Number(component.h),d=Number(component.d);
+    const points=[
+      [x,y,z],[x+w,y,z],[x+w,y,z+d],[x,y,z+d],[x,y+h,z],[x,y+h,z+d],
+    ].map((point)=>designPointToWorld(machine,component,design,point,grow));
+    const faces=[[0,1,2,3],[0,4,1],[3,2,5],[0,3,5,4],[1,4,5,2]];
+    const shades=[-.24,-.1,-.2,0,-.14];
+    faces.forEach((indices,index)=>polygon(indices.map((vertexIndex)=>points[vertexIndex]),shades[index]?shade(component.color,shades[index]):component.color,"rgba(15,25,28,.16)",.5,alpha));
+  }
+
   function drawCustomDesign(machine, alpha, grow, time) {
     const design = machine.designId ? designLibrary[machine.designId] : null;
     if (!design || !Array.isArray(design.components)) return false;
@@ -2793,26 +3674,24 @@
     const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
     const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
     const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
-    const visibleComponents = design.components
+    const visibleComponents = flattenDesignComponents(design.components
       .filter((component) => component.visible !== false)
-      .map((component) => animateDesignComponent(component, time));
+      .map((component) => animateDesignComponent(component, time)))
+      .filter((component) => component.visible !== false);
     visibleComponents.forEach((component) => {
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0.05, 1);
       if (component.type === "box" || component.type === "glassPanel") {
         box(scaledComponentBox(machine, component, design), componentAlpha, grow);
+      } else if (component.type === "cylinder") {
+        drawDesignCylinder(machine,component,design,componentAlpha,grow,1);
+      } else if (component.type === "sphere") {
+        drawDesignSphere(machine,component,design,componentAlpha,grow);
+      } else if (component.type === "cone") {
+        drawDesignCylinder(machine,component,design,componentAlpha,grow,0);
+      } else if (component.type === "wedge") {
+        drawDesignWedge(machine,component,design,componentAlpha,grow);
       } else if (component.type === "beam") {
-        const start = [Number(component.x), Number(component.y), Number(component.z)];
-        const end = [Number(component.x2), Number(component.y2), Number(component.z2)];
-        const center = [(start[0]+end[0])/2,(start[1]+end[1])/2,(start[2]+end[2])/2];
-        const rotatedStart = rotatedDesignPoint(component,start,center);
-        const rotatedEnd = rotatedDesignPoint(component,end,center);
-        localLine(machine,
-          [rotatedStart[0] * scaleX, rotatedStart[1] * scaleY * grow, rotatedStart[2] * scaleZ],
-          [rotatedEnd[0] * scaleX, rotatedEnd[1] * scaleY * grow, rotatedEnd[2] * scaleZ],
-          component.color || machine.color,
-          Math.max(.5, Number(component.thickness) || 2),
-          componentAlpha,
-        );
+        drawDesignBeam(machine,component,design,componentAlpha,grow);
       } else if (component.type === "rollerBed") {
         const count = Math.max(2, Math.round(Number(component.count) || 10));
         const width = Number(component.w) * scaleX;
@@ -2838,7 +3717,7 @@
           ctx.restore();
         }
       } else if (component.type === "wheel") {
-        drawDesignWheel(machine, component, design, componentAlpha);
+        drawDesignWheel(machine, component, design, componentAlpha, grow);
       }
     });
     return true;
@@ -2996,14 +3875,16 @@
       const wheelXs = isTruck ? [1.5,machine.w/2,machine.w-1.5] : [1,machine.w-1];
       wheelXs.forEach((x) => {
         [0.7,machine.d-.7].forEach((z) => {
-          const point = project(...localPoint(machine,x,.2,z));
-          ctx.save();
-          ctx.globalAlpha = alpha;
-          ctx.fillStyle = "#20272a";
-          ctx.beginPath();
-          ctx.ellipse(point[0],point[1],Math.max(3,canvas.width/330),Math.max(2,canvas.width/500),0,0,Math.PI*2);
-          ctx.fill();
-          ctx.restore();
+          drawCylinder3d({
+            center: [x, .2, z],
+            radiusX: isTruck ? .72 : .55,
+            radiusY: isTruck ? .72 : .55,
+            halfDepth: isTruck ? .34 : .28,
+            color: "#20272a",
+            alpha,
+            pointFromLocal: (offset) => localPoint3d(machine, x + offset[0], .2 + offset[1], z + offset[2]),
+            segments: 16,
+          });
         });
       });
       if (isTruck) {
@@ -3048,26 +3929,46 @@
       const bodyHeight = Math.max(.5,(machine.h-1.2)*grow+bob);
       box(localBox(machine,machine.w*.18,machine.d*.18,machine.w*.64,machine.d*.64,bodyHeight,machine.color),alpha,1);
       box(localBox(machine,machine.w*.25,machine.d*.25,machine.w*.5,machine.d*.5,Math.max(.4,1.1*grow),"#e6b993",bodyHeight),alpha,1);
+    } else if (machine.type === "safetyLine") {
+      box({ ...machine, y: 0.035, h: Math.max(0.035, machine.h), color: machine.color || colors.yellow }, alpha * .92, grow);
+    } else if (machine.type === "trench") {
+      const trenchHeight = Math.max(0.08, machine.h);
+      box({ ...machine, y: 0.025, h: trenchHeight, color: machine.color || "#4a3a31" }, alpha, grow);
+      if (machine.w >= machine.d) {
+        localLine3d(machine,[0,trenchHeight+.035,machine.d/2],[machine.w,trenchHeight+.035,machine.d/2],colors.utility,2.2,alpha*.92);
+      } else {
+        localLine3d(machine,[machine.w/2,trenchHeight+.035,0],[machine.w/2,trenchHeight+.035,machine.d],colors.utility,2.2,alpha*.92);
+      }
+    } else if (machine.type === "floorDrain") {
+      const drainHeight = Math.max(.08, machine.h);
+      box({ ...machine, y: 0.03, h: drainHeight, color: machine.color || "#465155" }, alpha, grow);
+      box(localBox3d(machine,machine.w*.08,machine.d*.08,machine.w*.84,machine.d*.84,Math.max(.025,drainHeight*.18),"#252d30",drainHeight+.035),alpha,1);
+      const lineCount = Math.max(3, Math.min(10, Math.round(Math.max(machine.w,machine.d) * 1.5)));
+      for (let index = 1; index < lineCount; index += 1) {
+        const ratio = index / lineCount;
+        localLine3d(machine,[machine.w*.12 + machine.w*.76*ratio,drainHeight+.08,machine.d*.12],[machine.w*.12 + machine.w*.76*ratio,drainHeight+.08,machine.d*.88],"#879194",1,alpha);
+        localLine3d(machine,[machine.w*.12,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],[machine.w*.88,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],"#879194",1,alpha);
+      }
     } else if (machine.type === "animatedGlass") {
-      box({ ...machine, color: machine.color || colors.glass, y: Number(machine.renderY) || 0 }, alpha * .72, grow);
-      localLine(machine,[machine.w/2,0,machine.d/2],[machine.w/2,machine.h*grow,machine.d/2],"rgba(255,255,255,.6)",1.2,alpha*.65);
+      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, color: machine.color || colors.glass, y: Number(machine.renderY) || 0 }, alpha * .72, grow);
+      localLine3d(machine,[machine.w/2,0,machine.d/2],[machine.w/2,machine.h*grow,machine.d/2],"rgba(255,255,255,.6)",1.2,alpha*.65);
     } else if (machine.type === "animatedBox") {
-      box({ ...machine, y: Number(machine.renderY) || 0 },alpha,grow);
-      box(localBox(machine,machine.w*.08,machine.d*.08,machine.w*.84,machine.d*.84,machine.h*.16,shade(machine.color,.12),machine.h*.84),alpha,1);
+      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, y: Number(machine.renderY) || 0 },alpha,grow);
+      box(localBox3d(machine,machine.w*.08,machine.d*.08,machine.w*.84,machine.d*.84,machine.h*.16,shade(machine.color,.12),machine.h*.84),alpha,1);
     } else if (machine.type === "animatedPerson") {
-      box(localBox(machine,machine.w*.2,machine.d*.2,machine.w*.6,machine.d*.6,Math.max(.5,machine.h-1.2),machine.color,0),alpha,1);
-      box(localBox(machine,machine.w*.28,machine.d*.28,machine.w*.44,machine.d*.44,1.05,"#e6b993",machine.h-1.15),alpha,1);
-      localLine(machine,[machine.w*.3,machine.h*.35,machine.d*.5],[machine.w*.05,machine.h*.05,machine.d*.5],"#26363d",1.8,alpha);
-      localLine(machine,[machine.w*.7,machine.h*.35,machine.d*.5],[machine.w*.95,machine.h*.05,machine.d*.5],"#26363d",1.8,alpha);
+      box(localBox3d(machine,machine.w*.2,machine.d*.2,machine.w*.6,machine.d*.6,Math.max(.5,machine.h-1.2),machine.color,0),alpha,1);
+      box(localBox3d(machine,machine.w*.28,machine.d*.28,machine.w*.44,machine.d*.44,1.05,"#e6b993",machine.h-1.15),alpha,1);
+      localLine3d(machine,[machine.w*.3,machine.h*.35,machine.d*.5],[machine.w*.05,machine.h*.05,machine.d*.5],"#26363d",1.8,alpha);
+      localLine3d(machine,[machine.w*.7,machine.h*.35,machine.d*.5],[machine.w*.95,machine.h*.05,machine.d*.5],"#26363d",1.8,alpha);
     } else if (machine.type === "animatedCart") {
-      box(localBox(machine,0,0,machine.w,machine.d,1,machine.color,.8),alpha,1);
+      box(localBox3d(machine,0,0,machine.w,machine.d,1,machine.color,.8),alpha,1);
       [[.8,.7],[machine.w-.8,.7],[.8,machine.d-.7],[machine.w-.8,machine.d-.7]].forEach(([x,z]) => {
-        box(localBox(machine,x-.35,z-.35,.7,.7,.7,"#20272a",.1),alpha,1);
+        box(localBox3d(machine,x-.35,z-.35,.7,.7,.7,"#20272a",.1),alpha,1);
       });
-      box(localBox(machine,machine.w*.12,machine.d*.12,machine.w*.76,machine.d*.76,Math.max(.5,machine.h-1.8),shade(machine.color,.08),1.8),alpha,1);
+      box(localBox3d(machine,machine.w*.12,machine.d*.12,machine.w*.76,machine.d*.76,Math.max(.5,machine.h-1.8),shade(machine.color,.08),1.8),alpha,1);
     } else if (machine.type === "animatedBeacon") {
-      box(localBox(machine,machine.w*.38,machine.d*.38,machine.w*.24,machine.d*.24,Math.max(.5,machine.h-1.5),"#596365",0),alpha,1);
-      box(localBox(machine,0,0,machine.w,machine.d,1.5,machine.color,machine.h-1.5),alpha,1);
+      box(localBox3d(machine,machine.w*.38,machine.d*.38,machine.w*.24,machine.d*.24,Math.max(.5,machine.h-1.5),"#596365",0),alpha,1);
+      box(localBox3d(machine,0,0,machine.w,machine.d,1.5,machine.color,machine.h-1.5),alpha,1);
     } else if (machine.type === "generic") {
       box(machine,alpha,grow);
       box(localBox(machine,machine.w*.12,machine.d*.12,machine.w*.76,machine.d*.2,1.2*grow,shade(machine.color,.12),Math.max(0,topHeight-.2)),alpha,1);
@@ -3078,11 +3979,28 @@
   }
 
   function drawSelection(machine) {
-    if (!state.editing || machine.instanceId !== state.selectedMachineId) return;
+    if (!state.editing || !state.selectedMachineIds.has(machine.instanceId)) return;
     overlayPolygon(footprint(machine,2,.3),"rgba(228,109,58,.12)","#e46d3a",3,1);
     const centerPoint = localPoint(machine,machine.w/2,.4,machine.d/2);
     const directionPoint = localPoint(machine,machine.w/2,.4,-5);
     overlayLine3d(centerPoint,directionPoint,"#e46d3a",2.5,1);
+
+    if (machine.animationEnabled && ["loop", "pingPong"].includes(machine.animationMode)) {
+      const axis = machine.animationAxis || "x";
+      const localDirection = axis === "x"
+        ? [1,0,0]
+        : axis === "y"
+          ? [0,1,0]
+          : axis === "z"
+            ? [0,0,1]
+            : [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)];
+      const direction = rotateVector3(localDirection, ...objectRotation(machine));
+      const halfDistance = Math.abs(Number(machine.animationDistance) || 0) / 2;
+      const center = [machine.x + machine.w/2, machine.h/2, machine.z + machine.d/2];
+      const start = center.map((value,index) => value - direction[index] * halfDistance);
+      const end = center.map((value,index) => value + direction[index] * halfDistance);
+      overlayLine3d(start,end,"#2675a7",3,1);
+    }
   }
 
   function drawOverlapIndicator(machine, overlappingIds) {
@@ -3093,40 +4011,199 @@
 
   function animationWave(machine, time) {
     const speed = Math.max(0, Number(machine.animationSpeed) || 0);
-    const phase = (Number(machine.animationPhase) || 0) / 360;
-    const cycle = time / 1000 * speed + phase;
-    const wrapped = ((cycle % 1) + 1) % 1;
-    return { cycle, wrapped, sine: Math.sin(cycle * Math.PI * 2) };
+    const pauseSeconds = Math.max(0, Number(machine.animationPauseSeconds) || 0);
+    const phase = ((Number(machine.animationPhase) || 0) / 360 + 1) % 1;
+    if (speed <= 0) return { cycle: 0, wrapped: 0, sine: 0, pingPong: 0 };
+
+    const activeDuration = 1 / speed;
+    const elapsed = Math.max(0, time / 1000 + phase * activeDuration);
+    if (machine.animationMode === "pingPong") {
+      const quarterDuration = activeDuration / 4;
+      const totalDuration = activeDuration + pauseSeconds * 2;
+      const localTime = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+      let position;
+      if (localTime < quarterDuration) {
+        position = Math.sin(localTime / quarterDuration * Math.PI / 2);
+      } else if (localTime < quarterDuration + pauseSeconds) {
+        position = 1;
+      } else if (localTime < quarterDuration + pauseSeconds + activeDuration / 2) {
+        const progress = (localTime - quarterDuration - pauseSeconds) / (activeDuration / 2);
+        position = Math.sin(Math.PI / 2 + progress * Math.PI);
+      } else if (localTime < quarterDuration + pauseSeconds * 2 + activeDuration / 2) {
+        position = -1;
+      } else {
+        const progress = (localTime - quarterDuration - pauseSeconds * 2 - activeDuration / 2) / quarterDuration;
+        position = Math.sin(Math.PI * 1.5 + progress * Math.PI / 2);
+      }
+      return {
+        cycle: elapsed / totalDuration,
+        wrapped: (position + 1) / 2,
+        sine: position,
+        pingPong: position / 2,
+      };
+    }
+
+    const totalDuration = activeDuration + pauseSeconds;
+    const localTime = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+    const wrapped = localTime < activeDuration ? localTime / activeDuration : 1;
+    const cycle = Math.floor(elapsed / totalDuration) + wrapped;
+    return { cycle, wrapped, sine: Math.sin(wrapped * Math.PI * 2), pingPong: wrapped - 0.5 };
+  }
+
+  function machineAnimationTransform(machine, time) {
+    const identity = {
+      translation: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      alpha: 1,
+    };
+    if (!machine.animationEnabled || machine.animationMode === "none" || (state.editing && !state.previewObjectAnimations)) return identity;
+    const { cycle, wrapped, sine, pingPong } = animationWave(machine, time);
+    const amount = Number(machine.animationDistance) || 0;
+    const axis = machine.animationAxis || "x";
+    const localDirection = axis === "x"
+      ? [1,0,0]
+      : axis === "y"
+        ? [0,1,0]
+        : axis === "z"
+          ? [0,0,1]
+          : [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)];
+    const pathDirection = rotateVector3(localDirection, ...objectRotation(machine));
+    const transform = clone(identity);
+    const applyOffset = (offset) => {
+      transform.translation[0] += pathDirection[0] * offset;
+      transform.translation[1] += pathDirection[1] * offset;
+      transform.translation[2] += pathDirection[2] * offset;
+    };
+    if (machine.animationMode === "loop") applyOffset((wrapped - 0.5) * amount);
+    else if (machine.animationMode === "pingPong") applyOffset(pingPong * amount);
+    else if (machine.animationMode === "bob") transform.translation[1] += sine * amount / 2;
+    else if (machine.animationMode === "spin") {
+      const spin = cycle * (amount || 360);
+      if (axis === "x" || axis === "all") transform.rotation[0] += spin;
+      if (axis === "y" || axis === "all") transform.rotation[1] += spin;
+      if (axis === "z" || axis === "all") transform.rotation[2] += spin;
+    } else if (machine.animationMode === "pulse") {
+      const factor = Math.max(0.08, 1 + sine * amount / 200);
+      if (axis === "x" || axis === "all") transform.scale[0] *= factor;
+      if (axis === "y" || axis === "all") transform.scale[1] *= factor;
+      if (axis === "z" || axis === "all") transform.scale[2] *= factor;
+    } else if (machine.animationMode === "blink") {
+      transform.alpha *= sine > -0.15 ? 1 : 0.12;
+    }
+    return transform;
+  }
+
+  function combineAnimationTransforms(transforms) {
+    return transforms.reduce((combined, transform) => {
+      combined.translation = combined.translation.map((value, index) => value + transform.translation[index]);
+      combined.rotation = combined.rotation.map((value, index) => value + transform.rotation[index]);
+      combined.scale = combined.scale.map((value, index) => value * transform.scale[index]);
+      combined.alpha *= transform.alpha;
+      return combined;
+    }, { translation: [0,0,0], rotation: [0,0,0], scale: [1,1,1], alpha: 1 });
+  }
+
+  function animationGroupPivot(groupMembers) {
+    const minX = Math.min(...groupMembers.map((item) => item.x));
+    const maxX = Math.max(...groupMembers.map((item) => item.x + item.w));
+    const minY = Math.min(...groupMembers.map((item) => Number(item.renderY ?? item.y) || 0));
+    const maxY = Math.max(...groupMembers.map((item) => (Number(item.renderY ?? item.y) || 0) + item.h));
+    const minZ = Math.min(...groupMembers.map((item) => item.z));
+    const maxZ = Math.max(...groupMembers.map((item) => item.z + item.d));
+    return [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2];
+  }
+
+  function applyMachineAnimationTransform(machine, transform, pivot) {
+    const rendered = { ...machine };
+    const center = [
+      machine.x + machine.w / 2,
+      (Number(machine.renderY ?? machine.y) || 0) + machine.h / 2,
+      machine.z + machine.d / 2,
+    ];
+    const offset = [
+      (center[0] - pivot[0]) * transform.scale[0],
+      (center[1] - pivot[1]) * transform.scale[1],
+      (center[2] - pivot[2]) * transform.scale[2],
+    ];
+    const rotatedOffset = rotateVector3(offset, ...transform.rotation);
+    const targetCenter = [
+      pivot[0] + rotatedOffset[0] + transform.translation[0],
+      pivot[1] + rotatedOffset[1] + transform.translation[1],
+      pivot[2] + rotatedOffset[2] + transform.translation[2],
+    ];
+    rendered.w = Math.max(0.02, machine.w * transform.scale[0]);
+    rendered.h = Math.max(0.02, machine.h * transform.scale[1]);
+    rendered.d = Math.max(0.02, machine.d * transform.scale[2]);
+    rendered.x = targetCenter[0] - rendered.w / 2;
+    rendered.renderY = targetCenter[1] - rendered.h / 2;
+    rendered.z = targetCenter[2] - rendered.d / 2;
+    rendered.rotationX = (Number(machine.rotationX) || 0) + transform.rotation[0];
+    rendered.rotationY = (Number(machine.rotationY ?? machine.rotation) || 0) + transform.rotation[1];
+    rendered.rotationZ = (Number(machine.rotationZ) || 0) + transform.rotation[2];
+    rendered.rotation = rendered.rotationY;
+    rendered.renderAlpha = (Number(machine.renderAlpha ?? 1) || 0) * transform.alpha;
+    return rendered;
+  }
+
+  function machineBasePivot(machine) {
+    return [
+      machine.x + machine.w / 2,
+      (Number(machine.renderY ?? machine.y) || 0) + machine.h / 2,
+      machine.z + machine.d / 2,
+    ];
+  }
+
+  function motionAncestorChain(machine) {
+    const ancestors = [];
+    const visited = new Set([machine.instanceId]);
+    let parentId = machine.motionParentId;
+    while (parentId) {
+      const parent = machineById(parentId);
+      if (!parent || visited.has(parent.instanceId)) break;
+      ancestors.push(parent);
+      visited.add(parent.instanceId);
+      parentId = parent.motionParentId;
+    }
+    return ancestors;
   }
 
   function animatedMachine(machine, time) {
-    if (!machine.animationEnabled || machine.animationMode === "none" || (state.editing && !state.previewObjectAnimations)) return machine;
-    const rendered = { ...machine };
-    const { cycle, wrapped, sine } = animationWave(machine, time);
-    const amount = Number(machine.animationDistance) || 0;
-    const axis = machine.animationAxis || "x";
-    const applyOffset = (offset) => {
-      if (axis === "x" || axis === "all") rendered.x += offset;
-      if (axis === "z" || axis === "all") rendered.z += offset;
-      if (axis === "y" || axis === "all") rendered.renderY = (Number(rendered.renderY) || 0) + offset;
-    };
-    if (machine.animationMode === "loop") applyOffset((wrapped - 0.5) * amount);
-    else if (machine.animationMode === "pingPong") applyOffset(sine * amount / 2);
-    else if (machine.animationMode === "bob") rendered.renderY = (Number(rendered.renderY) || 0) + sine * amount / 2;
-    else if (machine.animationMode === "spin") rendered.rotation = (Number(rendered.rotation) || 0) + cycle * (amount || 360);
-    else if (machine.animationMode === "pulse") {
-      const factor = Math.max(0.08, 1 + sine * amount / 200);
-      const centerX = rendered.x + rendered.w / 2;
-      const centerZ = rendered.z + rendered.d / 2;
-      if (axis === "x" || axis === "all") rendered.w *= factor;
-      if (axis === "z" || axis === "all") rendered.d *= factor;
-      if (axis === "y" || axis === "all") rendered.h *= factor;
-      rendered.x = centerX - rendered.w / 2;
-      rendered.z = centerZ - rendered.d / 2;
-    } else if (machine.animationMode === "blink") {
-      rendered.renderAlpha = sine > -0.15 ? 1 : 0.12;
+    // New attached-motion assemblies are hierarchical: a child first plays its
+    // own animation, then inherits each parent's animation from the nearest
+    // parent outward. This keeps the child physically attached while allowing,
+    // for example, X travel on a bridge that is itself travelling on Z.
+    if (machine.motionParentId) {
+      let rendered = applyMachineAnimationTransform(
+        machine,
+        machineAnimationTransform(machine, time),
+        machineBasePivot(machine),
+      );
+      motionAncestorChain(machine).forEach((parent) => {
+        rendered = applyMachineAnimationTransform(
+          rendered,
+          machineAnimationTransform(parent, time),
+          machineBasePivot(parent),
+        );
+      });
+      return rendered;
     }
-    return rendered;
+
+    // Keep older saved motion groups working until the user reattaches them
+    // with the hierarchical parent control.
+    if (machine.animationGroupId) {
+      const groupMembers = animationGroupMembers(machine.animationGroupId);
+      const transforms = groupMembers.map((member) => machineAnimationTransform(member, time));
+      const combined = combineAnimationTransforms(transforms);
+      const pivot = animationGroupPivot(groupMembers);
+      return applyMachineAnimationTransform(machine, combined, pivot);
+    }
+
+    return applyMachineAnimationTransform(
+      machine,
+      machineAnimationTransform(machine, time),
+      machineBasePivot(machine),
+    );
   }
 
   function visibleMachineEntries(time) {
@@ -3191,7 +4268,7 @@
         rendered.h + 5 + (Number(rendered.renderY) || 0),
         rendered.z + rendered.d/2,
         current ? colors.orange : colors.teal,
-        machine.instanceId === state.selectedMachineId || current
+        state.selectedMachineIds.has(machine.instanceId) || current
       );
     });
   }
@@ -3242,8 +4319,6 @@
     depthRenderer.beginFrame(canvas.width, canvas.height, project);
     labelRects = [];
     drawFloor();
-    drawTrenches();
-    drawSafety();
     drawShell();
     drawSceneObjects(time);
     depthRenderer.render();
@@ -3329,13 +4404,25 @@
   buildTimeline();
   canvas.addEventListener("pointerdown", (event) => {
     if (event.button > 2) return;
-    const wantsPan = event.shiftKey || event.button === 1 || state.spacePressed;
     const wantsOrbit = event.altKey || event.button === 2;
+    const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
+    const selectableHit = state.editing && state.editorTool === "machines" && state.editorInteraction !== "navigate"
+      ? machineAt(event)
+      : null;
+    const wantsPan = event.button === 1 || state.spacePressed || (event.shiftKey && !selectableHit);
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
 
     if (state.editing) {
       if (state.editorTool === "timeline") return;
+      if (selectableHit && additiveSelection) {
+        toggleMachineSelection(selectableHit.instanceId);
+        updateEditorPanel();
+        const count = selectedMachines().length;
+        showToast(`${count} object${count === 1 ? "" : "s"} selected.`);
+        return;
+      }
+      if (!selectableHit && (event.ctrlKey || event.metaKey)) return;
       const navigating = state.editorInteraction === "navigate" || wantsPan || wantsOrbit;
       if (state.editorTool === "pillars" && !navigating) {
         const columnIndex = columnAt(event);
@@ -3351,8 +4438,8 @@
       if (navigating) {
         state.dragAction = wantsPan ? "pan" : "orbit";
       } else {
-        const machine = machineAt(event);
-        state.selectedMachineId = machine?.instanceId || null;
+        const machine = selectableHit || machineAt(event);
+        setSingleSelection(machine?.instanceId || null);
         updateEditorPanel();
         if (machine) {
           if (machine.locked) {
@@ -3388,9 +4475,13 @@
         const bounds = floorBounds();
         const nextX = Math.round(clamp(worldX-state.dragOffsetX,bounds[0],bounds[2]-machine.w)/snap)*snap;
         const nextZ = Math.round(clamp(worldZ-state.dragOffsetZ,bounds[1],bounds[3]-machine.d)/snap)*snap;
-        if (nextX !== machine.x || nextZ !== machine.z) state.dragMoved = true;
-        machine.x = nextX;
-        machine.z = nextZ;
+        const moveX = nextX - machine.x;
+        const moveZ = nextZ - machine.z;
+        if (moveX !== 0 || moveZ !== 0) state.dragMoved = true;
+        selectedMachines().filter((item) => !item.locked).forEach((item) => {
+          item.x = clamp(item.x + moveX, bounds[0], bounds[2] - item.w);
+          item.z = clamp(item.z + moveZ, bounds[1], bounds[3] - item.d);
+        });
         updateEditorPanel();
       }
     } else if (state.dragAction === "pan") {
@@ -3458,6 +4549,15 @@
     if (state.editing && !typing && modifier && event.key.toLowerCase() === "y") {
       event.preventDefault();
       redoLayout();
+      return;
+    }
+    if (state.editing && !typing && modifier && event.key.toLowerCase() === "a") {
+      event.preventDefault();
+      const visibleIds = machines.filter((machine) => machine.visible !== false && stageAlpha(machine.reveal, machine.retire) > .08).map((machine) => machine.instanceId);
+      state.selectedMachineIds = new Set(visibleIds);
+      state.selectedMachineId = visibleIds.at(-1) || null;
+      updateEditorPanel();
+      showToast(`${visibleIds.length} visible objects selected.`);
       return;
     }
     if (state.editing && !typing && modifier && event.key.toLowerCase() === "c") {

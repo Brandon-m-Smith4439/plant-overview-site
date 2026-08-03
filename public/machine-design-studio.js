@@ -21,11 +21,15 @@
   const AXIS_COLORS = { x: "#d94b45", y: "#3f9a65", z: "#3d7fc4" };
   const TOOL_LABELS = {
     select: ["Select", "Click a part to select it"],
-    move: ["Move", "Drag the colored axes or drag the part across the floor"],
-    rotate: ["Rotate", "Drag the orange rotation ring"],
-    scale: ["Scale", "Drag an axis handle or the center handle"],
+    move: ["Move", "Drag an axis handle or the orange center handle"],
+    rotate: ["Rotate", "Drag a colored ring around the selected part"],
+    scale: ["Scale", "Drag one axis handle or the orange uniform handle"],
     pan: ["Pan", "Drag the viewport to move the camera"],
   };
+  const COMPONENT_TYPES = [
+    "box", "cylinder", "sphere", "cone", "wedge",
+    "glassPanel", "beam", "rollerBed", "wheel", "group",
+  ];
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -72,8 +76,7 @@
   }
 
   function normalizeComponent(component, index = 0) {
-    const supported = ["box", "glassPanel", "beam", "rollerBed", "wheel"];
-    const type = supported.includes(component?.type) ? component.type : "box";
+    const type = COMPONENT_TYPES.includes(component?.type) ? component.type : "box";
     const normalized = {
       id: component?.id || uniqueId(type),
       name: component?.name || `${type} ${index + 1}`,
@@ -96,21 +99,27 @@
       animationAxis: ["x", "y", "z", "all"].includes(component?.animationAxis) ? component.animationAxis : "x",
       animationAmount: Number.isFinite(Number(component?.animationAmount)) ? Number(component.animationAmount) : 10,
       animationSpeed: Math.max(0, Number.isFinite(Number(component?.animationSpeed)) ? Number(component.animationSpeed) : 0.1),
+      animationPauseSeconds: Math.max(0, Number.isFinite(Number(component?.animationPauseSeconds)) ? Number(component.animationPauseSeconds) : 0),
       animationPhase: Number.isFinite(Number(component?.animationPhase)) ? Number(component.animationPhase) : 0,
     };
     // Keep the legacy Y-rotation field so existing plant layouts and older
     // exported designs continue to load without losing orientation.
     normalized.rotation = normalized.rotationY;
 
-    if (["box", "glassPanel"].includes(type)) {
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(type)) {
       normalized.w = Math.max(0.02, Number(component?.w) || 4);
       normalized.h = Math.max(0.02, Number(component?.h) || 4);
       normalized.d = Math.max(0.02, Number(component?.d) || (type === "glassPanel" ? 0.25 : 4));
+      if (["cylinder", "sphere", "cone"].includes(type)) {
+        normalized.segments = Math.max(8, Math.min(48, Math.round(Number(component?.segments) || 20)));
+      }
     } else if (type === "beam") {
       normalized.x2 = Number.isFinite(Number(component?.x2)) ? Number(component.x2) : normalized.x + 5;
       normalized.y2 = Number.isFinite(Number(component?.y2)) ? Number(component.y2) : normalized.y;
       normalized.z2 = Number.isFinite(Number(component?.z2)) ? Number(component.z2) : normalized.z;
       normalized.thickness = Math.max(0.2, Number(component?.thickness) || 2);
+      normalized.thicknessY = Math.max(0.2, Number(component?.thicknessY) || normalized.thickness);
+      normalized.thicknessZ = Math.max(0.2, Number(component?.thicknessZ) || normalized.thickness);
     } else if (type === "rollerBed") {
       normalized.w = Math.max(0.1, Number(component?.w) || 8);
       normalized.d = Math.max(0.1, Number(component?.d) || 5);
@@ -123,6 +132,15 @@
       normalized.d = Math.max(0.05, Number(component?.d) || legacySize * 0.64);
       // Retain the legacy field for exported v1/v2 designs and the plant viewer.
       normalized.size = Math.max(normalized.w, normalized.h);
+    } else if (type === "group") {
+      normalized.children = (Array.isArray(component?.children) ? component.children : []).map(normalizeComponent);
+      normalized.color = validColor(component?.color, normalized.children[0]?.color || "#68777a");
+      const requestedDriver = typeof component?.motionDriverId === "string" ? component.motionDriverId : "";
+      const automaticDriver = normalized.children.find((child) => child.animationEnabled !== false && child.animationType && child.animationType !== "none")
+        || normalized.children[0];
+      normalized.motionDriverId = normalized.children.some((child) => child.id === requestedDriver)
+        ? requestedDriver
+        : (automaticDriver?.id || "");
     }
     return normalized;
   }
@@ -264,6 +282,8 @@
   const state = {
     designId: initialDesignId,
     componentId: null,
+    selectedComponentIds: new Set(),
+    selectAllParts: false,
     yaw: -0.72,
     pitch: 0.62,
     zoom: 1,
@@ -272,6 +292,7 @@
     tool: "select",
     snapEnabled: true,
     snapStep: 0.5,
+    transformSpace: "local",
     dragging: false,
     drag: null,
     pointerX: 0,
@@ -294,7 +315,31 @@
   }
 
   function selectedComponent() {
-    return currentDesign()?.components.find((component) => component.id === state.componentId) || null;
+    if (state.selectAllParts || state.selectedComponentIds.size !== 1) return null;
+    const id = [...state.selectedComponentIds][0] || state.componentId;
+    return currentDesign()?.components.find((component) => component.id === id) || null;
+  }
+
+  function selectionComponents() {
+    const design = currentDesign();
+    if (!design) return [];
+    if (state.selectAllParts) return design.components;
+    const ids = state.selectedComponentIds.size
+      ? state.selectedComponentIds
+      : new Set(state.componentId ? [state.componentId] : []);
+    return design.components.filter((component) => ids.has(component.id));
+  }
+
+  function selectAllComponents() {
+    const design = currentDesign();
+    if (!design?.components.length) return;
+    state.selectAllParts = true;
+    state.selectedComponentIds = new Set(design.components.map((component) => component.id));
+    state.componentId = null;
+    state.browserTab = "parts";
+    state.inspectorTab = "object";
+    updateInterface();
+    showToast(`Selected all ${design.components.length} machine parts.`);
   }
 
   function saveLibrary() {
@@ -304,14 +349,14 @@
     Object.entries(library).forEach(([id, design]) => {
       designs[id] = { ...clone(design), updatedAt: new Date().toISOString() };
     });
-    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: 4, updatedAt: new Date().toISOString(), designs }));
+    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: 6, updatedAt: new Date().toISOString(), designs }));
     broadcastProjectUpdate("design-library-updated", { designId: state?.designId || null });
     if (saveState) window.setTimeout(() => { saveState.textContent = "Auto-saved"; }, 180);
   }
 
   function saveLayout() {
     plantLayout.version = 6;
-    plantLayout.appVersion = "0.9.0";
+    plantLayout.appVersion = "0.10.1";
     delete plantLayout.sourceKey;
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(plantLayout));
     broadcastProjectUpdate("layout-updated", { machineId: state?.linkedMachineId || null });
@@ -338,6 +383,8 @@
       designId: state.designId,
       design: clone(currentDesign()),
       componentId: state.componentId,
+      selectedComponentIds: [...state.selectedComponentIds],
+      selectAllParts: state.selectAllParts,
     };
   }
 
@@ -354,6 +401,8 @@
     library[item.designId] = normalizeDesign(item.design, item.designId);
     state.designId = item.designId;
     state.componentId = item.componentId;
+    state.selectedComponentIds = new Set(item.selectedComponentIds || (item.componentId ? [item.componentId] : []));
+    state.selectAllParts = item.selectAllParts === true;
     saveLibrary();
     syncLinkedMachineToCurrentDesign();
     updateInterface();
@@ -413,7 +462,11 @@
     const common = {
       id: uniqueId(type),
       name: {
-        box: "New cabinet box",
+        box: "New box",
+        cylinder: "New cylinder",
+        sphere: "New sphere",
+        cone: "New cone",
+        wedge: "New wedge",
         glassPanel: "New glass panel",
         beam: "New frame beam",
         rollerBed: "New roller bed",
@@ -432,12 +485,18 @@
       animationAxis: "x",
       animationAmount: 10,
       animationSpeed: 0.1,
+      animationPauseSeconds: 0,
       animationPhase: 0,
     };
-    if (["box", "glassPanel"].includes(type)) {
-      Object.assign(common, { w: base.w * 0.5, h: base.h * 0.5, d: type === "glassPanel" ? 0.25 : base.d * 0.5 });
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(type)) {
+      Object.assign(common, {
+        w: base.w * (type === "sphere" ? 0.3 : 0.5),
+        h: base.h * (type === "glassPanel" ? 0.65 : 0.5),
+        d: type === "glassPanel" ? 0.25 : base.d * (type === "sphere" ? 0.3 : 0.5),
+      });
+      if (["cylinder", "sphere", "cone"].includes(type)) common.segments = 20;
     } else if (type === "beam") {
-      Object.assign(common, { x2: base.w * 0.75, y2: 0, z2: base.d * 0.25, thickness: 2 });
+      Object.assign(common, { x2: base.w * 0.75, y2: 0, z2: base.d * 0.25, thickness: 2, thicknessY: 2, thicknessZ: 2 });
     } else if (type === "rollerBed") {
       Object.assign(common, { w: base.w * 0.5, d: base.d * 0.5, count: 8, thickness: 1.5 });
     } else if (type === "wheel") {
@@ -450,6 +509,8 @@
     if (!library[id]) return;
     state.designId = id;
     state.componentId = library[id].components[0]?.id || null;
+    state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
+    state.selectAllParts = false;
     state.history.length = 0;
     state.future.length = 0;
     syncLinkedMachineToCurrentDesign();
@@ -457,10 +518,21 @@
     updateInterface();
   }
 
-  function selectComponent(id, openParts = false) {
+  function selectComponent(id, openParts = false, additive = false) {
     const design = currentDesign();
     if (id && !design?.components.some((component) => component.id === id)) return;
-    state.componentId = id || null;
+    state.selectAllParts = false;
+    if (!id) {
+      state.componentId = null;
+      state.selectedComponentIds.clear();
+    } else if (additive) {
+      if (state.selectedComponentIds.has(id)) state.selectedComponentIds.delete(id);
+      else state.selectedComponentIds.add(id);
+      state.componentId = state.selectedComponentIds.has(id) ? id : [...state.selectedComponentIds].at(-1) || null;
+    } else {
+      state.componentId = id;
+      state.selectedComponentIds = new Set([id]);
+    }
     state.inspectorTab = "object";
     if (openParts) state.browserTab = "parts";
     updateInterface();
@@ -509,7 +581,9 @@
     if (!window.confirm(`Restore ${defaults[id].name} to its supplied component design?`)) return;
     pushHistory();
     library[id] = normalizeDesign({ ...clone(defaults[id]), id }, id);
+    state.selectAllParts = false;
     state.componentId = library[id].components[0]?.id || null;
+    state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
     commit("Preset restored.");
   }
 
@@ -533,33 +607,95 @@
 
   function duplicateSelectedComponent() {
     const design = currentDesign();
-    const component = selectedComponent();
-    if (!design || !component) return;
+    const components = selectionComponents();
+    if (!design || !components.length) return;
     pushHistory();
-    const copy = normalizeComponent({
-      ...clone(component),
-      id: uniqueId(component.type),
-      name: `${component.name} copy`,
-      x: component.x + state.snapStep,
-      z: component.z + state.snapStep,
-      x2: component.type === "beam" ? component.x2 + state.snapStep : component.x2,
-      z2: component.type === "beam" ? component.z2 + state.snapStep : component.z2,
+    const copies = components.map((component) => {
+      const copy = normalizeComponent({
+        ...clone(component),
+        id: uniqueId(component.type),
+        name: `${component.name} copy`,
+        x: component.type === "group" ? component.x : Number(component.x) + state.snapStep,
+        z: component.type === "group" ? component.z : Number(component.z) + state.snapStep,
+        x2: component.type === "beam" ? Number(component.x2) + state.snapStep : component.x2,
+        z2: component.type === "beam" ? Number(component.z2) + state.snapStep : component.z2,
+      });
+      if (copy.type === "group") translateComponent(copy, state.snapStep, 0, state.snapStep);
+      return copy;
     });
-    design.components.push(copy);
-    state.componentId = copy.id;
+    design.components.push(...copies);
+    state.selectAllParts = false;
+    state.selectedComponentIds = new Set(copies.map((component) => component.id));
+    state.componentId = copies.at(-1)?.id || null;
     state.browserTab = "parts";
-    commit("Component duplicated.");
+    commit(`${copies.length} component${copies.length === 1 ? "" : "s"} duplicated.`);
   }
 
   function deleteSelectedComponent() {
     const design = currentDesign();
-    const component = selectedComponent();
-    if (!design || !component) return;
+    const components = selectionComponents();
+    if (!design || !components.length) return;
     pushHistory();
-    const index = design.components.findIndex((item) => item.id === component.id);
-    design.components.splice(index, 1);
-    state.componentId = design.components[Math.min(index, design.components.length - 1)]?.id || null;
-    commit("Component deleted.");
+    const ids = new Set(components.map((component) => component.id));
+    design.components = design.components.filter((component) => !ids.has(component.id));
+    state.selectAllParts = false;
+    state.componentId = design.components[0]?.id || null;
+    state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
+    commit(`${components.length} component${components.length === 1 ? "" : "s"} deleted.`);
+  }
+
+  function mergeSelectedComponents() {
+    const design = currentDesign();
+    const components = selectionComponents();
+    if (!design || components.length < 2) {
+      showToast("Select at least two parts to merge them.");
+      return;
+    }
+    pushHistory();
+    const selectedIds = new Set(components.map((component) => component.id));
+    const insertionIndex = Math.min(...components.map((component) => design.components.findIndex((item) => item.id === component.id)));
+    const group = normalizeComponent({
+      id: uniqueId("group"),
+      name: "Merged item",
+      type: "group",
+      color: components[0]?.color || "#68777a",
+      visible: true,
+      opacity: 1,
+      animationEnabled: true,
+      animationType: "none",
+      animationAxis: "x",
+      animationAmount: 10,
+      animationSpeed: 0.1,
+      animationPauseSeconds: 0,
+      animationPhase: 0,
+      motionDriverId: components.some((component) => component.id === state.componentId)
+        ? state.componentId
+        : (components.find((component) => component.animationEnabled !== false && component.animationType !== "none")?.id || components[0]?.id || ""),
+      children: components.map(clone),
+    });
+    design.components = design.components.filter((component) => !selectedIds.has(component.id));
+    design.components.splice(Math.max(0, insertionIndex), 0, group);
+    state.selectAllParts = false;
+    state.componentId = group.id;
+    state.selectedComponentIds = new Set([group.id]);
+    commit(`${components.length} parts merged. ${group.children.find((child) => child.id === group.motionDriverId)?.name || "The active part"} carries the assembly while every child keeps its own animation.`);
+  }
+
+  function ungroupSelectedComponent() {
+    const design = currentDesign();
+    const group = selectedComponent();
+    if (!design || group?.type !== "group" || !Array.isArray(group.children)) {
+      showToast("Select a merged item to separate it.");
+      return;
+    }
+    pushHistory();
+    const index = design.components.findIndex((component) => component.id === group.id);
+    const children = group.children.map((child) => normalizeComponent({ ...clone(child), id: uniqueId(child.type) }));
+    design.components.splice(index, 1, ...children);
+    state.selectAllParts = false;
+    state.selectedComponentIds = new Set(children.map((child) => child.id));
+    state.componentId = children.at(-1)?.id || null;
+    commit(`Merged item separated into ${children.length} parts.`);
   }
 
   function moveComponentOrder(direction) {
@@ -584,6 +720,11 @@
     });
     canvas.dataset.tool = tool;
     updateToolLabel();
+    document.querySelectorAll("[data-transform-space]").forEach((button) => {
+      const active = button.dataset.transformSpace === state.transformSpace;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
   }
 
   function updateToolLabel() {
@@ -665,7 +806,7 @@
     if (count) count.textContent = `${design?.components.length || 0} part${design?.components.length === 1 ? "" : "s"}`;
     if (!list) return;
     list.innerHTML = components.map((component, index) => `
-      <div class="component-tree-row ${component.id === state.componentId ? "active" : ""}" data-component-row="${escapeHtml(component.id)}">
+      <div class="component-tree-row ${state.selectAllParts || state.selectedComponentIds.has(component.id) ? "active" : ""}" data-component-row="${escapeHtml(component.id)}">
         <button type="button" class="component-visibility" data-toggle-component="${escapeHtml(component.id)}" title="${component.visible === false ? "Show" : "Hide"} component" aria-label="${component.visible === false ? "Show" : "Hide"} ${escapeHtml(component.name)}">${component.visible === false ? "○" : "●"}</button>
         <button type="button" class="component-select" data-component-id="${escapeHtml(component.id)}">
           <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} · ${escapeHtml(component.type)}${component.animationType && component.animationType !== "none" ? ` · animated` : ""}</small></span>
@@ -673,7 +814,11 @@
       </div>
     `).join("") || `<p class="studio-empty">No parts match this search.</p>`;
     list.querySelectorAll("[data-component-id]").forEach((button) => {
-      button.addEventListener("click", () => selectComponent(button.dataset.componentId));
+      button.addEventListener("click", (event) => selectComponent(
+        button.dataset.componentId,
+        false,
+        event.shiftKey || event.ctrlKey || event.metaKey,
+      ));
     });
     list.querySelectorAll("[data-toggle-component]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -690,20 +835,48 @@
     const section = document.getElementById("component-properties");
     const empty = document.getElementById("empty-component-state");
     const component = selectedComponent();
+    const selectedCount = selectionComponents().length;
+    const wholeDesign = state.selectAllParts;
+    const multiSelection = !wholeDesign && selectedCount > 1;
     const typeLabel = document.getElementById("selected-component-type");
     if (section) section.hidden = !component;
-    if (empty) empty.hidden = Boolean(component);
-    if (typeLabel) typeLabel.textContent = component ? component.type : "Nothing selected";
+    if (empty) {
+      empty.hidden = Boolean(component);
+      const title = empty.querySelector("strong");
+      const help = empty.querySelector("p");
+      if (wholeDesign) {
+        if (title) title.textContent = "Entire machine selected.";
+        if (help) help.textContent = "Use Move, Rotate, or Scale to transform every part together around the machine center. Click any individual part to return to single-part editing.";
+      } else if (multiSelection) {
+        if (title) title.textContent = `${selectedCount} parts selected.`;
+        if (help) help.textContent = "Transform these parts together or use Merge selected to turn them into one reusable item.";
+      } else {
+        if (title) title.textContent = "Select a part in the viewport or Parts list.";
+        if (help) help.textContent = "Use Move, Rotate, or Scale after selecting a component. Transform controls always stay above the model. Colored handles match the X, Y, and Z axes.";
+      }
+    }
+    if (typeLabel) typeLabel.textContent = wholeDesign
+      ? `All ${currentDesign()?.components.length || 0} parts`
+      : multiSelection ? `${selectedCount} selected parts` : (component ? component.type : "Nothing selected");
 
-    document.getElementById("duplicate-component")?.toggleAttribute("disabled", !component);
-    document.getElementById("delete-component")?.toggleAttribute("disabled", !component);
+    document.getElementById("select-all-components")?.classList.toggle("active", wholeDesign);
+    document.getElementById("duplicate-component")?.toggleAttribute("disabled", selectedCount === 0);
+    document.getElementById("delete-component")?.toggleAttribute("disabled", selectedCount === 0);
+    document.getElementById("merge-components")?.toggleAttribute("disabled", selectedCount < 2);
+    document.getElementById("ungroup-component")?.toggleAttribute("disabled", component?.type !== "group");
     document.getElementById("move-component-up")?.toggleAttribute("disabled", !component);
     document.getElementById("move-component-down")?.toggleAttribute("disabled", !component);
     if (!component || !section) return;
 
     section.querySelectorAll("[data-component-field]").forEach((input) => {
       const field = input.dataset.componentField;
-      if (document.activeElement !== input) input.value = component[field] ?? "";
+      if (document.activeElement === input) return;
+      if (component.type === "group" && ["x", "y", "z"].includes(field)) {
+        const center = componentCenter(component);
+        input.value = center[{ x: 0, y: 1, z: 2 }[field]] ?? 0;
+      } else if (component.type === "beam" && field === "length") {
+        input.value = pointDistance([component.x, component.y, component.z], [component.x2, component.y2, component.z2]).toFixed(2);
+      } else input.value = component[field] ?? "";
     });
     section.querySelectorAll("[data-component-check]").forEach((input) => {
       input.checked = component[input.dataset.componentCheck] !== false;
@@ -712,6 +885,17 @@
       const supported = element.dataset.forComponent.split(/\s+/);
       element.hidden = !supported.includes(component.type);
     });
+    const motionDriver = document.getElementById("group-motion-driver");
+    if (motionDriver) {
+      const children = component.type === "group" ? (component.children || []) : [];
+      motionDriver.innerHTML = children.map((child) => (
+        `<option value="${escapeHtml(child.id)}">${escapeHtml(child.name)}${child.animationType && child.animationType !== "none" ? ` · ${escapeHtml(child.animationType)}` : ""}</option>`
+      )).join("");
+      motionDriver.value = children.some((child) => child.id === component.motionDriverId)
+        ? component.motionDriverId
+        : (children[0]?.id || "");
+      motionDriver.disabled = component.type !== "group" || children.length === 0;
+    }
   }
 
   function updateAssignmentPanel() {
@@ -746,8 +930,29 @@
     updateToolLabel();
   }
 
+  function selectionBounds(components = selectionComponents()) {
+    const points = components.flatMap((component) => componentWorldPoints(component));
+    if (!points.length) return null;
+    return {
+      minX: Math.min(...points.map((point) => point[0])),
+      maxX: Math.max(...points.map((point) => point[0])),
+      minY: Math.min(...points.map((point) => point[1])),
+      maxY: Math.max(...points.map((point) => point[1])),
+      minZ: Math.min(...points.map((point) => point[2])),
+      maxZ: Math.max(...points.map((point) => point[2])),
+    };
+  }
+
+  function selectionCenter(components = selectionComponents()) {
+    const bounds = selectionBounds(components);
+    return bounds
+      ? [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, (bounds.minZ + bounds.maxZ) / 2]
+      : [0, 0, 0];
+  }
+
   function componentCenter(component) {
-    if (["box", "glassPanel"].includes(component.type)) {
+    if (component.type === "group") return selectionCenter(component.children || []);
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
       return [component.x + component.w / 2, component.y + component.h / 2, component.z + component.d / 2];
     }
     if (component.type === "beam") {
@@ -1095,11 +1300,12 @@
       side[2] * forward[0] - side[0] * forward[2],
       side[0] * forward[1] - side[1] * forward[0],
     ];
-    const half = Math.max(0.03, Number(component.thickness) * 0.08);
+    const halfSide = Math.max(0.03, Number(component.thicknessZ || component.thickness) * 0.08);
+    const halfUp = Math.max(0.03, Number(component.thicknessY || component.thickness) * 0.08);
     const corner = (point, sideSign, upSign) => [
-      point[0] + side[0] * half * sideSign + up[0] * half * upSign,
-      point[1] + side[1] * half * sideSign + up[1] * half * upSign,
-      point[2] + side[2] * half * sideSign + up[2] * half * upSign,
+      point[0] + side[0] * halfSide * sideSign + up[0] * halfUp * upSign,
+      point[1] + side[1] * halfSide * sideSign + up[1] * halfUp * upSign,
+      point[2] + side[2] * halfSide * sideSign + up[2] * halfUp * upSign,
     ];
     return [
       corner(start, -1, -1), corner(start, 1, -1), corner(start, 1, 1), corner(start, -1, 1),
@@ -1218,25 +1424,193 @@
     return buildCylinderPrimitives(component, wheelVertices(component, 20), order, component.color, component.opacity);
   }
 
+  function verticalCylinderVertices(component, segments = 20, topScale = 1) {
+    const center = componentCenter(component);
+    const count = Math.max(8, Math.round(Number(segments) || 20));
+    const vertices = [];
+    for (const layer of [-1, 1]) {
+      const scale = layer < 0 ? 1 : topScale;
+      for (let index = 0; index < count; index += 1) {
+        const angle = index / count * Math.PI * 2;
+        const offset = [
+          Math.cos(angle) * component.w / 2 * scale,
+          layer * component.h / 2,
+          Math.sin(angle) * component.d / 2 * scale,
+        ];
+        const rotated = rotateVector3(offset, ...componentRotation(component));
+        vertices.push([center[0] + rotated[0], center[1] + rotated[1], center[2] + rotated[2]]);
+      }
+    }
+    return vertices;
+  }
 
-  function animatedComponent(component, time) {
-    if (!state.previewAnimations || component.animationEnabled === false || !component.animationType || component.animationType === "none") return component;
+  function buildVerticalCylinderPrimitives(component, order) {
+    return buildCylinderPrimitives(
+      component,
+      verticalCylinderVertices(component, component.segments || 20, 1),
+      order,
+      component.color,
+      component.opacity,
+    );
+  }
+
+  function buildConePrimitives(component, order) {
+    const count = Math.max(8, Math.round(Number(component.segments) || 20));
+    const center = componentCenter(component);
+    const base = [];
+    for (let index = 0; index < count; index += 1) {
+      const angle = index / count * Math.PI * 2;
+      const offset = [Math.cos(angle) * component.w / 2, -component.h / 2, Math.sin(angle) * component.d / 2];
+      const rotated = rotateVector3(offset, ...componentRotation(component));
+      base.push([center[0] + rotated[0], center[1] + rotated[1], center[2] + rotated[2]]);
+    }
+    const apexOffset = rotateVector3([0, component.h / 2, 0], ...componentRotation(component));
+    const apex = [center[0] + apexOffset[0], center[1] + apexOffset[1], center[2] + apexOffset[2]];
+    const primitives = [polygonPrimitive(component, [...base].reverse(), shade(component.color, -.22), "rgba(15,25,28,.2)", .6, component.opacity, order, 0)];
+    for (let index = 0; index < count; index += 1) {
+      const next = (index + 1) % count;
+      primitives.push(polygonPrimitive(component, [base[index], base[next], apex], shade(component.color, -.08 - .16 * (.5 + .5 * Math.cos(index / count * Math.PI * 2))), "rgba(15,25,28,.16)", .45, component.opacity, order, index + 1));
+    }
+    return primitives;
+  }
+
+  function buildSpherePrimitives(component, order) {
+    const center = componentCenter(component);
+    const longitude = Math.max(10, Math.round(Number(component.segments) || 20));
+    const latitude = Math.max(6, Math.round(longitude / 2));
+    const rings = [];
+    for (let lat = 0; lat <= latitude; lat += 1) {
+      const phi = -Math.PI / 2 + lat / latitude * Math.PI;
+      const ring = [];
+      for (let lon = 0; lon < longitude; lon += 1) {
+        const theta = lon / longitude * Math.PI * 2;
+        const offset = [
+          Math.cos(phi) * Math.cos(theta) * component.w / 2,
+          Math.sin(phi) * component.h / 2,
+          Math.cos(phi) * Math.sin(theta) * component.d / 2,
+        ];
+        const rotated = rotateVector3(offset, ...componentRotation(component));
+        ring.push([center[0] + rotated[0], center[1] + rotated[1], center[2] + rotated[2]]);
+      }
+      rings.push(ring);
+    }
+    const primitives = [];
+    let subOrder = 0;
+    for (let lat = 0; lat < latitude; lat += 1) {
+      for (let lon = 0; lon < longitude; lon += 1) {
+        const next = (lon + 1) % longitude;
+        const points = [rings[lat][lon], rings[lat][next], rings[lat + 1][next], rings[lat + 1][lon]];
+        const light = -0.22 + 0.22 * ((lat + 1) / latitude);
+        primitives.push(polygonPrimitive(
+          component,
+          points,
+          shade(component.color, light),
+          "rgba(15,25,28,.12)",
+          0.35,
+          component.opacity,
+          order,
+          subOrder,
+        ));
+        subOrder += 1;
+      }
+    }
+    return primitives;
+  }
+
+  function wedgeVertices(component) {
+    const center = componentCenter(component);
+    const local = [
+      [-component.w/2,-component.h/2,-component.d/2],
+      [ component.w/2,-component.h/2,-component.d/2],
+      [ component.w/2,-component.h/2, component.d/2],
+      [-component.w/2,-component.h/2, component.d/2],
+      [-component.w/2, component.h/2,-component.d/2],
+      [-component.w/2, component.h/2, component.d/2],
+    ];
+    return local.map((offset) => {
+      const rotated = rotateVector3(offset, ...componentRotation(component));
+      return [center[0] + rotated[0], center[1] + rotated[1], center[2] + rotated[2]];
+    });
+  }
+
+  function buildWedgePrimitives(component, order) {
+    const vertices = wedgeVertices(component);
+    const faces = [
+      [0,1,2,3], [0,4,1], [3,2,5], [0,3,5,4], [1,4,5,2],
+    ];
+    const shades = [-.24,-.1,-.2,0,-.14];
+    return faces.map((indices, index) => polygonPrimitive(
+      component,
+      indices.map((vertexIndex) => vertices[vertexIndex]),
+      shades[index] ? shade(component.color, shades[index]) : component.color,
+      "rgba(15,25,28,.2)",
+      .6,
+      component.opacity,
+      order,
+      index,
+    ));
+  }
+
+
+  function componentAnimationWave(component, time) {
+    const speed = Math.max(0, Number(component.animationSpeed) || 0);
+    const pauseSeconds = Math.max(0, Number(component.animationPauseSeconds) || 0);
+    const phase = ((Number(component.animationPhase) || 0) / 360 + 1) % 1;
+    if (speed <= 0) return { cycle: 0, wrapped: 0, sine: 0, pingPong: 0 };
+    const activeDuration = 1 / speed;
+    const elapsed = Math.max(0, time / 1000 + phase * activeDuration);
+    if (component.animationType === "oscillate") {
+      const quarterDuration = activeDuration / 4;
+      const totalDuration = activeDuration + pauseSeconds * 2;
+      const localTime = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+      let position;
+      if (localTime < quarterDuration) position = Math.sin(localTime / quarterDuration * Math.PI / 2);
+      else if (localTime < quarterDuration + pauseSeconds) position = 1;
+      else if (localTime < quarterDuration + pauseSeconds + activeDuration / 2) {
+        const progress = (localTime - quarterDuration - pauseSeconds) / (activeDuration / 2);
+        position = Math.sin(Math.PI / 2 + progress * Math.PI);
+      } else if (localTime < quarterDuration + pauseSeconds * 2 + activeDuration / 2) position = -1;
+      else {
+        const progress = (localTime - quarterDuration - pauseSeconds * 2 - activeDuration / 2) / quarterDuration;
+        position = Math.sin(Math.PI * 1.5 + progress * Math.PI / 2);
+      }
+      return { cycle: elapsed / totalDuration, wrapped: (position + 1) / 2, sine: position, pingPong: position / 2 };
+    }
+    const totalDuration = activeDuration + pauseSeconds;
+    const localTime = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+    const wrapped = localTime < activeDuration ? localTime / activeDuration : 1;
+    const cycle = Math.floor(elapsed / totalDuration) + wrapped;
+    return { cycle, wrapped, sine: Math.sin(wrapped * Math.PI * 2), pingPong: wrapped - 0.5 };
+  }
+
+  function animateComponentSelf(component, time) {
+    if (!state.previewAnimations || component.animationEnabled === false || !component.animationType || component.animationType === "none") return clone(component);
     const animated = clone(component);
-    const speed = Math.max(0, Number(component.animationSpeed) || 0.1);
-    const phase = (Number(component.animationPhase) || 0) / 360;
-    const cycle = time / 1000 * speed + phase;
-    const wrapped = ((cycle % 1) + 1) % 1;
-    const sine = Math.sin(cycle * Math.PI * 2);
+    const { cycle, wrapped, sine, pingPong } = componentAnimationWave(component, time);
     const amount = Number(component.animationAmount) || 0;
     const axis = component.animationAxis || "x";
-    const offset = component.animationType === "loop" ? (wrapped - 0.5) * amount : sine * amount / 2;
+    const offset = component.animationType === "loop"
+      ? (wrapped - 0.5) * amount
+      : component.animationType === "oscillate"
+        ? pingPong * amount
+        : sine * amount / 2;
     if (["oscillate", "loop"].includes(component.animationType)) {
       translateComponent(animated, axis === "x" || axis === "all" ? offset : 0, axis === "y" || axis === "all" ? offset : 0, axis === "z" || axis === "all" ? offset : 0);
     } else if (component.animationType === "bob") translateComponent(animated, 0, offset, 0);
     else if (component.animationType === "spin") {
-      const field = axis === "x" ? "rotationX" : axis === "z" ? "rotationZ" : "rotationY";
-      animated[field] = (Number(animated[field]) || 0) + cycle * (amount || 360);
-      if (field === "rotationY") animated.rotation = animated.rotationY;
+      const spin = cycle * (amount || 360);
+      if (component.type === "group") {
+        if (axis === "all") {
+          ["x", "y", "z"].forEach((rotationAxis) => rotateComponent(animated, spin, rotationAxis, clone(animated)));
+        } else rotateComponent(animated, spin, axis, component);
+      } else {
+        if (axis === "x" || axis === "all") animated.rotationX = (Number(animated.rotationX) || 0) + spin;
+        if (axis === "y" || axis === "all") {
+          animated.rotationY = (Number(animated.rotationY ?? animated.rotation) || 0) + spin;
+          animated.rotation = animated.rotationY;
+        }
+        if (axis === "z" || axis === "all") animated.rotationZ = (Number(animated.rotationZ) || 0) + spin;
+      }
     } else if (component.animationType === "pulse") {
       const factor = Math.max(0.08, 1 + sine * amount / 200);
       scaleComponent(animated, factor, axis === "all" ? "center" : axis, component);
@@ -1246,9 +1620,89 @@
     return animated;
   }
 
+  function componentAnimationDelta(component, animated) {
+    const baseCenter = componentCenter(component);
+    const animatedCenter = componentCenter(animated);
+    const baseBounds = componentWorldBounds(component);
+    const animatedBounds = componentWorldBounds(animated);
+    const safeRatio = (animatedSize, baseSize) => Math.abs(baseSize) > 0.0001 ? animatedSize / baseSize : 1;
+    const baseRotation = componentRotation(component);
+    const animatedRotation = componentRotation(animated);
+    return {
+      translation: animatedCenter.map((value, index) => value - baseCenter[index]),
+      rotation: animatedRotation.map((value, index) => value - baseRotation[index]),
+      scale: [
+        safeRatio(animatedBounds.maxX - animatedBounds.minX, baseBounds.maxX - baseBounds.minX),
+        safeRatio(animatedBounds.maxY - animatedBounds.minY, baseBounds.maxY - baseBounds.minY),
+        safeRatio(animatedBounds.maxZ - animatedBounds.minZ, baseBounds.maxZ - baseBounds.minZ),
+      ],
+      alpha: Math.max(0.01, Number(animated.opacity ?? 1) / Math.max(0.01, Number(component.opacity ?? 1))),
+    };
+  }
+
+  function multiplyComponentOpacity(component, factor) {
+    component.opacity = clamp((Number(component.opacity ?? 1) || 1) * factor, 0.01, 1);
+    if (component.type === "group") (component.children || []).forEach((child) => multiplyComponentOpacity(child, factor));
+  }
+
+  function applyInheritedComponentTransform(component, transform, pivot) {
+    let rendered = clone(component);
+    ["x", "y", "z"].forEach((axis, index) => {
+      const factor = Number(transform.scale[index]) || 1;
+      if (Math.abs(factor - 1) < 0.0001) return;
+      const original = clone(rendered);
+      scaleSelectionTogether([rendered], [original], pivot, factor, axis);
+    });
+    ["x", "y", "z"].forEach((axis, index) => {
+      const degrees = Number(transform.rotation[index]) || 0;
+      if (Math.abs(degrees) < 0.0001) return;
+      const original = clone(rendered);
+      rotateSelectionTogether([rendered], [original], pivot, degrees, axis);
+    });
+    translateComponent(rendered, ...transform.translation);
+    if (Math.abs((Number(transform.alpha) || 1) - 1) > 0.0001) multiplyComponentOpacity(rendered, Number(transform.alpha) || 1);
+    return rendered;
+  }
+
+  function animatedComponent(component, time) {
+    if (component.type !== "group") return animateComponentSelf(component, time);
+
+    const children = component.children || [];
+    if (!children.length) return animateComponentSelf(component, time);
+    const driver = children.find((child) => child.id === component.motionDriverId)
+      || children.find((child) => child.animationEnabled !== false && child.animationType && child.animationType !== "none")
+      || children[0];
+    const driverAnimated = animateComponentSelf(driver, time);
+    const inheritedTransform = componentAnimationDelta(driver, driverAnimated);
+    const driverPivot = componentCenter(driver);
+
+    const animatedGroup = clone(component);
+    animatedGroup.motionDriverId = driver.id;
+    animatedGroup.children = children.map((child) => {
+      // The driver animation moves the whole merged assembly once. Other
+      // children first play their own animation, then inherit the driver
+      // transform so they stay attached in the driver's moving coordinate space.
+      const ownAnimated = child.id === driver.id ? clone(child) : animatedComponent(child, time);
+      return applyInheritedComponentTransform(ownAnimated, inheritedTransform, driverPivot);
+    });
+
+    return animateComponentSelf(animatedGroup, time);
+  }
+
   function buildComponentPrimitives(component, order) {
     if (component.visible === false) return [];
+    if (component.type === "group") {
+      const groupOpacity = clamp(Number(component.opacity ?? 1), 0.05, 1);
+      return (component.children || []).flatMap((child, childIndex) => {
+        const renderedChild = { ...child, opacity: clamp(Number(child.opacity ?? 1), 0.05, 1) * groupOpacity };
+        return buildComponentPrimitives(renderedChild, order + childIndex / 1000);
+      }).map((primitive) => ({ ...primitive, component }));
+    }
     if (["box", "glassPanel"].includes(component.type)) return buildBoxPrimitives(component, order);
+    if (component.type === "cylinder") return buildVerticalCylinderPrimitives(component, order);
+    if (component.type === "sphere") return buildSpherePrimitives(component, order);
+    if (component.type === "cone") return buildConePrimitives(component, order);
+    if (component.type === "wedge") return buildWedgePrimitives(component, order);
     if (component.type === "beam") return buildBeamPrimitives(component, order);
     if (component.type === "rollerBed") return buildRollerPrimitives(component, order);
     if (component.type === "wheel") return buildWheelPrimitives(component, order);
@@ -1263,9 +1717,9 @@
     }
   }
 
-  function drawSelectionOverlay(component) {
-    if (!component || component.visible === false) return;
-    const points = componentScreenPoints(component);
+  function drawSelectionOverlay(selection) {
+    const components = Array.isArray(selection) ? selection : (selection ? [selection] : []);
+    const points = components.filter((component) => component.visible !== false).flatMap(componentScreenPoints);
     if (!points.length) return;
     const xs = points.map((point) => point[0]);
     const ys = points.map((point) => point[1]);
@@ -1313,7 +1767,20 @@
   }
 
   function componentWorldPoints(component) {
+    if (component.type === "group") return (component.children || []).flatMap(componentWorldPoints);
     if (["box", "glassPanel"].includes(component.type)) return boxVertices(component);
+    if (component.type === "cylinder") return verticalCylinderVertices(component, component.segments || 20, 1);
+    if (component.type === "sphere") {
+      const center = componentCenter(component);
+      return [
+        [-component.w/2,0,0],[component.w/2,0,0],[0,-component.h/2,0],[0,component.h/2,0],[0,0,-component.d/2],[0,0,component.d/2],
+      ].map((offset) => {
+        const rotated = rotateVector3(offset, ...componentRotation(component));
+        return [center[0]+rotated[0],center[1]+rotated[1],center[2]+rotated[2]];
+      });
+    }
+    if (component.type === "cone") return verticalCylinderVertices(component, component.segments || 20, 0);
+    if (component.type === "wedge") return wedgeVertices(component);
     if (component.type === "beam") return beamVertices(component);
     if (component.type === "rollerBed") {
       const radius = Math.max(0.05, Number(component.thickness) / 2);
@@ -1382,29 +1849,54 @@
     return clamp(Math.max(design?.base.w || 20, design?.base.d || 10, design?.base.h || 8) * 0.17, 2.5, 7);
   }
 
-  function ringPoints(axis, center, radius, segments = 72) {
+  function normalizedVector(vector, fallback = [1,0,0]) {
+    const length = Math.hypot(...vector);
+    return length > 0.00001 ? vector.map((value) => value / length) : fallback;
+  }
+
+  function componentLocalAxes(component) {
+    if (component?.type === "beam") {
+      const center = componentCenter(component);
+      const start = rotatePoint3([component.x, component.y, component.z], center, ...componentRotation(component));
+      const end = rotatePoint3([component.x2, component.y2, component.z2], center, ...componentRotation(component));
+      const x = normalizedVector(vectorBetween(start, end), [1,0,0]);
+      const helper = Math.abs(x[1]) < .88 ? [0,1,0] : [0,0,1];
+      const z = normalizedVector(crossProduct(x, helper), [0,0,1]);
+      const y = normalizedVector(crossProduct(z, x), [0,1,0]);
+      return { x, y, z };
+    }
+    const rotation = component ? componentRotation(component) : [0,0,0];
+    return {
+      x: normalizedVector(rotateVector3([1,0,0], ...rotation), [1,0,0]),
+      y: normalizedVector(rotateVector3([0,1,0], ...rotation), [0,1,0]),
+      z: normalizedVector(rotateVector3([0,0,1], ...rotation), [0,0,1]),
+    };
+  }
+
+  function ringPoints(axis, center, radius, vectors, segments = 72) {
+    const first = axis === "x" ? vectors.y : vectors.x;
+    const second = axis === "x" ? vectors.z : axis === "y" ? vectors.z : vectors.y;
     return Array.from({ length: segments + 1 }, (_, index) => {
       const angle = index / segments * Math.PI * 2;
-      if (axis === "x") return [center[0], center[1] + Math.cos(angle) * radius, center[2] + Math.sin(angle) * radius];
-      if (axis === "y") return [center[0] + Math.cos(angle) * radius, center[1], center[2] + Math.sin(angle) * radius];
-      return [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius, center[2]];
+      return [
+        center[0] + (first[0] * Math.cos(angle) + second[0] * Math.sin(angle)) * radius,
+        center[1] + (first[1] * Math.cos(angle) + second[1] * Math.sin(angle)) * radius,
+        center[2] + (first[2] * Math.cos(angle) + second[2] * Math.sin(angle)) * radius,
+      ];
     });
   }
 
   function gizmoGeometry() {
+    const components = selectionComponents();
+    if (!components.length) return null;
     const component = selectedComponent();
-    if (!component) return null;
-    const center = componentCenter(component);
+    const groupedSelection = components.length > 1;
+    const center = groupedSelection ? selectionCenter(components) : componentCenter(component || components[0]);
     const length = gizmoWorldLength();
     const centerScreen = project(...center);
-    // Scaling follows the part's local axes so width, height, and depth handles
-    // stay aligned with a rotated part. Move mode keeps predictable world axes.
-    const localAxes = state.tool === "scale";
-    const rotations = componentRotation(component);
-    const vectors = {
-      x: localAxes ? rotateVector3([1, 0, 0], ...rotations) : [1, 0, 0],
-      y: localAxes ? rotateVector3([0, 1, 0], ...rotations) : [0, 1, 0],
-      z: localAxes ? rotateVector3([0, 0, 1], ...rotations) : [0, 0, 1],
+    const useLocalAxes = state.transformSpace === "local" && !groupedSelection;
+    const vectors = useLocalAxes ? componentLocalAxes(component || components[0]) : {
+      x: [1,0,0], y: [0,1,0], z: [0,0,1],
     };
     const endpoint = (axis) => [
       center[0] + vectors[axis][0] * length,
@@ -1415,15 +1907,16 @@
       center,
       length,
       centerScreen,
+      vectors,
       axes: {
         x: { world: endpoint("x"), screen: project(...endpoint("x")) },
         y: { world: endpoint("y"), screen: project(...endpoint("y")) },
         z: { world: endpoint("z"), screen: project(...endpoint("z")) },
       },
       rings: {
-        x: ringPoints("x", center, length * 0.78).map((point) => project(...point)),
-        y: ringPoints("y", center, length * 0.9).map((point) => project(...point)),
-        z: ringPoints("z", center, length * 1.02).map((point) => project(...point)),
+        x: ringPoints("x", center, length * 0.78, vectors).map((point) => project(...point)),
+        y: ringPoints("y", center, length * 0.9, vectors).map((point) => project(...point)),
+        z: ringPoints("z", center, length * 1.02, vectors).map((point) => project(...point)),
       },
     };
   }
@@ -1580,7 +2073,12 @@
     })).sort((first, second) => first.depth - second.depth || first.order - second.order);
     state.renderPrimitives.forEach(drawPrimitive);
     depthRenderer.render();
-    const selectedRendered = state.drawnComponents.find((entry) => entry.component?.id === state.componentId)?.renderedComponent || selectedComponent();
+    const selectedIds = state.selectAllParts
+      ? new Set(state.drawnComponents.map((entry) => entry.component?.id))
+      : state.selectedComponentIds;
+    const selectedRendered = state.drawnComponents
+      .filter((entry) => selectedIds.has(entry.component?.id))
+      .map((entry) => entry.renderedComponent);
     drawSelectionOverlay(selectedRendered);
     drawGizmo();
     requestAnimationFrame(draw);
@@ -1596,13 +2094,13 @@
 
   function focusSelected() {
     const design = currentDesign();
-    const component = selectedComponent();
-    if (!design || !component) return;
-    const center = componentCenter(component);
+    const components = selectionComponents();
+    if (!design || !components.length) return;
+    const center = selectionCenter(components);
     state.panX = center[0] - design.base.w / 2;
     state.panZ = center[2] - design.base.d / 2;
-    state.zoom = clamp(state.zoom * 1.2, 0.25, 4);
-    showToast(`Focused ${component.name}.`);
+    state.zoom = clamp(components.length > 1 ? 20 / Math.max(design.base.w, design.base.d, design.base.h * 1.4) : state.zoom * 1.2, 0.25, 4);
+    showToast(components.length > 1 ? `Focused ${components.length} selected parts.` : `Focused ${components[0].name}.`);
   }
 
   function panCamera(deltaX, deltaY) {
@@ -1617,6 +2115,10 @@
   }
 
   function translateComponent(component, dx, dy, dz) {
+    if (component.type === "group") {
+      (component.children || []).forEach((child) => translateComponent(child, dx, dy, dz));
+      return;
+    }
     component.x += dx;
     component.y += dy;
     component.z += dz;
@@ -1628,6 +2130,17 @@
   }
 
   function rotateComponent(component, degrees, axis = "y", original = component) {
+    if (component.type === "group") {
+      Object.assign(component, clone(original));
+      const children = component.children || [];
+      const originals = original.children || [];
+      rotateSelectionTogether(children, originals, selectionCenter(originals), degrees, axis);
+      component.rotationX = (Number(original.rotationX) || 0) + (axis === "x" ? degrees : 0);
+      component.rotationY = (Number(original.rotationY ?? original.rotation) || 0) + (axis === "y" ? degrees : 0);
+      component.rotationZ = (Number(original.rotationZ) || 0) + (axis === "z" ? degrees : 0);
+      component.rotation = component.rotationY;
+      return;
+    }
     Object.assign(component, clone(original));
     const [rotationX, rotationY, rotationZ] = componentRotation(original);
     const source = axis === "x" ? rotationX : axis === "z" ? rotationZ : rotationY;
@@ -1636,8 +2149,15 @@
 
   function scaleComponent(component, factor, axis = "center", original = component) {
     factor = clamp(factor, 0.05, 20);
+    if (component.type === "group") {
+      Object.assign(component, clone(original));
+      const children = component.children || [];
+      const originals = original.children || [];
+      scaleSelectionTogether(children, originals, selectionCenter(originals), factor, axis);
+      return;
+    }
     const uniform = axis === "center";
-    if (["box", "glassPanel"].includes(component.type)) {
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
       const center = componentCenter(original);
       const scaleX = uniform || axis === "x" ? factor : 1;
       const scaleY = uniform || axis === "y" ? factor : 1;
@@ -1659,16 +2179,19 @@
       if (uniform || axis === "y") component.thickness = Math.max(0.2, original.thickness * factor);
     } else if (component.type === "beam") {
       const center = componentCenter(original);
-      const scaleX = uniform || axis === "x" ? factor : 1;
-      const scaleY = uniform || axis === "y" ? factor : 1;
-      const scaleZ = uniform || axis === "z" ? factor : 1;
-      component.x = center[0] + (original.x - center[0]) * scaleX;
-      component.y = center[1] + (original.y - center[1]) * scaleY;
-      component.z = center[2] + (original.z - center[2]) * scaleZ;
-      component.x2 = center[0] + (original.x2 - center[0]) * scaleX;
-      component.y2 = center[1] + (original.y2 - center[1]) * scaleY;
-      component.z2 = center[2] + (original.z2 - center[2]) * scaleZ;
-      if (uniform) component.thickness = Math.max(0.2, original.thickness * factor);
+      const start = [Number(original.x), Number(original.y), Number(original.z)];
+      const end = [Number(original.x2), Number(original.y2), Number(original.z2)];
+      const direction = normalizedVector(vectorBetween(start, end), [1,0,0]);
+      const halfLength = pointDistance(start, end) / 2 * (uniform || axis === "x" ? factor : 1);
+      component.x = center[0] - direction[0] * halfLength;
+      component.y = center[1] - direction[1] * halfLength;
+      component.z = center[2] - direction[2] * halfLength;
+      component.x2 = center[0] + direction[0] * halfLength;
+      component.y2 = center[1] + direction[1] * halfLength;
+      component.z2 = center[2] + direction[2] * halfLength;
+      component.thicknessY = Math.max(0.2, Number(original.thicknessY || original.thickness) * (uniform || axis === "y" ? factor : 1));
+      component.thicknessZ = Math.max(0.2, Number(original.thicknessZ || original.thickness) * (uniform || axis === "z" ? factor : 1));
+      component.thickness = Math.max(component.thicknessY, component.thicknessZ);
     } else if (component.type === "wheel") {
       const scaleX = uniform || axis === "x" ? factor : 1;
       const scaleY = uniform || axis === "y" ? factor : 1;
@@ -1678,6 +2201,42 @@
       component.d = Math.max(0.05, original.d * scaleZ);
       component.size = Math.max(component.w, component.h);
     }
+  }
+
+  function rotateSelectionTogether(components, originals, pivot, degrees, axis) {
+    const rotationVector = axis === "x" ? [degrees, 0, 0] : axis === "z" ? [0, 0, degrees] : [0, degrees, 0];
+    components.forEach((component, index) => {
+      const original = originals[index];
+      Object.assign(component, clone(original));
+      const originalCenter = componentCenter(original);
+      const offset = [originalCenter[0] - pivot[0], originalCenter[1] - pivot[1], originalCenter[2] - pivot[2]];
+      const rotatedOffset = rotateVector3(offset, ...rotationVector);
+      const targetCenter = [pivot[0] + rotatedOffset[0], pivot[1] + rotatedOffset[1], pivot[2] + rotatedOffset[2]];
+      translateComponent(component, targetCenter[0] - originalCenter[0], targetCenter[1] - originalCenter[1], targetCenter[2] - originalCenter[2]);
+      const [rotationX, rotationY, rotationZ] = componentRotation(original);
+      const source = axis === "x" ? rotationX : axis === "z" ? rotationZ : rotationY;
+      setComponentRotation(component, axis, source + degrees);
+    });
+  }
+
+  function scaleSelectionTogether(components, originals, pivot, factor, axis) {
+    const uniform = axis === "center";
+    const scaleX = uniform || axis === "x" ? factor : 1;
+    const scaleY = uniform || axis === "y" ? factor : 1;
+    const scaleZ = uniform || axis === "z" ? factor : 1;
+    components.forEach((component, index) => {
+      const original = originals[index];
+      Object.assign(component, clone(original));
+      const originalCenter = componentCenter(original);
+      scaleComponent(component, factor, axis, original);
+      const targetCenter = [
+        pivot[0] + (originalCenter[0] - pivot[0]) * scaleX,
+        pivot[1] + (originalCenter[1] - pivot[1]) * scaleY,
+        pivot[2] + (originalCenter[2] - pivot[2]) * scaleZ,
+      ];
+      const currentCenter = componentCenter(component);
+      translateComponent(component, targetCenter[0] - currentCenter[0], targetCenter[1] - currentCenter[1], targetCenter[2] - currentCenter[2]);
+    });
   }
 
   function axisDragAmount(axis, totalDeltaX, totalDeltaY, geometry) {
@@ -1692,8 +2251,8 @@
   }
 
   function beginTransform(event, handle) {
-    const component = selectedComponent();
-    if (!component) return false;
+    const components = selectionComponents();
+    if (!components.length) return false;
     const point = canvasPoint(event);
     const geometry = gizmoGeometry();
     const [worldX, worldZ] = worldFromScreen(event);
@@ -1710,7 +2269,10 @@
       startAngle: Math.atan2(point[1] - geometry.centerScreen[1], point[0] - geometry.centerScreen[0]),
       startDistance: Math.max(10, Math.hypot(point[0] - geometry.centerScreen[0], point[1] - geometry.centerScreen[1])),
       geometry,
-      componentBefore: clone(component),
+      selectionAll: components.length > 1,
+      targetIds: components.map((component) => component.id),
+      componentsBefore: components.map(clone),
+      pivot: components.length > 1 ? selectionCenter(components) : componentCenter(components[0]),
       historyBefore: snapshot(),
     };
     return true;
@@ -1718,27 +2280,38 @@
 
   function applyTransform(event) {
     const drag = state.drag;
-    const component = selectedComponent();
-    if (!drag || drag.kind !== "transform" || !component) return;
-    Object.assign(component, clone(drag.componentBefore));
+    if (!drag || drag.kind !== "transform") return;
+    const design = currentDesign();
+    const targets = drag.targetIds.map((id) => design?.components.find((component) => component.id === id)).filter(Boolean);
+    if (!targets.length) return;
+    targets.forEach((component, index) => Object.assign(component, clone(drag.componentsBefore[index])));
     const totalDeltaX = event.clientX - drag.startClientX;
     const totalDeltaY = event.clientY - drag.startClientY;
 
     if (drag.tool === "move") {
+      let dx = 0;
+      let dy = 0;
+      let dz = 0;
       if (drag.handle === "center") {
         const [worldX, worldZ] = worldFromScreen(event);
-        const dx = snapValue(drag.componentBefore.x + worldX - drag.startWorldX) - drag.componentBefore.x;
-        const dz = snapValue(drag.componentBefore.z + worldZ - drag.startWorldZ) - drag.componentBefore.z;
-        translateComponent(component, dx, 0, dz);
+        dx = snapValue(worldX - drag.startWorldX);
+        dz = snapValue(worldZ - drag.startWorldZ);
       } else {
         const amount = axisDragAmount(drag.handle, totalDeltaX, totalDeltaY, drag.geometry);
         const delta = snapValue(amount);
-        translateComponent(component, drag.handle === "x" ? delta : 0, drag.handle === "y" ? delta : 0, drag.handle === "z" ? delta : 0);
+        const vector = drag.geometry.vectors?.[drag.handle] || {
+          x:[1,0,0], y:[0,1,0], z:[0,0,1],
+        }[drag.handle];
+        dx = vector[0] * delta;
+        dy = vector[1] * delta;
+        dz = vector[2] * delta;
       }
+      targets.forEach((component) => translateComponent(component, dx, dy, dz));
     } else if (drag.tool === "rotate") {
       let degrees = (totalDeltaX * drag.rotationTangent[0] + totalDeltaY * drag.rotationTangent[1]) * 0.7;
       if (state.snapEnabled) degrees = Math.round(degrees / 5) * 5;
-      rotateComponent(component, degrees, drag.handle, drag.componentBefore);
+      if (drag.selectionAll) rotateSelectionTogether(targets, drag.componentsBefore, drag.pivot, degrees, drag.handle);
+      else rotateComponent(targets[0], degrees, drag.handle, drag.componentsBefore[0]);
     } else if (drag.tool === "scale") {
       let factor;
       if (drag.handle === "center") {
@@ -1747,25 +2320,38 @@
         factor = distance / drag.startDistance;
       } else {
         const amount = axisDragAmount(drag.handle, totalDeltaX, totalDeltaY, drag.geometry);
-        const size = drag.handle === "x"
-          ? (drag.componentBefore.w || Math.abs((drag.componentBefore.x2 || drag.componentBefore.x) - drag.componentBefore.x) || 1)
-          : drag.handle === "y"
-            ? (drag.componentBefore.h || Math.abs((drag.componentBefore.y2 || drag.componentBefore.y) - drag.componentBefore.y) || drag.componentBefore.size || 1)
-            : (drag.componentBefore.d || Math.abs((drag.componentBefore.z2 || drag.componentBefore.z) - drag.componentBefore.z) || 1);
-        factor = 1 + amount / Math.max(0.1, size);
+        if (drag.selectionAll) {
+          const bounds = selectionBounds(drag.componentsBefore);
+          const size = drag.handle === "x" ? bounds.maxX - bounds.minX : drag.handle === "y" ? bounds.maxY - bounds.minY : bounds.maxZ - bounds.minZ;
+          factor = 1 + amount / Math.max(0.1, size);
+        } else {
+          const original = drag.componentsBefore[0];
+          const beamLength = original.type === "beam"
+            ? pointDistance([original.x, original.y, original.z], [original.x2, original.y2, original.z2])
+            : 0;
+          const size = drag.handle === "x"
+            ? (original.type === "beam" ? beamLength : original.w || 1)
+            : drag.handle === "y"
+              ? (original.type === "beam" ? Number(original.thicknessY || original.thickness) * .16 : original.h || original.size || 1)
+              : (original.type === "beam" ? Number(original.thicknessZ || original.thickness) * .16 : original.d || 1);
+          factor = 1 + amount / Math.max(0.1, size);
+        }
       }
-      if (state.snapEnabled) factor = Math.round(factor / 0.05) * 0.05;
-      scaleComponent(component, factor, drag.handle, drag.componentBefore);
+      factor = clamp(factor, 0.05, 20);
+      if (state.snapEnabled) factor = Math.max(0.05, Math.round(factor / 0.05) * 0.05);
+      if (drag.selectionAll) scaleSelectionTogether(targets, drag.componentsBefore, drag.pivot, factor, drag.handle);
+      else scaleComponent(targets[0], factor, drag.handle, drag.componentsBefore[0]);
     }
     updateComponentProperties();
   }
 
   function finishPointer() {
     if (state.drag?.kind === "transform") {
-      const component = selectedComponent();
-      if (component && JSON.stringify(component) !== JSON.stringify(state.drag.componentBefore)) {
+      const design = currentDesign();
+      const current = state.drag.targetIds.map((id) => design?.components.find((component) => component.id === id)).filter(Boolean);
+      if (JSON.stringify(current) !== JSON.stringify(state.drag.componentsBefore)) {
         pushHistory(state.drag.historyBefore);
-        commit(`${TOOL_LABELS[state.drag.tool][0]} applied.`);
+        commit(`${TOOL_LABELS[state.drag.tool][0]} applied to ${state.drag.selectionAll ? "the entire machine" : "the selected part"}.`);
       }
     }
     state.dragging = false;
@@ -1779,7 +2365,9 @@
     state.dragging = true;
 
     const orbitRequested = event.button === 2 || event.altKey;
-    const panRequested = event.button === 1 || event.shiftKey || state.tool === "pan";
+    const initialHit = event.button === 0 ? componentAt(event) : null;
+    const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
+    const panRequested = event.button === 1 || state.tool === "pan" || (event.shiftKey && !initialHit);
 
     if (orbitRequested) {
       state.drag = { kind: "orbit" };
@@ -1790,17 +2378,17 @@
       // geometry so a handle remains draggable even when it is visually
       // located inside another solid component.
       const overlayHandle = ["move", "rotate", "scale"].includes(state.tool) ? gizmoHit(event) : null;
-      if (overlayHandle && selectedComponent()) {
+      if (overlayHandle && selectionComponents().length) {
         beginTransform(event, overlayHandle);
       } else {
-        const hit = componentAt(event);
-        if (hit && hit.id !== state.componentId) selectComponent(hit.id, true);
+        const hit = initialHit || componentAt(event);
+        if (hit && (additiveSelection || !state.selectedComponentIds.has(hit.id))) selectComponent(hit.id, true, additiveSelection);
         const selected = selectedComponent();
-        if (selected && ["move", "rotate", "scale"].includes(state.tool) && hit?.id === selected.id) {
+        if (selectionComponents().length && ["move", "rotate", "scale"].includes(state.tool) && hit && state.selectedComponentIds.has(hit.id)) {
           beginTransform(event, { axis: state.tool === "rotate" ? "y" : "center", tangent: [1, 0] });
         } else {
         state.drag = { kind: "select", startX: event.clientX, startY: event.clientY };
-          if (!hit && state.tool === "select") selectComponent(null);
+          if (!hit && state.tool === "select" && !additiveSelection) selectComponent(null);
         }
       }
     }
@@ -1873,6 +2461,17 @@
   document.getElementById("snap-step")?.addEventListener("change", (event) => {
     state.snapStep = Math.max(0.01, Number(event.target.value) || 0.5);
   });
+  document.querySelectorAll("[data-transform-space]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.transformSpace = button.dataset.transformSpace === "world" ? "world" : "local";
+      document.querySelectorAll("[data-transform-space]").forEach((candidate) => {
+        const active = candidate.dataset.transformSpace === state.transformSpace;
+        candidate.classList.toggle("active", active);
+        candidate.setAttribute("aria-pressed", String(active));
+      });
+      showToast(state.transformSpace === "local" ? "Local transforms follow the selected part." : "World transforms follow the plant axes.");
+    });
+  });
   document.getElementById("preview-design-animations")?.addEventListener("click", (event) => {
     state.previewAnimations = !state.previewAnimations;
     event.currentTarget.classList.toggle("active", state.previewAnimations);
@@ -1882,6 +2481,9 @@
 
   document.getElementById("design-search")?.addEventListener("input", updateDesignList);
   document.getElementById("component-search")?.addEventListener("input", updateComponentList);
+  document.getElementById("select-all-components")?.addEventListener("click", selectAllComponents);
+  document.getElementById("merge-components")?.addEventListener("click", mergeSelectedComponents);
+  document.getElementById("ungroup-component")?.addEventListener("click", ungroupSelectedComponent);
   document.getElementById("new-design")?.addEventListener("click", createDesign);
   document.getElementById("duplicate-design")?.addEventListener("click", duplicateDesign);
   document.getElementById("reset-design")?.addEventListener("click", resetDesign);
@@ -1913,19 +2515,26 @@
     });
   });
 
+  function addComponentOfType(type) {
+    const design = currentDesign();
+    if (!design || !COMPONENT_TYPES.includes(type) || type === "group") return;
+    pushHistory();
+    const component = newComponent(type);
+    design.components.push(component);
+    state.selectAllParts = false;
+    state.componentId = component.id;
+    state.selectedComponentIds = new Set([component.id]);
+    state.browserTab = "parts";
+    state.inspectorTab = "object";
+    setTool("move");
+    commit(`${component.name} added.`);
+  }
+
   document.querySelectorAll("[data-add-component]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const design = currentDesign();
-      if (!design) return;
-      pushHistory();
-      const component = newComponent(button.dataset.addComponent);
-      design.components.push(component);
-      state.componentId = component.id;
-      state.browserTab = "parts";
-      state.inspectorTab = "object";
-      setTool("move");
-      commit(`${component.name} added.`);
-    });
+    button.addEventListener("click", () => addComponentOfType(button.dataset.addComponent));
+  });
+  document.getElementById("add-component-button")?.addEventListener("click", () => {
+    addComponentOfType(document.getElementById("add-component-type")?.value || "box");
   });
 
   document.querySelectorAll("[data-component-field]").forEach((input) => {
@@ -1939,22 +2548,55 @@
           const replacement = normalizeComponent({ ...component, type: input.value, id: component.id, name: component.name });
           const index = currentDesign().components.findIndex((item) => item.id === component.id);
           currentDesign().components[index] = replacement;
-        } else if (field === "color") component.color = validColor(input.value, component.color);
-        else if (["animationType", "animationAxis"].includes(field)) component[field] = input.value;
+        } else if (field === "color") {
+          component.color = validColor(input.value, component.color);
+          if (component.type === "group") {
+            const recolor = (item) => {
+              item.color = component.color;
+              if (item.type === "group") (item.children || []).forEach(recolor);
+            };
+            (component.children || []).forEach(recolor);
+          }
+        } else if (["animationType", "animationAxis"].includes(field)) component[field] = input.value;
         else component.name = input.value.trim() || component.name;
       } else {
         const number = Number(input.value);
         if (!Number.isFinite(number)) return;
-        if (["w", "h", "d", "size", "thickness"].includes(field)) {
+        if (["w", "h", "d", "size", "thickness", "thicknessY", "thicknessZ"].includes(field)) {
           component[field] = Math.max(field === "d" && component.type === "wheel" ? 0.05 : 0.02, number);
+          if (component.type === "beam" && ["thicknessY", "thicknessZ"].includes(field)) component.thickness = Math.max(component.thicknessY, component.thicknessZ);
           if (component.type === "wheel" && ["w", "h"].includes(field)) component.size = Math.max(component.w, component.h);
         }
         else if (field === "count") component.count = Math.max(2, Math.round(number));
+        else if (field === "segments") component.segments = Math.max(8, Math.min(48, Math.round(number)));
+        else if (field === "length" && component.type === "beam") {
+          const center = componentCenter(component);
+          const direction = normalizedVector(vectorBetween([component.x, component.y, component.z], [component.x2, component.y2, component.z2]), [1,0,0]);
+          const half = Math.max(.01, number) / 2;
+          component.x = center[0] - direction[0] * half;
+          component.y = center[1] - direction[1] * half;
+          component.z = center[2] - direction[2] * half;
+          component.x2 = center[0] + direction[0] * half;
+          component.y2 = center[1] + direction[1] * half;
+          component.z2 = center[2] + direction[2] * half;
+        }
         else if (field === "opacity") component.opacity = clamp(number, 0.05, 1);
-        else if (field === "animationSpeed") component.animationSpeed = Math.max(0, number);
+        else if (["animationSpeed", "animationPauseSeconds"].includes(field)) component[field] = Math.max(0, number);
+        else if (component.type === "group" && ["x", "y", "z"].includes(field)) {
+          const center = componentCenter(component);
+          const axisIndex = { x: 0, y: 1, z: 2 }[field];
+          const delta = number - center[axisIndex];
+          translateComponent(component, field === "x" ? delta : 0, field === "y" ? delta : 0, field === "z" ? delta : 0);
+        }
         else if (["rotationX", "rotationY", "rotationZ"].includes(field)) {
-          component[field] = number;
-          if (field === "rotationY") component.rotation = number;
+          if (component.type === "group") {
+            const axis = field.at(-1).toLowerCase();
+            const current = Number(component[field]) || 0;
+            rotateComponent(component, number - current, axis, clone(component));
+          } else {
+            component[field] = number;
+            if (field === "rotationY") component.rotation = number;
+          }
         } else component[field] = number;
       }
       commit();
@@ -1969,6 +2611,16 @@
       component[input.dataset.componentCheck] = input.checked;
       commit();
     });
+  });
+
+  document.getElementById("group-motion-driver")?.addEventListener("change", (event) => {
+    const component = selectedComponent();
+    if (component?.type !== "group") return;
+    const child = (component.children || []).find((item) => item.id === event.target.value);
+    if (!child) return;
+    pushHistory();
+    component.motionDriverId = child.id;
+    commit(`${child.name} now carries the merged assembly. Other child animations remain relative to it.`);
   });
 
   document.getElementById("center-component")?.addEventListener("click", () => {
@@ -1986,24 +2638,26 @@
   }
 
   function rotateSelectedBy(degrees, axis = activeRotationAxis()) {
-    const component = selectedComponent();
-    if (!component) return;
+    const components = selectionComponents();
+    if (!components.length) return;
     pushHistory();
-    const before = clone(component);
-    rotateComponent(component, degrees, axis, before);
-    commit(`Rotated ${axis.toUpperCase()} ${degrees > 0 ? "+" : ""}${degrees}°.`);
+    if (components.length > 1) rotateSelectionTogether(components, components.map(clone), selectionCenter(components), degrees, axis);
+    else rotateComponent(components[0], degrees, axis, clone(components[0]));
+    commit(`Rotated ${components.length > 1 ? `${components.length} selected parts` : axis.toUpperCase()} ${degrees > 0 ? "+" : ""}${degrees}°.`);
   }
   document.getElementById("rotate-negative")?.addEventListener("click", () => rotateSelectedBy(-90));
   document.getElementById("rotate-positive")?.addEventListener("click", () => rotateSelectedBy(90));
   document.getElementById("reset-rotation")?.addEventListener("click", () => {
-    const component = selectedComponent();
-    if (!component) return;
+    const components = selectionComponents();
+    if (!components.length) return;
     pushHistory();
-    component.rotationX = 0;
-    component.rotationY = 0;
-    component.rotationZ = 0;
-    component.rotation = 0;
-    commit("All-axis rotation reset.");
+    components.forEach((component) => {
+      component.rotationX = 0;
+      component.rotationY = 0;
+      component.rotationZ = 0;
+      component.rotation = 0;
+    });
+    commit(components.length > 1 ? "Selected-part rotations reset." : "All-axis rotation reset.");
   });
 
   function componentWorldBounds(component) {
@@ -2077,7 +2731,7 @@
   document.getElementById("export-design")?.addEventListener("click", () => {
     const design = currentDesign();
     if (!design) return;
-    const blob = new Blob([JSON.stringify({ version: 4, exportedAt: new Date().toISOString(), design }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 6, exportedAt: new Date().toISOString(), design }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -2110,11 +2764,11 @@
   });
 
   function nudgeSelected(dx, dy, dz) {
-    const component = selectedComponent();
-    if (!component) return;
+    const components = selectionComponents();
+    if (!components.length) return;
     pushHistory();
-    translateComponent(component, dx, dy, dz);
-    commit();
+    components.forEach((component) => translateComponent(component, dx, dy, dz));
+    commit(components.length > 1 ? `${components.length} parts nudged together.` : undefined);
   }
 
   window.addEventListener("keydown", (event) => {
@@ -2122,6 +2776,7 @@
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
     if (modifier && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
+    if (!typing && modifier && event.key.toLowerCase() === "a") { event.preventDefault(); selectAllComponents(); return; }
     if (!typing && modifier && event.key.toLowerCase() === "d") { event.preventDefault(); duplicateSelectedComponent(); return; }
     if (typing) return;
 
@@ -2147,7 +2802,9 @@
 
   if (!state.designId) createDesign();
   else {
+    state.selectAllParts = false;
     state.componentId = currentDesign()?.components[0]?.id || null;
+    state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
     fitView();
     updateInterface();
   }

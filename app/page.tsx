@@ -14,7 +14,7 @@ export default function Home() {
             <a href="/machine-studio">Machine Design Studio</a>
           </nav>
           <p className="source-note">
-            Model Studio <strong>v0.9.0</strong> · Grounded in{" "}
+            Model Studio <strong>v0.10.1</strong> · Grounded in{" "}
             <strong>Monroe Archs w Updates 1-23-25 (002).dwg</strong>
           </p>
         </div>

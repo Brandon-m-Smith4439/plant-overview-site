@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Build editable component-based machine models for the Monroe glass plant.">
-  <title>Machine Design Studio · v0.9.0</title>
+  <title>Machine Design Studio · v0.10.1</title>
   <link rel="stylesheet" href="../app/globals.css">
 </head>
 <body>
@@ -12,10 +12,8 @@
     <header class="studio-topbar">
       <div class="studio-brand">
         <a class="studio-back-link" href="preview.html" aria-label="Return to plant layout">←</a>
-        <div>
-          <p>Monroe Glass Plant</p>
-          <h1>Machine Design Studio</h1>
-        </div>
+        <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
+        <span class="studio-version-badge">v0.10.1</span>
       </div>
       <div class="studio-top-actions" role="toolbar" aria-label="Design commands">
         <span id="save-state" class="studio-save-state">Auto-saved</span>
@@ -37,21 +35,21 @@
 
         <section data-browser-panel="designs">
           <div class="studio-panel-heading"><p>Design library</p><strong id="design-count">0 designs</strong></div>
-          <label class="studio-field studio-search-field">Search designs<input id="design-search" type="search" placeholder="Search designs"></label>
+          <label class="studio-field studio-search-field">Search<input id="design-search" type="search" placeholder="Machine name or type"></label>
           <div id="design-list" class="design-list" aria-label="Available machine designs"></div>
-          <div class="studio-button-grid">
-            <button id="new-design" type="button">New</button>
-            <button id="duplicate-design" type="button">Duplicate</button>
-            <button id="reset-design" type="button">Reset preset</button>
-            <button id="delete-design" type="button">Delete custom</button>
-          </div>
-          <div class="studio-button-grid compact">
-            <button id="export-design" type="button">Export JSON</button>
-            <button id="import-design" type="button">Import JSON</button>
-            <input id="import-design-file" type="file" accept="application/json,.json" hidden>
-          </div>
-          <fieldset class="assignment-panel">
-            <legend>Use in plant layout</legend>
+          <details class="studio-collapsible">
+            <summary>Design actions</summary>
+            <div class="studio-button-grid">
+              <button id="new-design" type="button">New</button><button id="duplicate-design" type="button">Duplicate</button>
+              <button id="reset-design" type="button">Reset preset</button><button id="delete-design" type="button">Delete custom</button>
+            </div>
+            <div class="studio-button-grid compact">
+              <button id="export-design" type="button">Export JSON</button><button id="import-design" type="button">Import JSON</button>
+              <input id="import-design-file" type="file" accept="application/json,.json" hidden>
+            </div>
+          </details>
+          <details class="studio-collapsible assignment-panel">
+            <summary>Use in plant layout</summary>
             <label class="studio-field">Plant object<select id="machine-assignment"><option value="">Choose a machine…</option></select></label>
             <div class="assignment-actions">
               <button id="apply-machine" type="button" class="primary">Apply to object</button>
@@ -59,27 +57,45 @@
               <button id="clear-machine-design" type="button">Use built-in model</button>
             </div>
             <p id="assignment-status" class="studio-help">Assignments save directly to the plant layout stored in this browser.</p>
-          </fieldset>
+          </details>
         </section>
 
         <section data-browser-panel="parts" hidden>
-          <div class="studio-panel-heading"><p>Object tree</p><strong id="component-count">0 parts</strong></div>
-          <label class="studio-field studio-search-field">Search parts<input id="component-search" type="search" placeholder="Search components"></label>
+          <div class="studio-panel-heading"><p>Machine parts</p><strong id="component-count">0 parts</strong></div>
+          <div class="parts-quick-actions">
+            <button id="select-all-components" type="button" title="Select every part (Ctrl+A)">Select all</button>
+            <button id="merge-components" type="button" disabled>Merge</button>
+            <button id="ungroup-component" type="button" disabled>Separate</button>
+          </div>
+          <label class="studio-field studio-search-field">Search<input id="component-search" type="search" placeholder="Part name or shape"></label>
           <div id="component-list" class="component-list" aria-label="Machine design components"></div>
-          <div class="component-add-panel">
-            <p>Add primitive</p>
-            <div>
+          <section class="component-add-panel">
+            <div class="studio-panel-heading"><p>Add shape</p><span>Placed near center</span></div>
+            <div class="shape-quick-grid" aria-label="Common shapes">
               <button type="button" data-add-component="box"><span>▣</span>Box</button>
-              <button type="button" data-add-component="glassPanel"><span>◇</span>Glass</button>
+              <button type="button" data-add-component="cylinder"><span>●</span>Cylinder</button>
               <button type="button" data-add-component="beam"><span>╱</span>Beam</button>
-              <button type="button" data-add-component="rollerBed"><span>≡</span>Rollers</button>
-              <button type="button" data-add-component="wheel"><span>◉</span>Wheel</button>
+              <button type="button" data-add-component="glassPanel"><span>◇</span>Glass</button>
             </div>
-          </div>
-          <div class="parts-order-actions">
-            <button id="move-component-up" type="button">Move up</button>
-            <button id="move-component-down" type="button">Move down</button>
-          </div>
+            <div class="shape-picker-row">
+              <select id="add-component-type" aria-label="Additional shape">
+                <optgroup label="Solid shapes">
+                  <option value="sphere">Sphere / ellipsoid</option>
+                  <option value="cone">Cone / hopper</option>
+                  <option value="wedge">Wedge / ramp</option>
+                </optgroup>
+                <optgroup label="Machine parts">
+                  <option value="rollerBed">Roller bed</option>
+                  <option value="wheel">Wheel / caster</option>
+                </optgroup>
+              </select>
+              <button id="add-component-button" type="button" class="primary">Add</button>
+            </div>
+          </section>
+          <details class="studio-collapsible compact-actions">
+            <summary>Part order</summary>
+            <div class="parts-order-actions"><button id="move-component-up" type="button">Move up</button><button id="move-component-down" type="button">Move down</button></div>
+          </details>
         </section>
       </aside>
 
@@ -92,10 +108,16 @@
             <button type="button" data-design-view="top" title="Top view (3)">Top</button>
             <button type="button" data-design-view="fit" title="Fit model (F)">Fit</button>
           </div>
-          <div class="snap-controls">
-            <button id="preview-design-animations" type="button" class="active">Pause animations</button>
-            <label class="studio-switch"><input id="snap-enabled" type="checkbox" checked><span>Snap</span></label>
-            <label>Step<select id="snap-step"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5" selected>0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+          <div class="viewport-settings">
+            <div class="transform-space-toggle" role="group" aria-label="Transform orientation">
+              <button type="button" data-transform-space="local" class="active" aria-pressed="true" title="Follow the selected part">Local</button>
+              <button type="button" data-transform-space="world" aria-pressed="false" title="Follow the design grid">World</button>
+            </div>
+            <div class="snap-controls">
+              <button id="preview-design-animations" type="button" class="active">Pause animation</button>
+              <label class="studio-switch"><input id="snap-enabled" type="checkbox" checked><span>Snap</span></label>
+              <label>Step<select id="snap-step"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5" selected>0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+            </div>
           </div>
         </div>
 
@@ -108,121 +130,67 @@
         </div>
 
         <canvas id="machine-design-canvas" aria-label="Interactive 3D preview of the selected machine design"></canvas>
-
-        <div class="orientation-cube" aria-label="Quick camera orientation">
-          <button type="button" data-design-view="top">TOP</button>
-          <div><button type="button" data-design-view="front">FRONT</button><button type="button" data-design-view="side">RIGHT</button></div>
-        </div>
-        <div class="viewport-statusbar">
-          <span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span>
-          <span>Right-drag orbit · Middle-drag pan · Wheel zoom · Double-click focus</span>
-        </div>
+        <div class="orientation-cube" aria-label="Quick camera orientation"><button type="button" data-design-view="top">TOP</button><div><button type="button" data-design-view="front">FRONT</button><button type="button" data-design-view="side">RIGHT</button></div></div>
+        <div class="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Right-drag orbit · Middle-drag pan · Wheel zoom · Double-click focus</span></div>
         <div id="design-toast" class="design-toast" role="status" aria-live="polite"></div>
       </section>
 
       <aside class="studio-inspector-panel">
         <div class="studio-tabs inspector-tabs" role="tablist" aria-label="Inspector">
-          <button type="button" role="tab" data-inspector-tab="object" class="active" aria-selected="true">Object</button>
-          <button type="button" role="tab" data-inspector-tab="design" aria-selected="false">Design</button>
+          <button type="button" role="tab" data-inspector-tab="object" class="active" aria-selected="true">Part</button>
+          <button type="button" role="tab" data-inspector-tab="design" aria-selected="false">Machine</button>
         </div>
-
         <section data-inspector-panel="object">
-          <div class="studio-panel-heading"><p>Selected component</p><span id="selected-component-type">Nothing selected</span></div>
-          <div id="empty-component-state" class="inspector-empty">
-            <strong>Select a part in the viewport or Parts list.</strong>
-            <p>Use Move, Rotate, or Scale after selecting a component. Transform controls always stay above the model. Colored handles match the X, Y, and Z axes.</p>
-          </div>
+          <div class="studio-panel-heading"><p>Selection</p><span id="selected-component-type">Nothing selected</span></div>
+          <div id="empty-component-state" class="inspector-empty"><strong>Select a part in the viewport or Parts list.</strong><p>Choose Move, Rotate, or Scale. Local mode follows the selected part; World mode follows the design grid.</p></div>
           <section id="component-properties" class="component-properties" hidden>
-            <label class="studio-field">Component name<input data-component-field="name" type="text"></label>
-            <div class="inspector-row two">
-              <label class="studio-field">Type<select data-component-field="type"><option value="box">Box</option><option value="glassPanel">Glass panel</option><option value="beam">Beam</option><option value="rollerBed">Roller bed</option><option value="wheel">Wheel</option></select></label>
-              <label class="studio-field">Color<input data-component-field="color" type="color"></label>
-            </div>
-            <div class="visibility-row">
-              <label class="studio-switch"><input data-component-check="visible" type="checkbox"><span>Visible</span></label>
-              <label class="studio-field compact-field">Opacity<input data-component-field="opacity" type="number" min="0.05" max="1" step="0.05"></label>
+            <div class="inspector-primary-card">
+              <label class="studio-field">Part name<input data-component-field="name" type="text"></label>
+              <div class="inspector-row two"><label class="studio-field">Shape<select data-component-field="type"><option value="box">Box</option><option value="cylinder">Cylinder</option><option value="sphere">Sphere</option><option value="cone">Cone</option><option value="wedge">Wedge</option><option value="glassPanel">Glass panel</option><option value="beam">Beam</option><option value="rollerBed">Roller bed</option><option value="wheel">Wheel</option><option value="group">Merged item</option></select></label><label class="studio-field">Color<input data-component-field="color" type="color"></label></div>
+              <div class="visibility-row"><label class="studio-switch"><input data-component-check="visible" type="checkbox"><span>Visible</span></label><label class="studio-field compact-field">Opacity<input data-component-field="opacity" type="number" min="0.05" max="1" step="0.05"></label></div>
             </div>
 
-            <fieldset class="transform-section">
-              <legend>Position</legend>
-              <div class="axis-fields">
-                <label class="axis-x-field">X<input data-component-field="x" type="number" step="0.1"></label>
-                <label class="axis-y-field">Y<input data-component-field="y" type="number" step="0.1"></label>
-                <label class="axis-z-field">Z<input data-component-field="z" type="number" step="0.1"></label>
-              </div>
-              <button id="center-component" type="button" class="full-width-button">Center on design base</button>
-            </fieldset>
+            <details class="transform-section" open><summary>Transform</summary>
+              <div class="transform-subheading">Position</div><div class="axis-fields"><label class="axis-x-field">X<input data-component-field="x" type="number" step="0.1"></label><label class="axis-y-field">Y<input data-component-field="y" type="number" step="0.1"></label><label class="axis-z-field">Z<input data-component-field="z" type="number" step="0.1"></label></div>
+              <div class="transform-subheading">Rotation</div><div class="axis-fields rotation-axis-fields"><label class="axis-x-field">X<input data-component-field="rotationX" type="number" step="1"></label><label class="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1"></label><label class="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1"></label></div>
+              <div class="rotation-row rotation-actions"><label class="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis"><option value="x">X</option><option value="y" selected>Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">−90°</button><button id="rotate-positive" type="button">+90°</button><button id="reset-rotation" type="button">Reset</button></div>
+              <button id="center-component" type="button" class="full-width-button">Center on machine</button>
+            </details>
 
-            <fieldset class="transform-section">
-              <legend>Rotation</legend>
-              <div class="axis-fields rotation-axis-fields">
-                <label class="axis-x-field">X<input data-component-field="rotationX" type="number" step="1"></label>
-                <label class="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1"></label>
-                <label class="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1"></label>
-              </div>
-              <div class="rotation-row rotation-actions">
-                <label class="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis"><option value="x">X axis</option><option value="y" selected>Y axis</option><option value="z">Z axis</option></select></label>
-                <button id="rotate-negative" type="button">−90°</button>
-                <button id="rotate-positive" type="button">+90°</button>
-                <button id="reset-rotation" type="button">Reset all</button>
-              </div>
-              <p class="transform-help">Use the red, green, and blue rings in Rotate mode for X, Y, and Z rotation.</p>
-            </fieldset>
-
-            <fieldset class="transform-section">
-              <legend>Size</legend>
+            <details class="transform-section" open><summary>Dimensions</summary>
               <div class="axis-fields size-fields">
-                <label data-for-component="box glassPanel rollerBed wheel" class="axis-x-field">Width<input data-component-field="w" type="number" min="0.02" step="0.1"></label>
-                <label data-for-component="box glassPanel wheel" class="axis-y-field">Height<input data-component-field="h" type="number" min="0.02" step="0.1"></label>
-                <label data-for-component="box glassPanel rollerBed wheel" class="axis-z-field">Depth<input data-component-field="d" type="number" min="0.02" step="0.1"></label>
-                <label data-for-component="beam rollerBed">Thickness<input data-component-field="thickness" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel" class="axis-x-field">Width<input data-component-field="w" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="box cylinder sphere cone wedge glassPanel wheel" class="axis-y-field">Height<input data-component-field="h" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel" class="axis-z-field">Depth<input data-component-field="d" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="beam" class="axis-x-field">Beam length<input data-component-field="length" type="number" min="0.02" step="0.1"></label><label data-for-component="beam" class="axis-y-field">Beam height<input data-component-field="thicknessY" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="beam" class="axis-z-field">Beam width<input data-component-field="thicknessZ" type="number" min="0.02" step="0.1"></label>
+                <label data-for-component="rollerBed">Roller diameter<input data-component-field="thickness" type="number" min="0.02" step="0.1"></label>
                 <label data-for-component="rollerBed">Roller count<input data-component-field="count" type="number" min="2" step="1"></label>
+                <label data-for-component="cylinder sphere cone">Smoothness<input data-component-field="segments" type="number" min="8" max="48" step="1"></label>
               </div>
-              <p class="transform-help scale-help"><strong>Scale tool:</strong> drag a colored square to resize only that local axis. Wheels now have independent width, height, and axle-depth dimensions. Drag the orange center handle to scale every axis together.</p>
-            </fieldset>
+              <p class="transform-help"><strong>Local scaling:</strong> X changes length/width, Y changes height, and Z changes depth. Beam X changes its length while Y and Z change its rectangular cross-section.</p>
+            </details>
 
-            <fieldset class="transform-section animation-section">
-              <legend>Part animation</legend>
+            <details class="transform-section animation-section"><summary>Animation</summary>
               <label class="studio-switch"><input data-component-check="animationEnabled" type="checkbox"><span>Animation enabled</span></label>
-              <div class="inspector-row two">
-                <label class="studio-field">Motion<select data-component-field="animationType">
-                  <option value="none">None</option><option value="oscillate">Back and forth</option><option value="loop">Continuous loop</option><option value="spin">Continuous rotation</option><option value="bob">Bob vertically</option><option value="pulse">Pulse size</option><option value="blink">Blink</option>
-                </select></label>
-                <label class="studio-field">Axis<select data-component-field="animationAxis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option><option value="all">All</option></select></label>
+              <div class="inspector-row two"><label class="studio-field">Motion<select data-component-field="animationType"><option value="none">None</option><option value="oscillate">Back and forth</option><option value="loop">Continuous loop</option><option value="spin">Continuous rotation</option><option value="bob">Bob vertically</option><option value="pulse">Pulse size</option><option value="blink">Blink</option></select></label><label class="studio-field">Axis<select data-component-field="animationAxis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option><option value="all">All</option></select></label></div>
+              <div class="axis-fields animation-fields"><label>Amount<input data-component-field="animationAmount" type="number" step="0.5"></label><label>Speed<input data-component-field="animationSpeed" type="number" min="0" step="0.01"></label><label>Pause sec<input data-component-field="animationPauseSeconds" type="number" min="0" step="0.1"></label><label>Phase °<input data-component-field="animationPhase" type="number" step="5"></label></div>
+              <div data-for-component="group" class="group-motion-driver">
+                <label class="studio-field">Attachment parent<select id="group-motion-driver"></select></label>
+                <p>The selected child drives the merged assembly. Every other child inherits that motion while continuing to play its own animation.</p>
               </div>
-              <div class="axis-fields animation-fields">
-                <label>Amount<input data-component-field="animationAmount" type="number" step="0.5"></label>
-                <label>Speed<input data-component-field="animationSpeed" type="number" min="0" step="0.01"></label>
-                <label>Phase °<input data-component-field="animationPhase" type="number" step="5"></label>
-              </div>
-              <p class="transform-help">Back-and-forth and loop amounts use design units. Spin uses degrees per cycle. Pulse uses a percentage. Phase offsets related parts.</p>
-            </fieldset>
+            </details>
 
-            <fieldset class="transform-section" data-for-component="beam">
-              <legend>Beam endpoint</legend>
-              <div class="axis-fields">
-                <label class="axis-x-field">End X<input data-component-field="x2" type="number" step="0.1"></label>
-                <label class="axis-y-field">End Y<input data-component-field="y2" type="number" step="0.1"></label>
-                <label class="axis-z-field">End Z<input data-component-field="z2" type="number" step="0.1"></label>
-              </div>
-            </fieldset>
+            <details class="transform-section" data-for-component="beam"><summary>Beam endpoints</summary><div class="axis-fields"><label class="axis-x-field">End X<input data-component-field="x2" type="number" step="0.1"></label><label class="axis-y-field">End Y<input data-component-field="y2" type="number" step="0.1"></label><label class="axis-z-field">End Z<input data-component-field="z2" type="number" step="0.1"></label></div></details>
           </section>
         </section>
 
         <section data-inspector-panel="design" hidden>
-          <div class="studio-panel-heading"><p>Design properties</p><span>Reusable preset</span></div>
+          <div class="studio-panel-heading"><p>Machine properties</p><span>Reusable preset</span></div>
           <div class="design-properties-grid">
             <label class="studio-field wide">Design name<input id="design-name" type="text"></label>
             <label class="studio-field wide">Machine type<input id="design-machine-type" type="text"></label>
-            <fieldset class="transform-section wide">
-              <legend>Design envelope</legend>
-              <div class="axis-fields size-fields">
-                <label class="axis-x-field">Width<input id="design-base-w" type="number" min="0.5" step="0.5"></label>
-                <label class="axis-z-field">Depth<input id="design-base-d" type="number" min="0.5" step="0.5"></label>
-                <label class="axis-y-field">Height<input id="design-base-h" type="number" min="0.5" step="0.5"></label>
-              </div>
-              <button id="fit-envelope" type="button" class="full-width-button">Fit envelope around parts</button>
-            </fieldset>
+            <details class="transform-section wide" open><summary>Design envelope</summary><div class="axis-fields size-fields"><label class="axis-x-field">Width<input id="design-base-w" type="number" min="0.5" step="0.5"></label><label class="axis-z-field">Depth<input id="design-base-d" type="number" min="0.5" step="0.5"></label><label class="axis-y-field">Height<input id="design-base-h" type="number" min="0.5" step="0.5"></label></div><button id="fit-envelope" type="button" class="full-width-button">Fit envelope around parts</button></details>
             <label class="studio-field wide">Description<textarea id="design-description" rows="4"></textarea></label>
           </div>
         </section>

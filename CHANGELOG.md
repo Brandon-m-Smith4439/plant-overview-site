@@ -1,5 +1,155 @@
 # Changelog
 
+## 0.10.1 - Hierarchical attached motion
+
+### Changed
+
+- Replaced newly created flat motion groups with true parent/child animation assemblies.
+- Added a **Motion parent** selector to the Plant Layout multi-selection panel.
+- Renamed the motion action to **Attach to parent** to make the relationship explicit.
+- Children now play their own animation first and then inherit each parent animation from the nearest parent outward.
+- Parent objects no longer inherit animation channels from their children.
+- Added support for nested motion chains, such as bridge Z travel → trolley X travel → tool-head Y travel.
+- Kept legacy `animationGroupId` layouts readable until they are reattached with the new hierarchy controls.
+
+### Machine Design Studio
+
+- Added an **Attachment parent** selector for merged items.
+- The selected child’s animation now drives the whole merged assembly.
+- Other children retain their own animations inside the driver’s moving coordinate space.
+- The active part at merge time becomes the initial animation driver.
+- Applied the same merged-item hierarchy when custom designs render in the Plant Layout.
+
+### Compatibility and validation
+
+- Added optional `motionParentId` and `motionDriverId` metadata without changing browser storage keys or layout schema.
+- Copied objects are detached from their original motion parent to prevent stale links.
+- Expanded motion regression coverage for inherited parent motion and independent child travel.
+- Updated project versioning and documentation to 0.10.1.
+
+## 0.10.0 - Condensed designer, local transforms, and expanded shape library
+
+- Reorganized Machine Design Studio into a cleaner slicer-style workspace while preserving advanced editing capabilities.
+- Added compact collapsible design actions, assignment controls, part ordering, and inspector sections.
+- Added a categorized shape picker with quick access to common primitives.
+- Added editable cylinder, sphere/ellipsoid, cone/hopper, and wedge/ramp primitives.
+- Added closed 3D rendering for the new shapes in both Machine Design Studio and the Plant Layout.
+- Added Local and World transform orientation controls, with Local selected by default.
+- Made move, rotate, and scale gizmos follow the selected part's local axes.
+- Corrected beam scaling so local X adjusts beam length, local Y adjusts beam height, and local Z adjusts beam width.
+- Added exact beam length, beam height, and beam width fields.
+- Changed custom beams in the Plant Layout from screen-width lines to closed depth-tested rectangular prisms.
+- Added regression coverage for shape availability, local transforms, beam scaling, and plant-view rendering.
+- Updated project versioning and documentation to 0.10.0.
+
+## 0.9.5 - Merged machine parts and compound motion groups
+
+### Added
+
+- Added Shift-click, Ctrl-click, and Command-click multi-selection for parts in Machine Design Studio.
+- Added **Merge selected** to turn two or more design parts into one compound item.
+- Added **Separate merged** to restore a compound item to its original parts.
+- Added **Join motion** in Plant Layout for combining selected scene objects into one motion group.
+- Added **Separate motion** without deleting or resetting either object’s individual animation settings.
+
+### Animation behavior
+
+- Every animation channel from every joined member is composed and applied to the complete group.
+- An X-axis shuttle on one object and a Z-axis shuttle on another produce a combined two-axis path for both objects.
+- Joined objects select, drag, nudge, rotate, focus, and delete as one layout selection.
+- Merged machine-design items can be moved, rotated, scaled, recolored, and animated as one item while retaining their child geometry.
+
+### Compatibility
+
+- Plant layouts remain on schema 6 and the existing browser storage key.
+- Machine-design payload metadata advances to version 5; older designs continue loading through normalization.
+
+
+## 0.9.4 - Animation pauses and multi-object selection
+
+### Added
+
+- Added `animationPauseSeconds` to scene-object animations.
+- Added a **Pause after movement** control to the Plant Layout animation inspector.
+- Added the same pause timing control to Machine Design Studio part animations.
+- Back-and-forth animations now pause at both path endpoints before resuming.
+- Added Shift-click, Ctrl-click, and Command-click multi-selection in the Plant Layout editor.
+- Added a multi-selection summary and collective color picker.
+- Added `Ctrl+A` to select every visible object at the active timeline stage.
+
+### Improved
+
+- Focus selected now frames the complete multi-object selection.
+- Nudge and Y-rotation buttons move every unlocked selected object together.
+- Remove deletes all selected objects in one undoable action.
+- Selection outlines and emphasized labels render for every selected object.
+- Single-object controls are disabled while multiple objects are selected so edits are not accidentally applied only to the primary object.
+
+### Compatibility
+
+- Plant layout storage remains `monroe-glass-plant-layout-v6` with schema 6.
+- Machine-design storage remains `monroe-glass-machine-designs-v1` with payload version 4.
+- Existing objects without pause metadata load with a pause duration of zero.
+- Existing machine positions, designs, animations, floor features, walls, pillars, and timeline edits remain preserved.
+
+## 0.9.3 - Depth-correct wheel occlusion
+
+### Fixed
+
+- Replaced plant-view wheel sprites with closed 3D cylinder geometry.
+- Custom machine-design wheels now use the same WebGL depth buffer as cabinets, bases, walls, floors, and other solid components.
+- Wheels below or behind a machine are now hidden by the machine instead of appearing through it.
+- A-frame cart and A-frame glass-truck wheels now use the same depth-tested geometry instead of Canvas 2D ellipses.
+- Wheel geometry preserves independent width, height, axle depth, component X/Y/Z rotation, machine rotation, and reveal scaling.
+
+### Compatibility
+
+- Plant layout storage remains `monroe-glass-plant-layout-v6` with schema 6.
+- Machine-design storage and payload version remain unchanged.
+- Existing layouts, custom designs, assignments, animations, floor features, walls, pillars, and timeline edits are preserved.
+
+### Validation
+
+- Added `npm run validate:wheels` to prevent plant wheels from bypassing the shared depth renderer.
+- Existing JavaScript, layout-rendering, animation, and floor-feature regression checks remain in place.
+
+## 0.9.2 - Editable floor features and rotation-aware animation paths
+
+### Added
+
+- Converted the supplied safety-yellow floor markings into regular selectable scene objects.
+- Converted the supplied construction trenches into regular selectable scene objects.
+- Added a square floor-drain object with an inset grated top.
+- Added Safety yellow floor line, Utility trench, and Square floor drain to the object-type picker and Add menu.
+- Added **Select floor feature** for cycling through floor features even when a trench is hidden by the current timeline stage.
+- Added **Reverse movement direction** for object animations.
+- Added an animation path guide for selected loop and back-and-forth objects.
+- Added `npm run validate:floor` and a floor-feature regression test.
+
+### Changed
+
+- Safety lines, trenches, and drains now use the standard object editor for X/Z location, X/Y/Z rotation, width, depth/length, height, color, visibility, locking, timeline stages, copy/paste, and removal.
+- Loop and back-and-forth animation axes are now local to the animated object. Rotating the object rotates its movement direction on all three axes.
+- Removed the legacy hard-coded `drawSafety()` and `drawTrenches()` rendering paths.
+- Existing schema-6 browser layouts receive the default floor features once through the `floorFeaturesInitialized` migration marker.
+
+### Compatibility
+
+- Plant layout storage remains `monroe-glass-plant-layout-v6` with schema 6.
+- Machine-design storage keys and payload versions are unchanged.
+- Existing machine positions, custom objects, animations, timeline edits, floor dimensions, walls, and hidden pillars remain intact.
+
+## 0.9.1 - Editable production glass and whole-machine transforms
+
+- Added X, Y, and Z base rotation fields for scene objects and animation objects.
+- Fixed scene-object and machine-part spin animations so the All axes option rotates X, Y, and Z instead of falling back to Y only.
+- Added a direct Select moving glass action in Edit Layout for the existing production-glass animation.
+- Object animations now pause by default when Edit Layout opens, making moving items easy to select and position.
+- Added Select entire machine in Machine Design Studio, including Ctrl+A.
+- Whole-machine selections can be moved, rotated, scaled uniformly, or scaled on one axis while preserving all part spacing.
+- Whole-machine selection has a combined outline, centered transform gizmo, focus behavior, nudge support, quick rotation, undo, and redo.
+- Preserved plant layout schema 6 and the existing machine-design storage key.
+
 ## 0.9.0 - Scene assets and animation authoring
 
 - Added editable Design Studio presets for cutting tables, filtration equipment, general boxes, freestanding cranes, overhead bridge cranes, raw-glass racks, plant rooms, and team members.

@@ -5,10 +5,20 @@
   if (!canvas || !data || !equipmentData) return;
 
   const ctx = canvas.getContext("2d");
+  const timelineEngine = window.MachineAnimationTimeline || null;
   const sceneCanvas = window.createDepthCanvas?.(canvas, "depth-scene-canvas plant-depth-canvas") || null;
   const depthRenderer = sceneCanvas && window.createDepthSceneRenderer
     ? window.createDepthSceneRenderer(sceneCanvas)
     : { available: false, beginFrame() {}, addPolygon() {}, addLine() {}, render() {} };
+  const renderPerformance = window.createRenderPerformanceController
+    ? window.createRenderPerformanceController({ id: "plant-layout" })
+    : {
+        shouldRender() { return true; }, invalidate() {}, noteInteraction() {},
+        pixelRatio(value) { return Math.min(Number(value) || 1, 1.25); },
+        cylinderSegments(value) { return Math.max(8, Math.min(14, Number(value) || 14)); },
+        shadowLayerCount() { return 1; }, maxShadowParts() { return 24; },
+        pillarShadowsEnabled() { return false; }, recordFrame() {}, mount() {},
+      };
   const defaultStages = [
     {
       title: "Empty shell",
@@ -156,7 +166,19 @@
   const syncChannel = typeof window.BroadcastChannel === "function"
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
-  const APP_VERSION = "0.10.1";
+  const APP_VERSION = "0.12.17";
+  const MIN_FLOOR_DIMENSION = 40;
+  const MAX_FLOOR_DIMENSION = 5000;
+  const MAX_FLOOR_GRID_LINES = 120;
+  const BASE_COLUMN_COUNT = data.columns.length;
+  const MAX_GENERATED_COLUMNS = 6000;
+  const defaultColumnGrid = {
+    autoExtend: true,
+    spacingX: 40,
+    spacingZ: 30,
+    anchorX: -220.04,
+    anchorZ: -199.97,
+  };
   const WALL_IDS = ["west", "east", "south", "north-west", "north-east"];
   const defaultWalls = Object.fromEntries(WALL_IDS.map((id) => [id, true]));
   const defaultDesignLibrary = window.PLANT_MACHINE_DESIGNS || {};
@@ -165,8 +187,18 @@
     return {
       centerX: Number.isFinite(Number(value?.centerX)) ? Number(value.centerX) : defaultFloor.centerX,
       centerZ: Number.isFinite(Number(value?.centerZ)) ? Number(value.centerZ) : defaultFloor.centerZ,
-      width: Math.max(40, Number(value?.width) || defaultFloor.width),
-      length: Math.max(40, Number(value?.length) || defaultFloor.length),
+      width: clamp(Number(value?.width) || defaultFloor.width, MIN_FLOOR_DIMENSION, MAX_FLOOR_DIMENSION),
+      length: clamp(Number(value?.length) || defaultFloor.length, MIN_FLOOR_DIMENSION, MAX_FLOOR_DIMENSION),
+    };
+  }
+
+  function normalizeColumnGrid(value) {
+    return {
+      autoExtend: value?.autoExtend !== false,
+      spacingX: clamp(Number(value?.spacingX) || defaultColumnGrid.spacingX, 5, 250),
+      spacingZ: clamp(Number(value?.spacingZ) || defaultColumnGrid.spacingZ, 5, 250),
+      anchorX: Number.isFinite(Number(value?.anchorX)) ? Number(value.anchorX) : defaultColumnGrid.anchorX,
+      anchorZ: Number.isFinite(Number(value?.anchorZ)) ? Number(value.anchorZ) : defaultColumnGrid.anchorZ,
     };
   }
 
@@ -192,6 +224,80 @@
 
   function modelCenter() {
     return [floor.centerX, floor.centerZ];
+  }
+
+  let structuralColumnCache = null;
+  let structuralColumnMeta = { baseCount: 0, generatedCount: 0, totalCount: 0, limited: false, stride: 1 };
+
+  function invalidateStructuralColumns() {
+    structuralColumnCache = null;
+  }
+
+  function columnIsInsideFloor(x, z, bounds = floorBounds()) {
+    return x >= bounds[0] && x <= bounds[2] && z >= bounds[1] && z <= bounds[3];
+  }
+
+  function structuralColumns() {
+    const bounds = floorBounds();
+    const grid = normalizeColumnGrid(columnGrid);
+    const signature = [
+      ...bounds.map((value) => Number(value).toFixed(3)),
+      grid.autoExtend, grid.spacingX, grid.spacingZ, grid.anchorX, grid.anchorZ,
+    ].join("|");
+    if (structuralColumnCache?.signature === signature) return structuralColumnCache.columns;
+
+    const columns = data.columns.slice(0, BASE_COLUMN_COUNT)
+      .map(([x, z], baseIndex) => ({ key: `cad:${baseIndex}`, source: "cad", baseIndex, x, z }))
+      .filter((column) => columnIsInsideFloor(column.x, column.z, bounds));
+    const baseCount = columns.length;
+    let generatedCount = 0;
+    let limited = false;
+    let stride = 1;
+
+    if (grid.autoExtend) {
+      // Keep generated supports one quarter-bay inside the exterior wall. This
+      // follows the existing CAD grid while avoiding columns directly inside a
+      // wall when the floor is enlarged by only part of a bay.
+      const insetX = Math.min(12, grid.spacingX * .25);
+      const insetZ = Math.min(10, grid.spacingZ * .25);
+      const minIx = Math.ceil((bounds[0] + insetX - grid.anchorX) / grid.spacingX);
+      const maxIx = Math.floor((bounds[2] - insetX - grid.anchorX) / grid.spacingX);
+      const minIz = Math.ceil((bounds[1] + insetZ - grid.anchorZ) / grid.spacingZ);
+      const maxIz = Math.floor((bounds[3] - insetZ - grid.anchorZ) / grid.spacingZ);
+      const rawCount = Math.max(0, maxIx - minIx + 1) * Math.max(0, maxIz - minIz + 1);
+      stride = rawCount > MAX_GENERATED_COLUMNS
+        ? Math.max(1, Math.ceil(Math.sqrt(rawCount / MAX_GENERATED_COLUMNS)))
+        : 1;
+      limited = stride > 1;
+      const tolerance = .25;
+      const existing = new Set(columns.map((column) => `${column.x.toFixed(2)}:${column.z.toFixed(2)}`));
+
+      for (let ix = minIx; ix <= maxIx; ix += stride) {
+        const x = grid.anchorX + ix * grid.spacingX;
+        for (let iz = minIz; iz <= maxIz; iz += stride) {
+          const z = grid.anchorZ + iz * grid.spacingZ;
+          const outsideOriginal = x < cadBounds[0] - tolerance || x > cadBounds[2] + tolerance ||
+            z < cadBounds[1] - tolerance || z > cadBounds[3] + tolerance;
+          if (!outsideOriginal) continue;
+          const coordinateKey = `${x.toFixed(2)}:${z.toFixed(2)}`;
+          if (existing.has(coordinateKey)) continue;
+          columns.push({ key: `grid:${ix}:${iz}`, source: "generated", baseIndex: null, gridX: ix, gridZ: iz, x, z });
+          existing.add(coordinateKey);
+          generatedCount += 1;
+        }
+      }
+    }
+
+    structuralColumnMeta = { baseCount, generatedCount, totalCount: columns.length, limited, stride };
+    structuralColumnCache = { signature, columns };
+    return columns;
+  }
+
+  function isColumnHidden(column) {
+    if (!column) return true;
+    return column.source === "cad"
+      ? state.hiddenColumns.has(column.baseIndex)
+      : state.hiddenColumnKeys.has(column.key);
   }
 
   function wallSections() {
@@ -247,7 +353,148 @@
       glassRack: "glass-rack-standard",
       room: "room-standard",
       person: "team-member-standard",
+      safetyLine: "safety-line-standard",
+      trench: "utility-trench-standard",
+      floorDrain: "floor-drain-standard",
     }[type] || "";
+  }
+
+  const DESIGN_SCALE_MODES = new Set(["preserve", "match", "stretch"]);
+  const MACHINE_SCALE_EDIT_MODES = new Set(["uniform", "individual"]);
+
+  function normalizedDesignScaleMode(value) {
+    return DESIGN_SCALE_MODES.has(value) ? value : "preserve";
+  }
+
+  function normalizedMachineScaleEditMode(value, machine = null) {
+    if (MACHINE_SCALE_EDIT_MODES.has(value)) return value;
+    const values = machine ? [
+      Number(machine.scaleXPercent) || 100,
+      Number(machine.scaleYPercent) || 100,
+      Number(machine.scaleZPercent) || 100,
+    ] : [100, 100, 100];
+    const axesDiffer = Math.max(...values) - Math.min(...values) > .01;
+    if (machine?.designId) {
+      return normalizedDesignScaleMode(machine.designScaleMode) === "stretch" ? "individual" : "uniform";
+    }
+    return axesDiffer ? "individual" : "uniform";
+  }
+
+  function designBaseDimensions(design, machine = null) {
+    const base = design?.base || {};
+    return {
+      w: Math.max(.01, Number(base.w) || Number(machine?.w) || 1),
+      d: Math.max(.01, Number(base.d) || Number(machine?.d) || 1),
+      h: Math.max(.01, Number(base.h) || Number(machine?.h) || 1),
+    };
+  }
+
+  function syncMachineDimensionsToDesign(machine, design) {
+    if (!machine || !design) return false;
+    const base = designBaseDimensions(design, machine);
+    const oldWidth = Math.max(.01, Number(machine.w) || base.w);
+    const oldDepth = Math.max(.01, Number(machine.d) || base.d);
+    const changed = Math.abs(oldWidth - base.w) > .0001
+      || Math.abs(oldDepth - base.d) > .0001
+      || Math.abs(Number(machine.h) - base.h) > .0001;
+    // Keep the object's floor-plan center fixed while its editable envelope
+    // changes to the studio design dimensions.
+    machine.x = Number(machine.x) + (oldWidth - base.w) / 2;
+    machine.z = Number(machine.z) + (oldDepth - base.d) / 2;
+    machine.w = base.w;
+    machine.d = base.d;
+    machine.h = base.h;
+    machine.naturalW = base.w;
+    machine.naturalD = base.d;
+    machine.naturalH = base.h;
+    machine.scaleEditMode = "uniform";
+    refreshMachineScaleMetadata(machine);
+    return changed;
+  }
+
+  let designLibrary = {};
+
+  function machineReferenceDimensions(machine) {
+    const design = machine?.designId ? designLibrary?.[machine.designId] : null;
+    if (design) return designBaseDimensions(design, machine);
+    return {
+      w: Math.max(.01, Number(machine?.naturalW) || Number(machine?.w) || 1),
+      d: Math.max(.01, Number(machine?.naturalD) || Number(machine?.d) || 1),
+      h: Math.max(.01, Number(machine?.naturalH) || Number(machine?.h) || 1),
+    };
+  }
+
+  function refreshMachineScaleMetadata(machine) {
+    if (!machine) return;
+    const reference = machineReferenceDimensions(machine);
+    machine.scaleXPercent = Math.max(.01, Number(machine.w) / reference.w * 100);
+    machine.scaleYPercent = Math.max(.01, Number(machine.h) / reference.h * 100);
+    machine.scaleZPercent = Math.max(.01, Number(machine.d) / reference.d * 100);
+  }
+
+  function resizeMachineAroundCenter(machine, field, value) {
+    const next = Math.max(.01, Number(value) || .01);
+    if (field === "w") {
+      const centerX = Number(machine.x) + Number(machine.w) / 2;
+      machine.w = next;
+      machine.x = centerX - next / 2;
+    } else if (field === "d") {
+      const centerZ = Number(machine.z) + Number(machine.d) / 2;
+      machine.d = next;
+      machine.z = centerZ - next / 2;
+    } else if (field === "h") {
+      machine.h = next;
+    }
+    refreshMachineScaleMetadata(machine);
+  }
+
+  function setMachineScalePercent(machine, axis, percent) {
+    if (!machine) return;
+    const value = clamp(Number(percent) || 100, 1, 10000);
+    const reference = machineReferenceDimensions(machine);
+    if (axis === "uniform") {
+      machine.scaleEditMode = "uniform";
+      if (machine.designScaleMode === "match" && Math.abs(value - 100) > .0001) machine.designScaleMode = "preserve";
+      resizeMachineAroundCenter(machine, "w", reference.w * value / 100);
+      resizeMachineAroundCenter(machine, "h", reference.h * value / 100);
+      resizeMachineAroundCenter(machine, "d", reference.d * value / 100);
+      machine.scaleXPercent = value;
+      machine.scaleYPercent = value;
+      machine.scaleZPercent = value;
+      return;
+    }
+    machine.scaleEditMode = "individual";
+    if (machine.designId) machine.designScaleMode = "stretch";
+    if (axis === "x") resizeMachineAroundCenter(machine, "w", reference.w * value / 100);
+    if (axis === "y") resizeMachineAroundCenter(machine, "h", reference.h * value / 100);
+    if (axis === "z") resizeMachineAroundCenter(machine, "d", reference.d * value / 100);
+  }
+
+  function designPlacement(machine, design) {
+    const base = designBaseDimensions(design, machine);
+    const mode = normalizedDesignScaleMode(machine?.designScaleMode);
+    const ratioX = Math.max(.0001, Number(machine.w) || base.w) / base.w;
+    const ratioY = Math.max(.0001, Number(machine.h) || base.h) / base.h;
+    const ratioZ = Math.max(.0001, Number(machine.d) || base.d) / base.d;
+    let scaleX = ratioX;
+    let scaleY = ratioY;
+    let scaleZ = ratioZ;
+    const scaleEditMode = normalizedMachineScaleEditMode(machine?.scaleEditMode, machine);
+    if (scaleEditMode === "uniform") {
+      const ratiosNearlyEqual = Math.max(ratioX, ratioY, ratioZ) - Math.min(ratioX, ratioY, ratioZ) < .0001;
+      const uniform = ratiosNearlyEqual
+        ? Math.max(.0001, (ratioX + ratioY + ratioZ) / 3)
+        : Math.max(.0001, Math.min(ratioX, ratioY, ratioZ));
+      scaleX = uniform;
+      scaleY = uniform;
+      scaleZ = uniform;
+    }
+    return {
+      base, mode, scaleEditMode, scaleX, scaleY, scaleZ,
+      offsetX: (Number(machine.w) - base.w * scaleX) / 2,
+      offsetY: 0,
+      offsetZ: (Number(machine.d) - base.d * scaleZ) / 2,
+    };
   }
 
   function animationDefaults(type) {
@@ -270,10 +517,18 @@
       short: machine.short || machine.name || "Object",
       type: machine.type || "genericBox",
       x: Number(machine.x) || 0,
+      y: Number(machine.y) || 0,
       z: Number(machine.z) || 0,
-      w: Math.max(0.5, Number(machine.w) || 10),
-      d: Math.max(0.5, Number(machine.d) || 10),
-      h: Math.max(0.5, Number(machine.h) || 5),
+      w: Math.max(0.01, Number(machine.w) || 10),
+      d: Math.max(0.01, Number(machine.d) || 10),
+      h: Math.max(0.01, Number(machine.h) || 5),
+      naturalW: Math.max(0.01, Number(machine.naturalW) || Number(machine.w) || 10),
+      naturalD: Math.max(0.01, Number(machine.naturalD) || Number(machine.d) || 10),
+      naturalH: Math.max(0.01, Number(machine.naturalH) || Number(machine.h) || 5),
+      scaleXPercent: Math.max(.01, Number(machine.scaleXPercent) || 100),
+      scaleYPercent: Math.max(.01, Number(machine.scaleYPercent) || 100),
+      scaleZPercent: Math.max(.01, Number(machine.scaleZPercent) || 100),
+      scaleEditMode: normalizedMachineScaleEditMode(machine.scaleEditMode, machine),
       rotationX: Number(machine.rotationX) || 0,
       rotationY: Number.isFinite(Number(machine.rotationY)) ? Number(machine.rotationY) : Number(machine.rotation) || 0,
       rotationZ: Number(machine.rotationZ) || 0,
@@ -286,17 +541,24 @@
       showLabel: machine.showLabel !== false,
       category: machine.category || objectCategory(machine.type),
       designId: machine.designId || defaultDesignForType(machine.type),
+      designScaleMode: normalizedDesignScaleMode(machine.designScaleMode || (isFloorFeatureType(machine.type) ? "stretch" : "preserve")),
       collisionMode: machine.collisionMode || (["bridgeCrane", "craneMachine", "person"].includes(machine.type) || isAnimationType(machine.type) ? "ignore" : "solid"),
       animationEnabled: machine.animationEnabled !== false,
-      animationMode: ["none", "loop", "pingPong", "spin", "bob", "pulse", "blink"].includes(machine.animationMode)
+      animationMode: ["none", "loop", "pingPong", "fourStep", "spin", "bob", "pulse", "blink"].includes(machine.animationMode)
         ? machine.animationMode
         : animationDefaults(machine.type).animationMode,
       animationAxis: ["x", "y", "z", "all"].includes(machine.animationAxis)
         ? machine.animationAxis
         : animationDefaults(machine.type).animationAxis,
+      animationSecondaryAxis: ["x", "y", "z"].includes(machine.animationSecondaryAxis)
+        ? machine.animationSecondaryAxis
+        : "z",
       animationDistance: Number.isFinite(Number(machine.animationDistance))
         ? Number(machine.animationDistance)
         : animationDefaults(machine.type).animationDistance,
+      animationSecondaryDistance: Number.isFinite(Number(machine.animationSecondaryDistance))
+        ? Number(machine.animationSecondaryDistance)
+        : 10,
       animationSpeed: Math.max(0, Number.isFinite(Number(machine.animationSpeed))
         ? Number(machine.animationSpeed)
         : animationDefaults(machine.type).animationSpeed),
@@ -306,8 +568,29 @@
       animationPauseSeconds: Math.max(0, Number.isFinite(Number(machine.animationPauseSeconds))
         ? Number(machine.animationPauseSeconds)
         : 0),
+      animationSecondaryPauseSeconds: Math.max(0, Number.isFinite(Number(machine.animationSecondaryPauseSeconds))
+        ? Number(machine.animationSecondaryPauseSeconds)
+        : (Number.isFinite(Number(machine.animationPauseSeconds)) ? Number(machine.animationPauseSeconds) : 0)),
+      animationStep1PauseSeconds: Math.max(0, Number.isFinite(Number(machine.animationStep1PauseSeconds))
+        ? Number(machine.animationStep1PauseSeconds)
+        : (Number.isFinite(Number(machine.animationPauseSeconds)) ? Number(machine.animationPauseSeconds) : 0)),
+      animationStep2PauseSeconds: Math.max(0, Number.isFinite(Number(machine.animationStep2PauseSeconds))
+        ? Number(machine.animationStep2PauseSeconds)
+        : (Number.isFinite(Number(machine.animationSecondaryPauseSeconds))
+          ? Number(machine.animationSecondaryPauseSeconds)
+          : (Number.isFinite(Number(machine.animationPauseSeconds)) ? Number(machine.animationPauseSeconds) : 0))),
+      animationStep3PauseSeconds: Math.max(0, Number.isFinite(Number(machine.animationStep3PauseSeconds))
+        ? Number(machine.animationStep3PauseSeconds)
+        : (Number.isFinite(Number(machine.animationPauseSeconds)) ? Number(machine.animationPauseSeconds) : 0)),
+      animationStep4PauseSeconds: Math.max(0, Number.isFinite(Number(machine.animationStep4PauseSeconds))
+        ? Number(machine.animationStep4PauseSeconds)
+        : (Number.isFinite(Number(machine.animationSecondaryPauseSeconds))
+          ? Number(machine.animationSecondaryPauseSeconds)
+          : (Number.isFinite(Number(machine.animationPauseSeconds)) ? Number(machine.animationPauseSeconds) : 0))),
       animationGroupId: typeof machine.animationGroupId === "string" ? machine.animationGroupId : "",
       motionParentId: typeof machine.motionParentId === "string" ? machine.motionParentId : "",
+      playOwnAnimation: machine.playOwnAnimation !== false,
+      playOwnAnimationWasExplicit: typeof machine.playOwnAnimation === "boolean",
     };
     if (normalized.crane) {
       normalized.crane = {
@@ -316,6 +599,9 @@
         height: Math.max(4, Number(normalized.crane.height) || 20),
       };
     }
+    // Existing layouts did not store scale metadata. Derive it from the
+    // current numeric dimensions so migration never changes the visible size.
+    refreshMachineScaleMetadata(normalized);
     return normalized;
   }
 
@@ -563,7 +849,9 @@
           machines: loadSceneAwareMachines(current),
           stages: normalizeStages(current.stages),
           floor: normalizeFloor(current.floor),
+          columnGrid: normalizeColumnGrid(current.columnGrid),
           hiddenColumns: Array.isArray(current.hiddenColumns) ? current.hiddenColumns : [],
+          hiddenColumnKeys: Array.isArray(current.hiddenColumnKeys) ? current.hiddenColumnKeys : [],
           walls: { ...defaultWalls, ...(current.walls || {}) },
           playbackSpeed: Number(current.playbackSpeed) || 1,
         };
@@ -578,7 +866,9 @@
           machines: loadSceneAwareMachines(legacy),
           stages: normalizeStages(legacy.stages),
           floor: normalizeFloor(legacy.floor),
+          columnGrid: normalizeColumnGrid(legacy.columnGrid),
           hiddenColumns: Array.isArray(legacy.hiddenColumns) ? legacy.hiddenColumns : [],
+          hiddenColumnKeys: Array.isArray(legacy.hiddenColumnKeys) ? legacy.hiddenColumnKeys : [],
           walls: { ...defaultWalls, ...(legacy.walls || {}) },
           playbackSpeed: Number(legacy.playbackSpeed) || 1,
         };
@@ -589,7 +879,9 @@
           machines: loadSceneAwareMachines(older),
           stages: normalizeStages(older.stages),
           floor: normalizeFloor(older.floor),
+          columnGrid: normalizeColumnGrid(older.columnGrid),
           hiddenColumns: Array.isArray(older.hiddenColumns) ? older.hiddenColumns : [],
+          hiddenColumnKeys: Array.isArray(older.hiddenColumnKeys) ? older.hiddenColumnKeys : [],
           walls: { ...defaultWalls, ...(older.walls || {}) },
           playbackSpeed: Number(older.playbackSpeed) || 1,
         };
@@ -600,7 +892,9 @@
           machines: loadSceneAwareMachines(oldest, true),
           stages: normalizeStages(defaultStages),
           floor: normalizeFloor(oldest.floor),
+          columnGrid: normalizeColumnGrid(oldest.columnGrid),
           hiddenColumns: Array.isArray(oldest.hiddenColumns) ? oldest.hiddenColumns : [],
+          hiddenColumnKeys: Array.isArray(oldest.hiddenColumnKeys) ? oldest.hiddenColumnKeys : [],
           walls: { ...defaultWalls, ...(oldest.walls || {}) },
           playbackSpeed: 1,
         };
@@ -612,7 +906,9 @@
       machines: defaultSceneMachines(),
       stages: normalizeStages(defaultStages),
       floor: normalizeFloor(defaultFloor),
+      columnGrid: normalizeColumnGrid(defaultColumnGrid),
       hiddenColumns: [],
+      hiddenColumnKeys: [],
       walls: { ...defaultWalls },
       playbackSpeed: 1,
     };
@@ -621,13 +917,34 @@
   const savedLayout = loadLayout();
   let stages = savedLayout.stages;
   let machines = savedLayout.machines;
+  // v0.10.2 automatically suppressed a child animation when it matched its
+  // parent. Preserve that visual behavior once, then store an explicit choice
+  // that the user can change from the active-member animation controls.
+  machines.forEach((machine) => {
+    if (machine.motionParentId && !machine.playOwnAnimationWasExplicit) {
+      const parent = machines.find((item) => item.instanceId === machine.motionParentId);
+      machine.playOwnAnimation = parent ? !animationSettingsMatch(machine, parent) : true;
+    }
+    delete machine.playOwnAnimationWasExplicit;
+  });
   let floor = savedLayout.floor;
-  let designLibrary = loadDesignLibrary();
+  let columnGrid = normalizeColumnGrid(savedLayout.columnGrid);
+  designLibrary = loadDesignLibrary();
 
   const state = {
     yaw: -0.72,
     pitch: 0.62,
     zoom: 1,
+    cameraMode: "orbit",
+    walkSpeed: 15,
+    walkEyeHeight: 5.5,
+    walkFov: 72,
+    walkSensitivity: 0.0022,
+    walkRadius: 1.2,
+    walkCollision: true,
+    walkHeadBob: true,
+    walkVerticalOffset: 0,
+    walkBobOffset: 0,
     panX: 0,
     panZ: 0,
     stage: 0,
@@ -641,10 +958,12 @@
     pointerY: 0,
     showCad: false,
     showLabels: true,
+    labelMode: "smart",
     playing: false,
     playAt: 0,
     editing: false,
     editorTool: "machines",
+    objectEditorTab: "select",
     editorInteraction: "select",
     snapSize: 0.5,
     spacePressed: false,
@@ -657,13 +976,29 @@
     selectedMachineIds: new Set(),
     clipboard: null,
     hiddenColumns: new Set(savedLayout.hiddenColumns),
+    hiddenColumnKeys: new Set(savedLayout.hiddenColumnKeys || []),
     walls: savedLayout.walls,
     previewObjectAnimations: false,
+    animationsPaused: false,
+    animationPausedAt: 0,
+    animationTimeOffset: 0,
     lastFrameTime: 0,
+    lastRenderedAt: 0,
   };
+
+  let firstPersonController = null;
+  let walkReturnView = null;
+  let walkStartedFullscreen = false;
 
   function refreshDesignLibrary() {
     designLibrary = loadDesignLibrary();
+    let changed = false;
+    machines.forEach((machine) => {
+      if (normalizedDesignScaleMode(machine.designScaleMode) !== "match") return;
+      const design = machine.designId ? designLibrary[machine.designId] : null;
+      if (design) changed = syncMachineDimensionsToDesign(machine, design) || changed;
+    });
+    if (changed) persistLayout();
   }
 
   function refreshMachineDesignAssignments() {
@@ -672,16 +1007,45 @@
       if (external?.version !== 6 || !Array.isArray(external.machines)) return false;
       const externalById = new Map(external.machines.map((machine) => [machine.instanceId, machine]));
       let changed = false;
+      const localIds = new Set(machines.map((machine) => machine.instanceId));
+      external.machines.forEach((incoming, index) => {
+        if (!incoming?.instanceId || localIds.has(incoming.instanceId)) return;
+        machines.push(normalizeMachine(incoming, machines.length + index));
+        localIds.add(incoming.instanceId);
+        changed = true;
+      });
       machines.forEach((machine) => {
         const incoming = externalById.get(machine.instanceId);
         if (!incoming) return;
+        const synchronizedFields = [
+          "name", "short", "type", "x", "y", "z", "w", "d", "h",
+          "naturalW", "naturalD", "naturalH", "scaleXPercent", "scaleYPercent", "scaleZPercent", "scaleEditMode",
+          "rotationX", "rotationY", "rotationZ", "rotation", "color", "visible", "locked", "showLabel",
+        ];
+        synchronizedFields.forEach((field) => {
+          if (incoming[field] !== undefined && String(machine[field] ?? "") !== String(incoming[field] ?? "")) {
+            machine[field] = incoming[field];
+            changed = true;
+          }
+        });
         const nextDesignId = incoming.designId || "";
+        const nextScaleMode = normalizedDesignScaleMode(incoming.designScaleMode);
         if ((machine.designId || "") !== nextDesignId) {
           machine.designId = nextDesignId;
           changed = true;
         }
+        if (machine.designScaleMode !== nextScaleMode) {
+          machine.designScaleMode = nextScaleMode;
+          changed = true;
+        }
+        if (nextScaleMode === "match" && nextDesignId && designLibrary[nextDesignId]) {
+          changed = syncMachineDimensionsToDesign(machine, designLibrary[nextDesignId]) || changed;
+        } else refreshMachineScaleMetadata(machine);
       });
-      if (changed) updateEditorPanel();
+      if (changed) {
+        updateEditorPanel();
+        renderPerformance.invalidate?.();
+      }
       return changed;
     } catch (error) {
       console.warn("External machine assignments could not be refreshed.", error);
@@ -714,7 +1078,9 @@
       machines: clone(machines),
       stages: clone(stages),
       floor: clone(floor),
+      columnGrid: clone(columnGrid),
       hiddenColumns: [...state.hiddenColumns],
+      hiddenColumnKeys: [...state.hiddenColumnKeys],
       walls: clone(state.walls),
       playbackSpeed: state.playbackSpeed,
     };
@@ -731,7 +1097,10 @@
     machines = normalizeMachines(snapshot.machines || []);
     stages = normalizeStages(snapshot.stages);
     floor = normalizeFloor(snapshot.floor);
+    columnGrid = normalizeColumnGrid(snapshot.columnGrid);
     state.hiddenColumns = new Set(snapshot.hiddenColumns || []);
+    state.hiddenColumnKeys = new Set(snapshot.hiddenColumnKeys || []);
+    invalidateStructuralColumns();
     state.walls = { ...defaultWalls, ...(snapshot.walls || {}) };
     state.playbackSpeed = Number(snapshot.playbackSpeed) || 1;
     state.stage = clamp(state.stage, 0, stages.length - 1);
@@ -778,10 +1147,13 @@
         machines,
         stages,
         floor,
+        columnGrid,
         hiddenColumns: [...state.hiddenColumns],
+        hiddenColumnKeys: [...state.hiddenColumnKeys],
         walls: state.walls,
         playbackSpeed: state.playbackSpeed,
       }));
+      try { syncChannel?.postMessage({ source: "plant-layout", type: "layout-updated", at: Date.now() }); } catch (error) { console.warn("Layout update could not be broadcast.", error); }
     } catch (error) {
       console.warn("Layout changes could not be saved to browser storage.", error);
     }
@@ -912,7 +1284,11 @@
       machine.instanceId !== parent.instanceId &&
       (!machine.motionParentId || !selectedIds.has(machine.motionParentId))
     ));
-    rootsToAttach.forEach((machine) => { machine.motionParentId = parent.instanceId; });
+    rootsToAttach.forEach((machine) => {
+      machine.motionParentId = parent.instanceId;
+      machine.playOwnAnimation = !animationSettingsMatch(machine, parent);
+    });
+    parent.playOwnAnimation = true;
     state.selectedMachineIds = new Set([parent, ...motionDescendants(parent.instanceId)].map((machine) => machine.instanceId));
     state.selectedMachineId = parent.instanceId;
     persistLayout();
@@ -945,6 +1321,70 @@
       machine.collisionMode === "solid" &&
       stageAlpha(machine.reveal, machine.retire) > 0.08
     ));
+  }
+
+  function circleIntersectsMachine(worldX, worldZ, radius, machine) {
+    const angle = -angleRadians(machine);
+    const centerX = Number(machine.x) + Number(machine.w) / 2;
+    const centerZ = Number(machine.z) + Number(machine.d) / 2;
+    const dx = worldX - centerX;
+    const dz = worldZ - centerZ;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const localX = dx * cosine - dz * sine;
+    const localZ = dx * sine + dz * cosine;
+    const halfWidth = Math.max(0.05, Number(machine.w) / 2);
+    const halfDepth = Math.max(0.05, Number(machine.d) / 2);
+    const closestX = clamp(localX, -halfWidth, halfWidth);
+    const closestZ = clamp(localZ, -halfDepth, halfDepth);
+    return Math.hypot(localX - closestX, localZ - closestZ) < radius;
+  }
+
+  function walkCanOccupy(worldX, worldZ, radius = state.walkRadius) {
+    const bounds = floorBounds();
+    const wallMargin = Math.max(0.45, Number(radius) || 1.2);
+    if (worldX < bounds[0] + wallMargin || worldX > bounds[2] - wallMargin ||
+        worldZ < bounds[1] + wallMargin || worldZ > bounds[3] - wallMargin) return false;
+
+    const columnRadius = wallMargin + 1.18;
+    for (const column of structuralColumns()) {
+      if (isColumnHidden(column)) continue;
+      if (Math.hypot(worldX - column.x, worldZ - column.z) < columnRadius) return false;
+    }
+
+    for (const machine of collisionCandidates()) {
+      if (isFloorFeatureType(machine.type)) continue;
+      const baseY = Number(machine.y) || 0;
+      const height = Number(machine.h) || 0;
+      if (baseY > state.walkEyeHeight + 1 || baseY + height < 0.35) continue;
+      if (circleIntersectsMachine(worldX, worldZ, wallMargin, machine)) return false;
+    }
+    return true;
+  }
+
+  function findWalkSpawn(preferredX, preferredZ) {
+    const bounds = floorBounds();
+    const radius = Math.max(0.5, Number(state.walkRadius) || 1.2);
+    const clampedX = clamp(preferredX, bounds[0] + radius, bounds[2] - radius);
+    const clampedZ = clamp(preferredZ, bounds[1] + radius, bounds[3] - radius);
+    if (walkCanOccupy(clampedX, clampedZ, radius)) return [clampedX, clampedZ];
+    const step = 4;
+    for (let ring = 1; ring <= 80; ring += 1) {
+      for (let offset = -ring; offset <= ring; offset += 1) {
+        const candidates = [
+          [clampedX + offset * step, clampedZ - ring * step],
+          [clampedX + offset * step, clampedZ + ring * step],
+          [clampedX - ring * step, clampedZ + offset * step],
+          [clampedX + ring * step, clampedZ + offset * step],
+        ];
+        for (const [x, z] of candidates) {
+          const safeX = clamp(x, bounds[0] + radius, bounds[2] - radius);
+          const safeZ = clamp(z, bounds[1] + radius, bounds[3] - radius);
+          if (walkCanOccupy(safeX, safeZ, radius)) return [safeX, safeZ];
+        }
+      }
+    }
+    return [clampedX, clampedZ];
   }
 
   function rectangleAxes(points) {
@@ -989,13 +1429,30 @@
     return pairs;
   }
 
+  let overlapCacheSignature = "";
+  let overlapCacheIds = new Set();
+
   function overlapIds() {
+    const candidates = collisionCandidates();
+    const signature = candidates.map((machine) => [
+      machine.instanceId, Number(machine.x).toFixed(2), Number(machine.z).toFixed(2),
+      Number(machine.w).toFixed(2), Number(machine.d).toFixed(2),
+      Number(machine.rotationY ?? machine.rotation ?? 0).toFixed(2), machine.collisionMode,
+    ].join(":" )).join("|");
+    if (signature === overlapCacheSignature) return overlapCacheIds;
     const ids = new Set();
-    overlapPairs().forEach(([first, second]) => {
-      ids.add(first.instanceId);
-      ids.add(second.instanceId);
-    });
-    return ids;
+    for (let firstIndex = 0; firstIndex < candidates.length; firstIndex += 1) {
+      for (let secondIndex = firstIndex + 1; secondIndex < candidates.length; secondIndex += 1) {
+        const first = candidates[firstIndex];
+        const second = candidates[secondIndex];
+        if (!machinesOverlap(first, second)) continue;
+        ids.add(first.instanceId);
+        ids.add(second.instanceId);
+      }
+    }
+    overlapCacheSignature = signature;
+    overlapCacheIds = ids;
+    return overlapCacheIds;
   }
 
   function selectedHasOverlap(machine, ignoreId = null) {
@@ -1024,6 +1481,38 @@
         machine.x = clamp(startX + deltaX, bounds[0], bounds[2] - machine.w);
         machine.z = clamp(startZ + deltaZ, bounds[1], bounds[3] - machine.d);
         if (!selectedHasOverlap(machine)) return { x: machine.x, z: machine.z };
+      }
+    }
+    machine.x = original.x;
+    machine.z = original.z;
+    return null;
+  }
+
+  function findOpenPositionAcrossFloor(machine, startX = machine.x, startZ = machine.z) {
+    const nearby = findOpenPosition(machine, startX, startZ);
+    if (nearby) return nearby;
+    const bounds = floorBounds();
+    const original = { x: machine.x, z: machine.z };
+    const step = Math.max(5, Number(state.snapSize) || .5, Math.min(Number(machine.w) || 5, Number(machine.d) || 5) / 2);
+    const columns = Math.max(1, Math.floor(Math.max(0, floor.width - machine.w) / step));
+    const rows = Math.max(1, Math.floor(Math.max(0, floor.length - machine.d) / step));
+    const centerColumn = Math.round((clamp(startX, bounds[0], bounds[2] - machine.w) - bounds[0]) / step);
+    const centerRow = Math.round((clamp(startZ, bounds[1], bounds[3] - machine.d) - bounds[1]) / step);
+    const maxRing = Math.max(columns, rows);
+    let checked = 0;
+    const maxChecks = 5000;
+    for (let ring = 0; ring <= maxRing && checked < maxChecks; ring += 1) {
+      for (let rowOffset = -ring; rowOffset <= ring && checked < maxChecks; rowOffset += 1) {
+        for (let columnOffset = -ring; columnOffset <= ring && checked < maxChecks; columnOffset += 1) {
+          if (ring && Math.max(Math.abs(columnOffset), Math.abs(rowOffset)) !== ring) continue;
+          const column = centerColumn + columnOffset;
+          const row = centerRow + rowOffset;
+          if (column < 0 || row < 0 || column > columns || row > rows) continue;
+          checked += 1;
+          machine.x = clamp(bounds[0] + column * step, bounds[0], bounds[2] - machine.w);
+          machine.z = clamp(bounds[1] + row * step, bounds[1], bounds[3] - machine.d);
+          if (!selectedHasOverlap(machine)) return { x: machine.x, z: machine.z };
+        }
       }
     }
     machine.x = original.x;
@@ -1095,6 +1584,78 @@
 
   function uniqueId(prefix = "machine") {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+  }
+
+  function designerMachineDesigns() {
+    return Object.values(designLibrary)
+      .filter((design) => design?.custom === true && Array.isArray(design.components) && design.components.length)
+      .sort((first, second) => String(first.name || first.id).localeCompare(String(second.name || second.id)));
+  }
+
+  function designMachineColor(design) {
+    const pending = [...(design?.components || [])];
+    while (pending.length) {
+      const component = pending.shift();
+      if (Array.isArray(component?.children)) pending.unshift(...component.children);
+      if (component?.visible === false || Number(component?.opacity) <= 0) continue;
+      if (/^#[0-9a-f]{6}$/i.test(component?.color || "")) return component.color;
+    }
+    return "#277d78";
+  }
+
+  function designMachineType(design) {
+    const value = String(design?.machineType || "custom-machine")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return value || "custom-machine";
+  }
+
+  function machineTemplateFromDesign(design, requestedName, revealStage = state.stage) {
+    const base = designBaseDimensions(design);
+    const name = requestedName?.trim() || design.name || "New custom machine";
+    const type = designMachineType(design);
+    return normalizeMachine({
+      id: uniqueId(type),
+      instanceId: uniqueId(`${type}-instance`),
+      name,
+      short: name,
+      type,
+      category: "equipment",
+      reveal: Number.isFinite(Number(revealStage)) ? Number(revealStage) : state.stage,
+      retire: 99,
+      x: modelCenter()[0] + state.panX - base.w / 2,
+      y: 0,
+      z: modelCenter()[1] + state.panZ - base.d / 2,
+      w: base.w,
+      d: base.d,
+      h: base.h,
+      naturalW: base.w,
+      naturalD: base.d,
+      naturalH: base.h,
+      scaleXPercent: 100,
+      scaleYPercent: 100,
+      scaleZPercent: 100,
+      scaleEditMode: "uniform",
+      rotationX: 0,
+      rotationY: 0,
+      rotationZ: 0,
+      rotation: 0,
+      color: designMachineColor(design),
+      visible: true,
+      locked: false,
+      showLabel: true,
+      designId: design.id,
+      designScaleMode: "match",
+      collisionMode: "solid",
+      placement_status: "designer_created",
+      evidence: "Created from a reusable Machine Design Studio design in the Plant Layout editor.",
+      custom: true,
+      crane: null,
+      animationEnabled: false,
+      animationMode: "none",
+    });
   }
 
   function machineTemplate(type, requestedName) {
@@ -1414,7 +1975,7 @@
     const maxZ = Math.max(...selection.map((machine) => machine.z + machine.d));
     state.panX = (minX + maxX) / 2 - modelCenter()[0];
     state.panZ = (minZ + maxZ) / 2 - modelCenter()[1];
-    state.zoom = Math.max(state.zoom, clamp(70 / Math.max(maxX - minX, maxZ - minZ, 1), 1.1, 2.5));
+    state.zoom = Math.max(state.zoom, clamp(70 / Math.max(maxX - minX, maxZ - minZ, 1), 1.1, 7));
     showToast(selection.length === 1 ? `Focused on ${selection[0].name}.` : `Focused on ${selection.length} selected objects.`);
   }
 
@@ -1446,12 +2007,29 @@
     const help = document.querySelector(".view-help");
     if (!help) return;
     if (!state.editing) {
-      help.textContent = "Drag to orbit · Shift-drag to pan · Scroll to zoom";
+      help.textContent = state.cameraMode === "walk"
+        ? "First person · WASD move · mouse look · Shift sprint · Space jump"
+        : "Drag to orbit · Shift-drag to pan · Scroll to zoom";
       return;
     }
     help.textContent = state.editorInteraction === "navigate"
       ? "Navigate: drag to orbit · Shift/Space-drag to pan · scroll to zoom"
       : "Edit: drag an object · drag empty floor to pan · Alt/right-drag to orbit";
+  }
+
+  const BULK_MACHINE_FIELDS = new Set([
+    "y", "rotationX", "rotationY", "rotationZ", "w", "d", "h",
+    "reveal", "retire", "color", "collisionMode",
+  ]);
+  const BULK_MACHINE_CHECKS = new Set(["visible", "showLabel", "locked"]);
+
+  function commonMachineValue(items, field) {
+    if (!items.length) return { mixed: false, value: "" };
+    const first = items[0]?.[field];
+    return {
+      value: first ?? "",
+      mixed: items.some((item) => String(item?.[field] ?? "") !== String(first ?? "")),
+    };
   }
 
   function updateEditorPanel() {
@@ -1464,11 +2042,20 @@
     panel.querySelectorAll("[data-editor-section]").forEach((section) => {
       section.hidden = section.dataset.editorSection !== state.editorTool;
     });
+    panel.querySelectorAll("[data-object-editor-panel]").forEach((section) => {
+      section.hidden = section.dataset.objectEditorPanel !== state.objectEditorTab;
+    });
+    panel.querySelectorAll("[data-object-editor-tab]").forEach((button) => {
+      const active = button.dataset.objectEditorTab === state.objectEditorTab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
 
     const selection = panel.querySelector("[data-editor-selection]");
     if (selection) {
       if (state.editorTool === "timeline") selection.textContent = currentStage()?.title || "Timeline";
       else if (state.editorTool === "pillars") selection.textContent = "Structure controls";
+      else if (state.editorTool === "project") selection.textContent = "Project tools";
       else selection.textContent = selectionCount > 1 ? `${selectionCount} objects selected` : (machine ? machine.name : "Select any model object");
     }
 
@@ -1478,7 +2065,10 @@
 
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       const field = input.dataset.machineField;
-      input.disabled = !machine || selectionCount > 1;
+      const bulkEditable = BULK_MACHINE_FIELDS.has(field);
+      input.disabled = !machine || (selectionCount > 1 && !bulkEditable);
+      input.dataset.mixed = "false";
+      input.removeAttribute("title");
       if (input.dataset.stageSelect !== undefined) {
         const includeNever = input.dataset.allowNever !== undefined;
         input.innerHTML = stages.map((stage,index) => (
@@ -1489,39 +2079,154 @@
         input.value = "";
         return;
       }
-      if (selectionCount > 1 && field === "color") {
-        input.disabled = false;
-        input.value = selectionItems[0]?.color || "#277d78";
+      if (selectionCount > 1) {
+        if (!bulkEditable) {
+          input.value = "";
+          return;
+        }
+        const common = commonMachineValue(selectionItems, field);
+        input.value = String(common.value ?? "");
+        input.dataset.mixed = String(common.mixed);
+        if (common.mixed) input.title = "Mixed values. Changing this setting applies it to all selected objects.";
         return;
       }
       const value = machine[field];
-      if (["name", "type", "color", "collisionMode"].includes(field)) input.value = value ?? "";
+      if (["name", "type", "color", "collisionMode", "designScaleMode"].includes(field)) input.value = value ?? "";
       else input.value = String(Number(value ?? 0));
+    });
+
+    const scaleModes = selectionItems.map((item) => normalizedMachineScaleEditMode(item.scaleEditMode, item));
+    const commonScaleMode = scaleModes[0] || "uniform";
+    const mixedScaleModes = scaleModes.some((value) => value !== commonScaleMode);
+    panel.querySelectorAll("[data-machine-scale-mode]").forEach((button) => {
+      const active = !mixedScaleModes && button.dataset.machineScaleMode === commonScaleMode;
+      button.disabled = selectionCount === 0;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    panel.querySelectorAll("[data-scale-fields]").forEach((group) => {
+      const mode = group.dataset.scaleFields;
+      group.hidden = selectionCount === 0
+        ? mode !== "uniform"
+        : (!mixedScaleModes && mode !== commonScaleMode);
+    });
+    const scaleModeHelp = panel.querySelector("[data-scale-mode-help]");
+    if (scaleModeHelp) {
+      scaleModeHelp.textContent = !selectionCount
+        ? "Select an object to edit its scale."
+        : mixedScaleModes
+          ? "Selected objects use mixed scaling modes. Choose Uniform or Individual axes to make them consistent."
+          : commonScaleMode === "uniform"
+            ? "Uniform scaling keeps width, height, and depth proportional."
+            : "Individual scaling lets X, Y, and Z use different percentages.";
+    }
+
+    panel.querySelectorAll("[data-machine-scale]").forEach((input) => {
+      const axis = input.dataset.machineScale;
+      input.disabled = selectionCount === 0;
+      input.dataset.mixed = "false";
+      if (!selectionCount) {
+        input.value = "";
+        return;
+      }
+      const values = selectionItems.map((item) => {
+        refreshMachineScaleMetadata(item);
+        if (axis === "uniform") {
+          const all = [item.scaleXPercent, item.scaleYPercent, item.scaleZPercent];
+          return Math.max(...all) - Math.min(...all) < .01 ? all[0] : "";
+        }
+        return item[`scale${axis.toUpperCase()}Percent`];
+      });
+      const first = values[0];
+      const mixed = values.some((value) => String(value) !== String(first));
+      input.value = mixed ? "" : String(Number(first).toFixed(2));
+      input.dataset.mixed = String(mixed);
+      input.placeholder = mixed ? "Mixed" : "100.00";
+      input.title = mixed ? "Mixed values. Enter a percentage to apply it to every selected object." : "";
     });
 
     const depthLabel = panel.querySelector("[data-depth-label]");
     if (depthLabel) depthLabel.textContent = machine && isFloorFeatureType(machine.type) ? "Length" : "Depth";
 
+
     panel.querySelectorAll("[data-machine-check]").forEach((input) => {
       const field = input.dataset.machineCheck;
-      input.disabled = !machine || selectionCount > 1;
-      input.checked = machine ? machine[field] !== false : false;
-      if (field === "locked") input.checked = machine?.locked === true;
+      input.disabled = !machine || (selectionCount > 1 && !BULK_MACHINE_CHECKS.has(field));
+      if (selectionCount > 1 && BULK_MACHINE_CHECKS.has(field)) {
+        const values = selectionItems.map((item) => field === "locked" ? item.locked === true : item[field] !== false);
+        input.checked = values.every(Boolean);
+        input.indeterminate = values.some(Boolean) && !values.every(Boolean);
+      } else {
+        input.indeterminate = false;
+        input.checked = machine ? (field === "locked" ? machine.locked === true : machine[field] !== false) : false;
+      }
     });
 
+    const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
     panel.querySelectorAll("[data-animation-field]").forEach((input) => {
       const field = input.dataset.animationField;
-      input.disabled = !machine || selectionCount > 1;
-      input.value = machine ? String(machine[field] ?? "") : "";
+      input.disabled = !machine;
+      input.dataset.mixed = "false";
+      input.removeAttribute("title");
+      if (selectionCount > 1 && !editingMotionMember) {
+        const common = commonMachineValue(selectionItems, field);
+        input.value = String(common.value ?? "");
+        input.dataset.mixed = String(common.mixed);
+        if (common.mixed) input.title = "Mixed values. Changing this setting applies it to all selected objects.";
+      } else {
+        input.value = machine ? String(machine[field] ?? "") : "";
+        if (editingMotionMember) input.title = `Editing animation for ${machine?.name || "the active member"} only.`;
+      }
     });
     panel.querySelectorAll("[data-animation-check]").forEach((input) => {
-      input.disabled = !machine || selectionCount > 1;
-      input.checked = Boolean(machine?.[input.dataset.animationCheck]);
+      input.disabled = !machine;
+      const field = input.dataset.animationCheck;
+      if (selectionCount > 1 && !editingMotionMember) {
+        const values = selectionItems.map((item) => Boolean(item[field]));
+        input.checked = values.every(Boolean);
+        input.indeterminate = values.some(Boolean) && !values.every(Boolean);
+      } else {
+        input.indeterminate = false;
+        input.checked = Boolean(machine?.[field]);
+        if (editingMotionMember) input.title = `Editing animation for ${machine?.name || "the active member"} only.`;
+      }
     });
     const previewAnimations = panel.querySelector("[data-editor-action='preview-animations']");
     if (previewAnimations) {
       previewAnimations.classList.toggle("active", state.previewObjectAnimations);
       previewAnimations.textContent = state.previewObjectAnimations ? "Pause animations" : "Preview animations";
+    }
+
+    const addDesignPicker = panel.querySelector("#new-design-machine");
+    if (addDesignPicker) {
+      const previousDesignId = addDesignPicker.value;
+      const designs = designerMachineDesigns();
+      addDesignPicker.innerHTML = designs.length
+        ? designs.map((design) => {
+          const base = designBaseDimensions(design);
+          return `<option value="${escapeHtml(design.id)}">${escapeHtml(design.name || design.id)} · ${base.w.toFixed(1)} × ${base.d.toFixed(1)} × ${base.h.toFixed(1)} ft</option>`;
+        }).join("")
+        : `<option value="">No saved custom designs</option>`;
+      addDesignPicker.disabled = designs.length === 0;
+      addDesignPicker.value = designs.some((design) => design.id === previousDesignId)
+        ? previousDesignId
+        : (designs[0]?.id || "");
+      const addDesignButton = panel.querySelector("[data-editor-action='add-design-machine']");
+      if (addDesignButton) addDesignButton.disabled = designs.length === 0;
+      const status = panel.querySelector("[data-add-design-status]");
+      if (status) status.textContent = designs.length
+        ? `${designs.length} saved custom machine design${designs.length === 1 ? " is" : "s are"} ready to add.`
+        : "No custom machines are saved yet. Open Machine Design Studio, choose New, build the machine, and return here.";
+    }
+    const addDesignStage = panel.querySelector("#new-design-machine-stage");
+    if (addDesignStage) {
+      const previousStage = addDesignStage.value;
+      addDesignStage.innerHTML = stages.map((stage, index) => (
+        `<option value="${index}">${String(index + 1).padStart(2, "0")} · ${escapeHtml(stage.short)}</option>`
+      )).join("");
+      addDesignStage.value = previousStage !== "" && Number(previousStage) < stages.length
+        ? previousStage
+        : String(state.stage);
     }
 
     const designPicker = panel.querySelector("[data-design-picker]");
@@ -1535,6 +2240,20 @@
       designPicker.disabled = !machine || selectionCount > 1;
       designPicker.value = machine?.designId || "";
     }
+    const activeDesign = machine?.designId ? designLibrary[machine.designId] : null;
+    const designSizingSummary = panel.querySelector("[data-design-sizing-summary]");
+    if (designSizingSummary) {
+      if (!machine) designSizingSummary.textContent = "Select one object to control custom-design sizing.";
+      else if (!activeDesign) designSizingSummary.textContent = "The built-in model uses the plant object's dimensions.";
+      else {
+        const base = designBaseDimensions(activeDesign, machine);
+        const mode = normalizedDesignScaleMode(machine.designScaleMode);
+        const modeLabel = mode === "match" ? "kept synchronized" : mode === "stretch" ? "stretched independently" : "uniformly fitted";
+        designSizingSummary.textContent = `Design ${base.w.toFixed(1)} × ${base.d.toFixed(1)} × ${base.h.toFixed(1)} ft · ${modeLabel}.`;
+      }
+    }
+    const syncDesignButton = panel.querySelector("[data-editor-action='sync-design-dimensions']");
+    if (syncDesignButton) syncDesignButton.disabled = selectionCount !== 1 || !activeDesign;
 
     const multiSelectionPanel = panel.querySelector("[data-multi-selection]");
     if (multiSelectionPanel) multiSelectionPanel.hidden = selectionCount < 2;
@@ -1570,6 +2289,31 @@
       motionParentPicker.value = preferredParent;
       motionParentPicker.disabled = selectionCount < 2;
     }
+    const motionActivePicker = panel.querySelector("[data-motion-active-picker]");
+    if (motionActivePicker) {
+      motionActivePicker.innerHTML = selectionItems.map((item) => (
+        `<option value="${escapeHtml(item.instanceId)}">${escapeHtml(item.name)}</option>`
+      )).join("");
+      motionActivePicker.value = machine?.instanceId || selectionItems[0]?.instanceId || "";
+      motionActivePicker.disabled = selectionCount < 2;
+    }
+    const ownAnimationToggle = panel.querySelector("[data-motion-own-animation]");
+    if (ownAnimationToggle) {
+      const root = motionRoot(machine);
+      ownAnimationToggle.checked = machine ? machine.playOwnAnimation !== false : false;
+      ownAnimationToggle.disabled = !machine || !machine.motionParentId || machine.instanceId === root?.instanceId;
+      ownAnimationToggle.title = ownAnimationToggle.disabled
+        ? "Choose an attached child as the active member to control its local animation layer."
+        : "When enabled, this child keeps its own animation while inheriting every parent transform.";
+    }
+    const commonAnimationMode = selectionCount > 1 ? commonMachineValue(selectionItems, "animationMode") : { mixed: false, value: machine?.animationMode };
+    const objectIsFourStep = !commonAnimationMode.mixed && commonAnimationMode.value === "fourStep";
+    panel.querySelectorAll("[data-object-four-step]").forEach((element) => {
+      element.hidden = !objectIsFourStep;
+    });
+    panel.querySelectorAll("[data-object-standard-pause]").forEach((element) => {
+      element.hidden = objectIsFourStep;
+    });
     const joinMotionButton = panel.querySelector("[data-editor-action='join-animation-group']");
     if (joinMotionButton) joinMotionButton.disabled = selectionCount < 2;
     const unjoinMotionButton = panel.querySelector("[data-editor-action='unjoin-animation-group']");
@@ -1582,6 +2326,20 @@
     panel.querySelectorAll("[data-floor-field]").forEach((input) => {
       input.value = String(floor[input.dataset.floorField]);
     });
+    panel.querySelectorAll("[data-column-grid-field]").forEach((input) => {
+      input.value = String(columnGrid[input.dataset.columnGridField]);
+    });
+    const autoColumns = panel.querySelector("[data-column-grid-check='autoExtend']");
+    if (autoColumns) autoColumns.checked = columnGrid.autoExtend !== false;
+    structuralColumns();
+    const columnSummary = panel.querySelector("[data-column-grid-summary]");
+    if (columnSummary) {
+      const spacingNote = structuralColumnMeta.limited
+        ? ` Performance safeguard is using every ${structuralColumnMeta.stride}th grid line on this unusually large floor.`
+        : "";
+      columnSummary.textContent = `${structuralColumnMeta.baseCount} CAD columns + ${structuralColumnMeta.generatedCount} extension columns.${spacingNote}`;
+      columnSummary.classList.toggle("warning", structuralColumnMeta.limited);
+    }
 
     const overlaps = overlapPairs();
     const overlapSummary = panel.querySelector("[data-overlap-summary]");
@@ -1606,19 +2364,6 @@
     });
 
     const stage = currentStage();
-    panel.querySelectorAll("[data-floor-field]").forEach((input) => {
-      input.addEventListener("change", () => {
-        const field = input.dataset.floorField;
-        const value = Number(input.value);
-        if (!Number.isFinite(value)) return;
-        pushHistory();
-        floor[field] = ["width", "length"].includes(field) ? Math.max(40, value) : value;
-        persistLayout();
-        updateEditorPanel();
-        showToast("Floor dimensions updated.");
-      });
-    });
-
     panel.querySelectorAll("[data-stage-field]").forEach((input) => {
       const field = input.dataset.stageField;
       input.value = field === "details" ? (stage?.details || []).join(", ") : stage?.[field] || "";
@@ -1794,7 +2539,9 @@
       machines,
       stages,
       floor,
+      columnGrid,
       hiddenColumns: [...state.hiddenColumns],
+      hiddenColumnKeys: [...state.hiddenColumnKeys],
       walls: state.walls,
       playbackSpeed: state.playbackSpeed,
     };
@@ -1820,7 +2567,10 @@
       machines = loadSceneAwareMachines(payload);
       stages = normalizeStages(payload.stages);
       floor = normalizeFloor(payload.floor);
+      columnGrid = normalizeColumnGrid(payload.columnGrid);
       state.hiddenColumns = new Set(payload.hiddenColumns || []);
+      state.hiddenColumnKeys = new Set(payload.hiddenColumnKeys || []);
+      invalidateStructuralColumns();
       state.walls = { ...defaultWalls, ...(payload.walls || {}) };
       state.playbackSpeed = Number(payload.playbackSpeed) || 1;
       state.stage = clamp(state.stage, 0, stages.length - 1);
@@ -1910,15 +2660,23 @@
       <div class="editor-tools" role="group" aria-label="Editor selection mode">
         <button type="button" data-editor-tool="machines" class="active">Objects</button>
         <button type="button" data-editor-tool="pillars">Structure</button>
-        <button type="button" data-editor-tool="timeline">Timeline</button>
+        <button type="button" data-editor-tool="timeline">Stages</button>
+        <button type="button" data-editor-tool="project">Project</button>
       </div>
 
       <div data-editor-section="machines">
+        <div class="object-editor-tabs" role="tablist" aria-label="Object editing sections">
+          <button type="button" data-object-editor-tab="select" class="active" aria-selected="true">Select</button>
+          <button type="button" data-object-editor-tab="transform" aria-selected="false">Transform</button>
+          <button type="button" data-object-editor-tab="animation" aria-selected="false">Animation</button>
+          <button type="button" data-object-editor-tab="add" aria-selected="false">Add</button>
+        </div>
+        <section data-object-editor-panel="select" class="object-editor-panel">
         <div class="editor-object-browser">
           <label>Find an object<input type="search" data-object-search placeholder="Search machines, rooms, racks…"></label>
           <label>Object list<select data-object-picker><option value="">Choose an object…</option></select></label>
           <div class="object-browser-actions">
-            <button type="button" data-editor-action="focus" data-needs-selection>Focus selected</button>
+            <button class="focus-selection-button" type="button" data-editor-action="focus" data-needs-selection>Frame selected object(s)</button>
             <button type="button" data-editor-action="select-production-glass">Select moving glass</button>
             <button type="button" data-editor-action="select-floor-feature">Select floor feature</button>
           </div>
@@ -1932,7 +2690,9 @@
           <label>Selected color<input type="color" data-group-color value="#277d78"></label>
           <div class="motion-parent-control">
             <label>Motion parent<select data-motion-parent-picker></select></label>
-            <p>The parent carries the attached objects. Every child keeps playing its own animation inside the parent’s moving coordinate space.</p>
+            <label>Active member<select data-motion-active-picker></select></label>
+            <label class="motion-own-toggle"><input type="checkbox" data-motion-own-animation> Play the active member’s own animation on top of inherited motion</label>
+            <p>The parent carries the attached objects. Each child can independently play or pause its own local animation while remaining attached.</p>
           </div>
           <div class="motion-group-actions">
             <button type="button" data-editor-action="join-animation-group">Attach to parent</button>
@@ -1961,17 +2721,42 @@
           <button type="button" data-nudge="rotate-negative" data-needs-selection>↶ Y 5°</button>
           <button type="button" data-nudge="rotate-positive" data-needs-selection>Y 5° ↷</button>
         </div>
-        <div class="editor-properties">
+        </section>
+        <section data-object-editor-panel="transform" class="object-editor-panel" hidden>
+        <div class="editor-properties editor-transform-properties">
           <label class="wide">Name<input data-machine-field="name" data-needs-selection type="text"></label>
           <label class="wide">Object type<select data-machine-field="type" data-needs-selection>${typeMarkup}</select></label>
-          <label>X position<input data-machine-field="x" data-needs-selection type="number" step="0.5"></label>
-          <label>Z position<input data-machine-field="z" data-needs-selection type="number" step="0.5"></label>
-          <label>Rotation X°<input data-machine-field="rotationX" data-needs-selection type="number" step="5"></label>
-          <label>Rotation Y°<input data-machine-field="rotationY" data-needs-selection type="number" step="5"></label>
-          <label>Rotation Z°<input data-machine-field="rotationZ" data-needs-selection type="number" step="5"></label>
-          <label>Width<input data-machine-field="w" data-needs-selection type="number" min="0.5" step="0.5"></label>
-          <label><span data-depth-label>Depth</span><input data-machine-field="d" data-needs-selection type="number" min="0.5" step="0.5"></label>
-          <label>Height<input data-machine-field="h" data-needs-selection type="number" min="0.5" step="0.5"></label>
+          <fieldset class="editor-transform-group wide"><legend>Position (ft)</legend><div>
+            <label>X<input data-machine-field="x" data-needs-selection type="number" step="0.1"></label>
+            <label>Y<input data-machine-field="y" data-needs-selection type="number" step="0.1"></label>
+            <label>Z<input data-machine-field="z" data-needs-selection type="number" step="0.1"></label>
+          </div></fieldset>
+          <fieldset class="editor-transform-group wide"><legend>Rotation (degrees)</legend><div>
+            <label>X<input data-machine-field="rotationX" data-needs-selection type="number" step="1"></label>
+            <label>Y<input data-machine-field="rotationY" data-needs-selection type="number" step="1"></label>
+            <label>Z<input data-machine-field="rotationZ" data-needs-selection type="number" step="1"></label>
+          </div></fieldset>
+          <fieldset class="editor-transform-group wide"><legend>Dimensions (ft)</legend><div>
+            <label>Width<input data-machine-field="w" data-needs-selection type="number" min="0.01" step="0.01"></label>
+            <label><span data-depth-label>Depth</span><input data-machine-field="d" data-needs-selection type="number" min="0.01" step="0.01"></label>
+            <label>Height<input data-machine-field="h" data-needs-selection type="number" min="0.01" step="0.01"></label>
+          </div></fieldset>
+          <fieldset class="editor-transform-group wide scale-control-panel"><legend>Scale</legend>
+            <div class="scale-mode-selector" role="group" aria-label="Scaling mode">
+              <button type="button" data-machine-scale-mode="uniform" aria-pressed="true">Uniform</button>
+              <button type="button" data-machine-scale-mode="individual" aria-pressed="false">Individual axes</button>
+            </div>
+            <div class="scale-value-fields scale-uniform-fields" data-scale-fields="uniform">
+              <label>Uniform scale (%)<input data-machine-scale="uniform" data-needs-selection type="number" min="1" max="10000" step="1" placeholder="100.00"></label>
+            </div>
+            <div class="scale-value-fields scale-axis-fields" data-scale-fields="individual" hidden>
+              <label>X scale (%)<input data-machine-scale="x" data-needs-selection type="number" min="1" max="10000" step="1" placeholder="100.00"></label>
+              <label>Y scale (%)<input data-machine-scale="y" data-needs-selection type="number" min="1" max="10000" step="1" placeholder="100.00"></label>
+              <label>Z scale (%)<input data-machine-scale="z" data-needs-selection type="number" min="1" max="10000" step="1" placeholder="100.00"></label>
+            </div>
+            <p data-scale-mode-help>Uniform scaling keeps width, height, and depth proportional.</p>
+            <p>Dimensions above show the final size in feet. Scale percentages are relative to the object's original or linked-design size.</p>
+          </fieldset>
           <label>Appears at<select data-machine-field="reveal" data-stage-select data-needs-selection></select></label>
           <label>Disappears after<select data-machine-field="retire" data-stage-select data-allow-never data-needs-selection></select></label>
           <label>Color<input data-machine-field="color" data-needs-selection type="color"></label>
@@ -1980,10 +2765,16 @@
             <option value="ignore">Ignore overlaps</option>
           </select></label>
           <label class="wide">Design preset<select data-design-picker data-needs-selection></select></label>
+          <label class="wide">Design sizing<select data-machine-field="designScaleMode" data-needs-selection>
+            <option value="preserve">Preserve proportions · fit uniformly</option>
+            <option value="match">Match design dimensions · keep synced</option>
+            <option value="stretch">Stretch to plant object · independent axes</option>
+          </select></label>
         </div>
         <div class="machine-design-actions">
           <button type="button" data-editor-action="machine-studio">Open Machine Design Studio</button>
-          <span>Edit cabinets, rollers, beams, wheels, glass panels, colors, and component dimensions on a dedicated page.</span>
+          <button type="button" data-editor-action="sync-design-dimensions">Sync plant dimensions to design</button>
+          <span data-design-sizing-summary>Edit the design on its dedicated page. Preserve proportions is the recommended default.</span>
         </div>
         <div class="overlap-tools">
           <p data-overlap-summary>No solid-object overlaps detected.</p>
@@ -2007,6 +2798,8 @@
             <label>Rail height<input type="number" min="4" step="0.5" data-crane-field="height"></label>
           </div>
         </fieldset>
+        </section>
+        <section data-object-editor-panel="animation" class="object-editor-panel" hidden>
         <fieldset class="object-animation-controls">
           <legend>Object animation</legend>
           <div class="animation-preview-row">
@@ -2018,6 +2811,7 @@
               <option value="none">None</option>
               <option value="loop">Loop across a path</option>
               <option value="pingPong">Move back and forth</option>
+              <option value="fourStep">Four-step path</option>
               <option value="spin">Rotate continuously</option>
               <option value="bob">Bob up and down</option>
               <option value="pulse">Pulse size</option>
@@ -2026,67 +2820,100 @@
             <label>Axis<select data-animation-field="animationAxis">
               <option value="x">X axis</option><option value="y">Y axis</option><option value="z">Z axis</option><option value="all">All axes</option>
             </select></label>
-            <label>Distance / amount<input data-animation-field="animationDistance" type="number" step="0.5"></label>
+            <label>Distance / amount 1<input data-animation-field="animationDistance" type="number" step="0.5"></label>
+            <label data-object-four-step hidden>Axis 2<select data-animation-field="animationSecondaryAxis"><option value="x">X axis</option><option value="y">Y axis</option><option value="z">Z axis</option></select></label>
+            <label data-object-four-step hidden>Distance 2<input data-animation-field="animationSecondaryDistance" type="number" step="0.5"></label>
             <label>Speed (cycles/sec)<input data-animation-field="animationSpeed" type="number" min="0" step="0.01"></label>
-            <label>Pause after movement (sec)<input data-animation-field="animationPauseSeconds" type="number" min="0" step="0.1"></label>
+            <label data-object-standard-pause>Pause after cycle / endpoint (sec)<input data-animation-field="animationPauseSeconds" type="number" min="0" step="0.1"></label>
+            <label data-object-four-step hidden>Pause after step 1<input data-animation-field="animationStep1PauseSeconds" type="number" min="0" step="0.1"><small>Axis 1 outbound</small></label>
+            <label data-object-four-step hidden>Pause after step 2<input data-animation-field="animationStep2PauseSeconds" type="number" min="0" step="0.1"><small>Axis 2 outbound</small></label>
+            <label data-object-four-step hidden>Pause after step 3<input data-animation-field="animationStep3PauseSeconds" type="number" min="0" step="0.1"><small>Axis 1 return</small></label>
+            <label data-object-four-step hidden>Pause after step 4<input data-animation-field="animationStep4PauseSeconds" type="number" min="0" step="0.1"><small>Axis 2 return</small></label>
             <label>Phase offset °<input data-animation-field="animationPhase" type="number" step="5"></label>
           </div>
           <button type="button" data-editor-action="reverse-animation-path" data-needs-selection>Reverse movement direction</button>
-          <p>The current object position is the animation center. Movement axes are local to the object, so rotating the object on X, Y, or Z rotates the direction of travel. Spin can rotate around X, Y, Z, or all three axes. Pause after movement holds back-and-forth animations at each end and holds other animations after each completed cycle. Animations pause automatically while editing unless Preview animations is enabled.</p>
+          <p>The current object position is the animation origin. Movement axes are local to the object, so rotating the object rotates the direction of travel. Four-step path moves along axis 1, then axis 2, returns along axis 1, and returns along axis 2—for example up, forward, down, backward. Each of the four path corners has its own pause timer, so outbound and return waits can be tuned independently. Animations pause automatically while editing unless Preview animations is enabled.</p>
         </fieldset>
+        </section>
+        <section data-object-editor-panel="add" class="object-editor-panel" hidden>
         <div class="editor-actions">
           <button type="button" data-editor-action="copy" data-needs-selection>Copy</button>
           <button type="button" data-editor-action="paste" disabled>Paste</button>
           <button type="button" data-editor-action="delete" data-needs-selection>Remove</button>
         </div>
-        <div class="editor-add">
-          <p>Add to the 3D model</p>
-          <input type="text" id="new-machine-name" placeholder="Optional custom name">
-          <div><select id="new-machine-type">
-            <optgroup label="Photo-refined machines">
-              <option value="kodiak">KODIAK 10-45 polisher</option>
-              <option value="waterjet">SQ4020 waterjet</option>
-              <option value="denver">Denver Surface CNC</option>
-              <option value="washer">Zafferani glass washer</option>
-              <option value="furnace">Tempering furnace</option>
-              <option value="cube">Diamon-Fusion FuseCube</option>
-              <option value="wrapping">Glass wrapping station</option>
-              <option value="shipping">Shipping glass rack</option>
-            </optgroup>
-            <optgroup label="Floor features">
-              <option value="safetyLine">Safety yellow floor line</option>
-              <option value="trench">Utility trench</option>
-              <option value="floorDrain">Square floor drain</option>
-            </optgroup>
-            <optgroup label="Animations">
-              <option value="animatedGlass">Vertical glass · back and forth</option>
-              <option value="animatedBox">Material box · back and forth</option>
-              <option value="animatedPerson">Team member · walking path</option>
-              <option value="animatedCart">Material cart · shuttle path</option>
-              <option value="animatedBeacon">Status beacon · blinking</option>
-            </optgroup>
-            <optgroup label="General objects">
-              <option value="generic">Generic machine</option>
-              <option value="genericBox">General box</option>
-              <option value="aFrame">A-frame glass cart</option>
-              <option value="aFrameTruck">A-frame glass truck</option>
-              <option value="craneMachine">Freestanding gantry crane</option>
-              <option value="bridgeCrane">Overhead bridge crane</option>
-              <option value="glassRack">Raw glass rack</option>
-              <option value="room">Office / room</option>
-              <option value="person">Team member marker</option>
-            </optgroup>
-          </select><button type="button" data-editor-action="add">Add</button></div>
-        </div>
+        <details class="editor-add" open>
+          <summary>Add to the 3D model</summary>
+          <section class="editor-add-design" aria-label="Add a saved Machine Design Studio machine">
+            <div class="editor-add-title">
+              <div><strong>Saved designer machine</strong><span>Insert a reusable machine created in Machine Design Studio.</span></div>
+              <button type="button" data-editor-action="refresh-add-designs">Refresh</button>
+            </div>
+            <label>Machine design<select id="new-design-machine"><option value="">No saved custom designs</option></select></label>
+            <label>Plant name<input type="text" id="new-design-machine-name" placeholder="Uses the design name"></label>
+            <div class="editor-add-grid">
+              <label>Appearance stage<select id="new-design-machine-stage"></select></label>
+              <label>Placement<select id="new-design-machine-placement">
+                <option value="open">Find open floor space</option>
+                <option value="view">Center of current view</option>
+                <option value="plant">Plant center</option>
+              </select></label>
+            </div>
+            <p class="editor-add-status" data-add-design-status>Custom designs saved in Machine Design Studio appear here automatically.</p>
+            <div class="editor-add-actions">
+              <button type="button" data-editor-action="open-new-machine-designer">Create or edit designs</button>
+              <button type="button" class="primary" data-editor-action="add-design-machine">Add designer machine</button>
+            </div>
+          </section>
+          <details class="editor-add-standard">
+            <summary>Standard machines, objects, animations, and floor features</summary>
+            <input type="text" id="new-machine-name" placeholder="Optional custom name">
+            <div><select id="new-machine-type">
+              <optgroup label="Photo-refined machines">
+                <option value="kodiak">KODIAK 10-45 polisher</option>
+                <option value="waterjet">SQ4020 waterjet</option>
+                <option value="denver">Denver Surface CNC</option>
+                <option value="washer">Zafferani glass washer</option>
+                <option value="furnace">Tempering furnace</option>
+                <option value="cube">Diamon-Fusion FuseCube</option>
+                <option value="wrapping">Glass wrapping station</option>
+                <option value="shipping">Shipping glass rack</option>
+              </optgroup>
+              <optgroup label="Floor features">
+                <option value="safetyLine">Safety yellow floor line</option>
+                <option value="trench">Utility trench</option>
+                <option value="floorDrain">Square floor drain</option>
+              </optgroup>
+              <optgroup label="Animations">
+                <option value="animatedGlass">Vertical glass · back and forth</option>
+                <option value="animatedBox">Material box · back and forth</option>
+                <option value="animatedPerson">Team member · walking path</option>
+                <option value="animatedCart">Material cart · shuttle path</option>
+                <option value="animatedBeacon">Status beacon · blinking</option>
+              </optgroup>
+              <optgroup label="General objects">
+                <option value="generic">Generic machine</option>
+                <option value="genericBox">General box</option>
+                <option value="aFrame">A-frame glass cart</option>
+                <option value="aFrameTruck">A-frame glass truck</option>
+                <option value="craneMachine">Freestanding gantry crane</option>
+                <option value="bridgeCrane">Overhead bridge crane</option>
+                <option value="glassRack">Raw glass rack</option>
+                <option value="room">Office / room</option>
+                <option value="person">Team member marker</option>
+              </optgroup>
+            </select><button type="button" data-editor-action="add">Add standard object</button></div>
+          </details>
+        </details>
+        </section>
       </div>
 
       <div data-editor-section="pillars" hidden>
-        <div class="editor-callout">Click any yellow pillar to remove or restore it. Safety lines, trenches, and floor drains are regular selectable objects in the Objects tab, where their position, rotation, width, length, and timeline visibility can be edited.</div>
+        <div class="editor-callout">Click any pillar to remove or restore it. When the floor expands beyond the original CAD footprint, the system continues the established structural bay grid automatically.</div>
         <fieldset class="floor-controls">
           <legend>Floor layout dimensions</legend>
           <div>
-            <label>Width (ft)<input type="number" min="40" step="5" data-floor-field="width"></label>
-            <label>Length (ft)<input type="number" min="40" step="5" data-floor-field="length"></label>
+            <label>Width (ft)<input type="number" min="40" max="5000" step="5" data-floor-field="width"></label>
+            <label>Length (ft)<input type="number" min="40" max="5000" step="5" data-floor-field="length"></label>
             <label>Center X<input type="number" step="1" data-floor-field="centerX"></label>
             <label>Center Z<input type="number" step="1" data-floor-field="centerZ"></label>
           </div>
@@ -2094,6 +2921,17 @@
             <button type="button" data-editor-action="floor-fit">Fit floor around objects</button>
             <button type="button" data-editor-action="floor-cad">Restore CAD floor size</button>
           </div>
+          <p class="floor-limit-note">Supported range: 40–5,000 ft. Grid spacing adapts automatically on large floors.</p>
+        </fieldset>
+        <fieldset class="column-grid-controls">
+          <legend>Automatic structural columns</legend>
+          <label class="column-grid-toggle"><input type="checkbox" data-column-grid-check="autoExtend" checked> Extend the CAD column grid into new floor sections</label>
+          <div class="column-grid-values">
+            <label>X bay spacing (ft)<input type="number" min="5" max="250" step="1" data-column-grid-field="spacingX"></label>
+            <label>Z bay spacing (ft)<input type="number" min="5" max="250" step="1" data-column-grid-field="spacingZ"></label>
+          </div>
+          <p data-column-grid-summary>Column grid ready.</p>
+          <button type="button" data-editor-action="column-grid-defaults">Restore 40 × 30 ft CAD bay spacing</button>
         </fieldset>
         <fieldset class="wall-controls">
           <legend>Exterior wall sections</legend>
@@ -2121,13 +2959,16 @@
         </div>
       </div>
 
-      <div class="editor-footer">
-        <button type="button" data-editor-action="export">Export layout</button>
-        <button type="button" data-editor-action="import">Import layout</button>
-        <input type="file" data-layout-file accept="application/json,.json" hidden>
-        <button type="button" data-editor-action="reset">Reset project</button>
-        <button type="button" data-editor-action="done" class="primary">Done editing</button>
+      <div class="editor-project" data-editor-section="project" hidden>
+        <div class="editor-callout"><strong>Project data</strong><p>Export a backup before moving the project to another browser or computer. Import replaces the current browser copy.</p></div>
+        <div class="editor-project-actions">
+          <button type="button" data-editor-action="export">Export layout</button>
+          <button type="button" data-editor-action="import">Import layout</button>
+          <input type="file" data-layout-file accept="application/json,.json" hidden>
+          <button type="button" data-editor-action="reset" class="danger-subtle">Reset project</button>
+        </div>
       </div>
+      <div class="editor-close-bar"><button type="button" data-editor-action="done" class="primary">Done editing</button></div>
     `;
     frame.appendChild(panel);
 
@@ -2135,6 +2976,12 @@
       button.addEventListener("click", () => {
         state.editorTool = button.dataset.editorTool;
         if (state.editorTool !== "machines") clearMachineSelection();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelectorAll("[data-object-editor-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.objectEditorTab = button.dataset.objectEditorTab;
         updateEditorPanel();
       });
     });
@@ -2184,6 +3031,24 @@
     });
     panel.querySelector("[data-editor-action='join-animation-group']")?.addEventListener("click", joinSelectedAnimationObjects);
     panel.querySelector("[data-editor-action='unjoin-animation-group']")?.addEventListener("click", unjoinSelectedAnimationObjects);
+    panel.querySelector("[data-motion-active-picker]")?.addEventListener("change", (event) => {
+      const target = machineById(event.target.value);
+      if (!target) return;
+      state.selectedMachineId = target.instanceId;
+      state.selectedMachineIds = new Set(motionAssemblyMembers(target).map((item) => item.instanceId));
+      updateEditorPanel();
+    });
+    panel.querySelector("[data-motion-own-animation]")?.addEventListener("change", (event) => {
+      const machine = selectedMachine();
+      if (!machine?.motionParentId) return;
+      pushHistory();
+      machine.playOwnAnimation = event.target.checked;
+      persistLayout();
+      updateEditorPanel();
+      showToast(event.target.checked
+        ? `${machine.name} now plays its own animation while following its parent.`
+        : `${machine.name} now follows only inherited parent motion.`);
+    });
     panel.querySelector("[data-group-color]")?.addEventListener("change", (event) => {
       const selection = selectedMachines();
       const color = String(event.target.value || "");
@@ -2204,9 +3069,19 @@
       if (!machine) return;
       pushHistory();
       machine.designId = event.target.value || "";
+      if (machine.designId && designLibrary[machine.designId]) {
+        const base = designBaseDimensions(designLibrary[machine.designId], machine);
+        machine.naturalW = base.w;
+        machine.naturalD = base.d;
+        machine.naturalH = base.h;
+        refreshMachineScaleMetadata(machine);
+      }
+      if (machine.designId && normalizedDesignScaleMode(machine.designScaleMode) === "match") {
+        syncMachineDimensionsToDesign(machine, designLibrary[machine.designId]);
+      }
       persistLayout();
       updateEditorPanel();
-      showToast(machine.designId ? "Custom design applied." : "Built-in model restored.");
+      showToast(machine.designId ? "Custom design applied with the selected sizing mode." : "Built-in model restored.");
     });
     panel.querySelector("[data-editor-action='machine-studio']")?.addEventListener("click", () => {
       const machine = selectedMachine();
@@ -2214,6 +3089,20 @@
       const target = standalone ? "machine-studio.html" : "/machine-studio";
       const query = machine ? `?machine=${encodeURIComponent(machine.instanceId)}` : "";
       window.open(`${target}${query}`, "_blank", "noopener");
+    });
+    panel.querySelector("[data-editor-action='sync-design-dimensions']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      const design = machine?.designId ? designLibrary[machine.designId] : null;
+      if (!machine || !design) {
+        showToast("Apply a custom design before syncing dimensions.");
+        return;
+      }
+      pushHistory();
+      machine.designScaleMode = "match";
+      syncMachineDimensionsToDesign(machine, design);
+      persistLayout();
+      updateEditorPanel();
+      showToast(`Plant dimensions now match ${design.name} and will stay synchronized.`);
     });
     panel.querySelector("[data-editor-action='find-overlap']")?.addEventListener("click", selectNextOverlap);
     panel.querySelector("[data-editor-action='separate-selected']")?.addEventListener("click", separateSelectedObject);
@@ -2246,16 +3135,11 @@
         const selection = selectedMachines();
         if (!machine) return;
         const field = input.dataset.machineField;
+        const bulkSelection = selection.length > 1;
+        if (bulkSelection && !BULK_MACHINE_FIELDS.has(field)) return;
         pushHistory();
-        if (field === "color" && selection.length > 1) {
-          const color = input.value.trim();
-          if (/^#[0-9a-f]{6}$/i.test(color)) selection.forEach((item) => { item.color = color; });
-          persistLayout();
-          updateEditorPanel();
-          showToast(`Updated the color of ${selection.length} selected objects.`);
-          return;
-        }
-        if (["name", "type", "color", "collisionMode"].includes(field)) {
+        const targets = bulkSelection ? selection : [machine];
+        if (["name", "type", "color", "collisionMode", "designScaleMode"].includes(field)) {
           const value = input.value.trim();
           if (field === "name") {
             machine.name = value || machine.name;
@@ -2287,30 +3171,86 @@
               }
             }
           } else if (field === "collisionMode") {
-            machine.collisionMode = value === "ignore" ? "ignore" : "solid";
-          } else if (/^#[0-9a-f]{6}$/i.test(value)) machine.color = value;
+            targets.forEach((item) => { item.collisionMode = value === "ignore" ? "ignore" : "solid"; });
+          } else if (field === "designScaleMode") {
+            machine.designScaleMode = normalizedDesignScaleMode(value);
+            if (machine.designScaleMode === "match" && machine.designId && designLibrary[machine.designId]) {
+              syncMachineDimensionsToDesign(machine, designLibrary[machine.designId]);
+            }
+          } else if (/^#[0-9a-f]{6}$/i.test(value)) {
+            targets.forEach((item) => { item.color = value; });
+          }
         } else {
           const value = Number(input.value);
           if (!Number.isFinite(value)) return;
-          if (["w","d","h"].includes(field)) machine[field] = Math.max(.5,value);
-          else if (field === "reveal") machine[field] = clamp(Math.round(value),0,stages.length-1);
-          else if (field === "retire") machine[field] = value >= 99 ? 99 : clamp(Math.round(value),machine.reveal,stages.length-1);
-          else {
-            machine[field] = value;
-            if (field === "rotationY") machine.rotation = value;
-          }
+          targets.forEach((item) => {
+            if (["w","d","h"].includes(field)) {
+              if (normalizedMachineScaleEditMode(item.scaleEditMode, item) === "uniform") {
+                const reference = machineReferenceDimensions(item);
+                const referenceValue = field === "w" ? reference.w : field === "d" ? reference.d : reference.h;
+                setMachineScalePercent(item, "uniform", Math.max(.01, value) / Math.max(.01, referenceValue) * 100);
+              } else resizeMachineAroundCenter(item, field, Math.max(.01,value));
+            }
+            else if (field === "reveal") item[field] = clamp(Math.round(value),0,stages.length-1);
+            else if (field === "retire") item[field] = value >= 99 ? 99 : clamp(Math.round(value),item.reveal,stages.length-1);
+            else {
+              item[field] = value;
+              if (field === "rotationY") item.rotation = value;
+            }
+          });
         }
         persistLayout();
         updateEditorPanel();
+        if (bulkSelection) showToast(`Updated ${field} for ${selection.length} selected objects.`);
+      });
+    });
+
+
+    panel.querySelectorAll("[data-machine-scale-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const selection = selectedMachines();
+        if (!selection.length) return;
+        const mode = normalizedMachineScaleEditMode(button.dataset.machineScaleMode);
+        pushHistory();
+        selection.forEach((item) => {
+          refreshMachineScaleMetadata(item);
+          if (mode === "uniform") {
+            const average = (Number(item.scaleXPercent) + Number(item.scaleYPercent) + Number(item.scaleZPercent)) / 3;
+            setMachineScalePercent(item, "uniform", average);
+          } else item.scaleEditMode = "individual";
+        });
+        persistLayout();
+        updateEditorPanel();
+        showToast(mode === "uniform"
+          ? `Uniform scaling selected for ${selection.length} object${selection.length === 1 ? "" : "s"}.`
+          : `Individual-axis scaling selected for ${selection.length} object${selection.length === 1 ? "" : "s"}.`);
+      });
+    });
+
+    panel.querySelectorAll("[data-machine-scale]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const selection = selectedMachines();
+        if (!selection.length) return;
+        const percent = Number(input.value);
+        if (!Number.isFinite(percent)) return;
+        pushHistory();
+        selection.forEach((item) => setMachineScalePercent(item, input.dataset.machineScale, percent));
+        persistLayout();
+        updateEditorPanel();
+        showToast(`Scale updated for ${selection.length} object${selection.length === 1 ? "" : "s"}.`);
       });
     });
 
     panel.querySelectorAll("[data-machine-check]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
+        const selection = selectedMachines();
         if (!machine) return;
+        const field = input.dataset.machineCheck;
+        const targets = selection.length > 1 && BULK_MACHINE_CHECKS.has(field) ? selection : [machine];
         pushHistory();
-        machine[input.dataset.machineCheck] = input.checked;
+        targets.forEach((item) => { item[field] = input.checked; });
+        input.indeterminate = false;
         persistLayout();
         updateEditorPanel();
       });
@@ -2319,14 +3259,18 @@
     panel.querySelectorAll("[data-animation-field]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
+        const selection = selectedMachines();
         if (!machine) return;
+        const editingMotionMember = selection.length > 1 && selection.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
+        const targets = editingMotionMember ? [machine] : (selection.length > 1 ? selection : [machine]);
         pushHistory();
         const field = input.dataset.animationField;
-        if (["animationMode", "animationAxis"].includes(field)) machine[field] = input.value;
+        if (["animationMode", "animationAxis", "animationSecondaryAxis"].includes(field)) targets.forEach((item) => { item[field] = input.value; });
         else {
           const value = Number(input.value);
           if (!Number.isFinite(value)) return;
-          machine[field] = ["animationSpeed", "animationPauseSeconds"].includes(field) ? Math.max(0, value) : value;
+          const normalized = ["animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds"].includes(field) ? Math.max(0, value) : value;
+          targets.forEach((item) => { item[field] = normalized; });
         }
         persistLayout();
         updateEditorPanel();
@@ -2335,9 +3279,13 @@
     panel.querySelectorAll("[data-animation-check]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
+        const selection = selectedMachines();
         if (!machine) return;
+        const editingMotionMember = selection.length > 1 && selection.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
+        const targets = editingMotionMember ? [machine] : (selection.length > 1 ? selection : [machine]);
         pushHistory();
-        machine[input.dataset.animationCheck] = input.checked;
+        targets.forEach((item) => { item[input.dataset.animationCheck] = input.checked; });
+        input.indeterminate = false;
         persistLayout();
         updateEditorPanel();
       });
@@ -2380,6 +3328,54 @@
       });
     });
 
+    panel.querySelectorAll("[data-floor-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const field = input.dataset.floorField;
+        const value = Number(input.value);
+        if (!Number.isFinite(value)) return;
+        pushHistory();
+        if (["width", "length"].includes(field)) {
+          floor[field] = clamp(value, MIN_FLOOR_DIMENSION, MAX_FLOOR_DIMENSION);
+          input.value = String(floor[field]);
+          if (value !== floor[field]) showToast(`Floor ${field} was limited to ${MAX_FLOOR_DIMENSION.toLocaleString()} ft.`);
+        } else floor[field] = value;
+        invalidateStructuralColumns();
+        persistLayout();
+        updateEditorPanel();
+        showToast("Floor dimensions updated.");
+      });
+    });
+
+    panel.querySelector("[data-column-grid-check='autoExtend']")?.addEventListener("change", (event) => {
+      pushHistory();
+      columnGrid.autoExtend = event.target.checked;
+      invalidateStructuralColumns();
+      persistLayout();
+      updateEditorPanel();
+      showToast(columnGrid.autoExtend ? "Automatic extension columns enabled." : "Automatic extension columns hidden.");
+    });
+    panel.querySelectorAll("[data-column-grid-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const field = input.dataset.columnGridField;
+        const value = Number(input.value);
+        if (!Number.isFinite(value)) return;
+        pushHistory();
+        columnGrid[field] = clamp(value, 5, 250);
+        invalidateStructuralColumns();
+        persistLayout();
+        updateEditorPanel();
+        showToast("Structural bay spacing updated.");
+      });
+    });
+    panel.querySelector("[data-editor-action='column-grid-defaults']")?.addEventListener("click", () => {
+      pushHistory();
+      columnGrid = normalizeColumnGrid(defaultColumnGrid);
+      invalidateStructuralColumns();
+      persistLayout();
+      updateEditorPanel();
+      showToast("CAD column spacing restored to 40 × 30 ft.");
+    });
+
     panel.querySelectorAll("[data-stage-field]").forEach((input) => {
       input.addEventListener("change", () => {
         const stage = currentStage();
@@ -2405,6 +3401,53 @@
     panel.querySelector("[data-editor-action='stage-later']").addEventListener("click",() => moveCurrentStage(1));
     panel.querySelector("[data-editor-action='stage-add']").addEventListener("click",addTimelineStage);
     panel.querySelector("[data-editor-action='stage-delete']").addEventListener("click",deleteTimelineStage);
+    panel.querySelector("[data-editor-action='refresh-add-designs']")?.addEventListener("click", () => {
+      refreshDesignLibrary();
+      updateEditorPanel();
+      showToast("Saved Machine Design Studio models refreshed.");
+    });
+    panel.querySelector("[data-editor-action='open-new-machine-designer']")?.addEventListener("click", () => {
+      const standalone = /preview\.html$/i.test(window.location.pathname);
+      window.open(standalone ? "machine-studio.html" : "/machine-studio", "_blank", "noopener");
+    });
+    panel.querySelector("[data-editor-action='add-design-machine']")?.addEventListener("click", () => {
+      refreshDesignLibrary();
+      const designId = panel.querySelector("#new-design-machine")?.value || "";
+      const design = designLibrary[designId];
+      if (!design) {
+        updateEditorPanel();
+        showToast("Choose a saved Machine Design Studio design first.");
+        return;
+      }
+      const requestedName = panel.querySelector("#new-design-machine-name")?.value.trim() || "";
+      const revealStage = Number(panel.querySelector("#new-design-machine-stage")?.value);
+      const placement = panel.querySelector("#new-design-machine-placement")?.value || "open";
+      const machine = machineTemplateFromDesign(design, requestedName, revealStage);
+      if (placement === "plant") {
+        machine.x = modelCenter()[0] - machine.w / 2;
+        machine.z = modelCenter()[1] - machine.d / 2;
+      } else {
+        machine.x = modelCenter()[0] + state.panX - machine.w / 2;
+        machine.z = modelCenter()[1] + state.panZ - machine.d / 2;
+      }
+      pushHistory();
+      if (placement === "open" && !findOpenPositionAcrossFloor(machine, machine.x, machine.z)) {
+        state.history.pop();
+        updateHistoryButtons();
+        showToast("No open position was found near the current view. Try Plant center or move the view to an open area.");
+        return;
+      }
+      machines.push(machine);
+      setSingleSelection(machine.instanceId);
+      state.editorTool = "machines";
+      const nameInput = panel.querySelector("#new-design-machine-name");
+      if (nameInput) nameInput.value = "";
+      persistLayout();
+      focusSelectedMachine();
+      updateEditorPanel();
+      showToast(`${machine.name} added from Machine Design Studio.`);
+    });
+
     panel.querySelector("[data-editor-action='add']").addEventListener("click",() => {
       const type = panel.querySelector("#new-machine-type").value;
       const requestedName = panel.querySelector("#new-machine-name").value.trim();
@@ -2428,6 +3471,7 @@
       const maxX = Math.max(...visible.map((machine) => machine.x + machine.w)) + padding;
       const maxZ = Math.max(...visible.map((machine) => machine.z + machine.d)) + padding;
       floor = normalizeFloor({ centerX: (minX + maxX) / 2, centerZ: (minZ + maxZ) / 2, width: maxX - minX, length: maxZ - minZ });
+      invalidateStructuralColumns();
       persistLayout();
       updateEditorPanel();
       showToast("Floor fitted around visible objects.");
@@ -2435,6 +3479,7 @@
     panel.querySelector("[data-editor-action='floor-cad']")?.addEventListener("click", () => {
       pushHistory();
       floor = normalizeFloor(defaultFloor);
+      invalidateStructuralColumns();
       persistLayout();
       updateEditorPanel();
       showToast("CAD floor dimensions restored.");
@@ -2443,9 +3488,10 @@
     panel.querySelector("[data-editor-action='restore-pillars']").addEventListener("click",() => {
       pushHistory();
       state.hiddenColumns.clear();
+      state.hiddenColumnKeys.clear();
       persistLayout();
       updateEditorPanel();
-      showToast("All pillars restored.");
+      showToast("All CAD and generated pillars restored.");
     });
     panel.querySelector("[data-editor-action='reset']").addEventListener("click",() => {
       if (!window.confirm("Reset every object, timeline stage, pillar, and wall change?")) return;
@@ -2453,7 +3499,10 @@
       machines = defaultSceneMachines();
       stages = normalizeStages(defaultStages);
       floor = normalizeFloor(defaultFloor);
+      columnGrid = normalizeColumnGrid(defaultColumnGrid);
       state.hiddenColumns.clear();
+      state.hiddenColumnKeys.clear();
+      invalidateStructuralColumns();
       state.walls = { ...defaultWalls };
       clearMachineSelection();
       state.stage = 0;
@@ -2508,12 +3557,16 @@
     controls.className = "model-controls";
     controls.innerHTML = `
       <button type="button" data-view="overview" aria-label="Reset to overview">Overview</button>
+      <button type="button" data-view="low" aria-label="Low-angle overview">Low angle</button>
       <button type="button" data-view="top" aria-label="View from above">Floor plan</button>
-      <button type="button" data-toggle="labels" class="active" aria-pressed="true">Labels</button>
+      <button type="button" data-toggle="walk" aria-pressed="false">First person</button>
+      <button type="button" data-toggle="labels" class="active" aria-pressed="true" title="Cycle between smart, all, and hidden labels">Smart labels</button>
+      <button type="button" data-toggle="animations" class="active" aria-pressed="false">Pause motion</button>
       <button type="button" data-toggle="fullscreen" aria-pressed="false">Full screen</button>
       <button type="button" data-toggle="editor" aria-pressed="false">Edit layout</button>
     `;
     frame.appendChild(controls);
+    renderPerformance.mount(frame, { buttonHost: controls });
     createEditorPanel(frame);
     const play = document.createElement("button");
     play.type = "button";
@@ -2526,13 +3579,184 @@
     legend.className = "model-legend";
     legend.innerHTML = `<span><i class="dwg"></i>DWG named</span><span><i class="correlated"></i>Photo + CAD</span><span><i class="crane"></i>Crane system</span>`;
     frame.appendChild(legend);
+    const reticle = document.createElement("div");
+    reticle.className = "walkthrough-reticle";
+    reticle.hidden = true;
+    reticle.setAttribute("aria-hidden", "true");
+    frame.appendChild(reticle);
+
+    const firstPersonHud = document.createElement("section");
+    firstPersonHud.className = "first-person-hud";
+    firstPersonHud.hidden = true;
+    firstPersonHud.innerHTML = `
+      <div class="first-person-status">
+        <span class="first-person-title">First-person walk</span>
+        <span data-first-person-lock>Click the model to capture the mouse</span>
+      </div>
+      <div class="first-person-keys" aria-label="First-person controls">
+        <span><b>WASD</b> move</span><span><b>Mouse</b> look</span><span><b>Shift</b> sprint</span><span><b>Space</b> jump</span><span><b>Ctrl/C</b> crouch</span><span><b>Esc</b> exit</span>
+      </div>
+      <div class="first-person-actions">
+        <button type="button" data-first-person-action="capture">Capture mouse</button>
+        <button type="button" data-first-person-action="settings">Settings</button>
+        <button type="button" data-first-person-action="exit" class="primary">Exit first person</button>
+      </div>
+      <div class="first-person-settings" data-first-person-settings hidden>
+        <label>Walking speed <span data-walk-speed-value>${state.walkSpeed.toFixed(0)} ft/s</span>
+          <input data-walk-setting="walkSpeed" type="range" min="2" max="40" step="1" value="${state.walkSpeed}">
+        </label>
+        <label>Eye height <span data-walk-height-value>${state.walkEyeHeight.toFixed(1)} ft</span>
+          <input data-walk-setting="walkEyeHeight" type="range" min="3" max="8" step="0.1" value="${state.walkEyeHeight}">
+        </label>
+        <label>Field of view <span data-walk-fov-value>${state.walkFov.toFixed(0)}°</span>
+          <input data-walk-setting="walkFov" type="range" min="45" max="105" step="1" value="${state.walkFov}">
+        </label>
+        <label>Mouse sensitivity <span data-walk-sensitivity-value>${(state.walkSensitivity * 1000).toFixed(1)}</span>
+          <input data-walk-setting="walkSensitivity" type="range" min="0.5" max="6" step="0.1" value="${state.walkSensitivity * 1000}">
+        </label>
+        <label class="first-person-check"><input data-walk-setting="walkCollision" type="checkbox" checked> Stop at machines, pillars, and walls</label>
+        <label class="first-person-check"><input data-walk-setting="walkHeadBob" type="checkbox" checked> Subtle walking motion</label>
+      </div>
+    `;
+    frame.appendChild(firstPersonHud);
+
+    const updateFirstPersonHud = (locked) => {
+      const lockText = firstPersonHud.querySelector("[data-first-person-lock]");
+      const capture = firstPersonHud.querySelector("[data-first-person-action='capture']");
+      if (lockText) lockText.textContent = locked ? "Mouse captured · Esc exits first person" : "Click the model to capture the mouse · Esc exits";
+      if (capture) capture.hidden = locked;
+      frame.classList.toggle("pointer-locked", locked);
+    };
+
+    let walkModeTransitioning = false;
+    let setWalkMode = null;
+
+    firstPersonController = window.createPlantFirstPersonController?.({
+      canvas,
+      getCamera: () => ({
+        x: modelCenter()[0] + state.panX,
+        z: modelCenter()[1] + state.panZ,
+        yaw: state.yaw,
+        pitch: state.pitch,
+        walkSpeed: state.walkSpeed,
+        walkSensitivity: state.walkSensitivity,
+        walkRadius: state.walkRadius,
+        walkCollision: state.walkCollision,
+        walkHeadBob: state.walkHeadBob,
+        walkVerticalOffset: state.walkVerticalOffset,
+        walkBobOffset: state.walkBobOffset,
+      }),
+      setCamera: (next) => {
+        if (Number.isFinite(next.x)) state.panX = next.x - modelCenter()[0];
+        if (Number.isFinite(next.z)) state.panZ = next.z - modelCenter()[1];
+        if (Number.isFinite(next.yaw)) state.yaw = next.yaw;
+        if (Number.isFinite(next.pitch)) state.pitch = next.pitch;
+        if (Number.isFinite(next.walkVerticalOffset)) state.walkVerticalOffset = next.walkVerticalOffset;
+        if (Number.isFinite(next.walkBobOffset)) state.walkBobOffset = next.walkBobOffset;
+      },
+      canOccupy: walkCanOccupy,
+      onLockChange: updateFirstPersonHud,
+      onMovement: () => renderPerformance.noteInteraction(120),
+      onExitRequest: () => {
+        if (state.cameraMode === "walk" && !walkModeTransitioning) setWalkMode?.(false);
+      },
+    }) || null;
+
+    setWalkMode = (enabled) => {
+      const experience = frame.closest(".experience");
+      const siteShell = frame.closest(".site-shell");
+      if (enabled === (state.cameraMode === "walk")) {
+        if (enabled) firstPersonController?.capture();
+        return;
+      }
+      state.cameraMode = enabled ? "walk" : "orbit";
+      frame.classList.toggle("walkthrough-mode", enabled);
+      experience?.classList.toggle("first-person-active", enabled);
+      siteShell?.classList.toggle("first-person-site", enabled);
+      reticle.hidden = !enabled;
+      firstPersonHud.hidden = !enabled;
+      const walkButton = frame.querySelector("[data-toggle='walk']");
+      if (walkButton) {
+        walkButton.classList.toggle("active", enabled);
+        walkButton.setAttribute("aria-pressed", String(enabled));
+        walkButton.textContent = enabled ? "Exit first person" : "First person";
+      }
+      if (enabled) {
+        setEditing(false);
+        document.activeElement?.blur?.();
+        canvas.tabIndex = 0;
+        canvas.focus?.({ preventScroll: true });
+        walkReturnView = { yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, panX: state.panX, panZ: state.panZ };
+        const [spawnX, spawnZ] = findWalkSpawn(modelCenter()[0] + state.panX, modelCenter()[1] + state.panZ);
+        state.panX = spawnX - modelCenter()[0];
+        state.panZ = spawnZ - modelCenter()[1];
+        // Orbit mode stores the rotation applied to the world, while first-person
+        // mode stores the direction the camera looks. They point in opposite
+        // directions. Rotate by 180 degrees on entry so first person faces the same
+        // side of the plant that was visible in the overview instead of presenting
+        // the layout as a reversed or mirrored view.
+        state.yaw = Math.atan2(Math.sin(state.yaw + Math.PI), Math.cos(state.yaw + Math.PI));
+        state.pitch = 0;
+        state.walkVerticalOffset = 0;
+        state.walkBobOffset = 0;
+        walkStartedFullscreen = !document.fullscreenElement;
+        if (walkStartedFullscreen) frame.requestFullscreen?.().catch(() => {});
+        firstPersonController?.start({ capture: false });
+        firstPersonController?.capture();
+        showToast("First person started. Use WASD and the mouse; press Esc to exit.");
+      } else {
+        walkModeTransitioning = true;
+        firstPersonController?.stop();
+        state.walkVerticalOffset = 0;
+        state.walkBobOffset = 0;
+        if (walkReturnView) Object.assign(state, walkReturnView);
+        walkReturnView = null;
+        if (walkStartedFullscreen && document.fullscreenElement === frame) document.exitFullscreen?.().catch(() => {});
+        walkStartedFullscreen = false;
+        walkModeTransitioning = false;
+        showToast("Returned to the overview camera.");
+      }
+      updateFirstPersonHud(false);
+      updateEditorHelp();
+    };
+
+    firstPersonHud.querySelector("[data-first-person-action='capture']")?.addEventListener("click", () => firstPersonController?.capture());
+    firstPersonHud.querySelector("[data-first-person-action='exit']")?.addEventListener("click", () => setWalkMode(false));
+    firstPersonHud.querySelector("[data-first-person-action='settings']")?.addEventListener("click", () => {
+      const settingsPanel = firstPersonHud.querySelector("[data-first-person-settings]");
+      if (settingsPanel) settingsPanel.hidden = !settingsPanel.hidden;
+    });
+    firstPersonHud.querySelectorAll("[data-walk-setting]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const field = input.dataset.walkSetting;
+        if (["walkCollision", "walkHeadBob"].includes(field)) state[field] = input.checked;
+        else if (field === "walkSensitivity") state.walkSensitivity = Number(input.value) / 1000;
+        else state[field] = Number(input.value);
+        const speedValue = firstPersonHud.querySelector("[data-walk-speed-value]");
+        const heightValue = firstPersonHud.querySelector("[data-walk-height-value]");
+        const fovValue = firstPersonHud.querySelector("[data-walk-fov-value]");
+        const sensitivityValue = firstPersonHud.querySelector("[data-walk-sensitivity-value]");
+        if (speedValue) speedValue.textContent = `${state.walkSpeed.toFixed(0)} ft/s`;
+        if (heightValue) heightValue.textContent = `${state.walkEyeHeight.toFixed(1)} ft`;
+        if (fovValue) fovValue.textContent = `${state.walkFov.toFixed(0)}°`;
+        if (sensitivityValue) sensitivityValue.textContent = (state.walkSensitivity * 1000).toFixed(1);
+        renderPerformance.noteInteraction(180);
+      });
+    });
 
     document.querySelectorAll("[data-view]").forEach((button) => {
       button.addEventListener("click", () => {
+        if (state.cameraMode === "walk") setWalkMode(false);
         if (button.dataset.view === "top") {
           state.yaw = 0;
           state.pitch = 1.42;
           state.zoom = .9;
+          state.panX = 0;
+          state.panZ = 0;
+        } else if (button.dataset.view === "low") {
+          state.yaw = -.72;
+          state.pitch = .035;
+          state.zoom = 1.8;
           state.panX = 0;
           state.panZ = 0;
         } else {
@@ -2547,21 +3771,57 @@
     document.querySelectorAll("[data-toggle]").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.dataset.toggle === "editor") {
+          if (state.cameraMode === "walk") setWalkMode(false);
           setEditing(!state.editing);
+          return;
+        }
+        if (button.dataset.toggle === "walk") {
+          setWalkMode(state.cameraMode !== "walk");
           return;
         }
         if (button.dataset.toggle === "fullscreen") {
           toggleModelFullscreen(frame);
           return;
         }
+        if (button.dataset.toggle === "animations") {
+          const now = performance.now();
+          if (state.animationsPaused) {
+            state.animationTimeOffset += Math.max(0, now - state.animationPausedAt);
+            state.animationsPaused = false;
+          } else {
+            state.animationsPaused = true;
+            state.animationPausedAt = now;
+          }
+          button.classList.toggle("active", !state.animationsPaused);
+          button.setAttribute("aria-pressed", String(state.animationsPaused));
+          button.textContent = state.animationsPaused ? "Resume motion" : "Pause motion";
+          showToast(state.animationsPaused ? "All model animations paused in place." : "Model animations resumed from the paused frame.");
+          return;
+        }
         if (button.dataset.toggle === "labels") {
-          state.showLabels = !state.showLabels;
+          const modes = ["smart", "all", "off"];
+          const currentIndex = Math.max(0, modes.indexOf(state.labelMode));
+          state.labelMode = modes[(currentIndex + 1) % modes.length];
+          state.showLabels = state.labelMode !== "off";
           button.classList.toggle("active", state.showLabels);
           button.setAttribute("aria-pressed", String(state.showLabels));
+          button.textContent = state.labelMode === "smart"
+            ? "Smart labels"
+            : state.labelMode === "all" ? "All labels" : "Labels off";
+          showToast(
+            state.labelMode === "smart"
+              ? "Smart labels prioritize major equipment and reduce clutter as you zoom out."
+              : state.labelMode === "all"
+                ? "All eligible labels are enabled; collision avoidance still prevents unreadable stacking."
+                : "Machine labels hidden."
+          );
         }
       });
     });
-    document.addEventListener("fullscreenchange", () => updateFullscreenControl(frame));
+    document.addEventListener("fullscreenchange", () => {
+      updateFullscreenControl(frame);
+      if (state.cameraMode === "walk" && walkStartedFullscreen && !document.fullscreenElement) setWalkMode(false);
+    });
     updateFullscreenControl(frame);
     play.addEventListener("click", () => {
       state.playing = !state.playing;
@@ -2630,7 +3890,42 @@
     return enter * leave;
   }
 
+  const WALK_NEAR_CLIP = 0.18;
+
   function project(x, y, z) {
+    if (state.cameraMode === "walk") {
+      const cameraX = modelCenter()[0] + state.panX;
+      const cameraHeight = state.walkEyeHeight + state.walkVerticalOffset + state.walkBobOffset;
+      const cameraZ = modelCenter()[1] + state.panZ;
+      const dx = x - cameraX;
+      const dy = y - cameraHeight;
+      const dz = z - cameraZ;
+      const cosineYaw = Math.cos(state.yaw);
+      const sineYaw = Math.sin(state.yaw);
+      const cameraXAxis = dx * cosineYaw - dz * sineYaw;
+      const forward = dx * sineYaw + dz * cosineYaw;
+      const cosinePitch = Math.cos(state.pitch);
+      const sinePitch = Math.sin(state.pitch);
+      const cameraVertical = dy * cosinePitch - forward * sinePitch;
+      const cameraDepth = forward * cosinePitch + dy * sinePitch;
+      const safeDepth = Math.max(WALK_NEAR_CLIP, cameraDepth);
+      const fieldOfView = clamp(Number(state.walkFov) || 72, 45, 105) * Math.PI / 180;
+      const focalLength = canvas.height / Math.max(0.1, 2 * Math.tan(fieldOfView / 2));
+      // Perspective depth must be reciprocal before it reaches the screen-space
+      // depth renderer. Camera-space Z is not linear after perspective division;
+      // interpolating it across already projected triangles causes rear surfaces
+      // to win the depth test and appear through cabinets or walls. 1/Z is linear
+      // in screen space, so it gives the depth buffer the same ordering a normal
+      // perspective projection matrix would produce.
+      const reciprocalDepth = 1 / safeDepth;
+      return [
+        canvas.width / 2 + cameraXAxis * focalLength / safeDepth,
+        canvas.height / 2 - cameraVertical * focalLength / safeDepth,
+        reciprocalDepth,
+        cameraDepth,
+      ];
+    }
+
     x -= modelCenter()[0] + state.panX;
     z -= modelCenter()[1] + state.panZ;
     const cy = Math.cos(state.yaw);
@@ -2659,10 +3954,13 @@
     const [screenX,screenY] = canvasPoint(event);
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
-    const sp = Math.max(.08,Math.sin(state.pitch));
+    const rawSin = Math.sin(state.pitch);
+    const sp = Math.abs(rawSin) < .04 ? (rawSin < 0 ? -.04 : .04) : rawSin;
+    const cp = Math.cos(state.pitch);
     const scale = state.zoom * Math.min(canvas.width / 720, canvas.height / 420);
+    const cameraY = state.cameraMode === "walk" ? state.walkEyeHeight : 0;
     const rx = (screenX - canvas.width/2) / scale;
-    const rz = (screenY - canvas.height*.57) / (sp * scale);
+    const rz = (screenY - canvas.height*.57 - cameraY * cp * scale) / (sp * scale);
     return [
       modelCenter()[0] + state.panX + rx*cy + rz*sy,
       modelCenter()[1] + state.panZ - rx*sy + rz*cy,
@@ -2681,7 +3979,7 @@
     const centeredZ = localZ - item.d / 2;
     return [
       item.x + item.w / 2 + centeredX * cosine - centeredZ * sine,
-      y + (Number(item.renderY) || 0),
+      y + (Number(item.renderY ?? item.y) || 0),
       item.z + item.d / 2 + centeredX * sine + centeredZ * cosine,
     ];
   }
@@ -2788,10 +4086,10 @@
     const [x,z] = worldFromScreen(event);
     let nearest = null;
     let distance = 6;
-    data.columns.slice(0,96).forEach(([columnX,columnZ],index) => {
-      const candidate = Math.hypot(columnX-x,columnZ-z);
+    structuralColumns().forEach((column) => {
+      const candidate = Math.hypot(column.x-x,column.z-z);
       if (candidate < distance) {
-        nearest = index;
+        nearest = column;
         distance = candidate;
       }
     });
@@ -2801,7 +4099,8 @@
   function panCamera(deltaX,deltaY) {
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
-    const sp = Math.max(.08,Math.sin(state.pitch));
+    const rawSin = Math.sin(state.pitch);
+    const sp = Math.abs(rawSin) < .04 ? (rawSin < 0 ? -.04 : .04) : rawSin;
     const scale = state.zoom * Math.min(canvas.width / 720, canvas.height / 420);
     const rx = deltaX/scale;
     const rz = deltaY/(sp*scale);
@@ -2809,11 +4108,56 @@
     state.panZ -= -rx*sy + rz*cy;
   }
 
-  function polygon(points, fill, stroke = null, lineWidth = 1, alpha = 1) {
+  function clipPolygonToWalkNearPlane(points) {
+    if (state.cameraMode !== "walk" || !Array.isArray(points) || points.length < 3) return points;
+    const output = [];
+    for (let index = 0; index < points.length; index += 1) {
+      const current = points[index];
+      const previous = points[(index + points.length - 1) % points.length];
+      const currentDepth = project(...current)[3];
+      const previousDepth = project(...previous)[3];
+      const currentInside = currentDepth >= WALK_NEAR_CLIP;
+      const previousInside = previousDepth >= WALK_NEAR_CLIP;
+      if (currentInside !== previousInside) {
+        const denominator = currentDepth - previousDepth;
+        const amount = Math.abs(denominator) < 0.000001 ? 0 : (WALK_NEAR_CLIP - previousDepth) / denominator;
+        output.push([
+          previous[0] + (current[0] - previous[0]) * amount,
+          previous[1] + (current[1] - previous[1]) * amount,
+          previous[2] + (current[2] - previous[2]) * amount,
+        ]);
+      }
+      if (currentInside) output.push(current);
+    }
+    return output;
+  }
+
+  function clipLineToWalkNearPlane(start, end) {
+    if (state.cameraMode !== "walk") return [start, end];
+    const startDepth = project(...start)[3];
+    const endDepth = project(...end)[3];
+    const startInside = startDepth >= WALK_NEAR_CLIP;
+    const endInside = endDepth >= WALK_NEAR_CLIP;
+    if (!startInside && !endInside) return null;
+    if (startInside && endInside) return [start, end];
+    const denominator = endDepth - startDepth;
+    const amount = Math.abs(denominator) < 0.000001 ? 0 : (WALK_NEAR_CLIP - startDepth) / denominator;
+    const intersection = [
+      start[0] + (end[0] - start[0]) * amount,
+      start[1] + (end[1] - start[1]) * amount,
+      start[2] + (end[2] - start[2]) * amount,
+    ];
+    return startInside ? [start, intersection] : [intersection, end];
+  }
+
+  function polygon(points, fill, stroke = null, lineWidth = 1, alpha = 1, options = {}) {
+    points = clipPolygonToWalkNearPlane(points);
+    if (!points || points.length < 3) return;
     if (alpha <= 0.01) return;
     if (depthRenderer.available) {
       depthRenderer.addPolygon(points, fill, alpha, stroke, lineWidth, {
         transparent: alpha < 0.985,
+        ...options,
       });
       return;
     }
@@ -2836,7 +4180,8 @@
   }
 
   function overlayPolygon(points, fill, stroke = null, lineWidth = 1, alpha = 1) {
-    if (alpha <= 0.01) return;
+    points = clipPolygonToWalkNearPlane(points);
+    if (!points || points.length < 3 || alpha <= 0.01) return;
     const projected = points.map((point) => project(...point));
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -2918,22 +4263,21 @@
       { indices:[3,2,1,0], fill:shade(item.color,-.28) },
       { indices:[4,5,6,7], fill:item.color, stroke:"rgba(20,30,34,.28)" },
     ];
-    faceDefinitions
-      .map((face) => {
-        const points = face.indices.map((index) => vertices[index]);
-        return {
-          ...face,
-          points,
-          depth: points.reduce((sum, point) => sum + project(...point)[2], 0) / points.length,
-        };
-      })
-      .sort((first, second) => first.depth - second.depth)
-      .forEach((face) => polygon(face.points, face.fill, face.stroke || "rgba(20,30,34,.12)", .7, alpha));
+    const faces = faceDefinitions.map((face) => {
+      const points = face.indices.map((index) => vertices[index]);
+      return {
+        ...face,
+        points,
+        depth: depthRenderer.available ? 0 : points.reduce((sum, point) => sum + project(...point)[2], 0) / points.length,
+      };
+    });
+    if (!depthRenderer.available) faces.sort((first, second) => first.depth - second.depth);
+    faces.forEach((face) => polygon(face.points, face.fill, face.stroke || "rgba(20,30,34,.12)", .7, alpha));
   }
 
   function drawCylinder3d({ radiusX, radiusY, halfDepth, color, alpha = 1, pointFromLocal, segments = 18 }) {
     if (alpha <= 0.01 || typeof pointFromLocal !== "function") return;
-    const count = Math.max(8, Math.round(Number(segments) || 18));
+    const count = renderPerformance.cylinderSegments(segments);
     const front = [];
     const back = [];
     for (let index = 0; index < count; index += 1) {
@@ -2963,6 +4307,9 @@
   }
 
   function line3d(start, end, color, width = 1, alpha = 1) {
+    const clipped = clipLineToWalkNearPlane(start, end);
+    if (!clipped) return;
+    [start, end] = clipped;
     if (depthRenderer.available) {
       depthRenderer.addLine(start, end, color, width, alpha);
       return;
@@ -2981,6 +4328,9 @@
   }
 
   function overlayLine3d(start, end, color, width = 1, alpha = 1) {
+    const clipped = clipLineToWalkNearPlane(start, end);
+    if (!clipped) return;
+    [start, end] = clipped;
     const a = project(...start);
     const b = project(...end);
     ctx.save();
@@ -2996,6 +4346,45 @@
 
   let labelRects = [];
 
+  const PRIMARY_LABEL_TYPES = new Set([
+    "cutting", "waterjet", "filtration", "kodiak", "denver", "furnace",
+    "cube", "washer", "wrapping", "shipping",
+  ]);
+  const SUPPORT_LABEL_TYPES = new Set([
+    "craneMachine", "bridgeCrane", "glassRack", "room", "generic", "genericBox",
+  ]);
+  const MINOR_LABEL_TYPES = new Set([
+    "aFrame", "aFrameTruck", "person", "animatedPerson", "animatedCart",
+    "animatedGlass", "animatedBox", "animatedBeacon",
+  ]);
+
+  const TYPE_LABEL_FALLBACKS = {
+    cutting: "Barefoot",
+    waterjet: "Waterjet",
+    filtration: "Filtration",
+    kodiak: "Kodiak",
+    denver: "Denver",
+    furnace: "Furnace",
+    cube: "Fuze Cube",
+    washer: "Washer",
+    wrapping: "Wrap station",
+    shipping: "Shipping rack",
+    craneMachine: "Gantry crane",
+    bridgeCrane: "Bridge crane",
+    glassRack: "Glass rack",
+    aFrame: "A-frame cart",
+    aFrameTruck: "A-frame truck",
+    person: "Team member",
+    animatedPerson: "Team member",
+    animatedCart: "Moving cart",
+    animatedGlass: "Moving glass",
+    animatedBox: "Moving box",
+    animatedBeacon: "Beacon",
+    safetyLine: "Safety line",
+    trench: "Trench",
+    floorDrain: "Floor drain",
+  };
+
   function rectanglesIntersect(first, second) {
     return !(
       first.right <= second.left ||
@@ -3005,25 +4394,92 @@
     );
   }
 
-  function label(text, x, y, z, color, priority = false) {
-    if (!state.showLabels) return;
+  function machineLabelProfile(machine) {
+    const type = machine?.type || "generic";
+    if (isFloorFeatureType(type)) return { rank: 0, cssSize: 8.5, maxChars: 12 };
+    if (PRIMARY_LABEL_TYPES.has(type)) return { rank: 4, cssSize: 12, maxChars: 18 };
+    if (SUPPORT_LABEL_TYPES.has(type)) return { rank: 2, cssSize: 10, maxChars: 15 };
+    if (MINOR_LABEL_TYPES.has(type)) return { rank: 1, cssSize: 9, maxChars: 13 };
+    const area = Math.max(0, Number(machine?.w) || 0) * Math.max(0, Number(machine?.d) || 0);
+    return area >= 220
+      ? { rank: 3, cssSize: 11, maxChars: 17 }
+      : { rank: 2, cssSize: 10, maxChars: 15 };
+  }
+
+  function compactMachineLabel(machine, profile) {
+    const fallback = TYPE_LABEL_FALLBACKS[machine?.type] || "Object";
+    let value = String(machine?.short || machine?.name || fallback).trim();
+    const substitutions = [
+      [/Barefoot cutting tables?/gi, "Barefoot"],
+      [/Tempering furnace oven/gi, "Furnace"],
+      [/Waterjet pump\s*(?:&|and)\s*filtration/gi, "Filtration"],
+      [/Freestanding crane machine/gi, "Gantry crane"],
+      [/A-frame glass truck/gi, "A-frame truck"],
+      [/A-frame glass cart/gi, "A-frame cart"],
+      [/Vertical glass moving/gi, "Moving glass"],
+      [/\b(machine|equipment|system|workstation)\b/gi, ""],
+    ];
+    substitutions.forEach(([pattern, replacement]) => {
+      value = value.replace(pattern, replacement);
+    });
+    value = value.replace(/\s{2,}/g, " ").replace(/\s+([#-])/g, " $1").trim() || fallback;
+    if (value.length <= profile.maxChars) return value;
+    const clipped = value.slice(0, Math.max(1, profile.maxChars - 1));
+    const boundary = clipped.lastIndexOf(" ");
+    return `${(boundary >= Math.floor(profile.maxChars * .55) ? clipped.slice(0, boundary) : clipped).trim()}…`;
+  }
+
+  function shouldShowSmartLabel(profile, selected, current) {
+    if (selected || current) return true;
+    if (state.labelMode === "all") return true;
+    if (profile.rank <= 0) return false;
+    if (state.zoom < .38) return profile.rank >= 4;
+    if (state.zoom < .62) return profile.rank >= 3;
+    if (state.zoom < 1.02) return profile.rank >= 2;
+    return profile.rank >= 1;
+  }
+
+  function smartLabelBudget() {
+    if (state.cameraMode === "walk") return state.labelMode === "all" ? 14 : 7;
+    if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
+    const rect = canvas.getBoundingClientRect();
+    const viewportBudget = Math.floor((rect.width * rect.height) / 52000);
+    const zoomFactor = clamp(state.zoom, .35, 1.45);
+    return Math.round(clamp(viewportBudget * zoomFactor, 5, 30));
+  }
+
+  function label(text, x, y, z, color, options = {}) {
+    if (!state.showLabels || state.labelMode === "off") return false;
     const point = project(x, y, z);
+    if (state.cameraMode === "walk" && point[3] < WALK_NEAR_CLIP) return false;
+    const rect = canvas.getBoundingClientRect();
+    const pixelScale = canvas.width / Math.max(1, rect.width);
+    const priority = Boolean(options.priority);
+    const zoomScale = clamp(.8 + Math.min(state.zoom, 2.2) * .13, .82, 1.08);
+    const cssFontSize = (Number(options.cssSize) || 10) * zoomScale + (priority ? .75 : 0);
+    const fontSize = Math.max(8 * pixelScale, cssFontSize * pixelScale);
+    const paddingX = 6 * pixelScale;
+    const height = Math.max(15 * pixelScale, (cssFontSize + 7) * pixelScale);
+    const topGap = 5 * pixelScale;
     ctx.save();
-    ctx.font = `600 ${Math.max(10, canvas.width / 115)}px "Segoe UI", sans-serif`;
-    const width = ctx.measureText(text).width + 16;
-    const height = 20;
-    const offsets = priority ? [0, -24, 24, -48, 48, -72] : [0, -24, 24, -48, 48];
+    ctx.font = `600 ${fontSize}px "Segoe UI", sans-serif`;
+    const width = ctx.measureText(text).width + paddingX * 2;
+    const labelX = clamp(point[0], width / 2 + 3 * pixelScale, canvas.width - width / 2 - 3 * pixelScale);
+    const baseY = point[1] - height - topGap;
+    const step = height + 4 * pixelScale;
+    const offsets = priority ? [0, -step, step, -step * 2, step * 2] : [0, -step, step, -step * 2];
     let rectangle = null;
-    let drawY = point[1] - 25;
+    let drawY = baseY;
     for (const offset of offsets) {
-      const candidateY = point[1] - 25 + offset;
+      const candidateY = baseY + offset;
       const candidate = {
-        left: point[0] - width / 2,
-        right: point[0] + width / 2,
+        left: labelX - width / 2,
+        right: labelX + width / 2,
         top: candidateY,
         bottom: candidateY + height,
       };
-      if (!labelRects.some((used) => rectanglesIntersect(candidate, used))) {
+      const onCanvas = candidate.right > 0 && candidate.left < canvas.width && candidate.bottom > 0 && candidate.top < canvas.height;
+      if (onCanvas && !labelRects.some((used) => rectanglesIntersect(candidate, used))) {
         rectangle = candidate;
         drawY = candidateY;
         break;
@@ -3031,31 +4487,38 @@
     }
     if (!rectangle && !priority) {
       ctx.restore();
-      return;
+      return false;
     }
     rectangle ||= {
-      left: point[0] - width / 2,
-      right: point[0] + width / 2,
+      left: labelX - width / 2,
+      right: labelX + width / 2,
       top: drawY,
       bottom: drawY + height,
     };
     labelRects.push(rectangle);
-    if (Math.abs(drawY - (point[1] - 25)) > 1) {
+    if (priority && Math.abs(drawY - baseY) > 1) {
       ctx.beginPath();
-      ctx.moveTo(point[0], point[1] - 4);
-      ctx.lineTo(point[0], drawY + height);
-      ctx.strokeStyle = "rgba(34,48,52,.38)";
-      ctx.lineWidth = 1;
+      ctx.moveTo(point[0], point[1] - 3 * pixelScale);
+      ctx.lineTo(labelX, drawY + height);
+      ctx.strokeStyle = "rgba(34,48,52,.34)";
+      ctx.lineWidth = Math.max(1, pixelScale * .75);
       ctx.stroke();
     }
-    ctx.fillStyle = "rgba(24,32,37,.86)";
-    ctx.fillRect(rectangle.left, drawY, width, height);
+    ctx.globalAlpha = priority ? .98 : clamp(.72 + state.zoom * .1, .76, .9);
+    ctx.fillStyle = "rgba(20,28,32,.88)";
+    if (typeof ctx.roundRect === "function") {
+      ctx.beginPath();
+      ctx.roundRect(rectangle.left, drawY, width, height, 4 * pixelScale);
+      ctx.fill();
+    } else ctx.fillRect(rectangle.left, drawY, width, height);
     ctx.fillStyle = color;
-    ctx.fillRect(rectangle.left, drawY, 3, height);
+    ctx.fillRect(rectangle.left, drawY, Math.max(2, 2.25 * pixelScale), height);
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
-    ctx.fillText(text, point[0], drawY + 14);
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, labelX, drawY + height / 2 + pixelScale * .15);
     ctx.restore();
+    return true;
   }
 
   function drawFloor() {
@@ -3066,10 +4529,19 @@
       "#7c8582",
       1.3
     );
-    for (let x = Math.ceil(bounds[0] / 25) * 25; x < bounds[2]; x += 25) {
+    const niceGridStep = (span) => {
+      const minimumStep = Math.max(1, span / MAX_FLOOR_GRID_LINES);
+      const magnitude = 10 ** Math.floor(Math.log10(minimumStep));
+      const normalized = minimumStep / magnitude;
+      const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+      return Math.max(25, nice * magnitude);
+    };
+    const gridX = niceGridStep(floor.width);
+    const gridZ = niceGridStep(floor.length);
+    for (let x = Math.ceil(bounds[0] / gridX) * gridX, count = 0; x < bounds[2] && count < MAX_FLOOR_GRID_LINES; x += gridX, count += 1) {
       line3d([x,.03,bounds[1]],[x,.03,bounds[3]],"#8f9794",.7,.25);
     }
-    for (let z = Math.ceil(bounds[1] / 25) * 25; z < bounds[3]; z += 25) {
+    for (let z = Math.ceil(bounds[1] / gridZ) * gridZ, count = 0; z < bounds[3] && count < MAX_FLOOR_GRID_LINES; z += gridZ, count += 1) {
       line3d([bounds[0],.03,z],[bounds[2],.03,z],"#8f9794",.7,.25);
     }
   }
@@ -3092,9 +4564,11 @@
   }
 
   function drawColumn(index) {
-    const column = data.columns[index];
-    if (!column || state.hiddenColumns.has(index)) return;
-    const [x,z] = column;
+    const column = typeof index === "object"
+      ? index
+      : structuralColumns().find((item) => item.source === "cad" && item.baseIndex === index);
+    if (!column || isColumnHidden(column)) return;
+    const { x, z } = column;
     const painted = clamp(state.stageFloat - 2.35);
     const size = 2.1 + (2.32 - 2.1) * painted;
     const color = blendHexColors(colors.steel, colors.yellow, painted);
@@ -3152,7 +4626,7 @@
     const phase = ((Number(component.animationPhase) || 0) / 360 + 1) % 1;
     if (speed <= 0) return { cycle: 0, wrapped: 0, sine: 0, pingPong: 0 };
     const activeDuration = 1 / speed;
-    const elapsed = Math.max(0, time / 1000 + phase * activeDuration);
+    const elapsed = Math.max(0, effectiveAnimationTime(time) / 1000 + phase * activeDuration);
     if (component.animationType === "oscillate") {
       const quarterDuration = activeDuration / 4;
       const totalDuration = activeDuration + pauseSeconds * 2;
@@ -3177,18 +4651,136 @@
     return { cycle, wrapped, sine: Math.sin(wrapped * Math.PI * 2), pingPong: wrapped - 0.5 };
   }
 
-  function designComponentPoints(component) {
-    if (component.type === "group") return (component.children || []).flatMap(designComponentPoints);
-    if (component.type === "beam") {
-      return [[Number(component.x), Number(component.y), Number(component.z)], [Number(component.x2), Number(component.y2), Number(component.z2)]];
+  function designComponentCenter(component) {
+    if (!component) return [0,0,0];
+    if (component.type === "group") return designGroupCenter(component.children || []);
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
+      return [
+        Number(component.x) + Number(component.w) / 2,
+        Number(component.y) + Number(component.h) / 2,
+        Number(component.z) + Number(component.d) / 2,
+      ];
     }
-    const width = Number(component.w || component.size || 0);
-    const height = Number(component.h || component.size || component.thickness || 0);
-    const depth = Number(component.d || component.size || 0);
-    return [
-      [Number(component.x), Number(component.y), Number(component.z)],
-      [Number(component.x) + width, Number(component.y) + height, Number(component.z) + depth],
-    ];
+    if (component.type === "beam") {
+      return [
+        (Number(component.x) + Number(component.x2)) / 2,
+        (Number(component.y) + Number(component.y2)) / 2,
+        (Number(component.z) + Number(component.z2)) / 2,
+      ];
+    }
+    if (component.type === "rollerBed") {
+      return [
+        Number(component.x) + Number(component.w) / 2,
+        Number(component.y),
+        Number(component.z) + Number(component.d) / 2,
+      ];
+    }
+    // Wheels use x/y/z as their center in both editors, not as a lower corner.
+    return [Number(component.x), Number(component.y), Number(component.z)];
+  }
+
+  function designComponentPoints(component) {
+    if (!component) return [];
+    if (component.type === "group") return (component.children || []).flatMap(designComponentPoints);
+    if (component.type === "beam") return designBeamVertices(component);
+
+    const center = designComponentCenter(component);
+    const rotation = designComponentRotation(component);
+    if (["box", "glassPanel"].includes(component.type)) {
+      const halfWidth = Math.max(.001, Number(component.w) / 2);
+      const halfHeight = Math.max(.001, Number(component.h) / 2);
+      const halfDepth = Math.max(.001, Number(component.d) / 2);
+      return [
+        [-halfWidth,-halfHeight,-halfDepth], [halfWidth,-halfHeight,-halfDepth],
+        [halfWidth,-halfHeight,halfDepth], [-halfWidth,-halfHeight,halfDepth],
+        [-halfWidth,halfHeight,-halfDepth], [halfWidth,halfHeight,-halfDepth],
+        [halfWidth,halfHeight,halfDepth], [-halfWidth,halfHeight,halfDepth],
+      ].map((offset) => {
+        const rotated = rotateVector3(offset, ...rotation);
+        return center.map((value, index) => value + rotated[index]);
+      });
+    }
+
+    if (component.type === "cylinder" || component.type === "cone") {
+      const requestedSegments = Math.max(8, Math.round(Number(component.segments) || 20));
+      const count = renderPerformance.cylinderSegments(requestedSegments);
+      const topScale = component.type === "cone" ? 0 : 1;
+      const points = [];
+      for (const layer of [-1, 1]) {
+        const radiusScale = layer < 0 ? 1 : topScale;
+        for (let index = 0; index < count; index += 1) {
+          const angle = index / count * Math.PI * 2;
+          const rotated = rotateVector3([
+            Math.cos(angle) * Number(component.w) / 2 * radiusScale,
+            layer * Number(component.h) / 2,
+            Math.sin(angle) * Number(component.d) / 2 * radiusScale,
+          ], ...rotation);
+          points.push(center.map((value, axis) => value + rotated[axis]));
+        }
+      }
+      return points;
+    }
+
+    if (component.type === "sphere") {
+      const offsets = [
+        [-Number(component.w) / 2, 0, 0], [Number(component.w) / 2, 0, 0],
+        [0, -Number(component.h) / 2, 0], [0, Number(component.h) / 2, 0],
+        [0, 0, -Number(component.d) / 2], [0, 0, Number(component.d) / 2],
+      ];
+      return offsets.map((offset) => {
+        const rotated = rotateVector3(offset, ...rotation);
+        return center.map((value, index) => value + rotated[index]);
+      });
+    }
+
+    if (component.type === "wedge") {
+      const local = [
+        [-Number(component.w)/2,-Number(component.h)/2,-Number(component.d)/2],
+        [ Number(component.w)/2,-Number(component.h)/2,-Number(component.d)/2],
+        [ Number(component.w)/2,-Number(component.h)/2, Number(component.d)/2],
+        [-Number(component.w)/2,-Number(component.h)/2, Number(component.d)/2],
+        [-Number(component.w)/2, Number(component.h)/2,-Number(component.d)/2],
+        [-Number(component.w)/2, Number(component.h)/2, Number(component.d)/2],
+      ];
+      return local.map((offset) => {
+        const rotated = rotateVector3(offset, ...rotation);
+        return center.map((value, index) => value + rotated[index]);
+      });
+    }
+
+    if (component.type === "rollerBed") {
+      const radius = Math.max(.05, Number(component.thickness) / 2);
+      const corners = [
+        [Number(component.x) - radius, Number(component.y) - radius, Number(component.z)],
+        [Number(component.x) + Number(component.w) + radius, Number(component.y) - radius, Number(component.z)],
+        [Number(component.x) + Number(component.w) + radius, Number(component.y) + radius, Number(component.z) + Number(component.d)],
+        [Number(component.x) - radius, Number(component.y) + radius, Number(component.z) + Number(component.d)],
+        [Number(component.x) - radius, Number(component.y) + radius, Number(component.z)],
+        [Number(component.x) + Number(component.w) + radius, Number(component.y) - radius, Number(component.z) + Number(component.d)],
+      ];
+      return corners.map((point) => rotatedDesignPoint(component, point, center));
+    }
+
+    if (component.type === "wheel") {
+      const radiusX = Math.max(.05, Number(component.w) / 2);
+      const radiusY = Math.max(.05, Number(component.h) / 2);
+      const halfDepth = Math.max(.025, Number(component.d) / 2);
+      const points = [];
+      for (const localZ of [-halfDepth, halfDepth]) {
+        for (let index = 0; index < 16; index += 1) {
+          const angle = index / 16 * Math.PI * 2;
+          const rotated = rotateVector3([
+            Math.cos(angle) * radiusX,
+            Math.sin(angle) * radiusY,
+            localZ,
+          ], ...rotation);
+          points.push(center.map((value, axis) => value + rotated[axis]));
+        }
+      }
+      return points;
+    }
+
+    return [center];
   }
 
   function designGroupCenter(children) {
@@ -3226,18 +4818,18 @@
       const rotated = rotateVector3(offset, rotationX, rotationY, rotationZ);
       return [pivot[0] + rotated[0], pivot[1] + rotated[1], pivot[2] + rotated[2]];
     };
-    if (component.type === "beam") {
-      [component.x, component.y, component.z] = rotatePoint([Number(component.x), Number(component.y), Number(component.z)]);
-      [component.x2, component.y2, component.z2] = rotatePoint([Number(component.x2), Number(component.y2), Number(component.z2)]);
-    } else {
-      const width = Number(component.w || component.size || 0);
-      const height = Number(component.h || component.size || component.thickness || 0);
-      const depth = Number(component.d || component.size || 0);
-      const center = rotatePoint([Number(component.x) + width / 2, Number(component.y) + height / 2, Number(component.z) + depth / 2]);
-      component.x = center[0] - width / 2;
-      component.y = center[1] - height / 2;
-      component.z = center[2] - depth / 2;
-    }
+    // Match Machine Design Studio's component-center rotation semantics for every
+    // leaf shape. Beam endpoints remain the authored local axis and the beam's
+    // rotation fields carry its orientation; rotating both endpoints here as well
+    // would apply the same animation rotation twice in Plant Overview.
+    const currentCenter = designComponentCenter(component);
+    const targetCenter = rotatePoint(currentCenter);
+    translateDesignComponent(
+      component,
+      targetCenter[0] - currentCenter[0],
+      targetCenter[1] - currentCenter[1],
+      targetCenter[2] - currentCenter[2],
+    );
     component.rotationX = (Number(component.rotationX) || 0) + rotationX;
     component.rotationY = (Number(component.rotationY ?? component.rotation) || 0) + rotationY;
     component.rotationZ = (Number(component.rotationZ) || 0) + rotationZ;
@@ -3245,41 +4837,100 @@
   }
 
   function scaleDesignComponentAround(component, pivot, scaleX, scaleY, scaleZ) {
-    if (component.type === "group") {
-      (component.children || []).forEach((child) => scaleDesignComponentAround(child, pivot, scaleX, scaleY, scaleZ));
-      return;
-    }
-    const scalePoint = (point) => [
-      pivot[0] + (point[0] - pivot[0]) * scaleX,
-      pivot[1] + (point[1] - pivot[1]) * scaleY,
-      pivot[2] + (point[2] - pivot[2]) * scaleZ,
-    ];
-    if (component.type === "beam") {
-      [component.x, component.y, component.z] = scalePoint([Number(component.x), Number(component.y), Number(component.z)]);
-      [component.x2, component.y2, component.z2] = scalePoint([Number(component.x2), Number(component.y2), Number(component.z2)]);
-      if (scaleX === scaleY && scaleY === scaleZ) component.thickness = Math.max(.02, Number(component.thickness) * scaleX);
-      return;
-    }
-    const width = Number(component.w || component.size || 0);
-    const height = Number(component.h || component.size || component.thickness || 0);
-    const depth = Number(component.d || component.size || 0);
-    const center = scalePoint([Number(component.x) + width / 2, Number(component.y) + height / 2, Number(component.z) + depth / 2]);
-    if (["box", "glassPanel", "wheel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
-      component.w = Math.max(.02, width * scaleX);
-      component.h = Math.max(.02, height * scaleY);
-      component.d = Math.max(.02, depth * scaleZ);
-      if (component.type === "wheel") component.size = Math.max(component.w, component.h);
-    } else if (component.type === "rollerBed") {
-      component.w = Math.max(.02, width * scaleX);
-      component.d = Math.max(.02, depth * scaleZ);
-      component.thickness = Math.max(.02, Number(component.thickness) * scaleY);
-    }
-    const newWidth = Number(component.w || component.size || 0);
-    const newHeight = Number(component.h || component.size || component.thickness || 0);
-    const newDepth = Number(component.d || component.size || 0);
-    component.x = center[0] - newWidth / 2;
-    component.y = center[1] - newHeight / 2;
-    component.z = center[2] - newDepth / 2;
+    const scaleAxis = (target, axis, requestedFactor) => {
+      const factor = clamp(Number(requestedFactor) || 1, .05, 20);
+      if (Math.abs(factor - 1) < .00001) return;
+      if (target.type === "group") {
+        (target.children || []).forEach((child) => scaleAxis(child, axis, factor));
+        return;
+      }
+
+      const axisIndex = axis === "x" ? 0 : axis === "y" ? 1 : 2;
+      const originalCenter = designComponentCenter(target);
+      if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(target.type)) {
+        if (axis === "x") target.w = Math.max(.02, Number(target.w) * factor);
+        if (axis === "y") target.h = Math.max(.02, Number(target.h) * factor);
+        if (axis === "z") target.d = Math.max(.02, Number(target.d) * factor);
+        target.x = originalCenter[0] - Number(target.w) / 2;
+        target.y = originalCenter[1] - Number(target.h) / 2;
+        target.z = originalCenter[2] - Number(target.d) / 2;
+      } else if (target.type === "rollerBed") {
+        if (axis === "x") target.w = Math.max(.1, Number(target.w) * factor);
+        if (axis === "z") target.d = Math.max(.1, Number(target.d) * factor);
+        if (axis === "y") target.thickness = Math.max(.2, Number(target.thickness) * factor);
+        target.x = originalCenter[0] - Number(target.w) / 2;
+        target.y = originalCenter[1];
+        target.z = originalCenter[2] - Number(target.d) / 2;
+      } else if (target.type === "beam") {
+        if (axis === "x") {
+          const start = [Number(target.x), Number(target.y), Number(target.z)];
+          const end = [Number(target.x2), Number(target.y2), Number(target.z2)];
+          const delta = end.map((value, index) => value - start[index]);
+          const length = Math.max(.0001, Math.hypot(...delta));
+          const direction = delta.map((value) => value / length);
+          const halfLength = length / 2 * factor;
+          target.x = originalCenter[0] - direction[0] * halfLength;
+          target.y = originalCenter[1] - direction[1] * halfLength;
+          target.z = originalCenter[2] - direction[2] * halfLength;
+          target.x2 = originalCenter[0] + direction[0] * halfLength;
+          target.y2 = originalCenter[1] + direction[1] * halfLength;
+          target.z2 = originalCenter[2] + direction[2] * halfLength;
+        } else if (axis === "y") {
+          target.thicknessY = Math.max(.2, Number(target.thicknessY || target.thickness) * factor);
+        } else if (axis === "z") {
+          target.thicknessZ = Math.max(.2, Number(target.thicknessZ || target.thickness) * factor);
+        }
+        target.thickness = Math.max(Number(target.thicknessY || target.thickness || 0), Number(target.thicknessZ || target.thickness || 0), .2);
+      } else if (target.type === "wheel") {
+        if (axis === "x") target.w = Math.max(.1, Number(target.w) * factor);
+        if (axis === "y") target.h = Math.max(.1, Number(target.h) * factor);
+        if (axis === "z") target.d = Math.max(.05, Number(target.d) * factor);
+        target.size = Math.max(Number(target.w), Number(target.h));
+      }
+
+      const resizedCenter = designComponentCenter(target);
+      const targetCenter = [...originalCenter];
+      targetCenter[axisIndex] = pivot[axisIndex] + (originalCenter[axisIndex] - pivot[axisIndex]) * factor;
+      translateDesignComponent(
+        target,
+        targetCenter[0] - resizedCenter[0],
+        targetCenter[1] - resizedCenter[1],
+        targetCenter[2] - resizedCenter[2],
+      );
+    };
+
+    scaleAxis(component, "x", scaleX);
+    scaleAxis(component, "y", scaleY);
+    scaleAxis(component, "z", scaleZ);
+  }
+
+  function scaleDesignSelectionTogether(component, pivot, factor, axis) {
+    const requestedFactor = clamp(Number(factor) || 1, .05, 20);
+    if (Math.abs(requestedFactor - 1) < .00001) return;
+
+    // Mirror Machine Design Studio's scaleSelectionTogether behavior. Nested
+    // groups first resize around their own current bounds center, then the whole
+    // group center moves relative to the external motion-driver pivot. Scaling
+    // every descendant directly around the external pivot is close, but drifts
+    // for rotated nested groups after non-uniform scaling.
+    const originalCenter = designComponentCenter(component);
+    scaleDesignComponentAround(
+      component,
+      originalCenter,
+      axis === "x" ? requestedFactor : 1,
+      axis === "y" ? requestedFactor : 1,
+      axis === "z" ? requestedFactor : 1,
+    );
+    const axisIndex = axis === "x" ? 0 : axis === "y" ? 1 : 2;
+    const targetCenter = [...originalCenter];
+    targetCenter[axisIndex] = pivot[axisIndex] + (originalCenter[axisIndex] - pivot[axisIndex]) * requestedFactor;
+    const currentCenter = designComponentCenter(component);
+    translateDesignComponent(
+      component,
+      targetCenter[0] - currentCenter[0],
+      targetCenter[1] - currentCenter[1],
+      targetCenter[2] - currentCenter[2],
+    );
   }
 
   function multiplyDesignOpacity(component, factor) {
@@ -3287,7 +4938,8 @@
       (component.children || []).forEach((child) => multiplyDesignOpacity(child, factor));
       return;
     }
-    component.opacity = (Number(component.opacity) || 1) * factor;
+    const baseOpacity = Number.isFinite(Number(component.opacity)) ? Number(component.opacity) : 1;
+    component.opacity = clamp(baseOpacity * factor, 0, 1);
   }
 
   function flattenDesignComponents(components) {
@@ -3296,12 +4948,335 @@
       : [component]);
   }
 
-  function animateDesignComponentSelf(component, time) {
+  // Expand the saved part into temporary box fragments only for drawing. The
+  // design library remains compact and keeps the original editable geometry.
+  function rectangularSplitDesignComponents(component) {
+    const effect = component?.rectangularSplit;
+    if (!effect || Number(effect.progress) <= 0.0001 || !timelineEngine?.rectangularSplitCells) {
+      return component?.type === "group"
+        ? (component.children || []).flatMap(rectangularSplitDesignComponents)
+        : [component];
+    }
+
+    const points = designComponentPoints(component);
+    if (!points.length) return [component];
+    const split = timelineEngine.rectangularSplitCells(effect);
+    const boxLike = ["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type);
+    const bounds = {
+      minX: Math.min(...points.map((point) => point[0])),
+      maxX: Math.max(...points.map((point) => point[0])),
+      minY: Math.min(...points.map((point) => point[1])),
+      maxY: Math.max(...points.map((point) => point[1])),
+      minZ: Math.min(...points.map((point) => point[2])),
+      maxZ: Math.max(...points.map((point) => point[2])),
+    };
+    const center = boxLike
+      ? [
+          Number(component.x) + Number(component.w) / 2,
+          Number(component.y) + Number(component.h) / 2,
+          Number(component.z) + Number(component.d) / 2,
+        ]
+      : [
+          (bounds.minX + bounds.maxX) / 2,
+          (bounds.minY + bounds.maxY) / 2,
+          (bounds.minZ + bounds.maxZ) / 2,
+        ];
+    const dimensions = boxLike
+      ? [Math.max(.02, Number(component.w) || .02), Math.max(.02, Number(component.h) || .02), Math.max(.02, Number(component.d) || .02)]
+      : [Math.max(.02, bounds.maxX - bounds.minX), Math.max(.02, bounds.maxY - bounds.minY), Math.max(.02, bounds.maxZ - bounds.minZ)];
+    const baseRotation = boxLike ? designComponentRotation(component) : [0, 0, 0];
+    const fragmentSize = [
+      dimensions[0] / split.columns,
+      dimensions[1] / split.rows,
+      dimensions[2] / split.layers,
+    ];
+    const progress = split.progress;
+
+    return split.cells.map((cell) => {
+      const localCenterOffset = [
+        cell.center[0] * dimensions[0],
+        cell.center[1] * dimensions[1],
+        cell.center[2] * dimensions[2],
+      ];
+      const localSpread = cell.direction.map((value) => value * split.distance * progress);
+      const rotatedCenterOffset = rotateVector3(localCenterOffset, ...baseRotation);
+      const rotatedSpread = rotateVector3(localSpread, ...baseRotation);
+      const fragmentCenter = [
+        center[0] + rotatedCenterOffset[0] + rotatedSpread[0],
+        center[1] + rotatedCenterOffset[1] + rotatedSpread[1],
+        center[2] + rotatedCenterOffset[2] + rotatedSpread[2],
+      ];
+      const rotation = baseRotation.map((value, axis) => value + cell.rotation[axis] * progress);
+      return {
+        id: `${component.id || "component"}-rectangle-${cell.index}`,
+        name: `${component.name || "Part"} rectangle ${cell.index + 1}`,
+        type: "box",
+        x: fragmentCenter[0] - fragmentSize[0] / 2,
+        y: fragmentCenter[1] - fragmentSize[1] / 2,
+        z: fragmentCenter[2] - fragmentSize[2] / 2,
+        w: fragmentSize[0],
+        h: fragmentSize[1],
+        d: fragmentSize[2],
+        color: component.color || "#68777a",
+        opacity: clamp(Number(component.opacity ?? 1), 0, 1),
+        visible: component.visible !== false,
+        rotationX: rotation[0],
+        rotationY: rotation[1],
+        rotationZ: rotation[2],
+        rotation: rotation[1],
+      };
+    });
+  }
+
+  function designAnimationSettingsMatch(first, second) {
+    if (!first || !second) return false;
+    const fields = [
+      "animationEnabled", "animationType", "animationAxis", "animationSecondaryAxis",
+      "animationAmount", "animationSecondaryAmount", "animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds", "animationPhase",
+    ];
+    return fields.every((field) => String(first[field] ?? "") === String(second[field] ?? ""))
+      && JSON.stringify(first.animationTimeline || null) === JSON.stringify(second.animationTimeline || null);
+  }
+
+  function designComponentPathAxes(component, firstAmount, secondAmount) {
+    const firstAxis = ["x", "y", "z"].includes(component.animationAxis) ? component.animationAxis : "y";
+    let secondAxis = ["x", "y", "z"].includes(component.animationSecondaryAxis) ? component.animationSecondaryAxis : "z";
+    if (secondAxis === firstAxis) secondAxis = firstAxis === "z" ? "x" : "z";
+    const rotation = [Number(component.rotationX)||0, Number(component.rotationY ?? component.rotation)||0, Number(component.rotationZ)||0];
+    const axisVector = (axis) => rotateVector3(axis === "x" ? [1,0,0] : axis === "y" ? [0,1,0] : [0,0,1], ...rotation);
+    const firstVector = axisVector(firstAxis);
+    const secondVector = axisVector(secondAxis);
+    return [0,1,2].map((index) => firstVector[index] * firstAmount + secondVector[index] * secondAmount);
+  }
+
+  function fourStepPauseDurations(source) {
+    const legacyAxis1 = Math.max(0, Number(source.animationPauseSeconds) || 0);
+    const legacyAxis2 = Math.max(0, Number.isFinite(Number(source.animationSecondaryPauseSeconds))
+      ? Number(source.animationSecondaryPauseSeconds)
+      : legacyAxis1);
+    return [
+      Math.max(0, Number.isFinite(Number(source.animationStep1PauseSeconds)) ? Number(source.animationStep1PauseSeconds) : legacyAxis1),
+      Math.max(0, Number.isFinite(Number(source.animationStep2PauseSeconds)) ? Number(source.animationStep2PauseSeconds) : legacyAxis2),
+      Math.max(0, Number.isFinite(Number(source.animationStep3PauseSeconds)) ? Number(source.animationStep3PauseSeconds) : legacyAxis1),
+      Math.max(0, Number.isFinite(Number(source.animationStep4PauseSeconds)) ? Number(source.animationStep4PauseSeconds) : legacyAxis2),
+    ];
+  }
+
+  function fourStepOffset(source, time, firstAmount, secondAmount, combine) {
+    const speed = Math.max(0, Number(source.animationSpeed) || 0);
+    if (speed <= 0) return [0,0,0];
+    const pauses = fourStepPauseDurations(source);
+    const activeDuration = 1 / speed;
+    const legDuration = activeDuration / 4;
+    const totalDuration = activeDuration + pauses.reduce((sum, value) => sum + value, 0);
+    const phase = ((Number(source.animationPhase) || 0) / 360 + 1) % 1;
+    const elapsed = Math.max(0, effectiveAnimationTime(time) / 1000 + phase * totalDuration);
+    let local = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+    const smooth = (value) => (1 - Math.cos(clamp(value, 0, 1) * Math.PI)) / 2;
+    const interpolate = (from, to, progress) => from + (to - from) * smooth(progress);
+    const legs = [
+      { from: [0, 0], to: [firstAmount, 0] },
+      { from: [firstAmount, 0], to: [firstAmount, secondAmount] },
+      { from: [firstAmount, secondAmount], to: [0, secondAmount] },
+      { from: [0, secondAmount], to: [0, 0] },
+    ];
+    for (let index = 0; index < legs.length; index += 1) {
+      const leg = legs[index];
+      if (local < legDuration) {
+        const progress = legDuration > 0 ? local / legDuration : 1;
+        return combine(
+          interpolate(leg.from[0], leg.to[0], progress),
+          interpolate(leg.from[1], leg.to[1], progress),
+        );
+      }
+      local -= legDuration;
+      if (local < pauses[index]) return combine(leg.to[0], leg.to[1]);
+      local -= pauses[index];
+    }
+    return [0,0,0];
+  }
+
+  function designComponentFourStepOffset(component, time) {
+    return fourStepOffset(
+      component,
+      time,
+      Number(component.animationAmount) || 0,
+      Number(component.animationSecondaryAmount) || 0,
+      (first, second) => designComponentPathAxes(component, first, second),
+    );
+  }
+
+  function timelineRotationOperations(timelineState) {
+    const explicitOperations = Array.isArray(timelineState?.rotationOperations)
+      ? timelineState.rotationOperations
+        .map((operation) => ({
+          rotation: (operation?.rotation || [0, 0, 0]).map((value) => Number(value) || 0),
+          pivotOffset: (operation?.pivotOffset || [0, 0, 0]).map((value) => Number(value) || 0),
+        }))
+        .filter((operation) => operation.rotation.some((value) => Math.abs(value) > .00001))
+      : [];
+    if (explicitOperations.length) return explicitOperations;
+    const fallbackRotation = (timelineState?.rotation || [0, 0, 0]).map((value) => Number(value) || 0);
+    return fallbackRotation.some((value) => Math.abs(value) > .00001)
+      ? [{ rotation: fallbackRotation, pivotOffset: [0, 0, 0] }]
+      : [];
+  }
+
+  function applyDesignTimelineAnimation(animated, source, timelineState) {
+    const rotation = designComponentRotation(source);
+    const localTranslation = timelineState.translation || [0, 0, 0];
+    const worldTranslation = rotateVector3(localTranslation, ...rotation);
+    const sourceCenter = designGroupCenter([source]);
+    timelineRotationOperations(timelineState).forEach((operation) => {
+      const worldPivotOffset = rotateVector3(operation.pivotOffset, ...rotation);
+      const pivot = sourceCenter.map((value, index) => value + worldPivotOffset[index]);
+      ["x", "y", "z"].forEach((axis, index) => {
+        const degrees = Number(operation.rotation[index]) || 0;
+        if (Math.abs(degrees) < .00001) return;
+        rotateDesignComponentAround(
+          animated,
+          pivot,
+          axis === "x" ? degrees : 0,
+          axis === "y" ? degrees : 0,
+          axis === "z" ? degrees : 0,
+        );
+      });
+    });
+    translateDesignComponent(animated, ...worldTranslation);
+
+    // Match Machine Design Studio exactly: timeline scaling is applied after
+    // rotation/translation, one axis at a time. A rotated merged group can shift
+    // its bounds center slightly after a non-uniform axis scale, so recompute the
+    // pivot before each axis instead of reusing one approximate group center.
+    const timelineScale = (timelineState.scale || [1, 1, 1]).map((value) => Number(value) || 1);
+    ["x", "y", "z"].forEach((axis, index) => {
+      const factor = timelineScale[index];
+      if (Math.abs(factor - 1) < .00001) return;
+      const scalePivot = designGroupCenter([animated]);
+      scaleDesignComponentAround(
+        animated,
+        scalePivot,
+        axis === "x" ? factor : 1,
+        axis === "y" ? factor : 1,
+        axis === "z" ? factor : 1,
+      );
+    });
+
+    const timelineOpacity = Number.isFinite(Number(timelineState.opacity)) ? clamp(Number(timelineState.opacity), 0, 1) : 1;
+    if (Math.abs(timelineOpacity - 1) > .00001) {
+      multiplyDesignOpacity(animated, timelineOpacity);
+    }
+    if (typeof timelineState.visible === "boolean") animated.visible = timelineState.visible;
+    if (timelineState.rectangularSplit) animated.rectangularSplit = clone(timelineState.rectangularSplit);
+    else delete animated.rectangularSplit;
+    return animated;
+  }
+
+  const designTimelineDurationCache = new WeakMap();
+
+  function designComponentTimelines(components) {
+    const timelines = [];
+    const visit = (component) => {
+      if (!component) return;
+      if (component.animationTimeline && Array.isArray(component.animationTimeline.clips)) {
+        timelines.push(component.animationTimeline);
+      }
+      (component.children || []).forEach(visit);
+    };
+    (components || []).forEach(visit);
+    return timelines;
+  }
+
+  function designSharedTimelineSettings(design) {
+    const saved = design?.animationTimelineSettings;
+    return {
+      loop: saved?.loop !== false,
+      playbackRate: clamp(Number(saved?.playbackRate ?? 1) || 0, 0, 20),
+    };
+  }
+
+  function designSharedTimelineDuration(design) {
+    if (design && designTimelineDurationCache.has(design)) return designTimelineDurationCache.get(design);
+    const timelines = designComponentTimelines(design?.components);
+    const duration = timelineEngine?.sharedTimelineDuration
+      ? timelineEngine.sharedTimelineDuration(timelines)
+      : Math.max(timelineEngine?.MIN_TIMELINE_SECONDS || 30, ...timelines.map((timeline) => timelineEngine?.timelineDuration?.(timeline) || 0));
+    if (design) designTimelineDurationCache.set(design, duration);
+    return duration;
+  }
+
+  function evaluateDesignTimeline(timeline, time, design) {
+    const settings = designSharedTimelineSettings(design);
+    return timelineEngine.evaluateTimeline(timeline, effectiveAnimationTime(time) / 1000, {
+      sharedClock: true,
+      duration: designSharedTimelineDuration(design),
+      loop: settings.loop,
+      playbackRate: settings.playbackRate,
+    });
+  }
+
+  function designComponentAnimationTransform(component, time, design) {
+    const transform = { translation: [0,0,0], rotation: [0,0,0], rotationOperations: [], scale: [1,1,1], alpha: 1, visible: null, rectangularSplit: null };
+    if (state.editing && !state.previewObjectAnimations) return transform;
+    if (timelineEngine && component.animationTimeline && Array.isArray(component.animationTimeline.clips)) {
+      if (component.animationTimeline.enabled === false || !component.animationTimeline.clips.some((clip) => clip.enabled !== false)) return transform;
+      const timelineState = evaluateDesignTimeline(component.animationTimeline, time, design);
+      transform.translation = rotateVector3(timelineState.translation || [0, 0, 0], ...designComponentRotation(component));
+      transform.rotation = (timelineState.rotation || [0, 0, 0]).map((value) => Number(value) || 0);
+      transform.rotationOperations = timelineRotationOperations(timelineState).map((operation) => ({
+        rotation: operation.rotation,
+        // Store inherited pivot offsets in world coordinates so every merged
+        // sibling rotates around the same point as the motion-driver part.
+        pivotOffset: rotateVector3(operation.pivotOffset, ...designComponentRotation(component)),
+      }));
+      transform.scale = (timelineState.scale || [1, 1, 1]).map((value) => Number(value) || 1);
+      transform.alpha = Number.isFinite(Number(timelineState.opacity)) ? clamp(Number(timelineState.opacity), 0, 1) : 1;
+      transform.visible = typeof timelineState.visible === "boolean" ? timelineState.visible : null;
+      transform.rectangularSplit = timelineState.rectangularSplit ? clone(timelineState.rectangularSplit) : null;
+      return transform;
+    }
+    if (component.animationEnabled === false || !component.animationType || component.animationType === "none") return transform;
+    const { cycle, wrapped, sine, pingPong } = componentAnimationWave(component, time);
+    const amount = Number(component.animationAmount) || 0;
+    const axis = component.animationAxis || "x";
+    const offset = component.animationType === "loop"
+      ? (wrapped - 0.5) * amount
+      : component.animationType === "oscillate"
+        ? pingPong * amount
+        : sine * amount / 2;
+    if (["oscillate", "loop"].includes(component.animationType)) {
+      if (axis === "x" || axis === "all") transform.translation[0] = offset;
+      if (axis === "y" || axis === "all") transform.translation[1] = offset;
+      if (axis === "z" || axis === "all") transform.translation[2] = offset;
+    } else if (component.animationType === "fourStep") {
+      transform.translation = designComponentFourStepOffset(component, time);
+    } else if (component.animationType === "bob") transform.translation[1] = offset;
+    else if (component.animationType === "spin") {
+      const spin = cycle * (amount || 360);
+      if (axis === "x" || axis === "all") transform.rotation[0] = spin;
+      if (axis === "y" || axis === "all") transform.rotation[1] = spin;
+      if (axis === "z" || axis === "all") transform.rotation[2] = spin;
+    } else if (component.animationType === "pulse") {
+      const factor = Math.max(0.08, 1 + sine * amount / 200);
+      if (axis === "x" || axis === "all") transform.scale[0] = factor;
+      if (axis === "y" || axis === "all") transform.scale[1] = factor;
+      if (axis === "z" || axis === "all") transform.scale[2] = factor;
+    } else if (component.animationType === "blink") transform.alpha = sine > -0.15 ? 1 : 0.08;
+    return transform;
+  }
+
+  function animateDesignComponentSelf(component, time, design) {
+    if (state.editing && !state.previewObjectAnimations) return clone(component);
+    if (timelineEngine && component.animationTimeline && Array.isArray(component.animationTimeline.clips)) {
+      if (component.animationTimeline.enabled === false || !component.animationTimeline.clips.some((clip) => clip.enabled !== false)) return clone(component);
+      const animated = clone(component);
+      const timelineState = evaluateDesignTimeline(component.animationTimeline, time, design);
+      return applyDesignTimelineAnimation(animated, component, timelineState);
+    }
     if (
       component.animationEnabled === false ||
       !component.animationType ||
-      component.animationType === "none" ||
-      (state.editing && !state.previewObjectAnimations)
+      component.animationType === "none"
     ) return clone(component);
     const animated = clone(component);
     const { cycle, wrapped, sine, pingPong } = componentAnimationWave(component, time);
@@ -3315,6 +5290,8 @@
     const translate = (dx,dy,dz) => translateDesignComponent(animated, dx, dy, dz);
     if (["oscillate", "loop"].includes(component.animationType)) {
       translate(axis === "x" || axis === "all" ? offset : 0, axis === "y" || axis === "all" ? offset : 0, axis === "z" || axis === "all" ? offset : 0);
+    } else if (component.animationType === "fourStep") {
+      translate(...designComponentFourStepOffset(component, time));
     } else if (component.animationType === "bob") translate(0, offset, 0);
     else if (component.animationType === "spin") {
       const spin = cycle * (amount || 360);
@@ -3337,52 +5314,18 @@
       }
     } else if (component.animationType === "pulse") {
       const factor = Math.max(0.08, 1 + sine * amount / 200);
-      if (animated.type === "group") {
-        const pivot = designGroupCenter(animated.children || []);
-        scaleDesignComponentAround(
-          animated,
-          pivot,
-          axis === "x" || axis === "all" ? factor : 1,
-          axis === "y" || axis === "all" ? factor : 1,
-          axis === "z" || axis === "all" ? factor : 1,
-        );
-      } else if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(animated.type)) {
-        const centerX = Number(component.x) + Number(component.w) / 2;
-        const centerY = Number(component.y) + Number(component.h) / 2;
-        const centerZ = Number(component.z) + Number(component.d) / 2;
-        if (axis === "x" || axis === "all") animated.w = Math.max(.02, Number(component.w) * factor);
-        if (axis === "y" || axis === "all") animated.h = Math.max(.02, Number(component.h) * factor);
-        if (axis === "z" || axis === "all") animated.d = Math.max(.02, Number(component.d) * factor);
-        animated.x = centerX - Number(animated.w) / 2;
-        animated.y = centerY - Number(animated.h) / 2;
-        animated.z = centerZ - Number(animated.d) / 2;
-      } else if (animated.type === "wheel") {
-        if (axis === "x" || axis === "all") animated.w = Math.max(.1, Number(component.w) * factor);
-        if (axis === "y" || axis === "all") animated.h = Math.max(.1, Number(component.h) * factor);
-        if (axis === "z" || axis === "all") animated.d = Math.max(.05, Number(component.d) * factor);
-      } else if (animated.type === "rollerBed") {
-        const centerX = Number(component.x) + Number(component.w) / 2;
-        const centerZ = Number(component.z) + Number(component.d) / 2;
-        if (axis === "x" || axis === "all") animated.w = Math.max(.1, Number(component.w) * factor);
-        if (axis === "z" || axis === "all") animated.d = Math.max(.1, Number(component.d) * factor);
-        if (axis === "y" || axis === "all") animated.thickness = Math.max(.1, Number(component.thickness) * factor);
-        animated.x = centerX - Number(animated.w) / 2;
-        animated.z = centerZ - Number(animated.d) / 2;
-      } else if (animated.type === "beam") {
-        const centerX = (Number(component.x) + Number(component.x2)) / 2;
-        const centerY = (Number(component.y) + Number(component.y2)) / 2;
-        const centerZ = (Number(component.z) + Number(component.z2)) / 2;
-        const scaleX = axis === "x" || axis === "all" ? factor : 1;
-        const scaleY = axis === "y" || axis === "all" ? factor : 1;
-        const scaleZ = axis === "z" || axis === "all" ? factor : 1;
-        animated.x = centerX + (Number(component.x) - centerX) * scaleX;
-        animated.y = centerY + (Number(component.y) - centerY) * scaleY;
-        animated.z = centerZ + (Number(component.z) - centerZ) * scaleZ;
-        animated.x2 = centerX + (Number(component.x2) - centerX) * scaleX;
-        animated.y2 = centerY + (Number(component.y2) - centerY) * scaleY;
-        animated.z2 = centerZ + (Number(component.z2) - centerZ) * scaleZ;
-        if (axis === "all") animated.thickness = Math.max(.1, Number(component.thickness) * factor);
-      }
+      const pivot = animated.type === "group"
+        ? designGroupCenter(animated.children || [])
+        : designComponentCenter(animated);
+      // Legacy pulse animations use the same shape-aware scaler as timeline
+      // clips so beams, wheels, roller beds, and nested groups match Designer.
+      scaleDesignComponentAround(
+        animated,
+        pivot,
+        axis === "x" || axis === "all" ? factor : 1,
+        axis === "y" || axis === "all" ? factor : 1,
+        axis === "z" || axis === "all" ? factor : 1,
+      );
     } else if (component.animationType === "blink") {
       const factor = sine > -0.15 ? 1 : 0.08;
       if (animated.type === "group") multiplyDesignOpacity(animated, factor);
@@ -3421,89 +5364,141 @@
         ratio(animatedBounds.maxY - animatedBounds.minY, baseBounds.maxY - baseBounds.minY),
         ratio(animatedBounds.maxZ - animatedBounds.minZ, baseBounds.maxZ - baseBounds.minZ),
       ],
-      alpha: Math.max(.01, Number(animated.opacity ?? 1) / Math.max(.01, Number(component.opacity ?? 1))),
+      alpha: Math.max(0, Number(animated.opacity ?? 1) / Math.max(.01, Number(component.opacity ?? 1))),
+      visible: (animated.visible !== false) !== (component.visible !== false) ? animated.visible !== false : null,
     };
   }
 
-  function applyInheritedDesignTransform(component, transform, pivot) {
+  function applyInheritedDesignTransform(component, transform, pivot, includeRenderEffects = false) {
     const rendered = clone(component);
-    scaleDesignComponentAround(rendered, pivot, ...transform.scale);
-    rotateDesignComponentAround(rendered, pivot, ...transform.rotation);
+    ["x", "y", "z"].forEach((axis, index) => {
+      const factor = Number(transform.scale[index]) || 1;
+      if (Math.abs(factor - 1) < .0001) return;
+      scaleDesignSelectionTogether(rendered, pivot, factor, axis);
+    });
+    const inheritedRotationOperations = Array.isArray(transform.rotationOperations) && transform.rotationOperations.length
+      ? transform.rotationOperations
+      : [{ rotation: transform.rotation || [0, 0, 0], pivotOffset: [0, 0, 0] }];
+    inheritedRotationOperations.forEach((operation) => {
+      const operationPivot = pivot.map((value, index) => value + (Number(operation.pivotOffset?.[index]) || 0));
+      rotateDesignComponentAround(rendered, operationPivot, ...(operation.rotation || [0, 0, 0]));
+    });
     translateDesignComponent(rendered, ...transform.translation);
     if (Math.abs(transform.alpha - 1) > .0001) multiplyDesignOpacity(rendered, transform.alpha);
+    if (typeof transform.visible === "boolean") rendered.visible = transform.visible;
+    if (includeRenderEffects && transform.rectangularSplit) rendered.rectangularSplit = clone(transform.rectangularSplit);
     return rendered;
   }
 
-  function animateDesignComponent(component, time) {
-    if (component.type !== "group") return animateDesignComponentSelf(component, time);
+  function animateDesignComponent(component, time, design) {
+    if (component.type !== "group") return animateDesignComponentSelf(component, time, design);
     const children = component.children || [];
-    if (!children.length) return animateDesignComponentSelf(component, time);
+    if (!children.length) return animateDesignComponentSelf(component, time, design);
+    if (component.embeddedMachine === true) {
+      // Embedded machines preserve the source machine's independent child
+      // animations. The parent design still supplies the one shared playback
+      // clock, and an animation on the wrapper moves the complete machine.
+      const animatedMachine = clone(component);
+      animatedMachine.children = children.map((child) => (
+        child.playOwnAnimation === false ? clone(child) : animateDesignComponent(child, time, design)
+      ));
+      return animateDesignComponentSelf(animatedMachine, time, design);
+    }
     const driver = children.find((child) => child.id === component.motionDriverId)
+      || children.find((child) => child.animationTimeline?.enabled !== false && child.animationTimeline?.clips?.some((clip) => clip.enabled !== false))
       || children.find((child) => child.animationEnabled !== false && child.animationType && child.animationType !== "none")
       || children[0];
-    const driverAnimated = animateDesignComponentSelf(driver, time);
-    const inheritedTransform = designComponentAnimationDelta(driver, driverAnimated);
+    const inheritedTransform = designComponentAnimationTransform(driver, time, design);
     const driverPivot = designGroupCenter([driver]);
     const animatedGroup = clone(component);
     animatedGroup.motionDriverId = driver.id;
     animatedGroup.children = children.map((child) => {
-      const ownAnimated = child.id === driver.id ? clone(child) : animateDesignComponent(child, time);
-      return applyInheritedDesignTransform(ownAnimated, inheritedTransform, driverPivot);
+      const playsLocalAnimation = child.id !== driver.id && child.playOwnAnimation !== false;
+      const ownAnimated = playsLocalAnimation ? animateDesignComponent(child, time, design) : clone(child);
+      return applyInheritedDesignTransform(ownAnimated, inheritedTransform, driverPivot, child.id === driver.id);
     });
-    return animateDesignComponentSelf(animatedGroup, time);
+    return animateDesignComponentSelf(animatedGroup, time, design);
   }
 
   function scaledComponentBox(machine, component, design) {
-    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
-    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
-    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
-    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
-    const width = Math.max(.02, Number(component.w) * scaleX);
-    const depth = Math.max(.02, Number(component.d) * scaleZ);
-    const height = Math.max(.02, Number(component.h) * scaleY);
-    const localCenterX = (Number(component.x) + Number(component.w) / 2) * scaleX;
-    const localCenterZ = (Number(component.z) + Number(component.d) / 2) * scaleZ;
-    const worldCenter = localPoint(machine, localCenterX, 0, localCenterZ);
+    const placement = designPlacement(machine, design);
+    const width = Math.max(.02, Number(component.w) * placement.scaleX);
+    const depth = Math.max(.02, Number(component.d) * placement.scaleZ);
+    const height = Math.max(.02, Number(component.h) * placement.scaleY);
+    const localCenter = [
+      placement.offsetX + (Number(component.x) + Number(component.w) / 2) * placement.scaleX,
+      placement.offsetY + (Number(component.y) + Number(component.h) / 2) * placement.scaleY,
+      placement.offsetZ + (Number(component.z) + Number(component.d) / 2) * placement.scaleZ,
+    ];
+    const worldCenter = localPoint3d(machine, ...localCenter);
     return {
       x: worldCenter[0] - width / 2,
+      y: worldCenter[1] - height / 2,
       z: worldCenter[2] - depth / 2,
-      y: Number(component.y) * scaleY + (Number(machine.renderY) || 0),
       w: width,
       d: depth,
       h: height,
       color: component.color || machine.color,
-      rotationX: Number(component.rotationX) || 0,
-      rotationY: (Number(machine.rotation) || 0) + (Number.isFinite(Number(component.rotationY)) ? Number(component.rotationY) : Number(component.rotation) || 0),
-      rotationZ: Number(component.rotationZ) || 0,
-      rotation: (Number(machine.rotation) || 0) + (Number.isFinite(Number(component.rotationY)) ? Number(component.rotationY) : Number(component.rotation) || 0),
+      rotationX: (Number(machine.rotationX) || 0) + (Number(component.rotationX) || 0),
+      rotationY: (Number(machine.rotationY ?? machine.rotation) || 0) + (Number.isFinite(Number(component.rotationY)) ? Number(component.rotationY) : Number(component.rotation) || 0),
+      rotationZ: (Number(machine.rotationZ) || 0) + (Number(component.rotationZ) || 0),
+      rotation: (Number(machine.rotationY ?? machine.rotation) || 0) + (Number.isFinite(Number(component.rotationY)) ? Number(component.rotationY) : Number(component.rotation) || 0),
     };
   }
 
-  function drawDesignWheel(machine, component, design, alpha, grow = 1) {
-    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
-    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
-    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
-    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
-    const center = [
-      Number(component.x) * scaleX,
-      Number(component.y) * scaleY * grow,
-      Number(component.z) * scaleZ,
+  function designLocalPointToWorld(machine, design, point, grow = 1) {
+    const placement = designPlacement(machine, design);
+    return localPoint3d(
+      machine,
+      placement.offsetX + Number(point[0]) * placement.scaleX,
+      placement.offsetY + Number(point[1]) * placement.scaleY * grow,
+      placement.offsetZ + Number(point[2]) * placement.scaleZ,
+    );
+  }
+
+  function drawDesignBox(machine, component, design, alpha, grow = 1) {
+    const vertices = designComponentPoints(component).map((point) => designLocalPointToWorld(machine, design, point, grow));
+    if (vertices.length < 8) return;
+    const faceDefinitions = [
+      { indices:[0,1,5,4], fill:shade(component.color || machine.color,-.12) },
+      { indices:[1,2,6,5], fill:shade(component.color || machine.color,-.22) },
+      { indices:[2,3,7,6], fill:shade(component.color || machine.color,-.18) },
+      { indices:[3,0,4,7], fill:shade(component.color || machine.color,-.08) },
+      { indices:[3,2,1,0], fill:shade(component.color || machine.color,-.28) },
+      { indices:[4,5,6,7], fill:component.color || machine.color, stroke:"rgba(20,30,34,.28)" },
     ];
-    const radiusX = Math.max(.025, Number(component.w || component.size || 1.2) * scaleX / 2);
-    const radiusY = Math.max(.025, Number(component.h || component.size || 1.2) * scaleY * grow / 2);
-    const halfDepth = Math.max(.02, Number(component.d || component.size * .64 || .75) * scaleZ / 2);
+    faceDefinitions.forEach((face) => polygon(
+      face.indices.map((index) => vertices[index]),
+      face.fill,
+      face.stroke || "rgba(20,30,34,.12)",
+      .7,
+      alpha,
+    ));
+  }
+
+  function drawDesignWheel(machine, component, design, alpha, grow = 1) {
+    const center = [
+      Number(component.x),
+      Number(component.y),
+      Number(component.z),
+    ];
+    const radiusX = Math.max(.025, Number(component.w || component.size || 1.2) / 2);
+    const radiusY = Math.max(.025, Number(component.h || component.size || 1.2) / 2);
+    const halfDepth = Math.max(.02, Number(component.d || component.size * .64 || .75) / 2);
     const rotation = designComponentRotation(component);
     const pointFromWheelSpace = (offset) => {
+      // Rotate in source-design coordinates first, then apply the destination
+      // machine's placement scale. This is the same transform order used by the
+      // Designer and prevents non-uniform Plant Layout scaling from skewing an
+      // animated wheel's axis or pivot.
       const rotated = rotateVector3(offset, ...rotation);
-      return localPoint3d(
-        machine,
+      return designLocalPointToWorld(machine, design, [
         center[0] + rotated[0],
         center[1] + rotated[1],
         center[2] + rotated[2],
-      );
+      ], grow);
     };
     drawCylinder3d({
-      center,
       radiusX,
       radiusY,
       halfDepth,
@@ -3529,17 +5524,19 @@
   }
 
   function designPointToWorld(machine, component, design, point, grow = 1) {
-    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
-    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
-    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
-    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
+    const placement = designPlacement(machine, design);
     const center = [
       Number(component.x) + Number(component.w || 0) / 2,
       Number(component.y) + Number(component.h || 0) / 2,
       Number(component.z) + Number(component.d || 0) / 2,
     ];
     const rotated = rotatedDesignPoint(component, point, center);
-    return localPoint3d(machine, rotated[0] * scaleX, rotated[1] * scaleY * grow, rotated[2] * scaleZ);
+    return localPoint3d(
+      machine,
+      placement.offsetX + rotated[0] * placement.scaleX,
+      placement.offsetY + rotated[1] * placement.scaleY * grow,
+      placement.offsetZ + rotated[2] * placement.scaleZ,
+    );
   }
 
   function drawClosedPrism(vertices, color, alpha) {
@@ -3594,18 +5591,18 @@
   }
 
   function drawDesignBeam(machine, component, design, alpha, grow) {
-    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
-    const scaleX = machine.w / Math.max(.01,Number(base.w)||machine.w);
-    const scaleY = machine.h / Math.max(.01,Number(base.h)||machine.h);
-    const scaleZ = machine.d / Math.max(.01,Number(base.d)||machine.d);
+    const placement = designPlacement(machine, design);
     const vertices = designBeamVertices(component).map((point)=>localPoint3d(
-      machine,point[0]*scaleX,point[1]*scaleY*grow,point[2]*scaleZ,
+      machine,
+      placement.offsetX + point[0] * placement.scaleX,
+      placement.offsetY + point[1] * placement.scaleY * grow,
+      placement.offsetZ + point[2] * placement.scaleZ,
     ));
     drawClosedPrism(vertices,component.color || machine.color,alpha);
   }
 
   function drawDesignCylinder(machine, component, design, alpha, grow, topScale = 1) {
-    const count = Math.max(8,Math.min(48,Math.round(Number(component.segments)||20)));
+    const count = renderPerformance.cylinderSegments(component.segments || 20);
     const center = [
       Number(component.x)+Number(component.w)/2,
       Number(component.y)+Number(component.h)/2,
@@ -3636,7 +5633,7 @@
   }
 
   function drawDesignSphere(machine, component, design, alpha, grow) {
-    const longitude=Math.max(10,Math.min(36,Math.round(Number(component.segments)||20)));
+    const longitude = Math.max(8, renderPerformance.cylinderSegments(component.segments || 20));
     const latitude=Math.max(6,Math.round(longitude/2));
     const center=[Number(component.x)+Number(component.w)/2,Number(component.y)+Number(component.h)/2,Number(component.z)+Number(component.d)/2];
     const rings=[];
@@ -3670,18 +5667,16 @@
   function drawCustomDesign(machine, alpha, grow, time) {
     const design = machine.designId ? designLibrary[machine.designId] : null;
     if (!design || !Array.isArray(design.components)) return false;
-    const base = design.base || { w: machine.w, d: machine.d, h: machine.h };
-    const scaleX = machine.w / Math.max(.01, Number(base.w) || machine.w);
-    const scaleY = machine.h / Math.max(.01, Number(base.h) || machine.h);
-    const scaleZ = machine.d / Math.max(.01, Number(base.d) || machine.d);
-    const visibleComponents = flattenDesignComponents(design.components
+    const placement = designPlacement(machine, design);
+    const visibleComponents = design.components
       .filter((component) => component.visible !== false)
-      .map((component) => animateDesignComponent(component, time)))
+      .map((component) => animateDesignComponent(component, time, design))
+      .flatMap(rectangularSplitDesignComponents)
       .filter((component) => component.visible !== false);
     visibleComponents.forEach((component) => {
-      const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0.05, 1);
+      const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
       if (component.type === "box" || component.type === "glassPanel") {
-        box(scaledComponentBox(machine, component, design), componentAlpha, grow);
+        drawDesignBox(machine, component, design, componentAlpha, grow);
       } else if (component.type === "cylinder") {
         drawDesignCylinder(machine,component,design,componentAlpha,grow,1);
       } else if (component.type === "sphere") {
@@ -3694,8 +5689,6 @@
         drawDesignBeam(machine,component,design,componentAlpha,grow);
       } else if (component.type === "rollerBed") {
         const count = Math.max(2, Math.round(Number(component.count) || 10));
-        const width = Number(component.w) * scaleX;
-        const depth = Number(component.d) * scaleZ;
         for (let index = 0; index < count; index += 1) {
           const ratio = count === 1 ? 0 : index / (count - 1);
           const localX = Number(component.x) + Number(component.w) * ratio;
@@ -3707,9 +5700,9 @@
           const roundedWidth = Math.max(.6, Number(component.thickness) || 1.5);
           ctx.save();
           ctx.lineCap = "round";
-          localLine(machine,
-            [rotatedStart[0] * scaleX, rotatedStart[1] * scaleY * grow, rotatedStart[2] * scaleZ],
-            [rotatedEnd[0] * scaleX, rotatedEnd[1] * scaleY * grow, rotatedEnd[2] * scaleZ],
+          localLine3d(machine,
+            [placement.offsetX + rotatedStart[0] * placement.scaleX, placement.offsetY + rotatedStart[1] * placement.scaleY * grow, placement.offsetZ + rotatedStart[2] * placement.scaleZ],
+            [placement.offsetX + rotatedEnd[0] * placement.scaleX, placement.offsetY + rotatedEnd[1] * placement.scaleY * grow, placement.offsetZ + rotatedEnd[2] * placement.scaleZ],
             component.color || "#c7d0cd",
             roundedWidth,
             componentAlpha,
@@ -3950,10 +5943,10 @@
         localLine3d(machine,[machine.w*.12,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],[machine.w*.88,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],"#879194",1,alpha);
       }
     } else if (machine.type === "animatedGlass") {
-      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, color: machine.color || colors.glass, y: Number(machine.renderY) || 0 }, alpha * .72, grow);
+      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, color: machine.color || colors.glass, y: Number(machine.renderY ?? machine.y) || 0 }, alpha * .72, grow);
       localLine3d(machine,[machine.w/2,0,machine.d/2],[machine.w/2,machine.h*grow,machine.d/2],"rgba(255,255,255,.6)",1.2,alpha*.65);
     } else if (machine.type === "animatedBox") {
-      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, y: Number(machine.renderY) || 0 },alpha,grow);
+      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, y: Number(machine.renderY ?? machine.y) || 0 },alpha,grow);
       box(localBox3d(machine,machine.w*.08,machine.d*.08,machine.w*.84,machine.d*.84,machine.h*.16,shade(machine.color,.12),machine.h*.84),alpha,1);
     } else if (machine.type === "animatedPerson") {
       box(localBox3d(machine,machine.w*.2,machine.d*.2,machine.w*.6,machine.d*.6,Math.max(.5,machine.h-1.2),machine.color,0),alpha,1);
@@ -4000,6 +5993,13 @@
       const start = center.map((value,index) => value - direction[index] * halfDistance);
       const end = center.map((value,index) => value + direction[index] * halfDistance);
       overlayLine3d(start,end,"#2675a7",3,1);
+    } else if (machine.animationEnabled && machine.animationMode === "fourStep") {
+      const origin = [machine.x + machine.w/2, machine.h/2, machine.z + machine.d/2];
+      const first = combineMachinePathAxes(machine, Number(machine.animationDistance) || 0, 0);
+      const corner = combineMachinePathAxes(machine, Number(machine.animationDistance) || 0, Number(machine.animationSecondaryDistance) || 0);
+      const second = combineMachinePathAxes(machine, 0, Number(machine.animationSecondaryDistance) || 0);
+      const points = [origin, origin.map((value,index) => value + first[index]), origin.map((value,index) => value + corner[index]), origin.map((value,index) => value + second[index]), origin];
+      for (let index = 0; index < points.length - 1; index += 1) overlayLine3d(points[index], points[index + 1], "#2675a7", 3, 1);
     }
   }
 
@@ -4009,6 +6009,31 @@
   }
 
 
+  function effectiveAnimationTime(time) {
+    const reference = state.animationsPaused ? state.animationPausedAt : time;
+    return Math.max(0, reference - state.animationTimeOffset);
+  }
+
+  function animationSettingsMatch(first, second) {
+    if (!first || !second) return false;
+    const fields = [
+      "animationEnabled", "animationMode", "animationAxis", "animationSecondaryAxis",
+      "animationDistance", "animationSecondaryDistance", "animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds", "animationPhase",
+    ];
+    if (!fields.every((field) => String(first[field] ?? "") === String(second[field] ?? ""))) return false;
+    if (["loop", "pingPong"].includes(first.animationMode)) {
+      return objectRotation(first).every((value, index) => Math.abs(value - objectRotation(second)[index]) < 0.0001);
+    }
+    return true;
+  }
+
+  function localMachineAnimationTransform(machine, time) {
+    if (machine.motionParentId && machine.playOwnAnimation === false) {
+      return { translation: [0,0,0], rotation: [0,0,0], scale: [1,1,1], alpha: 1 };
+    }
+    return machineAnimationTransform(machine, time);
+  }
+
   function animationWave(machine, time) {
     const speed = Math.max(0, Number(machine.animationSpeed) || 0);
     const pauseSeconds = Math.max(0, Number(machine.animationPauseSeconds) || 0);
@@ -4016,7 +6041,7 @@
     if (speed <= 0) return { cycle: 0, wrapped: 0, sine: 0, pingPong: 0 };
 
     const activeDuration = 1 / speed;
-    const elapsed = Math.max(0, time / 1000 + phase * activeDuration);
+    const elapsed = Math.max(0, effectiveAnimationTime(time) / 1000 + phase * activeDuration);
     if (machine.animationMode === "pingPong") {
       const quarterDuration = activeDuration / 4;
       const totalDuration = activeDuration + pauseSeconds * 2;
@@ -4050,6 +6075,26 @@
     return { cycle, wrapped, sine: Math.sin(wrapped * Math.PI * 2), pingPong: wrapped - 0.5 };
   }
 
+  function combineMachinePathAxes(machine, firstAmount, secondAmount) {
+    const firstAxis = ["x", "y", "z"].includes(machine.animationAxis) ? machine.animationAxis : "y";
+    let secondAxis = ["x", "y", "z"].includes(machine.animationSecondaryAxis) ? machine.animationSecondaryAxis : "z";
+    if (secondAxis === firstAxis) secondAxis = firstAxis === "z" ? "x" : "z";
+    const axisVector = (axis) => rotateVector3(axis === "x" ? [1,0,0] : axis === "y" ? [0,1,0] : [0,0,1], ...objectRotation(machine));
+    const firstVector = axisVector(firstAxis);
+    const secondVector = axisVector(secondAxis);
+    return [0,1,2].map((index) => firstVector[index] * firstAmount + secondVector[index] * secondAmount);
+  }
+
+  function machineFourStepOffset(machine, time) {
+    return fourStepOffset(
+      machine,
+      time,
+      Number(machine.animationDistance) || 0,
+      Number(machine.animationSecondaryDistance) || 0,
+      (first, second) => combineMachinePathAxes(machine, first, second),
+    );
+  }
+
   function machineAnimationTransform(machine, time) {
     const identity = {
       translation: [0, 0, 0],
@@ -4077,6 +6122,7 @@
     };
     if (machine.animationMode === "loop") applyOffset((wrapped - 0.5) * amount);
     else if (machine.animationMode === "pingPong") applyOffset(pingPong * amount);
+    else if (machine.animationMode === "fourStep") transform.translation = machineFourStepOffset(machine, time);
     else if (machine.animationMode === "bob") transform.translation[1] += sine * amount / 2;
     else if (machine.animationMode === "spin") {
       const spin = cycle * (amount || 360);
@@ -4176,13 +6222,13 @@
     if (machine.motionParentId) {
       let rendered = applyMachineAnimationTransform(
         machine,
-        machineAnimationTransform(machine, time),
+        localMachineAnimationTransform(machine, time),
         machineBasePivot(machine),
       );
       motionAncestorChain(machine).forEach((parent) => {
         rendered = applyMachineAnimationTransform(
           rendered,
-          machineAnimationTransform(parent, time),
+          localMachineAnimationTransform(parent, time),
           machineBasePivot(parent),
         );
       });
@@ -4206,12 +6252,55 @@
     );
   }
 
+  function projectedBoxVisible(item, margin = 180) {
+    const y = Number(item.renderY ?? item.y) || 0;
+    const centerX = Number(item.x) + Number(item.w) / 2;
+    const centerZ = Number(item.z) + Number(item.d) / 2;
+    const centerPoint = project(centerX, y + Number(item.h) / 2, centerZ);
+    const samples = [
+      project(Number(item.x), y, centerZ),
+      project(Number(item.x) + Number(item.w), y, centerZ),
+      project(centerX, y, Number(item.z)),
+      project(centerX, y, Number(item.z) + Number(item.d)),
+      project(centerX, y + Number(item.h), centerZ),
+    ];
+    const visibleSamples = state.cameraMode === "walk"
+      ? samples.filter((point) => point[3] >= WALK_NEAR_CLIP)
+      : samples;
+    if (!visibleSamples.length) return false;
+    const anchor = state.cameraMode === "walk" && centerPoint[3] < WALK_NEAR_CLIP ? visibleSamples[0] : centerPoint;
+    const radius = Math.max(12, ...visibleSamples.map((point) => Math.hypot(point[0] - anchor[0], point[1] - anchor[1])));
+    return anchor[0] + radius >= -margin
+      && anchor[0] - radius <= canvas.width + margin
+      && anchor[1] + radius >= -margin
+      && anchor[1] - radius <= canvas.height + margin;
+  }
+
+  function designContainsAnimation(components) {
+    return (components || []).some((component) => (
+      component?.animationTimeline?.enabled !== false && component?.animationTimeline?.clips?.some((clip) => clip.enabled !== false)
+    ) || (
+      component?.animationEnabled === true && component.animationType && component.animationType !== "none"
+    ) || (component?.type === "group" && designContainsAnimation(component.children)));
+  }
+
+  function hasActiveVisibleAnimations() {
+    if (state.animationsPaused || (state.editing && !state.previewObjectAnimations)) return false;
+    return machines.some((machine) => {
+      if (machine.visible === false || stageAlpha(machine.reveal, machine.retire) <= .01) return false;
+      if (machine.animationEnabled === true && machine.animationType && machine.animationType !== "none") return true;
+      const design = machine.designId ? designLibrary[machine.designId] : null;
+      return designContainsAnimation(design?.components);
+    });
+  }
+
   function visibleMachineEntries(time) {
     return machines.flatMap((machine) => {
       if (machine.visible === false) return [];
       const alpha = stageAlpha(machine.reveal,machine.retire);
       if (alpha <= .01) return [];
       const rendered = animatedMachine(machine, time);
+      if (!projectedBoxVisible(rendered)) return [];
       return [{
         kind: "machine",
         machine,
@@ -4224,11 +6313,144 @@
   }
 
   function visibleColumnEntries() {
-    return data.columns.slice(0,96).flatMap(([x,z],index) => (
-      state.hiddenColumns.has(index)
-        ? []
-        : [{ kind: "column", index, depth: sceneDepth(x,z) }]
+    return structuralColumns().flatMap((column) => {
+      if (isColumnHidden(column)) return [];
+      const { x, z } = column;
+      const base = project(x, 0, z);
+      const top = project(x, 22, z);
+      const margin = 80;
+      const left = Math.min(base[0], top[0]) - 10;
+      const right = Math.max(base[0], top[0]) + 10;
+      const upper = Math.min(base[1], top[1]) - 10;
+      const lower = Math.max(base[1], top[1]) + 10;
+      if (right < -margin || left > canvas.width + margin || lower < -margin || upper > canvas.height + margin) return [];
+      return [{ kind: "column", column, depth: sceneDepth(x,z) }];
+    });
+  }
+
+
+  function convexHullXZ(points) {
+    const unique = [...new Map(points.map((point) => [`${point[0].toFixed(5)}:${point[2].toFixed(5)}`, point])).values()]
+      .sort((first, second) => first[0] - second[0] || first[2] - second[2]);
+    if (unique.length <= 3) return unique;
+    const cross = (origin, first, second) => (first[0] - origin[0]) * (second[2] - origin[2]) - (first[2] - origin[2]) * (second[0] - origin[0]);
+    const lower = [];
+    unique.forEach((point) => {
+      while (lower.length >= 2 && cross(lower.at(-2), lower.at(-1), point) <= 0) lower.pop();
+      lower.push(point);
+    });
+    const upper = [];
+    [...unique].reverse().forEach((point) => {
+      while (upper.length >= 2 && cross(upper.at(-2), upper.at(-1), point) <= 0) upper.pop();
+      upper.push(point);
+    });
+    return lower.slice(0, -1).concat(upper.slice(0, -1));
+  }
+
+  function expandedShadowPolygon(points, expansion, y = 0.035) {
+    const centerX = points.reduce((sum, point) => sum + point[0], 0) / Math.max(1, points.length);
+    const centerZ = points.reduce((sum, point) => sum + point[2], 0) / Math.max(1, points.length);
+    return points.map((point) => {
+      const dx = point[0] - centerX;
+      const dz = point[2] - centerZ;
+      const length = Math.max(0.001, Math.hypot(dx, dz));
+      return [point[0] + dx / length * expansion, y, point[2] + dz / length * expansion];
+    });
+  }
+
+  function drawSoftGroundShadow(basePoints, height, strength = 1) {
+    if (!basePoints || basePoints.length < 3 || height <= 0.05) return;
+    const castDistance = clamp(height * 0.22, 0.35, 8);
+    const castX = castDistance * -0.62;
+    const castZ = castDistance * 0.78;
+    const shifted = basePoints.map((point) => [point[0] + castX, 0.035, point[2] + castZ]);
+    const hull = convexHullXZ([...basePoints.map((point) => [point[0], 0.035, point[2]]), ...shifted]);
+    const layerCount = renderPerformance.shadowLayerCount();
+    if (layerCount <= 0) return;
+    const layers = layerCount >= 2
+      ? [{ expansion: 1.0, alpha: 0.04 }, { expansion: 0.2, alpha: 0.085 }]
+      : [{ expansion: 0.45, alpha: 0.075 }];
+    layers.forEach((layer, index) => polygon(
+      expandedShadowPolygon(hull, layer.expansion, 0.035 + index * 0.002),
+      "#182126",
+      null,
+      0,
+      layer.alpha * strength,
+      { transparent: true, depthBias: -0.0002 - index * 0.00003 },
     ));
+  }
+
+  function shadowRectangle(x, z, w, d, y = 0.035) {
+    return [[x,y,z],[x+w,y,z],[x+w,y,z+d],[x,y,z+d]];
+  }
+
+  function designComponentShadowPoints(machine, component, design, grow = 1) {
+    if (!component || component.visible === false) return [];
+    if (component.type === "group") return (component.children || []).flatMap((child) => designComponentShadowPoints(machine, child, design, grow));
+    if (component.type === "beam") {
+      const start = designPointToWorld(machine, component, design, [Number(component.x), Number(component.y), Number(component.z)], grow);
+      const end = designPointToWorld(machine, component, design, [Number(component.x2), Number(component.y2), Number(component.z2)], grow);
+      const thickness = Math.max(.08, Number(component.thicknessZ || component.thickness || 1) * designPlacement(machine, design).scaleZ);
+      const dx = end[0] - start[0];
+      const dz = end[2] - start[2];
+      const length = Math.max(.001, Math.hypot(dx, dz));
+      const nx = -dz / length * thickness / 2;
+      const nz = dx / length * thickness / 2;
+      return [[[start[0]+nx,.035,start[2]+nz],[end[0]+nx,.035,end[2]+nz],[end[0]-nx,.035,end[2]-nz],[start[0]-nx,.035,start[2]-nz]]];
+    }
+    const boxed = scaledComponentBox(machine, {
+      ...component,
+      w: Number(component.w || component.size || component.thickness || 1),
+      h: Number(component.h || component.size || component.thickness || 1),
+      d: Number(component.d || component.size || component.thickness || 1),
+    }, design);
+    return [footprint(boxed, 0, 0).map(([x,,z]) => [x,.035,z])];
+  }
+
+  function drawMachineShadowCasters(machine, rendered, alpha, grow, time) {
+    const design = rendered.designId ? designLibrary[rendered.designId] : null;
+    if (design?.components?.length) {
+      const shadowLimit = renderPerformance.maxShadowParts();
+      if (shadowLimit <= 0) return;
+      const animated = flattenDesignComponents(design.components
+        .filter((component) => component.visible !== false)
+        .map((component) => animateDesignComponent(component, time, design)))
+        .slice(0, shadowLimit);
+      animated.forEach((component) => {
+        const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
+        const bounds = designComponentBounds(component);
+        designComponentShadowPoints(rendered, component, design, grow).forEach((points) => {
+          drawSoftGroundShadow(points, Math.max(.2, bounds.maxY - bounds.minY), componentAlpha * .62);
+        });
+      });
+      return;
+    }
+    if (["bridgeCrane", "craneMachine"].includes(machine.type)) {
+      const post = Math.max(.25, Math.min(1.2, Math.min(rendered.w, rendered.d) * .06));
+      [[rendered.x,rendered.z],[rendered.x+rendered.w-post,rendered.z],[rendered.x,rendered.z+rendered.d-post],[rendered.x+rendered.w-post,rendered.z+rendered.d-post]]
+        .forEach(([x,z]) => drawSoftGroundShadow(shadowRectangle(x,z,post,post), rendered.h, alpha * .5));
+      drawSoftGroundShadow(shadowRectangle(rendered.x, rendered.z + rendered.d / 2 - post / 2, rendered.w, post), rendered.h, alpha * .32);
+      return;
+    }
+    const footprintPoints = footprint(rendered, 0, 0).map(([x,,z]) => [x, 0.035, z]);
+    const strength = ["person", "animatedPerson"].includes(machine.type) ? .55 : .72;
+    drawSoftGroundShadow(footprintPoints, Math.max(.5, Number(rendered.h) || .5), alpha * strength);
+  }
+
+  function drawSceneShadows(machineEntries, time) {
+    machineEntries.forEach(({ machine, rendered, alpha, grow }) => {
+      if (alpha <= 0.03 || isFloorFeatureType(machine.type)) return;
+      drawMachineShadowCasters(machine, rendered, alpha, grow, time);
+    });
+    if (!renderPerformance.pillarShadowsEnabled()) return;
+    visibleColumnEntries().forEach(({ column }) => {
+      const { x, z } = column;
+      const size = 2.32;
+      drawSoftGroundShadow([
+        [x-size/2,0.035,z-size/2], [x+size/2,0.035,z-size/2],
+        [x+size/2,0.035,z+size/2], [x-size/2,0.035,z+size/2],
+      ], 22, 0.55);
+    });
   }
 
   // The viewer is drawn on a 2D canvas, so there is no hardware depth buffer.
@@ -4240,42 +6462,65 @@
   function drawSceneObjects(time) {
     const overlappingIds = state.editing ? overlapIds() : new Set();
     const machineEntries = visibleMachineEntries(time);
-    const sceneEntries = [...visibleColumnEntries(), ...machineEntries]
-      .sort((first,second) => first.depth-second.depth);
+    drawSceneShadows(machineEntries, time);
+    const sceneEntries = [...visibleColumnEntries(), ...machineEntries];
+    if (!depthRenderer.available) sceneEntries.sort((first,second) => first.depth-second.depth);
 
     sceneEntries.forEach((entry) => {
       if (entry.kind === "column") {
-        drawColumn(entry.index);
+        drawColumn(entry.column);
         return;
       }
       drawCrane(entry.rendered,entry.alpha);
       drawMachineShape(entry.rendered,entry.alpha,entry.grow,time);
     });
 
-    // Editor marks and labels are UI overlays, so draw them after the physical
-    // scene. This keeps selection feedback readable without changing occlusion.
-    machineEntries.forEach(({ machine, rendered, alpha }) => {
+    // Editor marks are UI overlays, so draw them after the physical scene.
+    machineEntries.forEach(({ machine, rendered }) => {
       drawOverlapIndicator(machine, overlappingIds);
       drawSelection(rendered);
-      if (alpha <= .15 || machine.showLabel === false) return;
-      const current = Math.round(state.stageFloat) === machine.reveal;
-      const source = machine.placement_status === "dwg_named"
-        ? "DWG"
-        : machine.placement_status === "user_added" ? "CUSTOM" : machine.placement_status === "illustrative" ? "ILLUSTRATIVE" : "PHOTO + CAD";
-      label(
-        `${machine.name}${current ? ` · ${source}` : ""}`,
+    });
+
+    // Label candidates are ranked before drawing so production equipment claims
+    // the clearest locations first. Smart mode reduces both label density and
+    // label detail as the camera zooms out, while selected/current objects always
+    // remain identifiable.
+    const labelBudget = smartLabelBudget();
+    let ordinaryLabelsDrawn = 0;
+    const labelCandidates = machineEntries
+      .filter(({ machine, alpha }) => alpha > .15 && machine.showLabel !== false)
+      .map((entry) => {
+        const selected = state.selectedMachineIds.has(entry.machine.instanceId);
+        const current = Math.round(state.stageFloat) === entry.machine.reveal;
+        const profile = machineLabelProfile(entry.machine);
+        return { ...entry, selected, current, profile };
+      })
+      .filter(({ selected, current, profile }) => shouldShowSmartLabel(profile, selected, current))
+      .sort((first, second) => (
+        Number(second.selected) - Number(first.selected) ||
+        Number(second.current) - Number(first.current) ||
+        second.profile.rank - first.profile.rank ||
+        second.rendered.w * second.rendered.d - first.rendered.w * first.rendered.d
+      ));
+
+    labelCandidates.forEach(({ machine, rendered, selected, current, profile }) => {
+      const priority = selected || current;
+      if (!priority && ordinaryLabelsDrawn >= labelBudget) return;
+      const drawn = label(
+        compactMachineLabel(machine, profile),
         rendered.x + rendered.w/2,
-        rendered.h + 5 + (Number(rendered.renderY) || 0),
+        rendered.h + 4 + (Number(rendered.renderY) || 0),
         rendered.z + rendered.d/2,
         current ? colors.orange : colors.teal,
-        state.selectedMachineIds.has(machine.instanceId) || current
+        { priority, cssSize: profile.cssSize }
       );
+      if (drawn && !priority) ordinaryLabelsDrawn += 1;
     });
   }
 
   function updateCanvasSize() {
     const rect = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = renderPerformance.pixelRatio(window.devicePixelRatio || 1);
     const width = Math.round(rect.width * ratio);
     const height = Math.round(rect.height * ratio);
     if (canvas.width !== width || canvas.height !== height) {
@@ -4307,9 +6552,22 @@
   }
 
   function draw(time) {
+    requestAnimationFrame(draw);
+    const firstPersonMoving = firstPersonController?.update(time) || false;
+    const stageMoving = Math.abs(state.stage - state.stageFloat) > .001;
+    const animating = state.playing || stageMoving || hasActiveVisibleAnimations() || firstPersonMoving;
+    if (!renderPerformance.shouldRender(time, {
+      interacting: state.dragging || firstPersonController?.isMoving() || state.cameraMode === "walk",
+      animating,
+    })) return;
+    const frameStartedAt = performance.now();
     state.lastFrameTime = time;
+    const elapsed = state.lastRenderedAt ? Math.min(80, Math.max(0, time - state.lastRenderedAt)) : 16.667;
+    state.lastRenderedAt = time;
     updateCanvasSize();
-    state.stageFloat += (state.stage - state.stageFloat) * .07;
+    const blend = 1 - Math.pow(.93, elapsed / 16.667);
+    state.stageFloat += (state.stage - state.stageFloat) * blend;
+    if (Math.abs(state.stage - state.stageFloat) < .0005) state.stageFloat = state.stage;
     if (state.playing && time > state.playAt) {
       setStage(state.stage >= stages.length - 1 ? 0 : state.stage + 1);
       const baseDelay = state.stage === 0 ? 1600 : 3400;
@@ -4322,7 +6580,7 @@
     drawShell();
     drawSceneObjects(time);
     depthRenderer.render();
-    requestAnimationFrame(draw);
+    renderPerformance.recordFrame(performance.now() - frameStartedAt);
   }
 
   function escapeHtml(value) {
@@ -4402,7 +6660,20 @@
   }
 
   buildTimeline();
+  // Middle-button dragging pans the 3D scene. Cancel the browser's native
+  // autoscroll gesture so panning cannot scroll the surrounding page when the
+  // viewport is not fullscreen. `mousedown` is handled explicitly because
+  // desktop browsers may start autoscroll before the pointer event completes.
+  canvas.addEventListener("mousedown", (event) => {
+    if (event.button === 1) event.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener("auxclick", (event) => {
+    if (event.button === 1) event.preventDefault();
+  });
+
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.button === 1) event.preventDefault();
+    if (state.cameraMode === "walk") return;
     if (event.button > 2) return;
     const wantsOrbit = event.altKey || event.button === 2;
     const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
@@ -4425,11 +6696,14 @@
       if (!selectableHit && (event.ctrlKey || event.metaKey)) return;
       const navigating = state.editorInteraction === "navigate" || wantsPan || wantsOrbit;
       if (state.editorTool === "pillars" && !navigating) {
-        const columnIndex = columnAt(event);
-        if (columnIndex !== null) {
+        const column = columnAt(event);
+        if (column) {
           pushHistory();
-          if (state.hiddenColumns.has(columnIndex)) state.hiddenColumns.delete(columnIndex);
-          else state.hiddenColumns.add(columnIndex);
+          if (column.source === "cad") {
+            if (state.hiddenColumns.has(column.baseIndex)) state.hiddenColumns.delete(column.baseIndex);
+            else state.hiddenColumns.add(column.baseIndex);
+          } else if (state.hiddenColumnKeys.has(column.key)) state.hiddenColumnKeys.delete(column.key);
+          else state.hiddenColumnKeys.add(column.key);
           persistLayout();
           updateEditorPanel();
         }
@@ -4461,10 +6735,12 @@
       state.dragAction = wantsPan ? "pan" : "orbit";
     }
     state.dragging = true;
+    renderPerformance.noteInteraction(260);
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener("pointermove", (event) => {
     if (!state.dragging) return;
+    renderPerformance.noteInteraction(140);
     const deltaX = event.clientX-state.pointerX;
     const deltaY = event.clientY-state.pointerY;
     if (state.dragAction === "machine") {
@@ -4488,7 +6764,9 @@
       panCamera(deltaX,deltaY);
     } else {
       state.yaw -= deltaX * .006;
-      state.pitch = clamp(state.pitch - deltaY * .004, .16, 1.43);
+      state.pitch = state.cameraMode === "walk"
+        ? clamp(state.pitch - deltaY * .003, .02, .38)
+        : clamp(state.pitch - deltaY * .004, .02, 1.48);
     }
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
@@ -4508,8 +6786,10 @@
   canvas.addEventListener("pointercancel",finishPointer);
   canvas.addEventListener("contextmenu",(event) => event.preventDefault());
   canvas.addEventListener("wheel", (event) => {
+    if (state.cameraMode === "walk") return;
     event.preventDefault();
-    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 1.08 : .92), .52, 2.5);
+    renderPerformance.noteInteraction(260);
+    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? .9 : 1.12), .2, 10);
   }, { passive: false });
 
   window.addEventListener("focus", refreshExternalProjectChanges);
@@ -4533,6 +6813,14 @@
     if (!typing && event.code === "Space") {
       state.spacePressed = true;
       event.preventDefault();
+    }
+    if (!typing && state.cameraMode === "walk") {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        canvas.closest(".model-frame")?.querySelector("[data-toggle='walk']")?.click();
+        return;
+      }
+      if (["w", "a", "s", "d", " "].includes(event.key.toLowerCase())) return;
     }
     if (!typing && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "f") {
       const frame = canvas.closest(".model-frame");
@@ -4592,6 +6880,10 @@
   });
 
   window.addEventListener("resize", updateCanvasSize);
+  window.addEventListener("renderperformancechange", () => {
+    updateCanvasSize();
+    renderPerformance.invalidate();
+  });
   window.addEventListener("pagehide", () => syncChannel?.close());
 
   addControls();

@@ -9,6 +9,20 @@
   const depthRenderer = sceneCanvas && window.createDepthSceneRenderer
     ? window.createDepthSceneRenderer(sceneCanvas)
     : { available: false, beginFrame() {}, addPolygon() {}, addLine() {}, render() {} };
+  const renderPerformance = window.createRenderPerformanceController
+    ? window.createRenderPerformanceController({ id: "machine-design-studio" })
+    : {
+        shouldRender() { return true; }, invalidate() {}, noteInteraction() {},
+        pixelRatio(value) { return Math.min(Number(value) || 1, 1.25); },
+        cylinderSegments(value) { return Math.max(8, Math.min(14, Number(value) || 14)); },
+        shadowLayerCount() { return 1; }, maxShadowParts() { return 24; },
+        recordFrame() {}, mount() {},
+      };
+  const APP_VERSION = "0.12.17";
+  const timelineEngine = window.MachineAnimationTimeline || null;
+  const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
+  const MIN_DESIGN_ENVELOPE = 0.01;
+  const MAX_ENVELOPE_CLEARANCE_INCHES = 120;
   const DESIGN_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
   const LAYOUT_KEY = "monroe-glass-plant-layout-v6";
   const LEGACY_LAYOUT_KEY = "monroe-glass-plant-layout-v5";
@@ -92,15 +106,43 @@
         ? Number(component.rotationY)
         : Number(component?.rotation) || 0,
       rotationZ: Number(component?.rotationZ) || 0,
+      scaleXPercent: Math.max(.01, Number(component?.scaleXPercent) || 100),
+      scaleYPercent: Math.max(.01, Number(component?.scaleYPercent) || 100),
+      scaleZPercent: Math.max(.01, Number(component?.scaleZPercent) || 100),
       animationEnabled: component?.animationEnabled !== false,
-      animationType: ["none", "oscillate", "loop", "spin", "bob", "pulse", "blink"].includes(component?.animationType)
+      animationType: ["none", "oscillate", "loop", "fourStep", "spin", "bob", "pulse", "blink"].includes(component?.animationType)
         ? component.animationType
         : "none",
       animationAxis: ["x", "y", "z", "all"].includes(component?.animationAxis) ? component.animationAxis : "x",
+      animationSecondaryAxis: ["x", "y", "z"].includes(component?.animationSecondaryAxis) ? component.animationSecondaryAxis : "z",
       animationAmount: Number.isFinite(Number(component?.animationAmount)) ? Number(component.animationAmount) : 10,
+      animationSecondaryAmount: Number.isFinite(Number(component?.animationSecondaryAmount)) ? Number(component.animationSecondaryAmount) : 10,
       animationSpeed: Math.max(0, Number.isFinite(Number(component?.animationSpeed)) ? Number(component.animationSpeed) : 0.1),
       animationPauseSeconds: Math.max(0, Number.isFinite(Number(component?.animationPauseSeconds)) ? Number(component.animationPauseSeconds) : 0),
+      animationSecondaryPauseSeconds: Math.max(0, Number.isFinite(Number(component?.animationSecondaryPauseSeconds))
+        ? Number(component.animationSecondaryPauseSeconds)
+        : (Number.isFinite(Number(component?.animationPauseSeconds)) ? Number(component.animationPauseSeconds) : 0)),
+      animationStep1PauseSeconds: Math.max(0, Number.isFinite(Number(component?.animationStep1PauseSeconds))
+        ? Number(component.animationStep1PauseSeconds)
+        : (Number.isFinite(Number(component?.animationPauseSeconds)) ? Number(component.animationPauseSeconds) : 0)),
+      animationStep2PauseSeconds: Math.max(0, Number.isFinite(Number(component?.animationStep2PauseSeconds))
+        ? Number(component.animationStep2PauseSeconds)
+        : (Number.isFinite(Number(component?.animationSecondaryPauseSeconds))
+          ? Number(component.animationSecondaryPauseSeconds)
+          : (Number.isFinite(Number(component?.animationPauseSeconds)) ? Number(component.animationPauseSeconds) : 0))),
+      animationStep3PauseSeconds: Math.max(0, Number.isFinite(Number(component?.animationStep3PauseSeconds))
+        ? Number(component.animationStep3PauseSeconds)
+        : (Number.isFinite(Number(component?.animationPauseSeconds)) ? Number(component.animationPauseSeconds) : 0)),
+      animationStep4PauseSeconds: Math.max(0, Number.isFinite(Number(component?.animationStep4PauseSeconds))
+        ? Number(component.animationStep4PauseSeconds)
+        : (Number.isFinite(Number(component?.animationSecondaryPauseSeconds))
+          ? Number(component.animationSecondaryPauseSeconds)
+          : (Number.isFinite(Number(component?.animationPauseSeconds)) ? Number(component.animationPauseSeconds) : 0))),
       animationPhase: Number.isFinite(Number(component?.animationPhase)) ? Number(component.animationPhase) : 0,
+      playOwnAnimation: component?.playOwnAnimation !== false,
+      animationTimeline: timelineEngine
+        ? timelineEngine.normalizeTimeline(component?.animationTimeline, component)
+        : { enabled: component?.animationEnabled !== false, loop: true, playbackRate: 1, duration: 0, clips: [] },
     };
     // Keep the legacy Y-rotation field so existing plant layouts and older
     // exported designs continue to load without losing orientation.
@@ -133,16 +175,109 @@
       // Retain the legacy field for exported v1/v2 designs and the plant viewer.
       normalized.size = Math.max(normalized.w, normalized.h);
     } else if (type === "group") {
-      normalized.children = (Array.isArray(component?.children) ? component.children : []).map(normalizeComponent);
+      const rawChildren = Array.isArray(component?.children) ? component.children : [];
+      normalized.children = rawChildren.map(normalizeComponent);
       normalized.color = validColor(component?.color, normalized.children[0]?.color || "#68777a");
+      // Embedded machines intentionally reuse the group geometry model while
+      // retaining source metadata. Their children animate independently instead
+      // of inheriting one attachment driver's motion.
+      normalized.embeddedMachine = component?.embeddedMachine === true;
+      if (normalized.embeddedMachine) {
+        normalized.embeddedMachineSourceId = String(component?.embeddedMachineSourceId || "");
+        normalized.embeddedMachineSourceName = String(component?.embeddedMachineSourceName || component?.name || "Embedded machine");
+        normalized.embeddedMachineSourceUpdatedAt = String(component?.embeddedMachineSourceUpdatedAt || "");
+      }
       const requestedDriver = typeof component?.motionDriverId === "string" ? component.motionDriverId : "";
-      const automaticDriver = normalized.children.find((child) => child.animationEnabled !== false && child.animationType && child.animationType !== "none")
+      const automaticDriver = normalized.children.find((child) => child.animationTimeline?.enabled !== false && child.animationTimeline?.clips?.some((clip) => clip.enabled !== false))
+        || normalized.children.find((child) => child.animationEnabled !== false && child.animationType && child.animationType !== "none")
         || normalized.children[0];
       normalized.motionDriverId = normalized.children.some((child) => child.id === requestedDriver)
         ? requestedDriver
         : (automaticDriver?.id || "");
+      normalized.activeAnimationChildId = normalized.children.some((child) => child.id === component?.activeAnimationChildId)
+        ? component.activeAnimationChildId
+        : (normalized.children[0]?.id || "");
+      const driver = normalized.children.find((child) => child.id === normalized.motionDriverId) || normalized.children[0];
+      normalized.children.forEach((child, childIndex) => {
+        if (typeof rawChildren[childIndex]?.playOwnAnimation !== "boolean") {
+          child.playOwnAnimation = child.id === driver?.id ? true : !componentAnimationSettingsMatch(child, driver);
+        }
+      });
     }
     return normalized;
+  }
+
+  function firstSavedTimelineSettings(components) {
+    const stack = [...(components || [])];
+    while (stack.length) {
+      const component = stack.shift();
+      const timeline = component?.animationTimeline;
+      if (timeline && typeof timeline === "object") {
+        const requestedRate = Number(timeline.playbackRate);
+        return {
+          loop: timeline.loop !== false,
+          playbackRate: clamp(Number.isFinite(requestedRate) ? requestedRate : 1, 0, 20),
+        };
+      }
+      stack.unshift(...(component?.children || []));
+    }
+    return { loop: true, playbackRate: 1 };
+  }
+
+  function normalizeSharedTimelineSettings(design) {
+    const legacy = firstSavedTimelineSettings(design?.components);
+    const saved = design?.animationTimelineSettings;
+    return {
+      loop: saved?.loop === undefined ? legacy.loop : saved.loop !== false,
+      playbackRate: clamp(Number(saved?.playbackRate ?? legacy.playbackRate) || 0, 0, 20),
+    };
+  }
+
+  const DESIGN_SCALE_MODES = new Set(["preserve", "match", "stretch"]);
+  const MACHINE_SCALE_EDIT_MODES = new Set(["uniform", "individual"]);
+
+  function normalizedDesignScaleMode(value) {
+    return DESIGN_SCALE_MODES.has(value) ? value : "preserve";
+  }
+
+  function normalizedMachineScaleEditMode(value, machine = null) {
+    if (MACHINE_SCALE_EDIT_MODES.has(value)) return value;
+    const values = machine ? [
+      Number(machine.scaleXPercent) || 100,
+      Number(machine.scaleYPercent) || 100,
+      Number(machine.scaleZPercent) || 100,
+    ] : [100, 100, 100];
+    const axesDiffer = Math.max(...values) - Math.min(...values) > .01;
+    if (machine?.designId) {
+      return normalizedDesignScaleMode(machine.designScaleMode) === "stretch" ? "individual" : "uniform";
+    }
+    return axesDiffer ? "individual" : "uniform";
+  }
+
+  function syncPlantObjectDimensions(machine, design) {
+    if (!machine || !design?.base) return false;
+    const width = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.w) || Number(machine.w) || 1);
+    const depth = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.d) || Number(machine.d) || 1);
+    const height = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.h) || Number(machine.h) || 1);
+    const oldWidth = Math.max(.01, Number(machine.w) || width);
+    const oldDepth = Math.max(.01, Number(machine.d) || depth);
+    const changed = Math.abs(oldWidth - width) > .0001
+      || Math.abs(oldDepth - depth) > .0001
+      || Math.abs(Number(machine.h) - height) > .0001;
+    // Preserve the plant object's center so syncing a design does not move it.
+    machine.x = Number(machine.x) + (oldWidth - width) / 2;
+    machine.z = Number(machine.z) + (oldDepth - depth) / 2;
+    machine.w = width;
+    machine.d = depth;
+    machine.h = height;
+    machine.naturalW = width;
+    machine.naturalD = depth;
+    machine.naturalH = height;
+    machine.scaleXPercent = 100;
+    machine.scaleYPercent = 100;
+    machine.scaleZPercent = 100;
+    machine.scaleEditMode = "uniform";
+    return changed;
   }
 
   function normalizeDesign(design, fallbackId = uniqueId("design")) {
@@ -153,10 +288,11 @@
       machineType: design?.machineType || "generic",
       description: design?.description || "",
       base: {
-        w: Math.max(0.5, Number(base.w) || 20),
-        d: Math.max(0.5, Number(base.d) || 10),
-        h: Math.max(0.5, Number(base.h) || 8),
+        w: Math.max(MIN_DESIGN_ENVELOPE, Number(base.w) || 20),
+        d: Math.max(MIN_DESIGN_ENVELOPE, Number(base.d) || 10),
+        h: Math.max(MIN_DESIGN_ENVELOPE, Number(base.h) || 8),
       },
+      animationTimelineSettings: normalizeSharedTimelineSettings(design),
       components: (Array.isArray(design?.components) ? design.components : []).map(normalizeComponent),
       custom: design?.custom === true || !builtinIds.has(design?.id),
       updatedAt: design?.updatedAt || new Date().toISOString(),
@@ -217,6 +353,9 @@
       glassRack: "glass-rack-standard",
       aFrame: "aframe-cart-standard",
       aFrameTruck: "aframe-truck-standard",
+      safetyLine: "safety-line-standard",
+      trench: "utility-trench-standard",
+      floorDrain: "floor-drain-standard",
     }[machine.type];
     if (preferred && library[preferred]) return preferred;
     const matching = Object.values(library).find((design) => design.machineType === machine.type);
@@ -250,6 +389,65 @@
     });
   }
 
+  function plantReferenceDimensions(machine, design = null) {
+    const source = design || (machine?.designId ? library[machine.designId] : null);
+    if (source?.base) return {
+      w: Math.max(.01, Number(source.base.w) || 1),
+      d: Math.max(.01, Number(source.base.d) || 1),
+      h: Math.max(.01, Number(source.base.h) || 1),
+    };
+    return {
+      w: Math.max(.01, Number(machine?.naturalW) || Number(machine?.w) || 1),
+      d: Math.max(.01, Number(machine?.naturalD) || Number(machine?.d) || 1),
+      h: Math.max(.01, Number(machine?.naturalH) || Number(machine?.h) || 1),
+    };
+  }
+
+  function refreshPlantScaleMetadata(machine, design = null) {
+    if (!machine) return;
+    const reference = plantReferenceDimensions(machine, design);
+    machine.scaleXPercent = Math.max(.01, Number(machine.w) / reference.w * 100);
+    machine.scaleYPercent = Math.max(.01, Number(machine.h) / reference.h * 100);
+    machine.scaleZPercent = Math.max(.01, Number(machine.d) / reference.d * 100);
+  }
+
+  function resizePlantMachine(machine, field, value) {
+    if (!machine) return;
+    const next = Math.max(MIN_DESIGN_ENVELOPE, Number(value) || MIN_DESIGN_ENVELOPE);
+    if (field === "w") {
+      const center = Number(machine.x) + Number(machine.w) / 2;
+      machine.w = next;
+      machine.x = center - next / 2;
+    } else if (field === "d") {
+      const center = Number(machine.z) + Number(machine.d) / 2;
+      machine.d = next;
+      machine.z = center - next / 2;
+    } else if (field === "h") machine.h = next;
+    refreshPlantScaleMetadata(machine);
+  }
+
+  function setPlantScalePercent(machine, axis, percent) {
+    if (!machine) return;
+    const value = clamp(Number(percent) || 100, 1, 10000);
+    const reference = plantReferenceDimensions(machine);
+    if (axis === "uniform") {
+      machine.scaleEditMode = "uniform";
+      if (machine.designScaleMode === "match" && Math.abs(value - 100) > .0001) machine.designScaleMode = "preserve";
+      resizePlantMachine(machine, "w", reference.w * value / 100);
+      resizePlantMachine(machine, "h", reference.h * value / 100);
+      resizePlantMachine(machine, "d", reference.d * value / 100);
+      machine.scaleXPercent = value;
+      machine.scaleYPercent = value;
+      machine.scaleZPercent = value;
+      return;
+    }
+    machine.scaleEditMode = "individual";
+    if (machine.designId) machine.designScaleMode = "stretch";
+    if (axis === "x") resizePlantMachine(machine, "w", reference.w * value / 100);
+    if (axis === "y") resizePlantMachine(machine, "h", reference.h * value / 100);
+    if (axis === "z") resizePlantMachine(machine, "d", reference.d * value / 100);
+  }
+
   function linkedDesignId(machine) {
     if (!machine) return "";
     if (machine.designId && library[machine.designId] && !builtinIds.has(machine.designId)) return machine.designId;
@@ -272,6 +470,7 @@
       }, stableId);
     }
     machine.designId = stableId;
+    machine.designScaleMode = normalizedDesignScaleMode(machine.designScaleMode);
     return stableId;
   }
 
@@ -305,13 +504,73 @@
     hoverHandle: null,
     browserTab: "designs",
     inspectorTab: "object",
+    partTab: "properties",
+    timelineTargetId: null,
+    timelineTargetPathIds: [],
+    timelineClipId: null,
+    timelineScrubSeconds: null,
+    timelineOpen: false,
+    timelineDrag: null,
+    timelineDragFrame: 0,
     previewAnimations: true,
+    animationPausedAt: 0,
+    animationTimeOffset: 0,
     lastFrameTime: 0,
+    lastRenderedAt: 0,
     linkedMachineId: queryMachine?.instanceId || null,
+    lastCreatedMachineId: null,
+    showDesignEnvelope: true,
   };
 
   function currentDesign() {
     return library[state.designId] || null;
+  }
+
+  function componentTimelines(components) {
+    const timelines = [];
+    const visit = (component) => {
+      if (!component) return;
+      if (component.animationTimeline && Array.isArray(component.animationTimeline.clips)) {
+        timelines.push(component.animationTimeline);
+      }
+      (component.children || []).forEach(visit);
+    };
+    (components || []).forEach(visit);
+    return timelines;
+  }
+
+  function sharedDesignTimelineSettings(design = currentDesign()) {
+    if (!design) return { loop: true, playbackRate: 1 };
+    if (!design.animationTimelineSettings) {
+      design.animationTimelineSettings = normalizeSharedTimelineSettings(design);
+    }
+    return design.animationTimelineSettings;
+  }
+
+  function sharedDesignTimelineDuration(design = currentDesign()) {
+    const timelines = componentTimelines(design?.components);
+    return timelineEngine?.sharedTimelineDuration
+      ? timelineEngine.sharedTimelineDuration(timelines)
+      : Math.max(timelineEngine?.MIN_TIMELINE_SECONDS || 30, ...timelines.map((timeline) => timelineEngine?.timelineDuration?.(timeline) || 0));
+  }
+
+  function sharedDesignTimelineSeconds(now = state.lastFrameTime || performance.now(), design = currentDesign()) {
+    const duration = sharedDesignTimelineDuration(design);
+    const settings = sharedDesignTimelineSettings(design);
+    const scaled = Math.max(0, designAnimationTime(now) / 1000 * Math.max(0, Number(settings.playbackRate) || 0));
+    return settings.loop === false ? Math.min(scaled, duration) : ((scaled % duration) + duration) % duration;
+  }
+
+  function evaluateTimelineOnSharedClock(timeline, now, design = currentDesign()) {
+    const settings = sharedDesignTimelineSettings(design);
+    const scrubbing = Number.isFinite(state.timelineScrubSeconds);
+    const seconds = scrubbing ? Math.max(0, state.timelineScrubSeconds) : designAnimationTime(now) / 1000;
+    return timelineEngine.evaluateTimeline(timeline, seconds, {
+      sharedClock: true,
+      duration: sharedDesignTimelineDuration(design),
+      loop: scrubbing ? false : settings.loop,
+      playbackRate: scrubbing ? 1 : settings.playbackRate,
+    });
   }
 
   function selectedComponent() {
@@ -334,6 +593,9 @@
     const design = currentDesign();
     if (!design?.components.length) return;
     state.selectAllParts = true;
+    state.timelineTargetId = null;
+    state.timelineTargetPathIds = [];
+    state.timelineClipId = null;
     state.selectedComponentIds = new Set(design.components.map((component) => component.id));
     state.componentId = null;
     state.browserTab = "parts";
@@ -349,27 +611,39 @@
     Object.entries(library).forEach(([id, design]) => {
       designs[id] = { ...clone(design), updatedAt: new Date().toISOString() };
     });
-    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: 6, updatedAt: new Date().toISOString(), designs }));
+    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: 17, updatedAt: new Date().toISOString(), designs }));
     broadcastProjectUpdate("design-library-updated", { designId: state?.designId || null });
     if (saveState) window.setTimeout(() => { saveState.textContent = "Auto-saved"; }, 180);
   }
 
   function saveLayout() {
     plantLayout.version = 6;
-    plantLayout.appVersion = "0.10.1";
+    plantLayout.appVersion = APP_VERSION;
     delete plantLayout.sourceKey;
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(plantLayout));
     broadcastProjectUpdate("layout-updated", { machineId: state?.linkedMachineId || null });
   }
 
   function syncLinkedMachineToCurrentDesign() {
-    if (!state.linkedMachineId || !state.designId) return;
-    const machine = plantLayout.machines.find((item) => item.instanceId === state.linkedMachineId);
-    if (!machine) return;
-    if (machine.designId !== state.designId) {
-      machine.designId = state.designId;
-      saveLayout();
+    if (!state.designId) return;
+    const design = currentDesign();
+    if (!design) return;
+    let changed = false;
+    const linkedMachine = state.linkedMachineId
+      ? plantLayout.machines.find((item) => item.instanceId === state.linkedMachineId)
+      : null;
+    if (linkedMachine && linkedMachine.designId !== state.designId) {
+      linkedMachine.designId = state.designId;
+      linkedMachine.designScaleMode = normalizedDesignScaleMode(linkedMachine.designScaleMode);
+      changed = true;
     }
+    plantLayout.machines.forEach((machine) => {
+      machine.designScaleMode = normalizedDesignScaleMode(machine.designScaleMode);
+      if (machine.designId === state.designId && machine.designScaleMode === "match") {
+        changed = syncPlantObjectDimensions(machine, design) || changed;
+      }
+    });
+    if (changed) saveLayout();
   }
 
   if (queryMachine && state.designId) {
@@ -483,10 +757,18 @@
       animationEnabled: true,
       animationType: "none",
       animationAxis: "x",
+      animationSecondaryAxis: "z",
       animationAmount: 10,
+      animationSecondaryAmount: 10,
       animationSpeed: 0.1,
       animationPauseSeconds: 0,
+      animationSecondaryPauseSeconds: 0,
+      animationStep1PauseSeconds: 0,
+      animationStep2PauseSeconds: 0,
+      animationStep3PauseSeconds: 0,
+      animationStep4PauseSeconds: 0,
       animationPhase: 0,
+      playOwnAnimation: true,
     };
     if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(type)) {
       Object.assign(common, {
@@ -505,12 +787,142 @@
     return normalizeComponent(common);
   }
 
+  function cloneComponentTreeForEmbedding(component) {
+    const source = clone(component);
+    const copied = clone(source);
+    copied.id = uniqueId(source.type || "part");
+
+    // Clip ids only need to be unique within a target timeline, but refreshing
+    // them here avoids duplicate editor state when the same machine is embedded
+    // more than once and later separated into editable parts.
+    if (copied.animationTimeline && Array.isArray(copied.animationTimeline.clips)) {
+      copied.animationTimeline.clips = copied.animationTimeline.clips.map((clip) => ({
+        ...clip,
+        id: uniqueId("clip"),
+      }));
+    }
+
+    if (source.type === "group" && Array.isArray(source.children)) {
+      const copiedChildren = source.children.map((child) => cloneComponentTreeForEmbedding(child));
+      const directIdMap = new Map(source.children.map((child, index) => [child.id, copiedChildren[index]?.id]));
+      copied.children = copiedChildren;
+      copied.motionDriverId = directIdMap.get(source.motionDriverId) || copiedChildren[0]?.id || "";
+      copied.activeAnimationChildId = directIdMap.get(source.activeAnimationChildId) || copiedChildren[0]?.id || "";
+    }
+
+    return normalizeComponent(copied);
+  }
+
+  function embeddedMachineOptions() {
+    return Object.values(library)
+      .filter((design) => design?.id !== state.designId && Array.isArray(design?.components) && design.components.length)
+      .sort((first, second) => {
+        const customOrder = Number(second.custom === true) - Number(first.custom === true);
+        return customOrder || String(first.name || first.id).localeCompare(String(second.name || second.id));
+      });
+  }
+
+  function updateEmbeddedMachinePicker() {
+    const select = document.getElementById("add-machine-design");
+    const button = document.getElementById("add-machine-design-button");
+    const status = document.getElementById("add-machine-design-status");
+    if (!select) return;
+
+    const previous = select.value;
+    const options = embeddedMachineOptions();
+    const custom = options.filter((design) => design.custom === true);
+    const presets = options.filter((design) => design.custom !== true);
+    const optionMarkup = (design) => `<option value="${escapeHtml(design.id)}">${escapeHtml(design.name)} · ${escapeHtml(design.machineType || "generic")}</option>`;
+    select.innerHTML = [
+      custom.length ? `<optgroup label="My machines">${custom.map(optionMarkup).join("")}</optgroup>` : "",
+      presets.length ? `<optgroup label="Preset machines">${presets.map(optionMarkup).join("")}</optgroup>` : "",
+    ].join("") || `<option value="">No other machine designs available</option>`;
+
+    if (options.some((design) => design.id === previous)) select.value = previous;
+    else if (options[0]) select.value = options[0].id;
+    if (button) button.disabled = options.length === 0;
+
+    const source = library[select.value];
+    if (status) {
+      status.textContent = source
+        ? `${source.name} · ${source.components.length} top-level part${source.components.length === 1 ? "" : "s"} · inserted as one editable machine.`
+        : "Create or save another machine design first, then return here to insert it.";
+    }
+  }
+
+  function addMachineDesignToCurrentDesign(sourceId) {
+    const design = currentDesign();
+    const source = sourceId ? library[sourceId] : null;
+    if (!design || !source || source.id === design.id || !Array.isArray(source.components) || !source.components.length) {
+      showToast("Choose another saved machine to add.");
+      return;
+    }
+
+    const sourceBounds = designGeometryBounds(source);
+    if (!sourceBounds) {
+      showToast("That machine does not contain visible geometry to add.");
+      return;
+    }
+
+    pushHistory();
+    const children = source.components.map((component) => cloneComponentTreeForEmbedding(component));
+    // Keep the destination envelope unchanged when embedding another machine.
+    // Component coordinates are already stored in real design units, so changing
+    // the envelope here would change the Plant Layout placement scale for every
+    // existing part when the plant instance is in Preserve/Stretch sizing mode.
+    // The embedded snapshot therefore keeps the exact size it had in its source
+    // design. Users can intentionally resize the envelope later with Tight fit.
+    const sourceCenterX = (sourceBounds.minX + sourceBounds.maxX) / 2;
+    const sourceCenterZ = (sourceBounds.minZ + sourceBounds.maxZ) / 2;
+    const targetCenterX = Number(design.base?.w || 0) / 2;
+    const targetCenterZ = Number(design.base?.d || 0) / 2;
+    const dx = targetCenterX - sourceCenterX;
+    const dy = -sourceBounds.minY;
+    const dz = targetCenterZ - sourceCenterZ;
+    children.forEach((child) => translateComponent(child, dx, dy, dz));
+
+    const embedded = normalizeComponent({
+      id: uniqueId("machine"),
+      name: source.name || "Embedded machine",
+      type: "group",
+      color: visibleDesignColor(source),
+      opacity: 1,
+      visible: true,
+      animationEnabled: true,
+      animationType: "none",
+      playOwnAnimation: true,
+      embeddedMachine: true,
+      embeddedMachineSourceId: source.id,
+      embeddedMachineSourceName: source.name || source.id,
+      embeddedMachineSourceUpdatedAt: source.updatedAt || "",
+      motionDriverId: children[0]?.id || "",
+      activeAnimationChildId: children[0]?.id || "",
+      children,
+    });
+
+    design.components.push(embedded);
+    state.selectAllParts = false;
+    state.componentId = embedded.id;
+    state.selectedComponentIds = new Set([embedded.id]);
+    state.timelineTargetId = embedded.id;
+    state.timelineTargetPathIds = [embedded.id];
+    state.timelineClipId = embedded.animationTimeline?.clips?.[0]?.id || null;
+    state.browserTab = "parts";
+    state.inspectorTab = "object";
+    setTool("move");
+    fitView();
+    commit(`${source.name} added as an embedded machine.`);
+  }
+
   function selectDesign(id) {
     if (!library[id]) return;
     state.designId = id;
     state.componentId = library[id].components[0]?.id || null;
     state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
     state.selectAllParts = false;
+    state.timelineTargetId = state.componentId;
+    state.timelineTargetPathIds = state.componentId ? [state.componentId] : [];
+    state.timelineClipId = null;
     state.history.length = 0;
     state.future.length = 0;
     syncLinkedMachineToCurrentDesign();
@@ -518,7 +930,13 @@
     updateInterface();
   }
 
-  function selectComponent(id, openParts = false, additive = false) {
+  function selectComponent(
+    id,
+    openParts = false,
+    additive = false,
+    requestedTimelineTargetId = null,
+    requestedTimelineTargetPathIds = null,
+  ) {
     const design = currentDesign();
     if (id && !design?.components.some((component) => component.id === id)) return;
     state.selectAllParts = false;
@@ -534,6 +952,21 @@
       state.selectedComponentIds = new Set([id]);
     }
     state.inspectorTab = "object";
+    const selectedRoot = !additive && state.componentId
+      ? design?.components.find((component) => component.id === state.componentId) || null
+      : null;
+    const requestedPathTarget = selectedRoot
+      ? componentFromPathIds(selectedRoot, requestedTimelineTargetPathIds)
+      : null;
+    const requestedIdTarget = selectedRoot && requestedTimelineTargetId
+      ? findComponentById(selectedRoot, requestedTimelineTargetId)
+      : null;
+    const timelineTarget = requestedPathTarget || requestedIdTarget || selectedRoot;
+    state.timelineTargetId = timelineTarget?.id || state.componentId;
+    state.timelineTargetPathIds = selectedRoot && timelineTarget
+      ? componentPathToTarget(selectedRoot, timelineTarget)?.map((component) => component.id) || [selectedRoot.id]
+      : [];
+    state.timelineClipId = null;
     if (openParts) state.browserTab = "parts";
     updateInterface();
   }
@@ -664,20 +1097,41 @@
       animationEnabled: true,
       animationType: "none",
       animationAxis: "x",
+      animationSecondaryAxis: "z",
       animationAmount: 10,
+      animationSecondaryAmount: 10,
       animationSpeed: 0.1,
       animationPauseSeconds: 0,
+      animationSecondaryPauseSeconds: 0,
+      animationStep1PauseSeconds: 0,
+      animationStep2PauseSeconds: 0,
+      animationStep3PauseSeconds: 0,
+      animationStep4PauseSeconds: 0,
       animationPhase: 0,
+      playOwnAnimation: true,
       motionDriverId: components.some((component) => component.id === state.componentId)
         ? state.componentId
-        : (components.find((component) => component.animationEnabled !== false && component.animationType !== "none")?.id || components[0]?.id || ""),
+        : (components.find((component) => component.animationTimeline?.enabled !== false && component.animationTimeline?.clips?.some((clip) => clip.enabled !== false))?.id
+          || components.find((component) => component.animationEnabled !== false && component.animationType !== "none")?.id
+          || components[0]?.id || ""),
       children: components.map(clone),
+    });
+    group.activeAnimationChildId = group.children[0]?.id || "";
+    const driver = group.children.find((child) => child.id === group.motionDriverId) || group.children[0];
+    group.children.forEach((child) => {
+      child.playOwnAnimation = child.id === driver?.id ? true : !componentAnimationSettingsMatch(child, driver);
     });
     design.components = design.components.filter((component) => !selectedIds.has(component.id));
     design.components.splice(Math.max(0, insertionIndex), 0, group);
     state.selectAllParts = false;
     state.componentId = group.id;
     state.selectedComponentIds = new Set([group.id]);
+    // A merge creates a new animation owner. Reset the timeline to the new
+    // outer group so a previously selected child, including a nested merged
+    // item, cannot silently receive clips intended for the whole assembly.
+    state.timelineTargetId = group.id;
+    state.timelineTargetPathIds = [group.id];
+    state.timelineClipId = group.animationTimeline?.clips?.[0]?.id || null;
     commit(`${components.length} parts merged. ${group.children.find((child) => child.id === group.motionDriverId)?.name || "The active part"} carries the assembly while every child keeps its own animation.`);
   }
 
@@ -757,6 +1211,434 @@
     });
   }
 
+
+  function setTimelineOpen(open, { focusInspector = false } = {}) {
+    state.timelineOpen = Boolean(open);
+    const workspace = document.getElementById("animation-timeline-workspace");
+    const viewport = canvas.closest(".design-viewport-panel");
+    const toolButton = document.getElementById("toggle-animation-timeline");
+    if (workspace) workspace.hidden = !state.timelineOpen;
+    viewport?.classList.toggle("timeline-open", state.timelineOpen);
+    if (toolButton) {
+      toolButton.classList.toggle("active", state.timelineOpen);
+      toolButton.setAttribute("aria-pressed", String(state.timelineOpen));
+    }
+    if (state.timelineOpen && focusInspector) {
+      setInspectorTab("object");
+      setPartTab("animation");
+    }
+    window.requestAnimationFrame(() => {
+      updateCanvasSize();
+      updateAnimationTimelineUI();
+      renderPerformance.invalidate?.("timeline-workspace");
+    });
+  }
+
+  function setPartTab(tab) {
+    state.partTab = ["properties", "transform", "animation"].includes(tab) ? tab : "properties";
+    document.querySelectorAll("[data-part-tab]").forEach((button) => {
+      const active = button.dataset.partTab === state.partTab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    document.querySelectorAll("[data-part-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.partPanel !== state.partTab;
+    });
+  }
+
+  function findComponentById(component, id) {
+    if (!component || !id) return null;
+    if (component.id === id) return component;
+    for (const child of component.children || []) {
+      const match = findComponentById(child, id);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  function componentOwnsAnimation(component) {
+    if (!component) return false;
+    const timeline = component.animationTimeline;
+    if (timeline && Array.isArray(timeline.clips)) {
+      return timeline.enabled !== false && timeline.clips.some((clip) => clip.enabled !== false);
+    }
+    return component.animationEnabled !== false
+      && Boolean(component.animationType)
+      && component.animationType !== "none";
+  }
+
+  function motionDriverAnimationOwner(component) {
+    if (!component) return null;
+    if (componentOwnsAnimation(component)) return component;
+    if (component.type !== "group" || !(component.children || []).length) return null;
+    const driver = component.children.find((child) => child.id === component.motionDriverId)
+      || component.children.find(componentOwnsAnimation)
+      || component.children.find((child) => motionDriverAnimationOwner(child));
+    return driver ? motionDriverAnimationOwner(driver) : null;
+  }
+
+  function componentPathFromIds(root, pathIds) {
+    if (!root) return [];
+    const path = [root];
+    let current = root;
+    const ids = Array.isArray(pathIds) ? pathIds : [];
+    const startIndex = ids[0] === root.id ? 1 : 0;
+    for (let index = startIndex; index < ids.length; index += 1) {
+      const child = (current.children || []).find((item) => item.id === ids[index]);
+      if (!child) break;
+      path.push(child);
+      current = child;
+    }
+    return path;
+  }
+
+  function componentFromPathIds(root, pathIds) {
+    const path = componentPathFromIds(root, pathIds);
+    const ids = Array.isArray(pathIds) ? pathIds : [];
+    return path.length && path.length === ids.length ? path.at(-1) : null;
+  }
+
+  function componentPathToTarget(root, target) {
+    if (!root || !target) return null;
+    if (root === target) return [root];
+    for (const child of root.children || []) {
+      const childPath = componentPathToTarget(child, target);
+      if (childPath) return [root, ...childPath];
+    }
+    return null;
+  }
+
+  function resolvedTimelineTarget(component, path) {
+    return {
+      component,
+      pathIds: path.map((item) => item.id),
+    };
+  }
+
+  function resolveTimelineTargetForHit(root, pathIds) {
+    const path = componentPathFromIds(root, pathIds);
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      if (componentOwnsAnimation(path[index])) {
+        return resolvedTimelineTarget(path[index], path.slice(0, index + 1));
+      }
+    }
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      const owner = motionDriverAnimationOwner(path[index]);
+      const ownerPath = componentPathToTarget(root, owner);
+      if (owner && ownerPath) return resolvedTimelineTarget(owner, ownerPath);
+    }
+    return resolvedTimelineTarget(root, [root]);
+  }
+
+  function resolveTimelineTargetIdForHit(root, pathIds) {
+    return resolveTimelineTargetForHit(root, pathIds).component?.id || null;
+  }
+
+  function timelineTargetOptions(component) {
+    const targets = [];
+    const visit = (item, depth, parentPathIds) => {
+      const pathIds = [...parentPathIds, item.id];
+      const qualifier = depth === 0
+        ? (item.type === "group" ? "whole merged item" : "part")
+        : (item.type === "group" ? "nested merged item" : "child");
+      targets.push({
+        id: item.id,
+        key: JSON.stringify(pathIds),
+        pathIds,
+        name: `${depth ? `${"↳ ".repeat(depth)}` : ""}${item.name} · ${qualifier}`,
+        component: item,
+      });
+      (item.children || []).forEach((child) => visit(child, depth + 1, pathIds));
+    };
+    if (component) visit(component, 0, []);
+    return targets;
+  }
+
+  function timelineTargetComponent() {
+    const component = selectedComponent();
+    if (!component) return null;
+    return componentFromPathIds(component, state.timelineTargetPathIds)
+      || findComponentById(component, state.timelineTargetId)
+      || component;
+  }
+
+  function ensureTimeline(component) {
+    if (!component || !timelineEngine) return null;
+    // normalizeComponent() already normalizes every loaded/new part. Avoid
+    // replacing the timeline object on every lookup because event handlers may
+    // otherwise remove a clip from a stale array while the component keeps a
+    // newer normalized copy.
+    if (!component.animationTimeline || !Array.isArray(component.animationTimeline.clips)) {
+      component.animationTimeline = timelineEngine.normalizeTimeline(component.animationTimeline, component);
+    }
+    return component.animationTimeline;
+  }
+
+  function selectedTimelineClip() {
+    const timeline = ensureTimeline(timelineTargetComponent());
+    if (!timeline) return null;
+    return timeline.clips.find((clip) => clip.id === state.timelineClipId) || timeline.clips[0] || null;
+  }
+
+  function animationTypeOptions(selected = "") {
+    return (timelineEngine?.TYPES || []).map((type) => `<option value="${escapeHtml(type.value)}"${type.value === selected ? " selected" : ""}>${escapeHtml(type.label)}</option>`).join("");
+  }
+
+  function timelineCurrentSeconds(now = state.lastFrameTime || performance.now()) {
+    if (Number.isFinite(state.timelineScrubSeconds)) return Math.max(0, state.timelineScrubSeconds);
+    if (!timelineEngine || !currentDesign()) return 0;
+    return sharedDesignTimelineSeconds(now);
+  }
+
+  function updateTimelinePlayhead(now = state.lastFrameTime || performance.now()) {
+    if (!state.timelineOpen) return;
+    const target = timelineTargetComponent();
+    const timeline = target?.animationTimeline;
+    const input = document.getElementById("timeline-playhead");
+    const label = document.getElementById("timeline-time-label");
+    if (!timelineEngine || !timeline || !input) return;
+    const duration = sharedDesignTimelineDuration();
+    const seconds = Math.min(duration, timelineCurrentSeconds(now));
+    input.max = String(duration);
+    if (document.activeElement !== input) input.value = String(seconds);
+    if (label) label.textContent = `${seconds.toFixed(2)}s / ${duration.toFixed(2)}s`;
+    document.querySelectorAll("[data-timeline-clip-id]").forEach((row) => {
+      const clip = timeline.clips.find((item) => item.id === row.dataset.timelineClipId);
+      row.classList.toggle("playing", Boolean(clip && seconds >= clip.start && seconds <= clip.start + clip.duration));
+    });
+  }
+
+  function timelineSnapStep() {
+    return Math.max(0.01, Number(document.getElementById("timeline-snap-step")?.value) || 0.05);
+  }
+
+  function animationTypeIcon(type) {
+    return ({
+      move: "↗", oscillate: "↔", loop: "⇢", fourStep: "▣", rotate: "⟳",
+      bob: "↕", pulse: "◉", splitRectangles: "▦", fadeIn: "◒", fadeOut: "◓", blink: "◐", visibility: "◫", wait: "Ⅱ",
+    })[type] || "◆";
+  }
+
+  function orderedTimelineClips(timeline) {
+    return timelineWorkspaceEngine?.sortClips
+      ? timelineWorkspaceEngine.sortClips(timeline?.clips || [])
+      : [...(timeline?.clips || [])].sort((first, second) => (first.start || 0) - (second.start || 0));
+  }
+
+  function updateAnimationTimelineUI() {
+    const selected = selectionComponents();
+    const component = selectedComponent();
+    const bulkSelection = state.selectAllParts || selected.length > 1;
+    const targetPicker = document.getElementById("timeline-target-picker");
+    const targetHelp = document.getElementById("timeline-target-help");
+    const card = document.querySelector(".animation-timeline-card");
+    const empty = document.getElementById("timeline-empty");
+    const editor = document.getElementById("timeline-clip-editor");
+    const palette = document.getElementById("timeline-type-palette");
+    const tracks = document.getElementById("timeline-ruler-tracks");
+    const scale = document.getElementById("timeline-ruler-scale");
+    const scrollCanvas = document.getElementById("timeline-scroll-canvas");
+    if (!timelineEngine || !targetPicker || !card || !empty || !editor) return;
+
+    if (palette && !palette.children.length) {
+      palette.innerHTML = (timelineEngine.TYPES || []).map((type) => `
+        <button type="button" draggable="true" data-animation-type="${escapeHtml(type.value)}" title="Drag ${escapeHtml(type.label)} onto the timeline">
+          <span>${animationTypeIcon(type.value)}</span>
+          <span class="timeline-type-copy"><strong>${escapeHtml(type.label)}</strong><em>${Number(type.presetDuration || 2).toFixed(0)} sec preset</em></span>
+        </button>`).join("");
+    }
+
+    const renderEmptyTimeline = (message) => {
+      const duration = timelineEngine.MIN_TIMELINE_SECONDS || 30;
+      const width = timelineWorkspaceEngine?.timelinePixelWidth?.(duration) || 1320;
+      if (scrollCanvas) scrollCanvas.style.width = `${width}px`;
+      if (scale) {
+        scale.innerHTML = Array.from({ length: 7 }, (_, index) => `<span style="left:${index / 6 * 100}%">${index * 5}s</span>`).join("");
+      }
+      if (tracks) {
+        tracks.dataset.timelineDuration = String(duration);
+        tracks.dataset.pixelsPerSecond = String(timelineWorkspaceEngine?.PIXELS_PER_SECOND || 44);
+        tracks.innerHTML = `<div class="timeline-empty-drop-zone" data-timeline-drop-lane><strong>${escapeHtml(message)}</strong><span>The ruler starts at 0 seconds and runs to 30 seconds.</span></div>`;
+      }
+    };
+
+    if (!component || bulkSelection) {
+      targetPicker.innerHTML = '<option value="">Select one part</option>';
+      targetPicker.disabled = true;
+      card.classList.add("empty-target");
+      if (palette) palette.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+      empty.hidden = false;
+      empty.querySelector("strong").textContent = bulkSelection ? "Select one part to edit its timeline." : "Select a part to create an animation timeline.";
+      empty.querySelector("p").textContent = "Timelines are edited one part at a time so every clip keeps a clear owner.";
+      editor.hidden = true;
+      renderEmptyTimeline("Select one part to begin");
+      if (targetHelp) targetHelp.textContent = "Select one machine part, then add or drag an animation type onto the timeline.";
+      return;
+    }
+
+    if (palette) palette.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+    const targets = timelineTargetOptions(component);
+    const requestedTargetKey = JSON.stringify(state.timelineTargetPathIds || []);
+    const selectedTarget = targets.find((item) => item.key === requestedTargetKey)
+      || targets.find((item) => item.id === state.timelineTargetId)
+      || targets[0];
+    state.timelineTargetId = selectedTarget?.id || component.id;
+    state.timelineTargetPathIds = selectedTarget?.pathIds || [component.id];
+    targetPicker.innerHTML = targets.map((item) => `<option value="${escapeHtml(item.key)}">${escapeHtml(item.name)}</option>`).join("");
+    targetPicker.value = selectedTarget?.key || JSON.stringify([component.id]);
+    targetPicker.disabled = targets.length <= 1;
+    const target = selectedTarget?.component || component;
+    const timeline = ensureTimeline(target);
+    const sharedSettings = sharedDesignTimelineSettings();
+    card.classList.remove("empty-target");
+    if (targetHelp) targetHelp.textContent = target === component
+      ? `Editing ${target.name} on the shared machine clock. Drag a clip body to overlap it with another clip; extending its right edge pushes later clips right.`
+      : `Editing child part ${target.name} inside ${component.name}. Its clips keep their own track positions but play from the same machine-wide clock.`;
+
+    const clips = timeline.clips;
+    if (!clips.some((clip) => clip.id === state.timelineClipId)) state.timelineClipId = clips[0]?.id || null;
+    const activeClip = selectedTimelineClip();
+    const duration = sharedDesignTimelineDuration();
+    const summary = document.getElementById("timeline-summary");
+    if (summary) summary.textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"} · 0–${duration.toFixed(0)} sec`;
+
+    const masterValues = {
+      "timeline-enabled": timeline.enabled,
+      "timeline-loop": sharedSettings.loop,
+      "timeline-playback-rate": sharedSettings.playbackRate,
+      "timeline-duration": duration,
+    };
+    Object.entries(masterValues).forEach(([id, value]) => {
+      const input = document.getElementById(id);
+      if (!input || document.activeElement === input) return;
+      if (input.type === "checkbox") input.checked = Boolean(value);
+      else input.value = String(value);
+    });
+
+    document.querySelectorAll('[data-timeline-clip-field="type"]').forEach((select) => {
+      if (!select.options.length) select.innerHTML = animationTypeOptions(activeClip?.type || "move");
+    });
+
+    const tickStep = duration <= 60 ? 5 : duration <= 120 ? 10 : duration <= 300 ? 30 : 60;
+    if (scale) {
+      const ticks = [];
+      for (let seconds = 0; seconds <= duration + 1e-9; seconds += tickStep) ticks.push(seconds);
+      if (ticks[ticks.length - 1] < duration) ticks.push(duration);
+      scale.innerHTML = ticks.map((seconds) => `<span style="left:${seconds / duration * 100}%">${seconds.toFixed(0)}s</span>`).join("");
+    }
+
+    const canvasWidth = timelineWorkspaceEngine?.timelinePixelWidth?.(duration) || Math.max(960, duration * 44);
+    if (scrollCanvas) scrollCanvas.style.width = `${canvasWidth}px`;
+    const lanes = timelineWorkspaceEngine?.layoutClipsIntoLanes
+      ? timelineWorkspaceEngine.layoutClipsIntoLanes(clips)
+      : orderedTimelineClips(timeline).map((clip) => [clip]);
+    const clipMarkup = lanes.map((lane, laneIndex) => {
+      const laneClips = lane.map((clip) => {
+        const left = Math.max(0, Math.min(100, clip.start / duration * 100));
+        const width = Math.max(0.25, Math.min(100 - left, clip.duration / duration * 100));
+        const active = clip.id === state.timelineClipId ? " active" : "";
+        const disabled = clip.enabled === false ? " disabled" : "";
+        return `<button type="button" class="timeline-track${active}${disabled}" data-timeline-clip-id="${escapeHtml(clip.id)}" style="--clip-left:${left}%;--clip-width:${width}%" title="${escapeHtml(timelineEngine.describeClip(clip))}">
+          <i class="timeline-resize-handle start" data-timeline-resize="start" aria-label="Resize start of ${escapeHtml(clip.name)}"></i>
+          <span class="timeline-track-body" data-timeline-drag-body>
+            <span class="timeline-track-icon">${animationTypeIcon(clip.type)}</span>
+            <span class="timeline-track-copy"><strong>${escapeHtml(clip.name)}</strong><small>${clip.start.toFixed(2)}s → ${(clip.start + clip.duration).toFixed(2)}s · ${clip.duration.toFixed(2)}s</small></span>
+          </span>
+          <i class="timeline-resize-handle end" data-timeline-resize="end" aria-label="Resize end of ${escapeHtml(clip.name)}"></i>
+        </button>`;
+      }).join("");
+      return `<div class="timeline-track-row" data-timeline-lane="${laneIndex + 1}"><span class="timeline-row-number">${laneIndex + 1}</span><div class="timeline-track-lane" data-timeline-drop-lane>${laneClips}</div></div>`;
+    }).join("");
+    if (tracks) {
+      tracks.dataset.timelineDuration = String(duration);
+      tracks.dataset.pixelsPerSecond = String(timelineWorkspaceEngine?.PIXELS_PER_SECOND || 44);
+      tracks.innerHTML = clipMarkup || '<div class="timeline-empty-drop-zone" data-timeline-drop-lane><strong>Drop an animation here</strong><span>or click a preset to append it from left to right</span></div>';
+    }
+
+    empty.hidden = Boolean(activeClip);
+    if (!activeClip) {
+      empty.querySelector("strong").textContent = clips.length ? "No animation clip selected." : "No animation clips yet.";
+      empty.querySelector("p").textContent = clips.length
+        ? "Click a clip in the bottom timeline to open all of its settings here."
+        : "Open the timeline, then click or drag an animation type to add the first clip.";
+    }
+    editor.hidden = !activeClip;
+    if (activeClip) {
+      const description = document.getElementById("timeline-clip-description");
+      if (description) description.textContent = timelineEngine.describeClip(activeClip);
+      editor.querySelectorAll("[data-timeline-clip-field]").forEach((input) => {
+        const field = input.dataset.timelineClipField;
+        if (document.activeElement !== input) input.value = String(activeClip[field] ?? "");
+      });
+      editor.querySelectorAll("[data-timeline-clip-check]").forEach((input) => {
+        const field = input.dataset.timelineClipCheck;
+        input.checked = Boolean(activeClip[field]);
+      });
+      editor.querySelectorAll("[data-timeline-for]").forEach((element) => {
+        element.hidden = !element.dataset.timelineFor.split(/\s+/).includes(activeClip.type);
+      });
+      const axisLabel = document.getElementById("timeline-axis-label");
+      if (axisLabel) axisLabel.textContent = activeClip.type === "splitRectangles" ? "Spread axis" : "Axis";
+      const amountLabel = document.getElementById("timeline-amount-label");
+      if (amountLabel) {
+        amountLabel.textContent = activeClip.type === "rotate"
+          ? "Rotation angle (degrees)"
+          : activeClip.type === "pulse"
+            ? "Scale change (%)"
+            : activeClip.type === "splitRectangles"
+              ? "Fragment spread (ft)"
+              : activeClip.type === "bob"
+              ? "Vertical distance (ft)"
+              : "Distance (ft)";
+      }
+      const rotationDirection = document.getElementById("timeline-rotation-direction");
+      if (rotationDirection) {
+        const angle = Number(activeClip.amount) || 0;
+        rotationDirection.textContent = Math.abs(angle) < 0.00001
+          ? "Current direction: none (angle is 0°)"
+          : `Current direction: ${angle < 0 ? "reverse (-)" : "forward (+)"}`;
+      }
+    }
+    const playing = state.previewAnimations && !Number.isFinite(state.timelineScrubSeconds);
+    const playButton = document.getElementById("timeline-play");
+    const pauseButton = document.getElementById("timeline-pause");
+    if (playButton) {
+      playButton.disabled = playing;
+      playButton.classList.toggle("active", playing);
+    }
+    if (pauseButton) {
+      pauseButton.disabled = !playing;
+      pauseButton.classList.toggle("active", !playing);
+    }
+    updateTimelinePlayhead();
+  }
+
+  function setAnimationPreview(playing, restart = false) {
+    const now = performance.now();
+    if (restart) {
+      state.animationTimeOffset = now;
+      state.animationPausedAt = now;
+      state.timelineScrubSeconds = null;
+    }
+    if (playing && !state.previewAnimations) {
+      if (Number.isFinite(state.timelineScrubSeconds)) {
+        const rate = Math.max(0.0001, Number(sharedDesignTimelineSettings().playbackRate) || 0.0001);
+        state.animationTimeOffset = now - state.timelineScrubSeconds * 1000 / rate;
+      }
+      else state.animationTimeOffset += Math.max(0, now - state.animationPausedAt);
+    }
+    if (!playing && state.previewAnimations) state.animationPausedAt = now;
+    state.previewAnimations = playing;
+    if (playing) state.timelineScrubSeconds = null;
+    const topButton = document.getElementById("preview-design-animations");
+    if (topButton) {
+      topButton.classList.toggle("active", playing);
+      topButton.textContent = playing ? "Pause animations" : "Resume animations";
+    }
+    updateAnimationTimelineUI();
+    renderPerformance.invalidate?.("animation-preview");
+  }
+
   function updateDesignList() {
     const list = document.getElementById("design-list");
     const count = document.getElementById("design-count");
@@ -777,6 +1659,51 @@
     });
   }
 
+  function envelopePointsForComponent(component, visibleOnly = false) {
+    if (!component || (visibleOnly && component.visible === false)) return [];
+    if (component.type === "group") {
+      return (component.children || []).flatMap((child) => envelopePointsForComponent(child, visibleOnly));
+    }
+    return componentWorldPoints(component);
+  }
+
+  function designGeometryBounds(design, visibleOnly = false) {
+    const points = (design?.components || []).flatMap((component) => envelopePointsForComponent(component, visibleOnly));
+    if (!points.length) return null;
+    return {
+      minX: Math.min(...points.map((point) => point[0])),
+      maxX: Math.max(...points.map((point) => point[0])),
+      minY: Math.min(...points.map((point) => point[1])),
+      maxY: Math.max(...points.map((point) => point[1])),
+      minZ: Math.min(...points.map((point) => point[2])),
+      maxZ: Math.max(...points.map((point) => point[2])),
+    };
+  }
+
+  function updateEnvelopeStatus(design) {
+    const status = document.getElementById("design-envelope-status");
+    if (!status) return;
+    const bounds = designGeometryBounds(design);
+    if (!design || !bounds) {
+      status.textContent = "Add at least one part, then use Tight fit to build the envelope around it.";
+      status.classList.remove("warning");
+      return;
+    }
+    const geometry = {
+      w: bounds.maxX - bounds.minX,
+      d: bounds.maxZ - bounds.minZ,
+      h: bounds.maxY - bounds.minY,
+    };
+    const outside = bounds.minX < -0.0005
+      || bounds.minY < -0.0005
+      || bounds.minZ < -0.0005
+      || bounds.maxX > design.base.w + 0.0005
+      || bounds.maxY > design.base.h + 0.0005
+      || bounds.maxZ > design.base.d + 0.0005;
+    status.textContent = `Envelope ${design.base.w.toFixed(3)} × ${design.base.d.toFixed(3)} × ${design.base.h.toFixed(3)} ft · Tight part bounds ${geometry.w.toFixed(3)} × ${geometry.d.toFixed(3)} × ${geometry.h.toFixed(3)} ft${outside ? " · Some geometry extends outside the envelope." : ""}`;
+    status.classList.toggle("warning", outside);
+  }
+
   function updateDesignFields() {
     const design = currentDesign();
     const map = {
@@ -795,6 +1722,9 @@
     if (deleteButton) deleteButton.disabled = !design || builtinIds.has(design.id);
     const resetButton = document.getElementById("reset-design");
     if (resetButton) resetButton.disabled = !design || !defaults[design.id];
+    const showEnvelope = document.getElementById("show-design-envelope");
+    if (showEnvelope && document.activeElement !== showEnvelope) showEnvelope.checked = state.showDesignEnvelope;
+    updateEnvelopeStatus(design);
   }
 
   function updateComponentList() {
@@ -809,16 +1739,25 @@
       <div class="component-tree-row ${state.selectAllParts || state.selectedComponentIds.has(component.id) ? "active" : ""}" data-component-row="${escapeHtml(component.id)}">
         <button type="button" class="component-visibility" data-toggle-component="${escapeHtml(component.id)}" title="${component.visible === false ? "Show" : "Hide"} component" aria-label="${component.visible === false ? "Show" : "Hide"} ${escapeHtml(component.name)}">${component.visible === false ? "○" : "●"}</button>
         <button type="button" class="component-select" data-component-id="${escapeHtml(component.id)}">
-          <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} · ${escapeHtml(component.type)}${component.animationType && component.animationType !== "none" ? ` · animated` : ""}</small></span>
+          <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} · ${escapeHtml(component.embeddedMachine ? "machine" : component.type)}${component.embeddedMachine ? " · embedded" : ""}${componentHasAnimation(component) ? ` · animated` : ""}</small></span>
         </button>
       </div>
     `).join("") || `<p class="studio-empty">No parts match this search.</p>`;
     list.querySelectorAll("[data-component-id]").forEach((button) => {
-      button.addEventListener("click", (event) => selectComponent(
-        button.dataset.componentId,
-        false,
-        event.shiftKey || event.ctrlKey || event.metaKey,
-      ));
+      button.addEventListener("click", (event) => {
+        const component = design.components.find((item) => item.id === button.dataset.componentId);
+        const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+        const timelineTarget = !additive && component
+          ? resolveTimelineTargetForHit(component, [component.id])
+          : null;
+        selectComponent(
+          button.dataset.componentId,
+          false,
+          additive,
+          timelineTarget?.component?.id || null,
+          timelineTarget?.pathIds || null,
+        );
+      });
     });
     list.querySelectorAll("[data-toggle-component]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -831,33 +1770,48 @@
     });
   }
 
+  const BULK_COMPONENT_FIELDS = new Set([
+    "color", "opacity", "animationType", "animationAxis", "animationSecondaryAxis",
+    "animationAmount", "animationSecondaryAmount", "animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds", "animationPhase",
+  ]);
+  const BULK_COMPONENT_CHECKS = new Set(["visible", "animationEnabled"]);
+
+  function commonSelectionValue(components, field) {
+    if (!components.length) return { mixed: false, value: "" };
+    const first = components[0]?.[field];
+    const mixed = components.some((component) => String(component?.[field] ?? "") !== String(first ?? ""));
+    return { mixed, value: first ?? "" };
+  }
+
+  function recolorComponentTree(component, color) {
+    component.color = color;
+    if (component.type === "group") (component.children || []).forEach((child) => recolorComponentTree(child, color));
+  }
+
   function updateComponentProperties() {
     const section = document.getElementById("component-properties");
     const empty = document.getElementById("empty-component-state");
+    const selected = selectionComponents();
     const component = selectedComponent();
-    const selectedCount = selectionComponents().length;
+    const selectedCount = selected.length;
     const wholeDesign = state.selectAllParts;
-    const multiSelection = !wholeDesign && selectedCount > 1;
+    const multiSelection = selectedCount > 1;
+    const bulkSelection = wholeDesign || multiSelection;
     const typeLabel = document.getElementById("selected-component-type");
-    if (section) section.hidden = !component;
+    if (section) {
+      section.hidden = selectedCount === 0;
+      section.classList.toggle("multi-component-edit", bulkSelection);
+    }
     if (empty) {
-      empty.hidden = Boolean(component);
+      empty.hidden = selectedCount > 0;
       const title = empty.querySelector("strong");
       const help = empty.querySelector("p");
-      if (wholeDesign) {
-        if (title) title.textContent = "Entire machine selected.";
-        if (help) help.textContent = "Use Move, Rotate, or Scale to transform every part together around the machine center. Click any individual part to return to single-part editing.";
-      } else if (multiSelection) {
-        if (title) title.textContent = `${selectedCount} parts selected.`;
-        if (help) help.textContent = "Transform these parts together or use Merge selected to turn them into one reusable item.";
-      } else {
-        if (title) title.textContent = "Select a part in the viewport or Parts list.";
-        if (help) help.textContent = "Use Move, Rotate, or Scale after selecting a component. Transform controls always stay above the model. Colored handles match the X, Y, and Z axes.";
-      }
+      if (title) title.textContent = "Select a part in the viewport or Parts list.";
+      if (help) help.textContent = "Use Move, Rotate, or Scale after selecting a component. Transform controls always stay above the model.";
     }
     if (typeLabel) typeLabel.textContent = wholeDesign
-      ? `All ${currentDesign()?.components.length || 0} parts`
-      : multiSelection ? `${selectedCount} selected parts` : (component ? component.type : "Nothing selected");
+      ? `All ${currentDesign()?.components.length || 0} parts · shared settings`
+      : multiSelection ? `${selectedCount} selected parts · shared settings` : (component ? component.type : "Nothing selected");
 
     document.getElementById("select-all-components")?.classList.toggle("active", wholeDesign);
     document.getElementById("duplicate-component")?.toggleAttribute("disabled", selectedCount === 0);
@@ -866,39 +1820,336 @@
     document.getElementById("ungroup-component")?.toggleAttribute("disabled", component?.type !== "group");
     document.getElementById("move-component-up")?.toggleAttribute("disabled", !component);
     document.getElementById("move-component-down")?.toggleAttribute("disabled", !component);
-    if (!component || !section) return;
+    if (!selectedCount || !section) return;
 
+    const primary = component || selected[0];
     section.querySelectorAll("[data-component-field]").forEach((input) => {
       const field = input.dataset.componentField;
       if (document.activeElement === input) return;
-      if (component.type === "group" && ["x", "y", "z"].includes(field)) {
-        const center = componentCenter(component);
+      const bulkEditable = BULK_COMPONENT_FIELDS.has(field);
+      input.disabled = bulkSelection && !bulkEditable;
+      input.dataset.mixed = "false";
+      input.removeAttribute("title");
+
+      if (bulkSelection) {
+        const common = commonSelectionValue(selected, field);
+        if (bulkEditable) {
+          input.value = String(common.value ?? "");
+          input.dataset.mixed = String(common.mixed);
+          if (common.mixed) input.title = "Mixed values. Changing this control applies the new value to every selected part.";
+        } else {
+          input.value = "";
+          input.placeholder = field === "name" ? `${selectedCount} selected parts` : "Use transform handles";
+        }
+        return;
+      }
+
+      input.placeholder = "";
+      if (primary.type === "group" && ["x", "y", "z"].includes(field)) {
+        const center = componentCenter(primary);
         input.value = center[{ x: 0, y: 1, z: 2 }[field]] ?? 0;
-      } else if (component.type === "beam" && field === "length") {
-        input.value = pointDistance([component.x, component.y, component.z], [component.x2, component.y2, component.z2]).toFixed(2);
-      } else input.value = component[field] ?? "";
+      } else if (primary.type === "beam" && field === "length") {
+        input.value = pointDistance([primary.x, primary.y, primary.z], [primary.x2, primary.y2, primary.z2]).toFixed(2);
+      } else input.value = primary[field] ?? "";
     });
+
+    section.querySelectorAll("[data-component-scale]").forEach((input) => {
+      const axis = input.dataset.componentScale;
+      input.disabled = selectedCount === 0;
+      const values = selected.map((item) => {
+        if (axis === "uniform") {
+          const all = [Number(item.scaleXPercent) || 100, Number(item.scaleYPercent) || 100, Number(item.scaleZPercent) || 100];
+          return Math.max(...all) - Math.min(...all) < .01 ? all[0] : "";
+        }
+        return Number(item[`scale${axis.toUpperCase()}Percent`]) || 100;
+      });
+      const first = values[0];
+      const mixed = values.some((value) => String(value) !== String(first));
+      if (document.activeElement !== input) input.value = mixed ? "" : Number(first).toFixed(2);
+      input.placeholder = mixed ? "Mixed" : "100";
+      input.dataset.mixed = String(mixed);
+    });
+
     section.querySelectorAll("[data-component-check]").forEach((input) => {
-      input.checked = component[input.dataset.componentCheck] !== false;
+      const field = input.dataset.componentCheck;
+      input.disabled = bulkSelection && !BULK_COMPONENT_CHECKS.has(field);
+      if (bulkSelection && BULK_COMPONENT_CHECKS.has(field)) {
+        const values = selected.map((item) => item[field] !== false);
+        input.checked = values.every(Boolean);
+        input.indeterminate = values.some(Boolean) && !values.every(Boolean);
+      } else {
+        input.indeterminate = false;
+        input.checked = primary[field] !== false;
+      }
     });
+
     section.querySelectorAll("[data-for-component]").forEach((element) => {
+      if (bulkSelection) {
+        element.hidden = true;
+        return;
+      }
       const supported = element.dataset.forComponent.split(/\s+/);
-      element.hidden = !supported.includes(component.type);
+      element.hidden = !supported.includes(primary.type);
     });
+
     const motionDriver = document.getElementById("group-motion-driver");
+    const groupChildPicker = document.getElementById("group-animation-child");
+    const groupChildPanel = document.querySelector("[data-group-child-animation]");
+    const children = !bulkSelection && primary.type === "group" ? (primary.children || []) : [];
     if (motionDriver) {
-      const children = component.type === "group" ? (component.children || []) : [];
       motionDriver.innerHTML = children.map((child) => (
-        `<option value="${escapeHtml(child.id)}">${escapeHtml(child.name)}${child.animationType && child.animationType !== "none" ? ` · ${escapeHtml(child.animationType)}` : ""}</option>`
+        `<option value="${escapeHtml(child.id)}">${escapeHtml(child.name)}${componentHasAnimation(child) ? " · animated" : ""}</option>`
       )).join("");
-      motionDriver.value = children.some((child) => child.id === component.motionDriverId)
-        ? component.motionDriverId
+      motionDriver.value = children.some((child) => child.id === primary.motionDriverId)
+        ? primary.motionDriverId
         : (children[0]?.id || "");
-      motionDriver.disabled = component.type !== "group" || children.length === 0;
+      motionDriver.disabled = bulkSelection || primary.type !== "group" || children.length === 0;
     }
+    if (groupChildPicker) {
+      groupChildPicker.innerHTML = children.map((child) => `<option value="${escapeHtml(child.id)}">${escapeHtml(child.name)}</option>`).join("");
+      const activeId = children.some((child) => child.id === primary.activeAnimationChildId)
+        ? primary.activeAnimationChildId
+        : (children[0]?.id || "");
+      primary.activeAnimationChildId = activeId;
+      groupChildPicker.value = activeId;
+      groupChildPicker.disabled = children.length === 0;
+    }
+    const activeChild = children.find((child) => child.id === primary.activeAnimationChildId) || children[0] || null;
+    if (groupChildPanel) {
+      groupChildPanel.hidden = primary.type !== "group" || !activeChild;
+      groupChildPanel.querySelectorAll("[data-group-child-field]").forEach((input) => {
+        const field = input.dataset.groupChildField;
+        if (document.activeElement !== input) input.value = activeChild ? String(activeChild[field] ?? "") : "";
+        input.disabled = !activeChild;
+      });
+      groupChildPanel.querySelectorAll("[data-group-child-check]").forEach((input) => {
+        const field = input.dataset.groupChildCheck;
+        input.checked = activeChild ? activeChild[field] !== false : false;
+        const driverOwnToggle = field === "playOwnAnimation" && activeChild?.id === primary.motionDriverId;
+        input.disabled = !activeChild || driverOwnToggle;
+        input.title = driverOwnToggle
+          ? "The attachment parent always plays its own animation because that motion carries the assembly."
+          : "";
+      });
+      const childIsFourStep = activeChild?.animationType === "fourStep";
+      const childFourStep = groupChildPanel.querySelector("[data-child-four-step-controls]");
+      if (childFourStep) childFourStep.hidden = !childIsFourStep;
+      const childStandardPause = groupChildPanel.querySelector("[data-child-standard-pause]");
+      if (childStandardPause) childStandardPause.hidden = childIsFourStep;
+    }
+    const fourStepControls = section.querySelector("[data-four-step-controls]");
+    const mode = bulkSelection ? commonSelectionValue(selected, "animationType") : { mixed: false, value: primary.animationType };
+    const isFourStep = !mode.mixed && mode.value === "fourStep";
+    if (fourStepControls) fourStepControls.hidden = !isFourStep;
+    const standardPause = section.querySelector("[data-standard-animation-pause]");
+    if (standardPause) standardPause.hidden = isFourStep;
+
+  }
+
+  function visibleDesignColor(design) {
+    const stack = [...(design?.components || [])];
+    while (stack.length) {
+      const component = stack.shift();
+      if (!component || component.visible === false) continue;
+      if (component.type === "group") {
+        stack.unshift(...(component.children || []));
+        continue;
+      }
+      return validColor(component.color, "#277d78");
+    }
+    return "#277d78";
+  }
+
+  function conciseMachineName(value) {
+    const name = String(value || "New machine").trim() || "New machine";
+    return name.length <= 28 ? name : `${name.slice(0, 25).trimEnd()}…`;
+  }
+
+  function plantFloorBounds() {
+    const floor = plantLayout.floor || {};
+    const width = Math.max(40, Number(floor.width) || 470.83);
+    const length = Math.max(40, Number(floor.length) || 262.5);
+    const centerX = Number.isFinite(Number(floor.centerX)) ? Number(floor.centerX) : 2.085;
+    const centerZ = Number.isFinite(Number(floor.centerZ)) ? Number(floor.centerZ) : -81.25;
+    return {
+      centerX,
+      centerZ,
+      minX: centerX - width / 2,
+      maxX: centerX + width / 2,
+      minZ: centerZ - length / 2,
+      maxZ: centerZ + length / 2,
+    };
+  }
+
+  function plantObjectBlocksPlacement(machine) {
+    if (!machine || machine.visible === false) return false;
+    if (["safetyLine", "trench", "floorDrain", "person", "animatedBeacon"].includes(machine.type)) return false;
+    return machine.collisionMode !== "ignore";
+  }
+
+  function candidateOverlapsPlant(candidate, padding = 4) {
+    return plantLayout.machines.some((machine) => {
+      if (!plantObjectBlocksPlacement(machine)) return false;
+      const left = Number(machine.x) - padding;
+      const right = Number(machine.x) + Math.max(.02, Number(machine.w) || 1) + padding;
+      const near = Number(machine.z) - padding;
+      const far = Number(machine.z) + Math.max(.02, Number(machine.d) || 1) + padding;
+      return candidate.x < right
+        && candidate.x + candidate.w > left
+        && candidate.z < far
+        && candidate.z + candidate.d > near;
+    });
+  }
+
+  function findPlantPlacement(width, depth, mode = "auto") {
+    const floor = plantFloorBounds();
+    const centered = {
+      x: floor.centerX - width / 2,
+      z: floor.centerZ - depth / 2,
+      w: width,
+      d: depth,
+    };
+    if (mode === "origin") return { x: -width / 2, z: -depth / 2 };
+    if (mode === "center") return { x: centered.x, z: centered.z };
+    if (!candidateOverlapsPlant(centered) && centered.x >= floor.minX && centered.x + width <= floor.maxX && centered.z >= floor.minZ && centered.z + depth <= floor.maxZ) {
+      return { x: centered.x, z: centered.z };
+    }
+
+    const stepX = Math.max(10, Math.min(30, width * .55 + 6));
+    const stepZ = Math.max(10, Math.min(30, depth * .55 + 6));
+    const fits = (candidate) => candidate.x >= floor.minX + 2
+      && candidate.x + width <= floor.maxX - 2
+      && candidate.z >= floor.minZ + 2
+      && candidate.z + depth <= floor.maxZ - 2;
+    for (let ring = 1; ring <= 80; ring += 1) {
+      for (let offset = -ring; offset <= ring; offset += 1) {
+        const points = [
+          [offset, -ring], [offset, ring], [-ring, offset], [ring, offset],
+        ];
+        for (const [gridX, gridZ] of points) {
+          const candidate = {
+            x: centered.x + gridX * stepX,
+            z: centered.z + gridZ * stepZ,
+            w: width,
+            d: depth,
+          };
+          if (fits(candidate) && !candidateOverlapsPlant(candidate)) return { x: candidate.x, z: candidate.z };
+        }
+      }
+    }
+    return { x: centered.x, z: centered.z };
+  }
+
+  function populateCreationStages() {
+    const select = document.getElementById("new-plant-machine-stage");
+    if (!select) return;
+    const currentValue = select.value || "last";
+    const stages = Array.isArray(plantLayout.stages) ? plantLayout.stages : [];
+    select.innerHTML = stages.length
+      ? stages.map((stage, index) => `<option value="${index}">${escapeHtml(stage.title || stage.short || `Stage ${index + 1}`)}${index === stages.length - 1 ? " · current" : ""}</option>`).join("")
+      : '<option value="0">Current plant</option>';
+    const preferred = currentValue === "last" ? String(Math.max(0, stages.length - 1)) : currentValue;
+    select.value = [...select.options].some((option) => option.value === preferred)
+      ? preferred
+      : String(Math.max(0, stages.length - 1));
+  }
+
+  function createPlantMachineFromCurrentDesign() {
+    const design = currentDesign();
+    if (!design) {
+      showToast("Create or select a design first.");
+      return;
+    }
+    if (!Array.isArray(plantLayout.machines)) plantLayout.machines = [];
+    const base = designBaseDimensions(design);
+    const requestedName = document.getElementById("new-plant-machine-name")?.value.trim();
+    const name = requestedName || design.name || "New machine";
+    const placementMode = document.getElementById("new-plant-machine-placement")?.value || "auto";
+    const placement = findPlantPlacement(base.w, base.d, placementMode);
+    const stageValue = Number(document.getElementById("new-plant-machine-stage")?.value);
+    const reveal = Number.isFinite(stageValue)
+      ? Math.max(0, stageValue)
+      : Math.max(0, (plantLayout.stages?.length || 1) - 1);
+    const type = safeId(design.machineType || design.name || "custom-machine");
+    const id = uniqueId(type);
+    const instanceId = uniqueId(`${type}-instance`);
+    const machine = {
+      id,
+      instanceId,
+      name,
+      short: conciseMachineName(name),
+      type,
+      category: "equipment",
+      reveal,
+      retire: 99,
+      x: placement.x,
+      y: 0,
+      z: placement.z,
+      w: base.w,
+      d: base.d,
+      h: base.h,
+      naturalW: base.w,
+      naturalD: base.d,
+      naturalH: base.h,
+      scaleXPercent: 100,
+      scaleYPercent: 100,
+      scaleZPercent: 100,
+      scaleEditMode: "uniform",
+      rotationX: 0,
+      rotationY: 0,
+      rotationZ: 0,
+      rotation: 0,
+      color: visibleDesignColor(design),
+      visible: true,
+      locked: false,
+      showLabel: true,
+      designId: design.id,
+      designScaleMode: "match",
+      collisionMode: "solid",
+      placement_status: "designer_created",
+      evidence: "Created from a reusable Machine Design Studio design.",
+      custom: true,
+      crane: null,
+      animationEnabled: false,
+      animationMode: "none",
+      animationAxis: "x",
+      animationSecondaryAxis: "z",
+      animationDistance: 10,
+      animationSecondaryDistance: 10,
+      animationSpeed: .1,
+      animationPauseSeconds: 0,
+      animationStep1PauseSeconds: 0,
+      animationStep2PauseSeconds: 0,
+      animationStep3PauseSeconds: 0,
+      animationStep4PauseSeconds: 0,
+      animationPhase: 0,
+    };
+    plantLayout.machines.push(machine);
+    state.linkedMachineId = instanceId;
+    state.lastCreatedMachineId = instanceId;
+    saveLibrary();
+    saveLayout();
+    updateAssignmentPanel();
+    const assignment = document.getElementById("machine-assignment");
+    if (assignment) assignment.value = instanceId;
+    updateAssignmentPanel();
+    const status = document.getElementById("create-plant-machine-status");
+    if (status) {
+      status.dataset.state = "success";
+      status.textContent = `${name} was added to the Plant Layout at X ${machine.x.toFixed(1)}, Z ${machine.z.toFixed(1)}.`;
+    }
+    const nameInput = document.getElementById("new-plant-machine-name");
+    if (nameInput) nameInput.value = "";
+    showToast(`${name} added to the Plant Layout.`);
   }
 
   function updateAssignmentPanel() {
+    populateCreationStages();
+    const design = currentDesign();
+    const createButton = document.getElementById("create-plant-machine");
+    if (createButton) createButton.disabled = !design;
+    const createName = document.getElementById("new-plant-machine-name");
+    if (createName && document.activeElement !== createName) createName.placeholder = design ? `Defaults to ${design.name}` : "Select a design first";
     const select = document.getElementById("machine-assignment");
     if (!select) return;
     const currentValue = select.value || queryMachineId || "";
@@ -909,24 +2160,54 @@
     select.value = machines.some((machine) => machine.instanceId === currentValue) ? currentValue : "";
     const status = document.getElementById("assignment-status");
     const machine = machines.find((item) => item.instanceId === select.value);
+    const sizingMode = document.getElementById("assignment-scale-mode");
+    const syncButton = document.getElementById("sync-machine-dimensions");
+    if (machine) machine.scaleEditMode = normalizedMachineScaleEditMode(machine.scaleEditMode, machine);
+    if (sizingMode) {
+      sizingMode.disabled = !machine;
+      sizingMode.value = normalizedDesignScaleMode(machine?.designScaleMode);
+    }
+    if (syncButton) syncButton.disabled = !machine || !currentDesign();
+    document.querySelectorAll("[data-instance-field]").forEach((input) => {
+      const field = input.dataset.instanceField;
+      input.disabled = !machine;
+      if (!machine || document.activeElement === input) return;
+      input.value = Number(machine[field] ?? 0).toFixed(["x","y","z","w","d","h"].includes(field) ? 2 : 1);
+    });
+    document.querySelectorAll("[data-instance-scale]").forEach((input) => {
+      const axis = input.dataset.instanceScale;
+      input.disabled = !machine;
+      if (!machine || document.activeElement === input) return;
+      refreshPlantScaleMetadata(machine);
+      if (axis === "uniform") {
+        const values = [machine.scaleXPercent, machine.scaleYPercent, machine.scaleZPercent];
+        input.value = Math.max(...values) - Math.min(...values) < .01 ? Number(values[0]).toFixed(2) : "";
+        input.placeholder = input.value ? "100" : "Mixed";
+      } else input.value = Number(machine[`scale${axis.toUpperCase()}Percent`] || 100).toFixed(2);
+    });
     if (status) {
+      const design = machine?.designId && library[machine.designId] ? library[machine.designId] : currentDesign();
+      const dimensions = design?.base ? `${Number(design.base.w).toFixed(1)} × ${Number(design.base.d).toFixed(1)} × ${Number(design.base.h).toFixed(1)} ft` : "no custom envelope";
+      const mode = normalizedDesignScaleMode(machine?.designScaleMode);
+      const modeLabel = mode === "match" ? "matches and stays synced" : mode === "stretch" ? "stretches on each axis" : "preserves proportions";
       status.textContent = machine
-        ? (machine.instanceId === state.linkedMachineId
-          ? `${machine.name} is live-linked to ${machine.designId && library[machine.designId] ? library[machine.designId].name : "the current design"}. Every saved change updates the plant model automatically.`
-          : `${machine.name} currently uses ${machine.designId && library[machine.designId] ? library[machine.designId].name : "its built-in model"}.`)
+        ? `${machine.name} · ${dimensions} · ${modeLabel}.${machine.instanceId === state.linkedMachineId ? " Every saved design change updates this plant object automatically." : ""}`
         : "Assignments save directly to the plant layout stored in this browser.";
     }
   }
 
   function updateInterface() {
     updateDesignList();
+    updateEmbeddedMachinePicker();
     updateDesignFields();
     updateComponentList();
     updateComponentProperties();
+    updateAnimationTimelineUI();
     updateAssignmentPanel();
     updateHistoryButtons();
     setBrowserTab(state.browserTab);
     setInspectorTab(state.inspectorTab);
+    setPartTab(state.partTab);
     updateToolLabel();
   }
 
@@ -1000,11 +2281,12 @@
     return [centerX + rx * cy + rz * sy, centerZ - rx * sy + rz * cy];
   }
 
-  function polygon(points, fill, stroke = null, lineWidth = 1, alpha = 1) {
+  function polygon(points, fill, stroke = null, lineWidth = 1, alpha = 1, options = {}) {
     if (alpha <= 0.01) return;
     if (depthRenderer.available) {
       depthRenderer.addPolygon(points, fill, alpha, stroke, lineWidth, {
         transparent: alpha < 0.985,
+        ...options,
       });
       return;
     }
@@ -1020,6 +2302,7 @@
   }
 
   function line3d(start, end, color, width = 1, alpha = 1) {
+    if (alpha <= 0.01) return;
     if (depthRenderer.available) {
       depthRenderer.addLine(start, end, color, width, alpha);
       return;
@@ -1206,8 +2489,8 @@
     const targetSize = Math.max(2.5, Number(options.targetSize) || 5);
     const uLength = Math.max(pointDistance(points[0], points[1]), pointDistance(points[3], points[2]));
     const vLength = Math.max(pointDistance(points[0], points[3]), pointDistance(points[1], points[2]));
-    const uSegments = clamp(Math.ceil(uLength / targetSize), 1, 14);
-    const vSegments = clamp(Math.ceil(vLength / targetSize), 1, 14);
+    const uSegments = depthRenderer.available ? 1 : clamp(Math.ceil(uLength / targetSize), 1, 14);
+    const vSegments = depthRenderer.available ? 1 : clamp(Math.ceil(vLength / targetSize), 1, 14);
     const primitives = [];
     let cell = 0;
     for (let vIndex = 0; vIndex < vSegments; vIndex += 1) {
@@ -1241,7 +2524,7 @@
     for (let index = 0; index < 4; index += 1) {
       const start = points[index];
       const end = points[(index + 1) % 4];
-      const segments = clamp(Math.ceil(pointDistance(start, end) / targetSize), 1, 14);
+      const segments = depthRenderer.available ? 1 : clamp(Math.ceil(pointDistance(start, end) / targetSize), 1, 14);
       for (let segment = 0; segment < segments; segment += 1) {
         primitives.push(linePrimitive(
           component,
@@ -1398,7 +2681,7 @@
         radius,
         radius,
         component.d / 2,
-        14,
+        renderPerformance.cylinderSegments(14),
       );
       result.push(...buildCylinderPrimitives(
         component,
@@ -1421,12 +2704,12 @@
   }
 
   function buildWheelPrimitives(component, order) {
-    return buildCylinderPrimitives(component, wheelVertices(component, 20), order, component.color, component.opacity);
+    return buildCylinderPrimitives(component, wheelVertices(component, renderPerformance.cylinderSegments(20)), order, component.color, component.opacity);
   }
 
   function verticalCylinderVertices(component, segments = 20, topScale = 1) {
     const center = componentCenter(component);
-    const count = Math.max(8, Math.round(Number(segments) || 20));
+    const count = renderPerformance.cylinderSegments(segments || 20);
     const vertices = [];
     for (const layer of [-1, 1]) {
       const scale = layer < 0 ? 1 : topScale;
@@ -1455,7 +2738,7 @@
   }
 
   function buildConePrimitives(component, order) {
-    const count = Math.max(8, Math.round(Number(component.segments) || 20));
+    const count = renderPerformance.cylinderSegments(component.segments || 20);
     const center = componentCenter(component);
     const base = [];
     for (let index = 0; index < count; index += 1) {
@@ -1476,7 +2759,7 @@
 
   function buildSpherePrimitives(component, order) {
     const center = componentCenter(component);
-    const longitude = Math.max(10, Math.round(Number(component.segments) || 20));
+    const longitude = Math.max(8, renderPerformance.cylinderSegments(component.segments || 20));
     const latitude = Math.max(6, Math.round(longitude / 2));
     const rings = [];
     for (let lat = 0; lat <= latitude; lat += 1) {
@@ -1552,13 +2835,148 @@
   }
 
 
+  function designAnimationTime(time) {
+    if (Number.isFinite(state.timelineScrubSeconds)) return Math.max(0, state.timelineScrubSeconds * 1000);
+    const reference = state.previewAnimations ? time : state.animationPausedAt;
+    return Math.max(0, reference - state.animationTimeOffset);
+  }
+
+  function componentAnimationSettingsMatch(first, second) {
+    if (!first || !second) return false;
+    const fields = [
+      "animationEnabled", "animationType", "animationAxis", "animationSecondaryAxis",
+      "animationAmount", "animationSecondaryAmount", "animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds", "animationPhase",
+    ];
+    return fields.every((field) => String(first[field] ?? "") === String(second[field] ?? ""))
+      && JSON.stringify(first.animationTimeline || null) === JSON.stringify(second.animationTimeline || null);
+  }
+
+  function localAnimationAxisVector(component, axis) {
+    const base = axis === "x" ? [1,0,0] : axis === "y" ? [0,1,0] : [0,0,1];
+    return rotateVector3(base, ...componentRotation(component));
+  }
+
+  function combineAxisOffsets(component, firstAmount, secondAmount) {
+    const firstAxis = ["x", "y", "z"].includes(component.animationAxis) ? component.animationAxis : "y";
+    let secondAxis = ["x", "y", "z"].includes(component.animationSecondaryAxis) ? component.animationSecondaryAxis : "z";
+    if (secondAxis === firstAxis) secondAxis = firstAxis === "z" ? "x" : "z";
+    const firstVector = localAnimationAxisVector(component, firstAxis);
+    const secondVector = localAnimationAxisVector(component, secondAxis);
+    return [0,1,2].map((index) => firstVector[index] * firstAmount + secondVector[index] * secondAmount);
+  }
+
+  function fourStepPauseDurations(component) {
+    const legacyAxis1 = Math.max(0, Number(component.animationPauseSeconds) || 0);
+    const legacyAxis2 = Math.max(0, Number.isFinite(Number(component.animationSecondaryPauseSeconds))
+      ? Number(component.animationSecondaryPauseSeconds)
+      : legacyAxis1);
+    return [
+      Math.max(0, Number.isFinite(Number(component.animationStep1PauseSeconds)) ? Number(component.animationStep1PauseSeconds) : legacyAxis1),
+      Math.max(0, Number.isFinite(Number(component.animationStep2PauseSeconds)) ? Number(component.animationStep2PauseSeconds) : legacyAxis2),
+      Math.max(0, Number.isFinite(Number(component.animationStep3PauseSeconds)) ? Number(component.animationStep3PauseSeconds) : legacyAxis1),
+      Math.max(0, Number.isFinite(Number(component.animationStep4PauseSeconds)) ? Number(component.animationStep4PauseSeconds) : legacyAxis2),
+    ];
+  }
+
+  function fourStepPathOffset(component, time) {
+    const speed = Math.max(0, Number(component.animationSpeed) || 0);
+    if (speed <= 0) return [0,0,0];
+    const pauses = fourStepPauseDurations(component);
+    const activeDuration = 1 / speed;
+    const legDuration = activeDuration / 4;
+    const totalDuration = activeDuration + pauses.reduce((sum, value) => sum + value, 0);
+    const phase = ((Number(component.animationPhase) || 0) / 360 + 1) % 1;
+    const elapsed = Math.max(0, designAnimationTime(time) / 1000 + phase * totalDuration);
+    let local = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+    const firstAmount = Number(component.animationAmount) || 0;
+    const secondAmount = Number(component.animationSecondaryAmount) || 0;
+    const smooth = (value) => (1 - Math.cos(clamp(value, 0, 1) * Math.PI)) / 2;
+    const interpolate = (from, to, progress) => from + (to - from) * smooth(progress);
+    const legs = [
+      { from: [0, 0], to: [firstAmount, 0] },
+      { from: [firstAmount, 0], to: [firstAmount, secondAmount] },
+      { from: [firstAmount, secondAmount], to: [0, secondAmount] },
+      { from: [0, secondAmount], to: [0, 0] },
+    ];
+    for (let index = 0; index < legs.length; index += 1) {
+      const leg = legs[index];
+      if (local < legDuration) {
+        const progress = legDuration > 0 ? local / legDuration : 1;
+        return combineAxisOffsets(
+          component,
+          interpolate(leg.from[0], leg.to[0], progress),
+          interpolate(leg.from[1], leg.to[1], progress),
+        );
+      }
+      local -= legDuration;
+      if (local < pauses[index]) return combineAxisOffsets(component, leg.to[0], leg.to[1]);
+      local -= pauses[index];
+    }
+    return [0,0,0];
+  }
+
+  function componentAnimationTransform(component, time) {
+    const transform = { translation: [0,0,0], rotation: [0,0,0], rotationOperations: [], scale: [1,1,1], alpha: 1, visible: null, rectangularSplit: null };
+    if (timelineEngine && component.animationTimeline && Array.isArray(component.animationTimeline.clips)) {
+      if (component.animationTimeline.enabled === false || !component.animationTimeline.clips.some((clip) => clip.enabled !== false)) return transform;
+      const timelineState = evaluateTimelineOnSharedClock(component.animationTimeline, time);
+      const localTranslation = timelineState.translation || [0, 0, 0];
+      ["x", "y", "z"].forEach((axis, index) => {
+        const vector = localAnimationAxisVector(component, axis);
+        transform.translation[0] += vector[0] * (Number(localTranslation[index]) || 0);
+        transform.translation[1] += vector[1] * (Number(localTranslation[index]) || 0);
+        transform.translation[2] += vector[2] * (Number(localTranslation[index]) || 0);
+      });
+      transform.rotation = (timelineState.rotation || [0, 0, 0]).map((value) => Number(value) || 0);
+      transform.rotationOperations = timelineRotationOperations(timelineState).map((operation) => ({
+        rotation: operation.rotation,
+        // The timeline stores pivot offsets in the part's local coordinates.
+        // Convert them once so merged siblings inherit the same world pivot.
+        pivotOffset: rotateVector3(operation.pivotOffset, ...componentRotation(component)),
+      }));
+      transform.scale = (timelineState.scale || [1, 1, 1]).map((value) => Number(value) || 1);
+      transform.alpha = Number.isFinite(Number(timelineState.opacity)) ? clamp(Number(timelineState.opacity), 0, 1) : 1;
+      transform.visible = typeof timelineState.visible === "boolean" ? timelineState.visible : null;
+      transform.rectangularSplit = timelineState.rectangularSplit ? clone(timelineState.rectangularSplit) : null;
+      return transform;
+    }
+    if (component.animationEnabled === false || !component.animationType || component.animationType === "none") return transform;
+    const { cycle, wrapped, sine, pingPong } = componentAnimationWave(component, time);
+    const amount = Number(component.animationAmount) || 0;
+    const axis = component.animationAxis || "x";
+    const offset = component.animationType === "loop"
+      ? (wrapped - 0.5) * amount
+      : component.animationType === "oscillate"
+        ? pingPong * amount
+        : sine * amount / 2;
+    if (["oscillate", "loop"].includes(component.animationType)) {
+      if (axis === "x" || axis === "all") transform.translation[0] = offset;
+      if (axis === "y" || axis === "all") transform.translation[1] = offset;
+      if (axis === "z" || axis === "all") transform.translation[2] = offset;
+    } else if (component.animationType === "fourStep") {
+      transform.translation = fourStepPathOffset(component, time);
+    } else if (component.animationType === "bob") transform.translation[1] = offset;
+    else if (component.animationType === "spin") {
+      const spin = cycle * (amount || 360);
+      if (axis === "x" || axis === "all") transform.rotation[0] = spin;
+      if (axis === "y" || axis === "all") transform.rotation[1] = spin;
+      if (axis === "z" || axis === "all") transform.rotation[2] = spin;
+    } else if (component.animationType === "pulse") {
+      const factor = Math.max(0.08, 1 + sine * amount / 200);
+      if (axis === "x" || axis === "all") transform.scale[0] = factor;
+      if (axis === "y" || axis === "all") transform.scale[1] = factor;
+      if (axis === "z" || axis === "all") transform.scale[2] = factor;
+    } else if (component.animationType === "blink") transform.alpha = sine > -0.15 ? 1 : 0.08;
+    return transform;
+  }
+
   function componentAnimationWave(component, time) {
     const speed = Math.max(0, Number(component.animationSpeed) || 0);
     const pauseSeconds = Math.max(0, Number(component.animationPauseSeconds) || 0);
     const phase = ((Number(component.animationPhase) || 0) / 360 + 1) % 1;
     if (speed <= 0) return { cycle: 0, wrapped: 0, sine: 0, pingPong: 0 };
     const activeDuration = 1 / speed;
-    const elapsed = Math.max(0, time / 1000 + phase * activeDuration);
+    const elapsed = Math.max(0, designAnimationTime(time) / 1000 + phase * activeDuration);
     if (component.animationType === "oscillate") {
       const quarterDuration = activeDuration / 4;
       const totalDuration = activeDuration + pauseSeconds * 2;
@@ -1583,8 +3001,77 @@
     return { cycle, wrapped, sine: Math.sin(wrapped * Math.PI * 2), pingPong: wrapped - 0.5 };
   }
 
+  function timelineRotationOperations(timelineState) {
+    const explicitOperations = Array.isArray(timelineState?.rotationOperations)
+      ? timelineState.rotationOperations
+        .map((operation) => ({
+          rotation: (operation?.rotation || [0, 0, 0]).map((value) => Number(value) || 0),
+          pivotOffset: (operation?.pivotOffset || [0, 0, 0]).map((value) => Number(value) || 0),
+        }))
+        .filter((operation) => operation.rotation.some((value) => Math.abs(value) > 0.00001))
+      : [];
+    if (explicitOperations.length) return explicitOperations;
+    const fallbackRotation = (timelineState?.rotation || [0, 0, 0]).map((value) => Number(value) || 0);
+    return fallbackRotation.some((value) => Math.abs(value) > 0.00001)
+      ? [{ rotation: fallbackRotation, pivotOffset: [0, 0, 0] }]
+      : [];
+  }
+
+  function rotateAnimatedComponentAroundPoint(component, pivot, degrees, axis) {
+    if (Math.abs(Number(degrees) || 0) < 0.00001) return;
+    const original = clone(component);
+    const originalCenter = componentCenter(original);
+    rotateComponent(component, degrees, axis, original);
+    const rotationVector = axis === "x" ? [degrees, 0, 0] : axis === "z" ? [0, 0, degrees] : [0, degrees, 0];
+    const targetCenter = rotatePoint3(originalCenter, pivot, ...rotationVector);
+    translateComponent(component, targetCenter[0] - originalCenter[0], targetCenter[1] - originalCenter[1], targetCenter[2] - originalCenter[2]);
+  }
+
+  function applyTimelineAnimation(animated, source, timelineState) {
+    const localTranslation = timelineState.translation || [0, 0, 0];
+    const worldTranslation = [0, 0, 0];
+    ["x", "y", "z"].forEach((axis, index) => {
+      const vector = localAnimationAxisVector(source, axis);
+      worldTranslation[0] += vector[0] * (Number(localTranslation[index]) || 0);
+      worldTranslation[1] += vector[1] * (Number(localTranslation[index]) || 0);
+      worldTranslation[2] += vector[2] * (Number(localTranslation[index]) || 0);
+    });
+
+    const sourceCenter = componentCenter(source);
+    timelineRotationOperations(timelineState).forEach((operation) => {
+      const worldPivotOffset = rotateVector3(operation.pivotOffset, ...componentRotation(source));
+      const pivot = sourceCenter.map((value, index) => value + worldPivotOffset[index]);
+      ["x", "y", "z"].forEach((axis, index) => {
+        rotateAnimatedComponentAroundPoint(animated, pivot, operation.rotation[index], axis);
+      });
+    });
+    translateComponent(animated, ...worldTranslation);
+
+    const scales = timelineState.scale || [1, 1, 1];
+    ["x", "y", "z"].forEach((axis, index) => {
+      const factor = Number(scales[index]) || 1;
+      if (Math.abs(factor - 1) < 0.00001) return;
+      scaleComponent(animated, factor, axis, clone(animated));
+    });
+    const timelineOpacity = Number.isFinite(Number(timelineState.opacity)) ? clamp(Number(timelineState.opacity), 0, 1) : 1;
+    if (Math.abs(timelineOpacity - 1) > 0.00001) {
+      multiplyComponentOpacity(animated, timelineOpacity);
+    }
+    if (typeof timelineState.visible === "boolean") animated.visible = timelineState.visible;
+    if (timelineState.rectangularSplit) animated.rectangularSplit = clone(timelineState.rectangularSplit);
+    else delete animated.rectangularSplit;
+    return animated;
+  }
+
   function animateComponentSelf(component, time) {
-    if (!state.previewAnimations || component.animationEnabled === false || !component.animationType || component.animationType === "none") return clone(component);
+    const timeline = component.animationTimeline;
+    if (timelineEngine && timeline && Array.isArray(timeline.clips)) {
+      if (timeline.enabled === false || !timeline.clips.some((clip) => clip.enabled !== false)) return clone(component);
+      const animated = clone(component);
+      const timelineState = evaluateTimelineOnSharedClock(timeline, time);
+      return applyTimelineAnimation(animated, component, timelineState);
+    }
+    if (component.animationEnabled === false || !component.animationType || component.animationType === "none") return clone(component);
     const animated = clone(component);
     const { cycle, wrapped, sine, pingPong } = componentAnimationWave(component, time);
     const amount = Number(component.animationAmount) || 0;
@@ -1596,6 +3083,8 @@
         : sine * amount / 2;
     if (["oscillate", "loop"].includes(component.animationType)) {
       translateComponent(animated, axis === "x" || axis === "all" ? offset : 0, axis === "y" || axis === "all" ? offset : 0, axis === "z" || axis === "all" ? offset : 0);
+    } else if (component.animationType === "fourStep") {
+      translateComponent(animated, ...fourStepPathOffset(component, time));
     } else if (component.animationType === "bob") translateComponent(animated, 0, offset, 0);
     else if (component.animationType === "spin") {
       const spin = cycle * (amount || 360);
@@ -1636,16 +3125,17 @@
         safeRatio(animatedBounds.maxY - animatedBounds.minY, baseBounds.maxY - baseBounds.minY),
         safeRatio(animatedBounds.maxZ - animatedBounds.minZ, baseBounds.maxZ - baseBounds.minZ),
       ],
-      alpha: Math.max(0.01, Number(animated.opacity ?? 1) / Math.max(0.01, Number(component.opacity ?? 1))),
+      alpha: Math.max(0, Number(animated.opacity ?? 1) / Math.max(0.01, Number(component.opacity ?? 1))),
+      visible: (animated.visible !== false) !== (component.visible !== false) ? animated.visible !== false : null,
     };
   }
 
   function multiplyComponentOpacity(component, factor) {
-    component.opacity = clamp((Number(component.opacity ?? 1) || 1) * factor, 0.01, 1);
-    if (component.type === "group") (component.children || []).forEach((child) => multiplyComponentOpacity(child, factor));
+    const baseOpacity = Number.isFinite(Number(component.opacity)) ? Number(component.opacity) : 1;
+    component.opacity = clamp(baseOpacity * factor, 0, 1);
   }
 
-  function applyInheritedComponentTransform(component, transform, pivot) {
+  function applyInheritedComponentTransform(component, transform, pivot, includeRenderEffects = false) {
     let rendered = clone(component);
     ["x", "y", "z"].forEach((axis, index) => {
       const factor = Number(transform.scale[index]) || 1;
@@ -1653,14 +3143,20 @@
       const original = clone(rendered);
       scaleSelectionTogether([rendered], [original], pivot, factor, axis);
     });
-    ["x", "y", "z"].forEach((axis, index) => {
-      const degrees = Number(transform.rotation[index]) || 0;
-      if (Math.abs(degrees) < 0.0001) return;
-      const original = clone(rendered);
-      rotateSelectionTogether([rendered], [original], pivot, degrees, axis);
+    const inheritedRotationOperations = Array.isArray(transform.rotationOperations) && transform.rotationOperations.length
+      ? transform.rotationOperations
+      : [{ rotation: transform.rotation || [0, 0, 0], pivotOffset: [0, 0, 0] }];
+    inheritedRotationOperations.forEach((operation) => {
+      const operationPivot = pivot.map((value, index) => value + (Number(operation.pivotOffset?.[index]) || 0));
+      ["x", "y", "z"].forEach((axis, index) => {
+        rotateAnimatedComponentAroundPoint(rendered, operationPivot, Number(operation.rotation?.[index]) || 0, axis);
+      });
     });
     translateComponent(rendered, ...transform.translation);
-    if (Math.abs((Number(transform.alpha) || 1) - 1) > 0.0001) multiplyComponentOpacity(rendered, Number(transform.alpha) || 1);
+    const inheritedAlpha = Number.isFinite(Number(transform.alpha)) ? clamp(Number(transform.alpha), 0, 1) : 1;
+    if (Math.abs(inheritedAlpha - 1) > 0.0001) multiplyComponentOpacity(rendered, inheritedAlpha);
+    if (typeof transform.visible === "boolean") rendered.visible = transform.visible;
+    if (includeRenderEffects && transform.rectangularSplit) rendered.rectangularSplit = clone(transform.rectangularSplit);
     return rendered;
   }
 
@@ -1669,44 +3165,142 @@
 
     const children = component.children || [];
     if (!children.length) return animateComponentSelf(component, time);
+    if (component.embeddedMachine === true) {
+      // A machine embedded inside another machine is a structural container, not
+      // an attachment group. Preserve every child's own animation on the shared
+      // machine clock, then apply any animation authored on the embedded machine
+      // wrapper to the complete inserted assembly.
+      const animatedMachine = clone(component);
+      animatedMachine.children = children.map((child) => (
+        child.playOwnAnimation === false ? clone(child) : animatedComponent(child, time)
+      ));
+      return animateComponentSelf(animatedMachine, time);
+    }
     const driver = children.find((child) => child.id === component.motionDriverId)
+      || children.find((child) => child.animationTimeline?.enabled !== false && child.animationTimeline?.clips?.some((clip) => clip.enabled !== false))
       || children.find((child) => child.animationEnabled !== false && child.animationType && child.animationType !== "none")
       || children[0];
-    const driverAnimated = animateComponentSelf(driver, time);
-    const inheritedTransform = componentAnimationDelta(driver, driverAnimated);
+    const inheritedTransform = componentAnimationTransform(driver, time);
     const driverPivot = componentCenter(driver);
 
     const animatedGroup = clone(component);
     animatedGroup.motionDriverId = driver.id;
     animatedGroup.children = children.map((child) => {
-      // The driver animation moves the whole merged assembly once. Other
-      // children first play their own animation, then inherit the driver
-      // transform so they stay attached in the driver's moving coordinate space.
-      const ownAnimated = child.id === driver.id ? clone(child) : animatedComponent(child, time);
-      return applyInheritedComponentTransform(ownAnimated, inheritedTransform, driverPivot);
+      // Parent motion is inherited exactly once. Each child then has an explicit
+      // local animation layer that can be enabled or disabled independently.
+      const playsLocalAnimation = child.id !== driver.id && child.playOwnAnimation !== false;
+      const ownAnimated = playsLocalAnimation ? animatedComponent(child, time) : clone(child);
+      return applyInheritedComponentTransform(ownAnimated, inheritedTransform, driverPivot, child.id === driver.id);
     });
 
     return animateComponentSelf(animatedGroup, time);
   }
 
-  function buildComponentPrimitives(component, order) {
+  // Rectangular splitting is resolved at render time so saved component geometry
+  // remains unchanged and normal editing resumes as soon as the clip is inactive.
+  function rectangularSplitRenderComponents(component) {
+    const effect = component?.rectangularSplit;
+    if (!effect || Number(effect.progress) <= 0.0001 || !timelineEngine?.rectangularSplitCells) return [component];
+
+    if (component.type === "group" && !(component.children || []).length) return [component];
+    const split = timelineEngine.rectangularSplitCells(effect);
+    const boxLike = ["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type);
+    const bounds = componentWorldBounds(component);
+    const center = boxLike
+      ? componentCenter(component)
+      : [
+          (bounds.minX + bounds.maxX) / 2,
+          (bounds.minY + bounds.maxY) / 2,
+          (bounds.minZ + bounds.maxZ) / 2,
+        ];
+    const dimensions = boxLike
+      ? [Math.max(0.02, Number(component.w) || 0.02), Math.max(0.02, Number(component.h) || 0.02), Math.max(0.02, Number(component.d) || 0.02)]
+      : [Math.max(0.02, bounds.maxX - bounds.minX), Math.max(0.02, bounds.maxY - bounds.minY), Math.max(0.02, bounds.maxZ - bounds.minZ)];
+    const baseRotation = boxLike ? componentRotation(component) : [0, 0, 0];
+    const fragmentSize = [
+      dimensions[0] / split.columns,
+      dimensions[1] / split.rows,
+      dimensions[2] / split.layers,
+    ];
+    const progress = split.progress;
+
+    return split.cells.map((cell) => {
+      const localCenterOffset = [
+        cell.center[0] * dimensions[0],
+        cell.center[1] * dimensions[1],
+        cell.center[2] * dimensions[2],
+      ];
+      const localSpread = cell.direction.map((value) => value * split.distance * progress);
+      const worldCenterOffset = rotateVector3(localCenterOffset, ...baseRotation);
+      const worldSpread = rotateVector3(localSpread, ...baseRotation);
+      const fragmentCenter = [
+        center[0] + worldCenterOffset[0] + worldSpread[0],
+        center[1] + worldCenterOffset[1] + worldSpread[1],
+        center[2] + worldCenterOffset[2] + worldSpread[2],
+      ];
+      const rotation = baseRotation.map((value, axis) => value + cell.rotation[axis] * progress);
+      return {
+        id: `${component.id || "component"}-rectangle-${cell.index}`,
+        name: `${component.name || "Part"} rectangle ${cell.index + 1}`,
+        type: "box",
+        x: fragmentCenter[0] - fragmentSize[0] / 2,
+        y: fragmentCenter[1] - fragmentSize[1] / 2,
+        z: fragmentCenter[2] - fragmentSize[2] / 2,
+        w: fragmentSize[0],
+        h: fragmentSize[1],
+        d: fragmentSize[2],
+        color: component.color || "#68777a",
+        opacity: clamp(Number(component.opacity ?? 1), 0, 1),
+        visible: component.visible !== false,
+        rotationX: rotation[0],
+        rotationY: rotation[1],
+        rotationZ: rotation[2],
+        rotation: rotation[1],
+      };
+    });
+  }
+
+  function buildComponentPrimitives(component, order, hitContext = null) {
+    const hitRoot = hitContext?.root || component;
+    const inheritedPathIds = Array.isArray(hitContext?.pathIds) ? hitContext.pathIds : [];
+    const appendComponentId = hitContext?.appendComponentId !== false;
+    const hitPathIds = appendComponentId && component?.id
+      ? [...inheritedPathIds, component.id]
+      : inheritedPathIds;
     if (component.visible === false) return [];
-    if (component.type === "group") {
-      const groupOpacity = clamp(Number(component.opacity ?? 1), 0.05, 1);
-      return (component.children || []).flatMap((child, childIndex) => {
-        const renderedChild = { ...child, opacity: clamp(Number(child.opacity ?? 1), 0.05, 1) * groupOpacity };
-        return buildComponentPrimitives(renderedChild, order + childIndex / 1000);
-      }).map((primitive) => ({ ...primitive, component }));
+    if (component.rectangularSplit && Number(component.rectangularSplit.progress) > 0.0001) {
+      return rectangularSplitRenderComponents(component).flatMap((fragment, fragmentIndex) => (
+        buildComponentPrimitives(fragment, order + fragmentIndex / 1000, {
+          root: hitRoot,
+          pathIds: hitPathIds,
+          appendComponentId: false,
+        })
+      ));
     }
-    if (["box", "glassPanel"].includes(component.type)) return buildBoxPrimitives(component, order);
-    if (component.type === "cylinder") return buildVerticalCylinderPrimitives(component, order);
-    if (component.type === "sphere") return buildSpherePrimitives(component, order);
-    if (component.type === "cone") return buildConePrimitives(component, order);
-    if (component.type === "wedge") return buildWedgePrimitives(component, order);
-    if (component.type === "beam") return buildBeamPrimitives(component, order);
-    if (component.type === "rollerBed") return buildRollerPrimitives(component, order);
-    if (component.type === "wheel") return buildWheelPrimitives(component, order);
-    return [];
+    if (component.type === "group") {
+      const groupOpacity = clamp(Number(component.opacity ?? 1), 0, 1);
+      return (component.children || []).flatMap((child, childIndex) => {
+        const renderedChild = { ...child, opacity: clamp(Number(child.opacity ?? 1), 0, 1) * groupOpacity };
+        return buildComponentPrimitives(renderedChild, order + childIndex / 1000, {
+          root: hitRoot,
+          pathIds: hitPathIds,
+        });
+      });
+    }
+    let primitives = [];
+    if (["box", "glassPanel"].includes(component.type)) primitives = buildBoxPrimitives(component, order);
+    else if (component.type === "cylinder") primitives = buildVerticalCylinderPrimitives(component, order);
+    else if (component.type === "sphere") primitives = buildSpherePrimitives(component, order);
+    else if (component.type === "cone") primitives = buildConePrimitives(component, order);
+    else if (component.type === "wedge") primitives = buildWedgePrimitives(component, order);
+    else if (component.type === "beam") primitives = buildBeamPrimitives(component, order);
+    else if (component.type === "rollerBed") primitives = buildRollerPrimitives(component, order);
+    else if (component.type === "wheel") primitives = buildWheelPrimitives(component, order);
+    return primitives.map((primitive) => ({
+      ...primitive,
+      component: hitRoot,
+      hitPathIds,
+    }));
   }
 
   function drawPrimitive(primitive) {
@@ -1738,6 +3332,63 @@
     ctx.restore();
   }
 
+
+  function convexHullXZ(points) {
+    const unique = [...new Map(points.map((point) => [`${point[0].toFixed(5)}:${point[2].toFixed(5)}`, point])).values()]
+      .sort((first, second) => first[0] - second[0] || first[2] - second[2]);
+    if (unique.length <= 3) return unique;
+    const cross = (origin, first, second) => (first[0] - origin[0]) * (second[2] - origin[2]) - (first[2] - origin[2]) * (second[0] - origin[0]);
+    const lower = [];
+    unique.forEach((point) => {
+      while (lower.length >= 2 && cross(lower.at(-2), lower.at(-1), point) <= 0) lower.pop();
+      lower.push(point);
+    });
+    const upper = [];
+    [...unique].reverse().forEach((point) => {
+      while (upper.length >= 2 && cross(upper.at(-2), upper.at(-1), point) <= 0) upper.pop();
+      upper.push(point);
+    });
+    return lower.slice(0, -1).concat(upper.slice(0, -1));
+  }
+
+  function drawDesignerShadow(component) {
+    if (!component || component.visible === false) return;
+    if (component.rectangularSplit && Number(component.rectangularSplit.progress) > 0.0001) {
+      rectangularSplitRenderComponents(component).slice(0, 80).forEach(drawDesignerShadow);
+      return;
+    }
+    const points = componentWorldPoints(component);
+    if (points.length < 3) return;
+    const minimumY = Math.min(...points.map((point) => point[1]));
+    const maximumY = Math.max(...points.map((point) => point[1]));
+    const height = Math.max(0.1, maximumY - Math.min(0, minimumY));
+    const base = convexHullXZ(points.map((point) => [point[0], 0.025, point[2]]));
+    if (base.length < 3) return;
+    const castDistance = clamp(height * 0.2, 0.22, 4.5);
+    const shifted = base.map((point) => [point[0] - castDistance * 0.62, 0.025, point[2] + castDistance * 0.78]);
+    const hull = convexHullXZ([...base, ...shifted]);
+    const centerX = hull.reduce((sum, point) => sum + point[0], 0) / hull.length;
+    const centerZ = hull.reduce((sum, point) => sum + point[2], 0) / hull.length;
+    const layerCount = renderPerformance.shadowLayerCount();
+    if (layerCount <= 0) return;
+    const layers = layerCount >= 2
+      ? [{ expansion: 0.55, alpha: 0.04 }, { expansion: 0, alpha: 0.08 }]
+      : [{ expansion: 0.15, alpha: 0.07 }];
+    layers.forEach((layer, index) => {
+      const expanded = hull.map((point) => {
+        const dx = point[0] - centerX;
+        const dz = point[2] - centerZ;
+        const length = Math.max(0.001, Math.hypot(dx, dz));
+        return [point[0] + dx / length * layer.expansion, 0.025 + index * 0.002, point[2] + dz / length * layer.expansion];
+      });
+      const shadowOpacity = Number.isFinite(Number(component.opacity)) ? clamp(Number(component.opacity), 0, 1) : 1;
+      polygon(expanded, "#162126", null, 0, layer.alpha * shadowOpacity, {
+        transparent: true,
+        depthBias: -0.0002 - index * 0.00003,
+      });
+    });
+  }
+
   function drawGrid() {
     const design = currentDesign();
     if (!design) return;
@@ -1747,8 +3398,13 @@
     const minZ = -padding;
     const maxZ = design.base.d + padding;
     polygon([[minX, 0, minZ], [maxX, 0, minZ], [maxX, 0, maxZ], [minX, 0, maxZ]], "#dce2de", "#7f8b87", 1, 1);
-    const step = Math.max(0.5, state.snapStep);
-    const majorEvery = Math.max(1, Math.round(5 / step));
+    const span = Math.max(maxX - minX, maxZ - minZ);
+    const minimumStep = Math.max(0.5, span / 120);
+    const magnitude = 10 ** Math.floor(Math.log10(minimumStep));
+    const normalized = minimumStep / magnitude;
+    const niceStep = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
+    const step = Math.max(0.5, state.snapStep, niceStep);
+    const majorEvery = Math.max(1, Math.round(Math.max(5, step * 5) / step));
     let lineIndex = 0;
     for (let x = Math.ceil(minX / step) * step; x <= maxX; x += step) {
       const major = lineIndex % majorEvery === 0;
@@ -1764,6 +3420,24 @@
     line3d([0, 0.04, 0], [design.base.w + padding * 0.25, 0.04, 0], AXIS_COLORS.x, 2, 1);
     line3d([0, 0.04, 0], [0, 0.04, design.base.d + padding * 0.25], AXIS_COLORS.z, 2, 1);
     line3d([0, 0, 0], [0, design.base.h + padding * 0.3, 0], AXIS_COLORS.y, 2, 1);
+  }
+
+  function drawDesignEnvelope() {
+    const design = currentDesign();
+    if (!design || !state.showDesignEnvelope) return;
+    const w = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.w) || MIN_DESIGN_ENVELOPE);
+    const d = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.d) || MIN_DESIGN_ENVELOPE);
+    const h = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.h) || MIN_DESIGN_ENVELOPE);
+    const corners = [
+      [0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d],
+      [0, h, 0], [w, h, 0], [w, h, d], [0, h, d],
+    ];
+    const edges = [
+      [0,1],[1,2],[2,3],[3,0],
+      [4,5],[5,6],[6,7],[7,4],
+      [0,4],[1,5],[2,6],[3,7],
+    ];
+    edges.forEach(([start, end]) => line3d(corners[start], corners[end], "#187d74", 1.5, 0.72));
   }
 
   function componentWorldPoints(component) {
@@ -1839,7 +3513,15 @@
     const point = canvasPoint(event);
     for (let index = state.hitPrimitives.length - 1; index >= 0; index -= 1) {
       const primitive = state.hitPrimitives[index];
-      if (primitive.component?.visible !== false && primitiveHit(primitive, point)) return primitive.component;
+      if (primitive.component?.visible === false || !primitiveHit(primitive, point)) continue;
+      const root = currentDesign()?.components.find((component) => component.id === primitive.component?.id) || null;
+      if (!root) continue;
+      const timelineTarget = resolveTimelineTargetForHit(root, primitive.hitPathIds);
+      return {
+        component: root,
+        timelineTargetId: timelineTarget.component?.id || root.id,
+        timelineTargetPathIds: timelineTarget.pathIds,
+      };
     }
     return null;
   }
@@ -2037,7 +3719,7 @@
 
   function updateCanvasSize() {
     const rect = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = renderPerformance.pixelRatio(window.devicePixelRatio || 1);
     const width = Math.max(1, Math.round(rect.width * ratio));
     const height = Math.max(1, Math.round(rect.height * ratio));
     if (canvas.width !== width || canvas.height !== height) {
@@ -2046,16 +3728,34 @@
     }
   }
 
+  function componentHasAnimation(component) {
+    if (!component) return false;
+    if (component.animationTimeline && Array.isArray(component.animationTimeline.clips)) {
+      return component.animationTimeline.enabled !== false && component.animationTimeline.clips.some((clip) => clip.enabled !== false)
+        || (component.type === "group" && (component.children || []).some(componentHasAnimation));
+    }
+    if (component.visible === false) return component.type === "group" && (component.children || []).some(componentHasAnimation);
+    if (component.animationEnabled === true && component.animationType && component.animationType !== "none") return true;
+    return component.type === "group" && (component.children || []).some(componentHasAnimation);
+  }
+
   function draw(time) {
+    requestAnimationFrame(draw);
+    const design = currentDesign();
+    const sourceComponents = design?.components || [];
+    const animating = state.previewAnimations && sourceComponents.some(componentHasAnimation);
+    if (!renderPerformance.shouldRender(time, { interacting: state.dragging, animating })) return;
+    const frameStartedAt = performance.now();
     state.lastFrameTime = time;
+    state.lastRenderedAt = time;
     updateCanvasSize();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     depthRenderer.beginFrame(canvas.width, canvas.height, project);
     drawGrid();
 
-    const design = currentDesign();
-    const sourceComponents = design?.components || [];
     const components = sourceComponents.map((component) => animatedComponent(component, time));
+    const shadowLimit = renderPerformance.maxShadowParts();
+    if (shadowLimit > 0) components.slice(0, shadowLimit).forEach(drawDesignerShadow);
     state.renderPrimitives = components.flatMap((component, index) => buildComponentPrimitives(component, index));
     state.renderPrimitives.sort((first, second) => {
       const depthDifference = first.depth - second.depth;
@@ -2072,6 +3772,7 @@
       order: index,
     })).sort((first, second) => first.depth - second.depth || first.order - second.order);
     state.renderPrimitives.forEach(drawPrimitive);
+    drawDesignEnvelope();
     depthRenderer.render();
     const selectedIds = state.selectAllParts
       ? new Set(state.drawnComponents.map((entry) => entry.component?.id))
@@ -2081,7 +3782,8 @@
       .map((entry) => entry.renderedComponent);
     drawSelectionOverlay(selectedRendered);
     drawGizmo();
-    requestAnimationFrame(draw);
+    updateTimelinePlayhead(time);
+    renderPerformance.recordFrame(performance.now() - frameStartedAt);
   }
 
   function fitView() {
@@ -2149,11 +3851,17 @@
 
   function scaleComponent(component, factor, axis = "center", original = component) {
     factor = clamp(factor, 0.05, 20);
+    const originalScaleX = Number(original.scaleXPercent) || 100;
+    const originalScaleY = Number(original.scaleYPercent) || 100;
+    const originalScaleZ = Number(original.scaleZPercent) || 100;
     if (component.type === "group") {
       Object.assign(component, clone(original));
       const children = component.children || [];
       const originals = original.children || [];
       scaleSelectionTogether(children, originals, selectionCenter(originals), factor, axis);
+      component.scaleXPercent = axis === "center" || axis === "x" ? originalScaleX * factor : originalScaleX;
+      component.scaleYPercent = axis === "center" || axis === "y" ? originalScaleY * factor : originalScaleY;
+      component.scaleZPercent = axis === "center" || axis === "z" ? originalScaleZ * factor : originalScaleZ;
       return;
     }
     const uniform = axis === "center";
@@ -2200,6 +3908,15 @@
       component.h = Math.max(0.1, original.h * scaleY);
       component.d = Math.max(0.05, original.d * scaleZ);
       component.size = Math.max(component.w, component.h);
+    }
+    if (axis === "center") {
+      component.scaleXPercent = originalScaleX * factor;
+      component.scaleYPercent = originalScaleY * factor;
+      component.scaleZPercent = originalScaleZ * factor;
+    } else {
+      component.scaleXPercent = axis === "x" ? originalScaleX * factor : originalScaleX;
+      component.scaleYPercent = axis === "y" ? originalScaleY * factor : originalScaleY;
+      component.scaleZPercent = axis === "z" ? originalScaleZ * factor : originalScaleZ;
     }
   }
 
@@ -2358,14 +4075,28 @@
     state.drag = null;
   }
 
+  // Middle-button dragging pans the 3D scene. Cancel the browser's native
+  // autoscroll gesture so panning cannot scroll the surrounding page when the
+  // viewport is not fullscreen. `mousedown` is handled explicitly because
+  // desktop browsers may start autoscroll before the pointer event completes.
+  canvas.addEventListener("mousedown", (event) => {
+    if (event.button === 1) event.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener("auxclick", (event) => {
+    if (event.button === 1) event.preventDefault();
+  });
+
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.button === 1) event.preventDefault();
     if (event.button > 2) return;
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
     state.dragging = true;
+    renderPerformance.noteInteraction(260);
 
     const orbitRequested = event.button === 2 || event.altKey;
-    const initialHit = event.button === 0 ? componentAt(event) : null;
+    const initialHitResult = event.button === 0 ? componentAt(event) : null;
+    const initialHit = initialHitResult?.component || null;
     const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
     const panRequested = event.button === 1 || state.tool === "pan" || (event.shiftKey && !initialHit);
 
@@ -2381,13 +4112,34 @@
       if (overlayHandle && selectionComponents().length) {
         beginTransform(event, overlayHandle);
       } else {
-        const hit = initialHit || componentAt(event);
-        if (hit && (additiveSelection || !state.selectedComponentIds.has(hit.id))) selectComponent(hit.id, true, additiveSelection);
-        const selected = selectedComponent();
+        const hitResult = initialHitResult || componentAt(event);
+        const hit = hitResult?.component || null;
+        if (hit && (additiveSelection || !state.selectedComponentIds.has(hit.id))) {
+          selectComponent(
+            hit.id,
+            true,
+            additiveSelection,
+            hitResult.timelineTargetId,
+            hitResult.timelineTargetPathIds,
+          );
+        } else if (hit && !additiveSelection && state.tool === "select" && state.timelineTargetId !== hitResult.timelineTargetId) {
+          state.timelineTargetId = hitResult.timelineTargetId || hit.id;
+          state.timelineTargetPathIds = hitResult.timelineTargetPathIds || [hit.id];
+          state.timelineClipId = null;
+          updateInterface();
+        } else if (hit && !additiveSelection && state.tool === "select") {
+          const currentTargetPath = JSON.stringify(state.timelineTargetPathIds || []);
+          const requestedTargetPath = JSON.stringify(hitResult.timelineTargetPathIds || [hit.id]);
+          if (currentTargetPath !== requestedTargetPath) {
+            state.timelineTargetPathIds = hitResult.timelineTargetPathIds || [hit.id];
+            state.timelineClipId = null;
+            updateInterface();
+          }
+        }
         if (selectionComponents().length && ["move", "rotate", "scale"].includes(state.tool) && hit && state.selectedComponentIds.has(hit.id)) {
           beginTransform(event, { axis: state.tool === "rotate" ? "y" : "center", tangent: [1, 0] });
         } else {
-        state.drag = { kind: "select", startX: event.clientX, startY: event.clientY };
+          state.drag = { kind: "select", startX: event.clientX, startY: event.clientY };
           if (!hit && state.tool === "select" && !additiveSelection) selectComponent(null);
         }
       }
@@ -2396,6 +4148,7 @@
   });
 
   canvas.addEventListener("pointermove", (event) => {
+    renderPerformance.noteInteraction(state.dragging ? 140 : 60);
     if (!state.dragging || !state.drag) {
       const hover = ["move", "rotate", "scale"].includes(state.tool) ? gizmoHit(event) : null;
       state.hoverHandle = hover?.axis || null;
@@ -2408,7 +4161,7 @@
     if (state.drag.kind === "orbit") {
       // Natural horizontal orbit: dragging right rotates the model toward the right.
       state.yaw += deltaX * 0.006;
-      state.pitch = clamp(state.pitch - deltaY * 0.004, 0.08, 1.5);
+      state.pitch = clamp(state.pitch - deltaY * 0.004, 0.015, 1.53);
     } else if (state.drag.kind === "pan") {
       panCamera(deltaX, deltaY);
     } else if (state.drag.kind === "transform") {
@@ -2423,12 +4176,20 @@
   canvas.addEventListener("contextmenu", (event) => event.preventDefault());
   canvas.addEventListener("wheel", (event) => {
     event.preventDefault();
-    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 0.9 : 1.1), 0.2, 5);
+    renderPerformance.noteInteraction(260);
+    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 0.9 : 1.1), 0.1, 10);
   }, { passive: false });
   canvas.addEventListener("dblclick", (event) => {
-    const hit = componentAt(event);
+    const hitResult = componentAt(event);
+    const hit = hitResult?.component || null;
     if (hit) {
-      selectComponent(hit.id, true);
+      selectComponent(
+        hit.id,
+        true,
+        false,
+        hitResult.timelineTargetId,
+        hitResult.timelineTargetPathIds,
+      );
       focusSelected();
     } else fitView();
   });
@@ -2443,11 +4204,404 @@
     button.addEventListener("click", () => setTool(button.dataset.designMode));
   });
 
+  document.querySelectorAll("[data-part-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setPartTab(button.dataset.partTab);
+      if (button.dataset.partTab === "animation") setTimelineOpen(true);
+    });
+  });
+
+  document.getElementById("toggle-animation-timeline")?.addEventListener("click", () => {
+    setTimelineOpen(!state.timelineOpen, { focusInspector: true });
+  });
+  document.getElementById("open-animation-timeline-panel")?.addEventListener("click", () => {
+    setTimelineOpen(true, { focusInspector: true });
+  });
+  document.getElementById("close-animation-timeline")?.addEventListener("click", () => {
+    setTimelineOpen(false);
+  });
+
+  function focusTimelineClip(clipId) {
+    if (!clipId) return;
+    state.timelineClipId = clipId;
+    setTimelineOpen(true);
+    setInspectorTab("object");
+    setPartTab("animation");
+    updateAnimationTimelineUI();
+    const inspector = document.querySelector(".studio-inspector-panel");
+    inspector?.scrollTo?.({ top: 0, behavior: "smooth" });
+  }
+
+  document.getElementById("timeline-target-picker")?.addEventListener("change", (event) => {
+    const component = selectedComponent();
+    const targets = timelineTargetOptions(component);
+    const selectedTarget = targets.find((item) => item.key === event.target.value) || targets[0] || null;
+    state.timelineTargetId = selectedTarget?.id || component?.id || null;
+    state.timelineTargetPathIds = selectedTarget?.pathIds || (component?.id ? [component.id] : []);
+    const timeline = ensureTimeline(timelineTargetComponent());
+    state.timelineClipId = timeline?.clips?.[0]?.id || null;
+    updateAnimationTimelineUI();
+  });
+
+  ["timeline-enabled", "timeline-loop", "timeline-playback-rate"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", (event) => {
+      const target = timelineTargetComponent();
+      const timeline = ensureTimeline(target);
+      if (!timeline) return;
+      pushHistory();
+      if (id === "timeline-enabled") timeline.enabled = event.target.checked;
+      else if (id === "timeline-loop") sharedDesignTimelineSettings().loop = event.target.checked;
+      else if (id === "timeline-playback-rate") sharedDesignTimelineSettings().playbackRate = clamp(Number(event.target.value) || 0, 0, 20);
+      if (target !== selectedComponent()) target.playOwnAnimation = true;
+      commit(id === "timeline-enabled"
+        ? "Animation target settings updated."
+        : "Shared machine timeline settings updated.");
+    });
+  });
+
+  function addTimelineClip(type, requestedStart = null, { append = false } = {}) {
+    const target = timelineTargetComponent();
+    const timeline = ensureTimeline(target);
+    if (!timeline || !timelineEngine) {
+      showToast("Select one machine part before adding an animation.");
+      return null;
+    }
+    const definition = timelineEngine.TYPES.find((item) => item.value === type) || timelineEngine.TYPES[0];
+    if (!definition) return null;
+    const automaticStart = append
+      ? (timelineWorkspaceEngine?.nextClipStart?.(timeline.clips) ?? orderedTimelineClips(timeline).reduce((latest, item) => Math.max(latest, item.start + item.duration), 0))
+      : timelineCurrentSeconds();
+    const start = Math.max(0, Number.isFinite(Number(requestedStart)) ? Number(requestedStart) : automaticStart);
+    pushHistory();
+    const clip = timelineEngine.createClip(definition.value, start);
+    const typeCount = timeline.clips.filter((item) => item.type === definition.value).length + 1;
+    clip.name = `${definition.label} ${typeCount}`;
+    timeline.clips.push(clip);
+    timeline.clips = orderedTimelineClips(timeline);
+    if (target !== selectedComponent()) target.playOwnAnimation = true;
+    state.timelineClipId = clip.id;
+    state.timelineOpen = true;
+    state.inspectorTab = "object";
+    state.partTab = "animation";
+    commit(`${clip.name} added to ${target.name}.`);
+    setTimelineOpen(true, { focusInspector: true });
+    return clip;
+  }
+
+  const timelinePalette = document.getElementById("timeline-type-palette");
+  timelinePalette?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-animation-type]");
+    if (!button || button.disabled) return;
+    addTimelineClip(button.dataset.animationType, null, { append: true });
+  });
+  timelinePalette?.addEventListener("dragstart", (event) => {
+    const button = event.target.closest("[data-animation-type]");
+    if (!button || button.disabled || !event.dataTransfer) return;
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/x-machine-animation-type", button.dataset.animationType || "move");
+    event.dataTransfer.setData("text/plain", button.dataset.animationType || "move");
+    button.classList.add("dragging");
+  });
+  timelinePalette?.addEventListener("dragend", (event) => {
+    event.target.closest("[data-animation-type]")?.classList.remove("dragging");
+    document.getElementById("timeline-ruler-tracks")?.classList.remove("drop-active");
+  });
+
+  function selectTimelineClipFromEvent(event) {
+    const button = event.target.closest("[data-timeline-clip-id]");
+    if (!button) return;
+    focusTimelineClip(button.dataset.timelineClipId);
+  }
+
+  const timelineTracks = document.getElementById("timeline-ruler-tracks");
+  timelineTracks?.addEventListener("click", selectTimelineClipFromEvent);
+  timelineTracks?.addEventListener("dragover", (event) => {
+    const types = Array.from(event.dataTransfer?.types || []);
+    if (!types.includes("application/x-machine-animation-type") && !types.includes("text/plain")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    timelineTracks.classList.add("drop-active");
+  });
+  timelineTracks?.addEventListener("dragleave", (event) => {
+    if (!timelineTracks.contains(event.relatedTarget)) timelineTracks.classList.remove("drop-active");
+  });
+  timelineTracks?.addEventListener("drop", (event) => {
+    event.preventDefault();
+    timelineTracks.classList.remove("drop-active");
+    const type = event.dataTransfer?.getData("application/x-machine-animation-type") || event.dataTransfer?.getData("text/plain") || "move";
+    const target = timelineTargetComponent();
+    const timeline = ensureTimeline(target);
+    if (!timeline) return;
+    const duration = timelineEngine.timelineDuration(timeline);
+    const lane = event.target.closest(".timeline-track-lane") || timelineTracks;
+    const rectangle = lane.getBoundingClientRect();
+    const dropTime = timelineWorkspaceEngine?.timeFromClientX
+      ? timelineWorkspaceEngine.timeFromClientX(event.clientX, rectangle, duration)
+      : clamp((event.clientX - rectangle.left) / Math.max(1, rectangle.width), 0, 1) * duration;
+    const snappedTime = timelineWorkspaceEngine?.snap
+      ? timelineWorkspaceEngine.snap(dropTime, timelineSnapStep())
+      : dropTime;
+    addTimelineClip(type, snappedTime);
+  });
+
+  timelineTracks?.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    const track = event.target.closest("[data-timeline-clip-id]");
+    if (!track) return;
+    const resizeHandle = event.target.closest("[data-timeline-resize]");
+    const dragBody = event.target.closest("[data-timeline-drag-body]");
+    if (!resizeHandle && !dragBody) {
+      focusTimelineClip(track.dataset.timelineClipId);
+      return;
+    }
+    const target = timelineTargetComponent();
+    const timeline = ensureTimeline(target);
+    const clip = timeline?.clips?.find((item) => item.id === track.dataset.timelineClipId);
+    if (!clip) return;
+    event.preventDefault();
+    event.stopPropagation();
+    focusTimelineClip(clip.id);
+    const mode = resizeHandle?.dataset.timelineResize || "move";
+    state.timelineDrag = {
+      clipId: clip.id,
+      mode,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      originalStart: clip.start,
+      originalDuration: clip.duration,
+      originalClips: timeline.clips.map((item) => ({
+        id: item.id,
+        start: item.start,
+        duration: item.duration,
+      })),
+      pixelsPerSecond: Math.max(1, Number(timelineTracks.dataset.pixelsPerSecond) || timelineWorkspaceEngine?.PIXELS_PER_SECOND || 44),
+      before: snapshot(),
+      changed: false,
+    };
+    try { timelineTracks.setPointerCapture(event.pointerId); } catch {}
+    document.body.classList.add("timeline-dragging");
+    document.body.dataset.timelineDragMode = mode;
+  });
+
+  function renderTimelineDragFrame() {
+    state.timelineDragFrame = 0;
+    updateAnimationTimelineUI();
+    renderPerformance.noteInteraction(120);
+    renderPerformance.invalidate?.("timeline-drag");
+  }
+
+  window.addEventListener("pointermove", (event) => {
+    const drag = state.timelineDrag;
+    if (!drag) return;
+    const timeline = ensureTimeline(timelineTargetComponent());
+    const clip = timeline?.clips?.find((item) => item.id === drag.clipId);
+    if (!timeline || !clip) return;
+    const deltaPixels = event.clientX - drag.startX;
+    if (!drag.changed && Math.abs(deltaPixels) < 2) return;
+    event.preventDefault();
+    if (!drag.changed) {
+      pushHistory(drag.before);
+      drag.changed = true;
+    }
+    const deltaSeconds = timelineWorkspaceEngine?.secondsFromPixelDelta
+      ? timelineWorkspaceEngine.secondsFromPixelDelta(deltaPixels, drag.pixelsPerSecond)
+      : deltaPixels / drag.pixelsPerSecond;
+    const scrollViewport = document.getElementById("timeline-scroll-viewport");
+    if (scrollViewport) {
+      const rectangle = scrollViewport.getBoundingClientRect();
+      const edgeZone = 42;
+      if (event.clientX > rectangle.right - edgeZone) scrollViewport.scrollLeft += 12;
+      else if (event.clientX < rectangle.left + edgeZone) scrollViewport.scrollLeft -= 12;
+    }
+    clip.start = drag.originalStart;
+    clip.duration = drag.originalDuration;
+    if (drag.mode === "start") {
+      const nextStart = drag.originalStart + deltaSeconds;
+      if (timelineWorkspaceEngine?.resizeClip) {
+        timelineWorkspaceEngine.resizeClip(timeline.clips, clip.id, "start", nextStart, { step: timelineSnapStep() });
+      } else {
+        const originalEnd = drag.originalStart + drag.originalDuration;
+        clip.start = clamp(nextStart, 0, originalEnd - 0.05);
+        clip.duration = originalEnd - clip.start;
+      }
+    } else if (drag.mode === "end") {
+      const nextEnd = drag.originalStart + drag.originalDuration + deltaSeconds;
+      if (timelineWorkspaceEngine?.rippleResizeClipEnd) {
+        const ripple = timelineWorkspaceEngine.rippleResizeClipEnd(timeline.clips, clip.id, nextEnd, {
+          step: timelineSnapStep(),
+          baseline: drag.originalClips,
+        });
+        drag.rippleShiftedIds = ripple?.shiftedIds || [];
+      } else if (timelineWorkspaceEngine?.resizeClip) {
+        timelineWorkspaceEngine.resizeClip(timeline.clips, clip.id, "end", nextEnd, { step: timelineSnapStep() });
+      } else clip.duration = Math.max(0.05, nextEnd - drag.originalStart);
+    } else {
+      const nextStart = drag.originalStart + deltaSeconds;
+      if (timelineWorkspaceEngine?.moveClip) {
+        timelineWorkspaceEngine.moveClip(timeline.clips, clip.id, nextStart, {
+          step: timelineSnapStep(),
+          snapToNeighbors: true,
+          neighborTolerance: Math.max(timelineSnapStep() * 2.5, 8 / drag.pixelsPerSecond),
+        });
+      } else clip.start = Math.max(0, nextStart);
+    }
+    if (!state.timelineDragFrame) state.timelineDragFrame = window.requestAnimationFrame(renderTimelineDragFrame);
+  }, { passive: false });
+
+  function finishTimelineDrag() {
+    const drag = state.timelineDrag;
+    if (!drag) return;
+    state.timelineDrag = null;
+    document.body.classList.remove("timeline-dragging");
+    delete document.body.dataset.timelineDragMode;
+    try {
+      if (drag.pointerId !== undefined && timelineTracks?.hasPointerCapture?.(drag.pointerId)) timelineTracks.releasePointerCapture(drag.pointerId);
+    } catch {}
+    if (state.timelineDragFrame) {
+      window.cancelAnimationFrame(state.timelineDragFrame);
+      state.timelineDragFrame = 0;
+    }
+    const timeline = ensureTimeline(timelineTargetComponent());
+    const clip = timeline?.clips?.find((item) => item.id === drag.clipId);
+    if (drag.changed && timeline && clip) {
+      timeline.clips = orderedTimelineClips(timeline);
+      commit(drag.mode === "move"
+        ? `${clip.name} moved to ${clip.start.toFixed(2)} seconds.`
+        : drag.mode === "end" && drag.rippleShiftedIds?.length
+          ? `${clip.name} duration changed to ${clip.duration.toFixed(2)} seconds and pushed ${drag.rippleShiftedIds.length} later clip${drag.rippleShiftedIds.length === 1 ? "" : "s"} right.`
+          : `${clip.name} duration changed to ${clip.duration.toFixed(2)} seconds.`);
+    } else updateAnimationTimelineUI();
+  }
+  window.addEventListener("pointerup", finishTimelineDrag);
+  window.addEventListener("pointercancel", finishTimelineDrag);
+
+  document.getElementById("timeline-clip-editor")?.addEventListener("change", (event) => {
+    const fieldInput = event.target.closest("[data-timeline-clip-field]");
+    const checkInput = event.target.closest("[data-timeline-clip-check]");
+    const clip = selectedTimelineClip();
+    const target = timelineTargetComponent();
+    const timeline = ensureTimeline(target);
+    if (!clip || !target || !timeline || (!fieldInput && !checkInput)) return;
+    pushHistory();
+    if (checkInput) {
+      clip[checkInput.dataset.timelineClipCheck] = checkInput.checked;
+    } else {
+      const field = fieldInput.dataset.timelineClipField;
+      const numericFields = new Set(["start", "duration", "cycleSeconds", "cyclePause", "pauseAtPositive", "pauseAtNegative", "repeatCount", "phase", "amount", "secondaryAmount", "rotationPivotX", "rotationPivotY", "rotationPivotZ", "splitColumns", "splitColumnsMin", "splitColumnsMax", "splitRows", "splitLayers", "splitSeed", "splitRotation", "step1Pause", "step2Pause", "step3Pause", "step4Pause", "blinkMinOpacity", "blinkDutyCycle"]);
+      clip[field] = numericFields.has(field) ? Number(fieldInput.value) : fieldInput.value;
+      Object.assign(clip, timelineEngine.normalizeClip(clip));
+    }
+    timeline.clips = orderedTimelineClips(timeline);
+    if (target !== selectedComponent()) target.playOwnAnimation = true;
+    commit(`${clip.name} timeline clip updated.`);
+  });
+
+  document.getElementById("timeline-flip-rotation")?.addEventListener("click", () => {
+    const target = timelineTargetComponent();
+    const timeline = ensureTimeline(target);
+    const clip = selectedTimelineClip();
+    if (!target || !timeline || clip?.type !== "rotate") return;
+    const currentAngle = Number(clip.amount) || 0;
+    if (Math.abs(currentAngle) < 0.00001) {
+      showToast("Set a non-zero rotation angle before flipping the animation.");
+      return;
+    }
+    pushHistory();
+    // Rotation direction is represented by the sign of the existing angle.
+    // Flipping that sign preserves the stable v0.12.8 animation engine and
+    // avoids introducing a second direction field into saved designs.
+    clip.amount = -currentAngle;
+    Object.assign(clip, timelineEngine.normalizeClip(clip));
+    timeline.clips = orderedTimelineClips(timeline);
+    commit(`${clip.name} flipped to ${clip.amount < 0 ? "reverse" : "forward"} rotation.`);
+  });
+
+  document.getElementById("timeline-duplicate-clip")?.addEventListener("click", () => {
+    const target = timelineTargetComponent();
+    const timeline = ensureTimeline(target);
+    const clip = selectedTimelineClip();
+    if (!timeline || !clip || !timelineEngine) return;
+    pushHistory();
+    const copy = timelineEngine.normalizeClip({
+      ...clone(clip),
+      id: uniqueId(clip.type),
+      name: `${clip.name} copy`,
+      start: clip.start + Math.max(0.1, clip.duration),
+    });
+    timeline.clips.push(copy);
+    timeline.clips = orderedTimelineClips(timeline);
+    if (target !== selectedComponent()) target.playOwnAnimation = true;
+    state.timelineClipId = copy.id;
+    commit(`${copy.name} added.`);
+    focusTimelineClip(copy.id);
+  });
+
+  function deleteSelectedTimelineClip() {
+    const target = timelineTargetComponent();
+    const timeline = ensureTimeline(target);
+    if (!target || !timeline || !timeline.clips.length) return false;
+    const clipId = state.timelineClipId || timeline.clips[0]?.id;
+    const clip = timeline.clips.find((item) => item.id === clipId);
+    if (!clip) return false;
+    pushHistory();
+    const result = timelineWorkspaceEngine?.removeClip
+      ? timelineWorkspaceEngine.removeClip(timeline.clips, clip.id)
+      : (() => {
+          const index = timeline.clips.findIndex((item) => item.id === clip.id);
+          if (index < 0) return null;
+          const [removed] = timeline.clips.splice(index, 1);
+          timeline.clips = orderedTimelineClips(timeline);
+          return {
+            removed,
+            nextClipId: timeline.clips[Math.min(index, Math.max(0, timeline.clips.length - 1))]?.id || null,
+          };
+        })();
+    if (!result?.removed) return false;
+    state.timelineClipId = result.nextClipId;
+    if (target !== selectedComponent()) target.playOwnAnimation = true;
+    commit(`${result.removed.name} removed from the timeline.`);
+    return true;
+  }
+
+  document.getElementById("timeline-delete-clip")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteSelectedTimelineClip();
+  });
+
+  document.getElementById("timeline-playhead")?.addEventListener("input", (event) => {
+    const seconds = Math.max(0, Number(event.target.value) || 0);
+    if (state.previewAnimations) state.animationPausedAt = performance.now();
+    state.previewAnimations = false;
+    state.timelineScrubSeconds = seconds;
+    updateTimelinePlayhead();
+    const topButton = document.getElementById("preview-design-animations");
+    if (topButton) {
+      topButton.classList.remove("active");
+      topButton.textContent = "Resume animations";
+    }
+    document.getElementById("timeline-play")?.classList.remove("active");
+    document.getElementById("timeline-pause")?.classList.add("active");
+    renderPerformance.invalidate?.("timeline-scrub");
+  });
+
+  document.getElementById("timeline-play")?.addEventListener("click", () => {
+    setAnimationPreview(true);
+  });
+  document.getElementById("timeline-pause")?.addEventListener("click", () => {
+    setAnimationPreview(false);
+  });
+  document.getElementById("timeline-restart")?.addEventListener("click", () => {
+    setAnimationPreview(true, true);
+    showToast("Animation preview restarted from 0 seconds.");
+  });
+
   function setView(view) {
     document.querySelectorAll("[data-design-view]").forEach((item) => item.classList.toggle("active", item.dataset.designView === view));
     if (view === "iso") { state.yaw = -0.72; state.pitch = 0.62; }
-    else if (view === "front") { state.yaw = 0; state.pitch = 0.08; }
-    else if (view === "side") { state.yaw = Math.PI / 2; state.pitch = 0.08; }
+    else if (view === "low") { state.yaw = -0.72; state.pitch = 0.025; state.zoom = Math.max(state.zoom, 1.6); }
+    else if (view === "front") { state.yaw = 0; state.pitch = 0.025; }
+    else if (view === "side") { state.yaw = Math.PI / 2; state.pitch = 0.025; }
     else if (view === "top") { state.yaw = 0; state.pitch = 1.5; }
     else fitView();
   }
@@ -2472,11 +4626,9 @@
       showToast(state.transformSpace === "local" ? "Local transforms follow the selected part." : "World transforms follow the plant axes.");
     });
   });
-  document.getElementById("preview-design-animations")?.addEventListener("click", (event) => {
-    state.previewAnimations = !state.previewAnimations;
-    event.currentTarget.classList.toggle("active", state.previewAnimations);
-    event.currentTarget.textContent = state.previewAnimations ? "Pause animations" : "Play animations";
-    showToast(state.previewAnimations ? "Animation preview started." : "Animation preview paused at each part's base position.");
+  document.getElementById("preview-design-animations")?.addEventListener("click", () => {
+    setAnimationPreview(!state.previewAnimations || Number.isFinite(state.timelineScrubSeconds));
+    showToast(state.previewAnimations ? "Animation preview resumed from the paused frame." : "Animation preview paused in place.");
   });
 
   document.getElementById("design-search")?.addEventListener("input", updateDesignList);
@@ -2508,7 +4660,7 @@
       const design = currentDesign();
       if (!design) return;
       pushHistory();
-      if (kind === "base") design.base[field] = Math.max(0.5, Number(event.target.value) || design.base[field]);
+      if (kind === "base") design.base[field] = Math.max(MIN_DESIGN_ENVELOPE, Number(event.target.value) || design.base[field]);
       else design[field] = event.target.value.trim() || (field === "name" ? design.name : "");
       commit();
       if (kind === "base") fitView();
@@ -2536,14 +4688,42 @@
   document.getElementById("add-component-button")?.addEventListener("click", () => {
     addComponentOfType(document.getElementById("add-component-type")?.value || "box");
   });
+  document.getElementById("add-machine-design")?.addEventListener("change", updateEmbeddedMachinePicker);
+  document.getElementById("add-machine-design-button")?.addEventListener("click", () => {
+    addMachineDesignToCurrentDesign(document.getElementById("add-machine-design")?.value || "");
+  });
 
   document.querySelectorAll("[data-component-field]").forEach((input) => {
     input.addEventListener("change", () => {
+      const components = selectionComponents();
       const component = selectedComponent();
+      if (!components.length) return;
+      const field = input.dataset.componentField;
+      const bulkSelection = state.selectAllParts || components.length > 1;
+      if (bulkSelection) {
+        if (!BULK_COMPONENT_FIELDS.has(field)) return;
+        pushHistory();
+        if (field === "color") {
+          const color = validColor(input.value, components[0]?.color || "#68777a");
+          components.forEach((item) => recolorComponentTree(item, color));
+        } else if (["animationType", "animationAxis", "animationSecondaryAxis"].includes(field)) {
+          components.forEach((item) => { item[field] = input.value; });
+        } else {
+          const number = Number(input.value);
+          if (!Number.isFinite(number)) return;
+          const value = ["opacity"].includes(field)
+            ? clamp(number, 0.05, 1)
+            : ["animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds"].includes(field)
+              ? Math.max(0, number)
+              : number;
+          components.forEach((item) => { item[field] = value; });
+        }
+        commit(`Updated ${field} for ${components.length} selected parts.`);
+        return;
+      }
       if (!component) return;
       pushHistory();
-      const field = input.dataset.componentField;
-      if (["name", "type", "color", "animationType", "animationAxis"].includes(field)) {
+      if (["name", "type", "color", "animationType", "animationAxis", "animationSecondaryAxis"].includes(field)) {
         if (field === "type") {
           const replacement = normalizeComponent({ ...component, type: input.value, id: component.id, name: component.name });
           const index = currentDesign().components.findIndex((item) => item.id === component.id);
@@ -2557,13 +4737,20 @@
             };
             (component.children || []).forEach(recolor);
           }
-        } else if (["animationType", "animationAxis"].includes(field)) component[field] = input.value;
+        } else if (["animationType", "animationAxis", "animationSecondaryAxis"].includes(field)) component[field] = input.value;
         else component.name = input.value.trim() || component.name;
       } else {
         const number = Number(input.value);
         if (!Number.isFinite(number)) return;
         if (["w", "h", "d", "size", "thickness", "thicknessY", "thicknessZ"].includes(field)) {
+          const previous = Math.max(.0001, Number(component[field]) || Number(component.thickness) || 1);
           component[field] = Math.max(field === "d" && component.type === "wheel" ? 0.05 : 0.02, number);
+          const ratio = component[field] / previous;
+          if (field === "w") component.scaleXPercent = (Number(component.scaleXPercent) || 100) * ratio;
+          if (field === "h") component.scaleYPercent = (Number(component.scaleYPercent) || 100) * ratio;
+          if (field === "d") component.scaleZPercent = (Number(component.scaleZPercent) || 100) * ratio;
+          if (field === "thicknessY" || (field === "thickness" && component.type === "rollerBed")) component.scaleYPercent = (Number(component.scaleYPercent) || 100) * ratio;
+          if (field === "thicknessZ") component.scaleZPercent = (Number(component.scaleZPercent) || 100) * ratio;
           if (component.type === "beam" && ["thicknessY", "thicknessZ"].includes(field)) component.thickness = Math.max(component.thicknessY, component.thicknessZ);
           if (component.type === "wheel" && ["w", "h"].includes(field)) component.size = Math.max(component.w, component.h);
         }
@@ -2571,8 +4758,10 @@
         else if (field === "segments") component.segments = Math.max(8, Math.min(48, Math.round(number)));
         else if (field === "length" && component.type === "beam") {
           const center = componentCenter(component);
+          const previousLength = Math.max(.0001, pointDistance([component.x, component.y, component.z], [component.x2, component.y2, component.z2]));
           const direction = normalizedVector(vectorBetween([component.x, component.y, component.z], [component.x2, component.y2, component.z2]), [1,0,0]);
           const half = Math.max(.01, number) / 2;
+          component.scaleXPercent = (Number(component.scaleXPercent) || 100) * (half * 2 / previousLength);
           component.x = center[0] - direction[0] * half;
           component.y = center[1] - direction[1] * half;
           component.z = center[2] - direction[2] * half;
@@ -2580,8 +4769,14 @@
           component.y2 = center[1] + direction[1] * half;
           component.z2 = center[2] + direction[2] * half;
         }
+        else if (["x2", "y2", "z2"].includes(field) && component.type === "beam") {
+          const previousLength = Math.max(.0001, pointDistance([component.x, component.y, component.z], [component.x2, component.y2, component.z2]));
+          component[field] = number;
+          const nextLength = Math.max(.0001, pointDistance([component.x, component.y, component.z], [component.x2, component.y2, component.z2]));
+          component.scaleXPercent = (Number(component.scaleXPercent) || 100) * nextLength / previousLength;
+        }
         else if (field === "opacity") component.opacity = clamp(number, 0.05, 1);
-        else if (["animationSpeed", "animationPauseSeconds"].includes(field)) component[field] = Math.max(0, number);
+        else if (["animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds"].includes(field)) component[field] = Math.max(0, number);
         else if (component.type === "group" && ["x", "y", "z"].includes(field)) {
           const center = componentCenter(component);
           const axisIndex = { x: 0, y: 1, z: 2 }[field];
@@ -2603,12 +4798,47 @@
     });
   });
 
+  document.querySelectorAll("[data-component-scale]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const components = selectionComponents();
+      if (!components.length) return;
+      const requested = Number(input.value);
+      if (!Number.isFinite(requested)) return;
+      const axis = input.dataset.componentScale;
+      pushHistory();
+      components.forEach((component) => {
+        if (axis === "uniform") {
+          for (const localAxis of ["x", "y", "z"]) {
+            const current = Number(component[`scale${localAxis.toUpperCase()}Percent`]) || 100;
+            scaleComponent(component, clamp(requested / Math.max(.01, current), .05, 20), localAxis, clone(component));
+          }
+        } else {
+          const current = Number(component[`scale${axis.toUpperCase()}Percent`]) || 100;
+          scaleComponent(component, clamp(requested / Math.max(.01, current), .05, 20), axis, clone(component));
+        }
+      });
+      commit(`Scale updated for ${components.length} part${components.length === 1 ? "" : "s"}.`);
+    });
+  });
+
   document.querySelectorAll("[data-component-check]").forEach((input) => {
     input.addEventListener("change", () => {
+      const components = selectionComponents();
       const component = selectedComponent();
+      if (!components.length) return;
+      const field = input.dataset.componentCheck;
+      const bulkSelection = state.selectAllParts || components.length > 1;
+      if (bulkSelection) {
+        if (!BULK_COMPONENT_CHECKS.has(field)) return;
+        pushHistory();
+        components.forEach((item) => { item[field] = input.checked; });
+        input.indeterminate = false;
+        commit(`Updated ${field} for ${components.length} selected parts.`);
+        return;
+      }
       if (!component) return;
       pushHistory();
-      component[input.dataset.componentCheck] = input.checked;
+      component[field] = input.checked;
       commit();
     });
   });
@@ -2620,7 +4850,47 @@
     if (!child) return;
     pushHistory();
     component.motionDriverId = child.id;
-    commit(`${child.name} now carries the merged assembly. Other child animations remain relative to it.`);
+    child.playOwnAnimation = true;
+    commit(`${child.name} now carries the merged assembly. Every other child keeps its separately controlled local animation.`);
+  });
+
+  document.getElementById("group-animation-child")?.addEventListener("change", (event) => {
+    const component = selectedComponent();
+    if (component?.type !== "group") return;
+    component.activeAnimationChildId = event.target.value;
+    updateComponentProperties();
+  });
+
+  document.querySelectorAll("[data-group-child-field]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const component = selectedComponent();
+      if (component?.type !== "group") return;
+      const child = (component.children || []).find((item) => item.id === component.activeAnimationChildId);
+      if (!child) return;
+      const field = input.dataset.groupChildField;
+      pushHistory();
+      if (["animationType", "animationAxis", "animationSecondaryAxis"].includes(field)) child[field] = input.value;
+      else {
+        const value = Number(input.value);
+        if (!Number.isFinite(value)) return;
+        child[field] = ["animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds"].includes(field) ? Math.max(0, value) : value;
+      }
+      commit(`${child.name} animation updated.`);
+    });
+  });
+
+  document.querySelectorAll("[data-group-child-check]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const component = selectedComponent();
+      if (component?.type !== "group") return;
+      const child = (component.children || []).find((item) => item.id === component.activeAnimationChildId);
+      if (!child || child.id === component.motionDriverId) return;
+      pushHistory();
+      child[input.dataset.groupChildCheck] = input.checked;
+      commit(input.checked
+        ? `${child.name} now plays its own animation on top of the parent motion.`
+        : `${child.name} now follows only the parent motion.`);
+    });
   });
 
   document.getElementById("center-component")?.addEventListener("click", () => {
@@ -2675,29 +4945,102 @@
   document.getElementById("fit-envelope")?.addEventListener("click", () => {
     const design = currentDesign();
     if (!design || !design.components.length) return;
+    const visibleOnly = document.getElementById("envelope-fit-scope")?.value === "visible";
+    const bounds = designGeometryBounds(design, visibleOnly);
+    if (!bounds) {
+      showToast(visibleOnly ? "No visible parts are available to fit." : "Add at least one part before fitting the envelope.");
+      return;
+    }
+    const clearanceInches = clamp(
+      Number(document.getElementById("envelope-fit-clearance")?.value) || 0,
+      0,
+      MAX_ENVELOPE_CLEARANCE_INCHES,
+    );
+    const clearance = clearanceInches / 12;
     pushHistory();
-    const bounds = design.components.map(componentWorldBounds);
-    const minX = Math.min(...bounds.map((item) => item.minX));
-    const minY = Math.min(...bounds.map((item) => item.minY));
-    const minZ = Math.min(...bounds.map((item) => item.minZ));
-    const maxX = Math.max(...bounds.map((item) => item.maxX));
-    const maxY = Math.max(...bounds.map((item) => item.maxY));
-    const maxZ = Math.max(...bounds.map((item) => item.maxZ));
-    design.components.forEach((component) => translateComponent(component, -minX, -minY, -minZ));
-    design.base.w = Math.max(0.5, maxX - minX);
-    design.base.h = Math.max(0.5, maxY - minY);
-    design.base.d = Math.max(0.5, maxZ - minZ);
+    design.components.forEach((component) => translateComponent(
+      component,
+      clearance - bounds.minX,
+      clearance - bounds.minY,
+      clearance - bounds.minZ,
+    ));
+    design.base.w = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxX - bounds.minX + clearance * 2);
+    design.base.h = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxY - bounds.minY + clearance * 2);
+    design.base.d = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxZ - bounds.minZ + clearance * 2);
     fitView();
-    commit("Design envelope fitted around all parts.");
+    commit(`Design envelope fitted tightly to ${visibleOnly ? "visible" : "all"} parts${clearanceInches ? ` with ${clearanceInches.toFixed(3)} in clearance` : ""}.`);
   });
 
+  document.getElementById("show-design-envelope")?.addEventListener("change", (event) => {
+    state.showDesignEnvelope = event.target.checked;
+    renderPerformance.invalidate();
+    updateEnvelopeStatus(currentDesign());
+  });
+
+  document.getElementById("create-plant-machine")?.addEventListener("click", createPlantMachineFromCurrentDesign);
   document.getElementById("machine-assignment")?.addEventListener("change", updateAssignmentPanel);
+  document.querySelectorAll("[data-instance-field]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = document.getElementById("machine-assignment")?.value;
+      const machine = plantLayout.machines.find((item) => item.instanceId === id);
+      const value = Number(input.value);
+      if (!machine || !Number.isFinite(value)) return;
+      const field = input.dataset.instanceField;
+      if (["w","d","h"].includes(field)) resizePlantMachine(machine, field, value);
+      else machine[field] = value;
+      saveLayout();
+      updateAssignmentPanel();
+      showToast(`${machine.name} ${field} updated in the plant layout.`);
+    });
+  });
+  document.querySelectorAll("[data-instance-scale]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = document.getElementById("machine-assignment")?.value;
+      const machine = plantLayout.machines.find((item) => item.instanceId === id);
+      const value = Number(input.value);
+      if (!machine || !Number.isFinite(value)) return;
+      setPlantScalePercent(machine, input.dataset.instanceScale, value);
+      saveLayout();
+      updateAssignmentPanel();
+      showToast(`${machine.name} scale updated in the plant layout.`);
+    });
+  });
+  document.getElementById("assignment-scale-mode")?.addEventListener("change", (event) => {
+    const id = document.getElementById("machine-assignment")?.value;
+    const machine = plantLayout.machines.find((item) => item.instanceId === id);
+    const design = currentDesign();
+    if (!machine) return;
+    machine.designScaleMode = normalizedDesignScaleMode(event.target.value);
+    if (machine.designScaleMode === "match" && design) syncPlantObjectDimensions(machine, design);
+    saveLayout();
+    updateAssignmentPanel();
+    showToast(machine.designScaleMode === "match"
+      ? "Plant dimensions now follow the design envelope."
+      : machine.designScaleMode === "stretch"
+        ? "The design will stretch independently to the plant object."
+        : "The design will preserve its proportions.");
+  });
+  document.getElementById("sync-machine-dimensions")?.addEventListener("click", () => {
+    const id = document.getElementById("machine-assignment")?.value;
+    const machine = plantLayout.machines.find((item) => item.instanceId === id);
+    const design = currentDesign();
+    if (!machine || !design) { showToast("Choose a plant object and design first."); return; }
+    machine.designId = design.id;
+    machine.designScaleMode = "match";
+    syncPlantObjectDimensions(machine, design);
+    state.linkedMachineId = machine.instanceId;
+    saveLayout();
+    updateAssignmentPanel();
+    showToast(`${machine.name} now matches the design dimensions and will stay synchronized.`);
+  });
   document.getElementById("apply-machine")?.addEventListener("click", () => {
     const id = document.getElementById("machine-assignment")?.value;
     const machine = plantLayout.machines.find((item) => item.instanceId === id);
     const design = currentDesign();
     if (!machine || !design) { showToast("Choose a plant object first."); return; }
     machine.designId = design.id;
+    machine.designScaleMode = normalizedDesignScaleMode(document.getElementById("assignment-scale-mode")?.value);
+    if (machine.designScaleMode === "match") syncPlantObjectDimensions(machine, design);
     state.linkedMachineId = machine.instanceId;
     saveLayout();
     updateAssignmentPanel();
@@ -2710,8 +5053,14 @@
     if (!source || !design) { showToast("Choose a plant object first."); return; }
     state.linkedMachineId = source.instanceId;
     let count = 0;
+    const scaleMode = normalizedDesignScaleMode(document.getElementById("assignment-scale-mode")?.value);
     plantLayout.machines.forEach((machine) => {
-      if (machine.type === source.type) { machine.designId = design.id; count += 1; }
+      if (machine.type === source.type) {
+        machine.designId = design.id;
+        machine.designScaleMode = scaleMode;
+        if (scaleMode === "match") syncPlantObjectDimensions(machine, design);
+        count += 1;
+      }
     });
     saveLayout();
     updateAssignmentPanel();
@@ -2731,7 +5080,7 @@
   document.getElementById("export-design")?.addEventListener("click", () => {
     const design = currentDesign();
     if (!design) return;
-    const blob = new Blob([JSON.stringify({ version: 6, exportedAt: new Date().toISOString(), design }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 17, exportedAt: new Date().toISOString(), design }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -2786,18 +5135,34 @@
     else if (key === "r") setTool("rotate");
     else if (key === "s") setTool("scale");
     else if (key === "h") setTool("pan");
+    else if (key === "a") setTimelineOpen(!state.timelineOpen, { focusInspector: true });
     else if (key === "f") fitView();
     else if (key === "0") setView("iso");
     else if (key === "1") setView("front");
     else if (key === "2") setView("side");
     else if (key === "3") setView("top");
+    else if (key === "4") setView("low");
+    else if ((event.key === "Delete" || event.key === "Backspace") && state.timelineOpen && state.partTab === "animation" && selectedTimelineClip()) {
+      event.preventDefault();
+      deleteSelectedTimelineClip();
+    }
     else if (event.key === "Delete" || event.key === "Backspace") deleteSelectedComponent();
+    else if (event.key === "Escape" && state.timelineOpen) setTimelineOpen(false);
     else if (event.key === "Escape") setTool("select");
     else if (event.key === "ArrowLeft") { event.preventDefault(); nudgeSelected(-state.snapStep, 0, 0); }
     else if (event.key === "ArrowRight") { event.preventDefault(); nudgeSelected(state.snapStep, 0, 0); }
     else if (event.key === "ArrowUp") { event.preventDefault(); nudgeSelected(0, event.shiftKey ? state.snapStep : 0, event.shiftKey ? 0 : -state.snapStep); }
     else if (event.key === "ArrowDown") { event.preventDefault(); nudgeSelected(0, event.shiftKey ? -state.snapStep : 0, event.shiftKey ? 0 : state.snapStep); }
     else if (event.key === ".") focusSelected();
+  });
+
+  const viewportPanel = canvas.closest(".design-viewport-panel");
+  if (viewportPanel) renderPerformance.mount(viewportPanel, {
+    buttonHost: viewportPanel.querySelector(".viewport-settings") || viewportPanel,
+  });
+  window.addEventListener("renderperformancechange", () => {
+    updateCanvasSize();
+    renderPerformance.invalidate();
   });
 
   if (!state.designId) createDesign();
@@ -2808,6 +5173,20 @@
     fitView();
     updateInterface();
   }
+  function reloadPlantLayout() {
+    const latest = loadLayout();
+    if (!latest?.machines) return;
+    plantLayout = latest;
+    updateAssignmentPanel();
+  }
+  window.addEventListener("storage", (event) => {
+    if (event.key === LAYOUT_KEY || event.key === LEGACY_LAYOUT_KEY) reloadPlantLayout();
+  });
+  syncChannel?.addEventListener("message", (event) => {
+    if (event.data?.source !== "machine-design-studio" && event.data?.type === "layout-updated") reloadPlantLayout();
+  });
+  window.addEventListener("focus", reloadPlantLayout);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) reloadPlantLayout(); });
   window.addEventListener("pagehide", () => syncChannel?.close());
   setTool("select");
   requestAnimationFrame(draw);

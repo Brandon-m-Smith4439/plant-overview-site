@@ -380,6 +380,38 @@
         ]),
       ],
     },
+    "safety-line-standard": {
+      id: "safety-line-standard",
+      name: "Safety yellow floor line",
+      machineType: "safetyLine",
+      description: "Editable floor marking with exact width, length, thickness, color, position, rotation, and scale.",
+      base: { w: 20, d: 4, h: 0.12 },
+      components: [box("line", "Safety marking", 0, 0, 0, 20, 0.12, 4, "#e3ad28")],
+    },
+    "utility-trench-standard": {
+      id: "utility-trench-standard",
+      name: "Utility trench",
+      machineType: "trench",
+      description: "Editable recessed-looking trench assembled from a dark channel and two concrete edge strips.",
+      base: { w: 20, d: 3, h: 0.3 },
+      components: [
+        box("channel", "Trench channel", 0, 0, 0, 20, 0.18, 3, "#4a3a31"),
+        box("edge-a", "Trench edge A", 0, 0.18, 0, 20, 0.12, 0.18, "#cb8f55"),
+        box("edge-b", "Trench edge B", 0, 0.18, 2.82, 20, 0.12, 0.18, "#cb8f55"),
+      ],
+    },
+    "floor-drain-standard": {
+      id: "floor-drain-standard",
+      name: "Square floor drain",
+      machineType: "floorDrain",
+      description: "Editable square floor drain with recessed body and crossing grate bars.",
+      base: { w: 4, d: 4, h: 0.28 },
+      components: [
+        box("drain-body", "Drain body", 0, 0, 0, 4, 0.16, 4, "#31383a"),
+        ...[0.45, 1.3, 2.15, 3].map((x, i) => box(`grate-x-${i}`, "Grate bar", x, 0.16, 0.2, 0.18, 0.12, 3.6, "#747e7f")),
+        ...[0.45, 1.3, 2.15, 3].map((z, i) => box(`grate-z-${i}`, "Cross grate", 0.2, 0.2, z, 3.6, 0.08, 0.18, "#747e7f")),
+      ],
+    },
   };
 
   window.PLANT_MACHINE_DESIGN_STORAGE_KEY = "monroe-glass-machine-designs-v1";

@@ -5,8 +5,12 @@
     return Math.max(minimum, Math.min(maximum, value));
   }
 
+  const colorCache = new Map();
+
   function parseCssColor(value, opacity = 1) {
     const input = String(value || "#68777a").trim();
+    let cached = colorCache.get(input);
+    if (cached) return [cached[0], cached[1], cached[2], clamp(cached[3] * opacity, 0, 1)];
     let red = 104;
     let green = 119;
     let blue = 122;
@@ -33,12 +37,15 @@
       alpha = rgb[4] === undefined ? 1 : Number(rgb[4]);
     }
 
-    return [
+    cached = [
       clamp(red / 255, 0, 1),
       clamp(green / 255, 0, 1),
       clamp(blue / 255, 0, 1),
-      clamp(alpha * opacity, 0, 1),
+      clamp(alpha, 0, 1),
     ];
+    if (colorCache.size > 256) colorCache.clear();
+    colorCache.set(input, cached);
+    return [cached[0], cached[1], cached[2], clamp(cached[3] * opacity, 0, 1)];
   }
 
   function compileShader(gl, type, source) {
@@ -145,7 +152,9 @@
     let opaqueTriangles = [];
     let transparentTriangles = [];
     let lines = [];
-    let allDepths = [];
+    let minimumDepth = Infinity;
+    let maximumDepth = -Infinity;
+    let bufferCapacity = 0;
 
     function beginFrame(nextWidth, nextHeight, projectFunction) {
       width = Math.max(1, Math.round(nextWidth || 1));
@@ -158,12 +167,14 @@
       opaqueTriangles = [];
       transparentTriangles = [];
       lines = [];
-      allDepths = [];
+      minimumDepth = Infinity;
+      maximumDepth = -Infinity;
     }
 
     function projectedVertex(point, color) {
       const projected = project(...point);
-      allDepths.push(projected[2]);
+      if (projected[2] < minimumDepth) minimumDepth = projected[2];
+      if (projected[2] > maximumDepth) maximumDepth = projected[2];
       return {
         x: projected[0],
         y: projected[1],
@@ -232,7 +243,11 @@
       if (!vertices.length) return;
       const array = new Float32Array(vertices);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.bufferData(gl.ARRAY_BUFFER, array, gl.DYNAMIC_DRAW);
+      if (array.byteLength > bufferCapacity) {
+        bufferCapacity = 2 ** Math.ceil(Math.log2(Math.max(256, array.byteLength)));
+        gl.bufferData(gl.ARRAY_BUFFER, bufferCapacity, gl.DYNAMIC_DRAW);
+      }
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, array);
       const stride = 7 * Float32Array.BYTES_PER_ELEMENT;
       gl.enableVertexAttribArray(positionLocation);
       gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, stride, 0);
@@ -242,19 +257,15 @@
     }
 
     function render() {
-      if (!program || !allDepths.length) {
+      if (!program || !Number.isFinite(minimumDepth) || !Number.isFinite(maximumDepth)) {
         gl.viewport(0, 0, canvas.width, canvas.height);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         return;
       }
 
-      let minimum = Infinity;
-      let maximum = -Infinity;
-      allDepths.forEach((depth) => {
-        if (depth < minimum) minimum = depth;
-        if (depth > maximum) maximum = depth;
-      });
+      const minimum = minimumDepth;
+      const maximum = maximumDepth;
       const range = Math.max(0.0001, maximum - minimum);
       const opaque = [];
       opaqueTriangles.forEach((triangle) => {

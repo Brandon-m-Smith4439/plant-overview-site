@@ -14,7 +14,7 @@ export default function Home() {
             <a href="/machine-studio">Machine Design Studio</a>
           </nav>
           <p className="source-note">
-            Model Studio <strong>v0.10.1</strong> · Grounded in{" "}
+            Model Studio <strong>v0.12.17</strong> · Grounded in{" "}
             <strong>Monroe Archs w Updates 1-23-25 (002).dwg</strong>
           </p>
         </div>
@@ -70,9 +70,12 @@ export default function Home() {
       </nav>
 
       <script src="/depth-scene-renderer.js" />
+      <script src="/render-performance.js" />
       <script src="/plant-data.js" />
       <script src="/machine-data.js" />
       <script src="/machine-designs.js" />
+      <script src="/animation-timeline.js" />
+      <script src="/first-person-controller.js" />
       <script src="/plant-app.js" />
     </main>
   );

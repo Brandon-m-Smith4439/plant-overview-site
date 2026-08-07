@@ -24,7 +24,7 @@ assert.ok(cylinder.includes("pointFromLocal"), "Wheel geometry must preserve loc
 
 const designWheel = functionSource(app, "drawDesignWheel", "designComponentRotation");
 assert.ok(designWheel.includes("drawCylinder3d"), "Custom-design wheels must use the depth-rendered cylinder path.");
-assert.ok(designWheel.includes("localPoint3d"), "Custom-design wheels must share the machine's 3D transform.");
+assert.ok(designWheel.includes("designLocalPointToWorld"), "Custom-design wheels must rotate in design space before sharing the machine's full 3D transform.");
 assert.ok(!designWheel.includes("ctx.ellipse"), "Custom-design wheels must not be painted on the 2D overlay.");
 
 assert.equal((app.match(/ctx\.ellipse/g) || []).length, 0, "No plant wheel may bypass the depth buffer through a 2D ellipse.");

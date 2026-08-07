@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const [app, css] = await Promise.all([
+const [app, studio, css] = await Promise.all([
   readFile(path.join(root, "public", "plant-app.js"), "utf8"),
+  readFile(path.join(root, "public", "machine-design-studio.js"), "utf8"),
   readFile(path.join(root, "app", "globals.css"), "utf8"),
 ]);
 
@@ -22,6 +23,10 @@ assert.ok(
 );
 assert.ok(app.includes("const ids = new Set(selection.map"), "Group removal does not include every selected object.");
 assert.ok(app.includes("state.selectedMachineIds.has(machine.instanceId)"), "Selection outlines are not rendered for every selected object.");
+assert.ok(app.includes("BULK_MACHINE_FIELDS"), "Plant multi-selection settings are not editable in bulk.");
+assert.ok(studio.includes("BULK_COMPONENT_FIELDS"), "Designer multi-selection settings are not editable in bulk.");
+assert.ok(studio.includes("components.forEach((item) => { item[field] = value; })"), "Designer bulk animation settings are not applied to each selected part.");
 assert.ok(css.includes(".multi-selection-panel"), "Multi-selection panel styling is missing.");
+assert.ok(css.includes("multi-component-edit"), "Designer bulk-setting state is not styled.");
 
 console.log("Multi-object selection regression checks passed.");

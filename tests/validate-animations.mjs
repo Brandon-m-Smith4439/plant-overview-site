@@ -48,14 +48,16 @@ assert.ok(plantApp.includes("animatedComponent" ) || plantApp.includes("animateD
 
 for (const markup of [html, page]) {
   assert.ok(markup.includes("preview-design-animations"), "Design animation preview control is missing.");
-  assert.ok(markup.includes("animationAmount") && markup.includes("animationSpeed"), "Part animation inspector fields are missing.");
-  assert.ok(markup.includes("animationPauseSeconds"), "Part animation pause control is missing.");
+  assert.ok(markup.includes("animation-timeline-workspace") && markup.includes("timeline-type-palette") && markup.includes("timeline-clip-editor"), "Docked part animation timeline controls are missing.");
+  assert.ok(markup.includes("cycleSeconds") && markup.includes("step4Pause"), "Type-specific timeline timing controls are missing.");
 }
-assert.ok(studio.includes("JSON.stringify({ version: 6"), "Machine design payload version was not advanced to 6.");
+assert.ok(studio.includes("version: 17"), "Machine design payload version was not advanced to 17.");
 assert.ok(studio.includes("animatedComponent"), "Design Studio animation preview engine is missing.");
 assert.ok(plantApp.includes("animationPauseSeconds"), "Scene animation pause timing is missing.");
 assert.ok(plantApp.includes("pauseSeconds * 2"), "Back-and-forth animations do not pause at both endpoints.");
 assert.ok(studio.includes("componentAnimationWave"), "Design Studio pause-aware animation timing is missing.");
+assert.ok(studio.includes("animationPausedAt") && studio.includes("animationTimeOffset"), "Designer pause/resume clock is missing.");
+assert.ok(plantApp.includes("data-toggle=\"animations\"") && plantApp.includes("effectiveAnimationTime"), "Plant pause/resume control is missing.");
 assert.ok(plantApp.includes('axis === "all") transform.rotation[0]') && plantApp.includes('axis === "all") transform.rotation[2]'), "Scene spin animation does not rotate all axes.");
 assert.ok(studio.includes('axis === "all") animated.rotationX') && studio.includes('axis === "all") animated.rotationZ'), "Machine-part spin animation does not rotate all axes.");
 assert.ok(plantApp.includes('select-production-glass'), "Moving-glass quick selection is missing from the layout editor.");
@@ -79,7 +81,7 @@ function extractFunction(source, name) {
   throw new Error(`${name} could not be parsed.`);
 }
 
-const timingSandbox = { Math, Number };
+const timingSandbox = { Math, Number, effectiveAnimationTime: (time) => time };
 vm.createContext(timingSandbox);
 vm.runInContext(`${extractFunction(plantApp, "animationWave")}; this.animationWave = animationWave;`, timingSandbox);
 const pausedPingPong = { animationMode: "pingPong", animationSpeed: 1, animationPauseSeconds: 2, animationPhase: 0 };

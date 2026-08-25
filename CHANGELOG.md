@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.13.0 - 2026-08-25
+
+### Added
+
+- Added explicit **Save**, **Save as**, and **Save & add to layout** commands to Machine Design Studio.
+- Added a reusable-machine Save As dialog and a direct handoff that opens the newly added object in Plant Layout edit mode, selected and ready to position.
+- Added a visible Build, Save, Place workflow and made new custom machines start with a blank design ready for shapes.
+
+### Improved
+
+- Consolidated duplicate part and camera commands, including removal of the redundant orientation cube.
+- Applied consistent spacing, control sizing, focus states, panels, color tokens, and responsive behavior across the Plant Layout and Machine Design Studio.
+- Reduced rendering work from off-screen animations and idle first-person sessions; Auto mode now also scales curved-geometry and shadow budgets when sustained frame times are high.
+- Made first-person visibility culling conservative for nearby objects and use all box corners for distant screen checks.
+
+### Fixed
+
+- Corrected inverted Designer orbit, pan, and wheel zoom directions.
+- Fixed newly created reusable machines not having an obvious saved state or reliable transition into the Plant Layout positioning workflow.
+- Fixed machines disappearing near the sides of the first-person view.
+
+### Validation
+
+- Ran JavaScript syntax checks, machine-creation, Plant Layout insertion, adaptive-performance, and first-person regression tests.
+
 ## 0.12.17 - 2026-08-07
 
 ### Fixed

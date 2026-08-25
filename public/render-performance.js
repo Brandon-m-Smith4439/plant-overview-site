@@ -8,7 +8,7 @@
       pixelRatioCap: 1.35,
       idleFps: 8,
       animationFps: 30,
-      interactionFps: 60,
+      interactionFps: 55,
       shadowLayers: 1,
       cylinderSegments: 14,
       maxShadowParts: 28,
@@ -30,7 +30,7 @@
       pixelRatioCap: 1.25,
       idleFps: 8,
       animationFps: 30,
-      interactionFps: 60,
+      interactionFps: 50,
       shadowLayers: 1,
       cylinderSegments: 12,
       maxShadowParts: 24,
@@ -41,7 +41,7 @@
       pixelRatioCap: 1,
       idleFps: 5,
       animationFps: 24,
-      interactionFps: 45,
+      interactionFps: 40,
       shadowLayers: 0,
       cylinderSegments: 8,
       maxShadowParts: 0,
@@ -106,7 +106,10 @@
       if (shadowLayerCount() <= 0) return 0;
       if (settings.shadows === "full") return Math.max(72, modeConfig().maxShadowParts);
       if (settings.shadows === "reduced") return Math.min(24, modeConfig().maxShadowParts || 24);
-      return modeConfig().maxShadowParts;
+      const adaptiveScale = settings.mode === "auto"
+        ? clamp(currentPixelRatioCap / MODES.auto.pixelRatioCap, .6, 1)
+        : 1;
+      return Math.round(modeConfig().maxShadowParts * adaptiveScale);
     }
 
     function pillarShadowsEnabled() {
@@ -149,7 +152,10 @@
 
     function cylinderSegments(requested = 20) {
       const requestedCount = Math.max(8, Math.round(Number(requested) || 20));
-      return Math.max(8, Math.min(requestedCount, modeConfig().cylinderSegments));
+      const adaptiveScale = settings.mode === "auto"
+        ? clamp(currentPixelRatioCap / MODES.auto.pixelRatioCap, .6, 1)
+        : 1;
+      return Math.max(8, Math.min(requestedCount, Math.round(modeConfig().cylinderSegments * adaptiveScale)));
     }
 
     function recordFrame(durationMs) {
@@ -164,7 +170,7 @@
         fpsWindowStart = now;
         updateStatus();
       }
-      if (settings.mode !== "auto" || sampleCount < 45) return;
+      if (settings.mode !== "auto" || sampleCount < 30) return;
       const average = sampleTotal / sampleCount;
       sampleTotal = 0;
       sampleCount = 0;

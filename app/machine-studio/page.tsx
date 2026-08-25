@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-sync-scripts */
 export default function MachineStudio() {
   return (
 <main className="machine-studio-shell">
@@ -5,34 +6,36 @@ export default function MachineStudio() {
 <div className="studio-brand">
 <a className="studio-back-link" href="/" aria-label="Return to plant layout">←</a>
 <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-<span className="studio-version-badge">v0.12.17</span>
+<span className="studio-version-badge">v0.13.0</span>
 </div>
 <div className="studio-top-actions" role="toolbar" aria-label="Design commands">
 <span id="save-state" className="studio-save-state">Auto-saved</span>
 <button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
 <button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
 <span className="studio-toolbar-divider"></span>
-<button id="duplicate-component" type="button" title="Duplicate selected part (Ctrl+D)">Duplicate</button>
-<button id="delete-component" type="button" className="danger-subtle" title="Delete selected part">Delete</button>
-<a href="/">Plant layout</a>
+<button id="save-design" type="button" title="Save machine (Ctrl+S)">Save</button>
+<button id="save-design-as" type="button" title="Save as a new reusable machine (Ctrl+Shift+S)">Save as...</button>
+<button id="save-and-place-design" type="button" className="primary">Save &amp; add to layout</button>
+<a href="/" className="studio-layout-link">Open plant layout</a>
 </div>
 </header>
 <section className="machine-studio-workspace" aria-label="Machine design editor">
 <aside className="studio-browser-panel">
 <div className="studio-tabs studio-browser-tabs" role="tablist" aria-label="Design browser">
-<button type="button" role="tab" data-browser-tab="designs" className="active" aria-selected="true">Library</button>
+<button type="button" role="tab" data-browser-tab="designs" className="active" aria-selected="true">Machines</button>
 <button type="button" role="tab" data-browser-tab="parts" aria-selected="false">Parts</button>
-<button type="button" role="tab" data-browser-tab="add" aria-selected="false">Add</button>
-<button type="button" role="tab" data-browser-tab="plant" aria-selected="false">Plant</button>
+<button type="button" role="tab" data-browser-tab="add" aria-selected="false">Build</button>
+<button type="button" role="tab" data-browser-tab="plant" aria-selected="false">Place</button>
 </div>
 <section data-browser-panel="designs" className="studio-browser-section">
+<div className="studio-workflow-guide" aria-label="Machine creation workflow"><span><b>1</b> Build</span><span><b>2</b> Save</span><span><b>3</b> Place</span></div>
 <div className="studio-panel-heading"><p>Design library</p><strong id="design-count">0 designs</strong></div>
 <label className="studio-field studio-search-field">Search<input id="design-search" type="search" placeholder="Machine name or type" /></label>
 <div id="design-list" className="design-list" aria-label="Available machine designs"></div>
-<details className="studio-collapsible" open>
-<summary>Design actions</summary>
+<details className="studio-collapsible">
+<summary>More design actions</summary>
 <div className="studio-button-grid">
-<button id="new-design" type="button">New</button><button id="duplicate-design" type="button">Duplicate</button>
+<button id="new-design" type="button">New blank machine</button><button id="duplicate-design" type="button">Save a copy...</button>
 <button id="reset-design" type="button">Reset preset</button><button id="delete-design" type="button">Delete custom</button>
 </div>
 <div className="studio-button-grid compact">
@@ -107,7 +110,8 @@ export default function MachineStudio() {
 <label className="studio-field">Appearance stage<select id="new-plant-machine-stage"><option value="last">Plant today</option></select></label>
 <label className="studio-field">Placement<select id="new-plant-machine-placement"><option value="auto">Find open floor space</option><option value="center">Floor center</option><option value="origin">Plant origin</option></select></label>
 </div>
-<button id="create-plant-machine" type="button" className="primary full-width-button">Add new machine to Plant Layout</button>
+<button id="create-plant-machine" type="button" className="primary full-width-button">Save &amp; add machine to Plant Layout</button>
+<button id="open-created-plant-machine" type="button" className="full-width-button success-action" hidden>Open and position this machine</button>
 <p id="create-plant-machine-status" className="studio-help">The design envelope becomes the new machine’s starting dimensions.</p>
 </section>
 <button id="sync-machine-dimensions" type="button" className="full-width-button">Match plant dimensions to this design</button>
@@ -178,7 +182,6 @@ export default function MachineStudio() {
 <p id="timeline-target-help" className="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
 </section>
 
-<div className="orientation-cube" aria-label="Quick camera orientation"><button type="button" data-design-view="top">TOP</button><div><button type="button" data-design-view="front">FRONT</button><button type="button" data-design-view="side">RIGHT</button></div></div>
 <div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Right-drag orbit · Middle-drag pan · Wheel zoom · Double-click focus</span></div>
 <div id="design-toast" className="design-toast" role="status" aria-live="polite"></div>
 </section>
@@ -192,9 +195,9 @@ export default function MachineStudio() {
 <div id="empty-component-state" className="inspector-empty"><strong>Select a part in the viewport or Parts list.</strong><p>Choose a section below after selecting a part.</p></div>
 <section id="component-properties" className="component-properties" hidden>
 <div className="part-section-tabs" role="tablist" aria-label="Selected part editing sections">
-<button type="button" data-part-tab="properties" className="active" aria-selected="true">Properties</button>
-<button type="button" data-part-tab="transform" aria-selected="false">Transform</button>
-<button type="button" data-part-tab="animation" aria-selected="false">Animation</button>
+<button type="button" role="tab" data-part-tab="properties" className="active" aria-selected="true">Properties</button>
+<button type="button" role="tab" data-part-tab="transform" aria-selected="false">Transform</button>
+<button type="button" role="tab" data-part-tab="animation" aria-selected="false">Animation</button>
 </div>
 <section data-part-panel="properties" className="part-editor-panel">
 <div className="inspector-primary-card">
@@ -294,6 +297,15 @@ export default function MachineStudio() {
 </section>
 </aside>
 </section>
+<dialog id="save-design-as-dialog" className="studio-dialog" aria-labelledby="save-design-as-title">
+<form id="save-design-as-form" method="dialog">
+<div className="studio-dialog-heading"><div><p>Reusable machine</p><h2 id="save-design-as-title">Save machine as</h2></div><button id="cancel-save-design-as" type="button" aria-label="Close">&times;</button></div>
+<p className="studio-help">This creates a separate machine in the library. You can keep editing it or add it to the plant layout.</p>
+<label className="studio-field">Machine name<input id="save-design-as-name" type="text" required maxLength={120} autoComplete="off" /></label>
+<label className="studio-field">Machine type<input id="save-design-as-type" type="text" required maxLength={80} autoComplete="off" /></label>
+<div className="studio-dialog-actions"><button type="button" data-close-save-as>Cancel</button><button type="submit" className="primary">Save new machine</button></div>
+</form>
+</dialog>
 <script src="/depth-scene-renderer.js"></script>
 <script src="/render-performance.js"></script>
 <script src="/machine-designs.js"></script>

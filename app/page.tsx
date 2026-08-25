@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-sync-scripts */
 export default function Home() {
   return (
     <main className="site-shell">
@@ -14,7 +15,7 @@ export default function Home() {
             <a href="/machine-studio">Machine Design Studio</a>
           </nav>
           <p className="source-note">
-            Model Studio <strong>v0.12.17</strong> · Grounded in{" "}
+            Model Studio <strong>v0.13.0</strong> · Grounded in{" "}
             <strong>Monroe Archs w Updates 1-23-25 (002).dwg</strong>
           </p>
         </div>

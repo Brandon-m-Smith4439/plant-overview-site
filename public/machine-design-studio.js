@@ -18,7 +18,7 @@
         shadowLayerCount() { return 1; }, maxShadowParts() { return 24; },
         recordFrame() {}, mount() {},
       };
-  const APP_VERSION = "0.12.17";
+  const APP_VERSION = "0.13.0";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -977,32 +977,72 @@
       id,
       name: "New custom machine",
       machineType: "generic",
-      description: "Component-based custom machine design.",
+      description: "Build this reusable machine by adding and arranging shapes.",
       base: { w: 20, d: 10, h: 8 },
       custom: true,
-      components: [
-        { id: uniqueId("box"), name: "Main cabinet", type: "box", x: 0, y: 0, z: 0, w: 20, h: 6, d: 10, color: "#277d78", opacity: 1, rotation: 0, visible: true },
-      ],
+      components: [],
     }, id);
     saveLibrary();
     selectDesign(id);
-    showToast("New machine design created.");
+    state.browserTab = "add";
+    state.inspectorTab = "design";
+    updateInterface();
+    showToast("Blank machine created. Add your first shape from the Build panel.");
   }
 
-  function duplicateDesign() {
+  function saveCurrentDesign(options = {}) {
+    const design = currentDesign();
+    if (!design) {
+      showToast("Create or select a machine design first.");
+      return false;
+    }
+    design.updatedAt = new Date().toISOString();
+    saveLibrary();
+    syncLinkedMachineToCurrentDesign();
+    updateInterface();
+    if (!options.silent) showToast(`${design.name} saved.`);
+    return true;
+  }
+
+  function openSaveAsDialog() {
     const design = currentDesign();
     if (!design) return;
+    const dialog = document.getElementById("save-design-as-dialog");
+    const name = document.getElementById("save-design-as-name");
+    const type = document.getElementById("save-design-as-type");
+    if (!dialog || typeof dialog.showModal !== "function") {
+      const requestedName = window.prompt("Save machine design as", `${design.name} copy`)?.trim();
+      if (requestedName) saveDesignAs(requestedName, design.machineType);
+      return;
+    }
+    if (name) name.value = builtinIds.has(design.id) ? `${design.name} custom` : `${design.name} copy`;
+    if (type) type.value = design.machineType || "generic";
+    dialog.showModal();
+    window.setTimeout(() => name?.select(), 0);
+  }
+
+  function saveDesignAs(requestedName, requestedType) {
+    const design = currentDesign();
+    const name = String(requestedName || "").trim();
+    if (!design || !name) return false;
     const id = uniqueId("custom-design");
     library[id] = normalizeDesign({
       ...clone(design),
       id,
-      name: `${design.name} copy`,
+      name,
+      machineType: String(requestedType || design.machineType || "generic").trim() || "generic",
       custom: true,
-      components: design.components.map((component) => ({ ...clone(component), id: uniqueId(component.type) })),
+      sourceDesignId: design.id,
+      components: design.components.map((component) => cloneComponentTreeForEmbedding(component)),
     }, id);
     saveLibrary();
     selectDesign(id);
-    showToast("Design duplicated.");
+    showToast(`${name} saved as a reusable machine.`);
+    return true;
+  }
+
+  function duplicateDesign() {
+    openSaveAsDialog();
   }
 
   function resetDesign() {
@@ -2060,6 +2100,7 @@
       showToast("Create or select a design first.");
       return;
     }
+    if (!saveCurrentDesign({ silent: true })) return;
     if (!Array.isArray(plantLayout.machines)) plantLayout.machines = [];
     const base = designBaseDimensions(design);
     const requestedName = document.getElementById("new-plant-machine-name")?.value.trim();
@@ -2138,9 +2179,22 @@
       status.dataset.state = "success";
       status.textContent = `${name} was added to the Plant Layout at X ${machine.x.toFixed(1)}, Z ${machine.z.toFixed(1)}.`;
     }
+    const openButton = document.getElementById("open-created-plant-machine");
+    if (openButton) {
+      openButton.hidden = false;
+      openButton.dataset.machineId = instanceId;
+    }
     const nameInput = document.getElementById("new-plant-machine-name");
     if (nameInput) nameInput.value = "";
-    showToast(`${name} added to the Plant Layout.`);
+    showToast(`${name} saved and added to the Plant Layout.`);
+  }
+
+  function plantLayoutUrl(machineId = "") {
+    const isStaticStudio = /machine-studio\.html$/i.test(window.location.pathname);
+    const base = isStaticStudio ? "preview.html" : "/";
+    const query = new URLSearchParams({ edit: "1" });
+    if (machineId) query.set("machine", machineId);
+    return `${base}?${query.toString()}`;
   }
 
   function updateAssignmentPanel() {
@@ -3812,8 +3866,8 @@
     const scale = state.zoom * Math.min(canvas.width / 50, canvas.height / 28);
     const rx = deltaX / Math.max(1, scale);
     const rz = deltaY / Math.max(1, sp * scale);
-    state.panX -= rx * cy + rz * sy;
-    state.panZ -= -rx * sy + rz * cy;
+    state.panX += rx * cy + rz * sy;
+    state.panZ += -rx * sy + rz * cy;
   }
 
   function translateComponent(component, dx, dy, dz) {
@@ -4159,9 +4213,9 @@
     const deltaX = event.clientX - state.pointerX;
     const deltaY = event.clientY - state.pointerY;
     if (state.drag.kind === "orbit") {
-      // Natural horizontal orbit: dragging right rotates the model toward the right.
-      state.yaw += deltaX * 0.006;
-      state.pitch = clamp(state.pitch - deltaY * 0.004, 0.015, 1.53);
+      // Grab-and-drag camera motion: the scene follows the pointer in both axes.
+      state.yaw -= deltaX * 0.006;
+      state.pitch = clamp(state.pitch + deltaY * 0.004, 0.015, 1.53);
     } else if (state.drag.kind === "pan") {
       panCamera(deltaX, deltaY);
     } else if (state.drag.kind === "transform") {
@@ -4177,7 +4231,7 @@
   canvas.addEventListener("wheel", (event) => {
     event.preventDefault();
     renderPerformance.noteInteraction(260);
-    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 0.9 : 1.1), 0.1, 10);
+    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 1.1 : 0.9), 0.1, 10);
   }, { passive: false });
   canvas.addEventListener("dblclick", (event) => {
     const hitResult = componentAt(event);
@@ -4638,6 +4692,26 @@
   document.getElementById("ungroup-component")?.addEventListener("click", ungroupSelectedComponent);
   document.getElementById("new-design")?.addEventListener("click", createDesign);
   document.getElementById("duplicate-design")?.addEventListener("click", duplicateDesign);
+  document.getElementById("save-design")?.addEventListener("click", saveCurrentDesign);
+  document.getElementById("save-design-as")?.addEventListener("click", openSaveAsDialog);
+  document.getElementById("save-and-place-design")?.addEventListener("click", () => {
+    saveCurrentDesign({ silent: true });
+    setBrowserTab("plant");
+    document.getElementById("new-plant-machine-name")?.focus();
+  });
+  document.getElementById("cancel-save-design-as")?.addEventListener("click", () => {
+    document.getElementById("save-design-as-dialog")?.close();
+  });
+  document.querySelector("[data-close-save-as]")?.addEventListener("click", () => {
+    document.getElementById("save-design-as-dialog")?.close();
+  });
+  document.getElementById("save-design-as-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = document.getElementById("save-design-as-name")?.value;
+    const type = document.getElementById("save-design-as-type")?.value;
+    if (!String(name || "").trim()) return;
+    if (saveDesignAs(name, type)) document.getElementById("save-design-as-dialog")?.close();
+  });
   document.getElementById("reset-design")?.addEventListener("click", resetDesign);
   document.getElementById("delete-design")?.addEventListener("click", deleteDesign);
   document.getElementById("undo-design")?.addEventListener("click", undo);
@@ -4978,6 +5052,9 @@
   });
 
   document.getElementById("create-plant-machine")?.addEventListener("click", createPlantMachineFromCurrentDesign);
+  document.getElementById("open-created-plant-machine")?.addEventListener("click", (event) => {
+    window.location.href = plantLayoutUrl(event.currentTarget.dataset.machineId || state.lastCreatedMachineId || "");
+  });
   document.getElementById("machine-assignment")?.addEventListener("change", updateAssignmentPanel);
   document.querySelectorAll("[data-instance-field]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -5123,6 +5200,12 @@
   window.addEventListener("keydown", (event) => {
     const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName);
     const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      if (event.shiftKey) openSaveAsDialog();
+      else saveCurrentDesign();
+      return;
+    }
     if (modifier && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
     if (modifier && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
     if (!typing && modifier && event.key.toLowerCase() === "a") { event.preventDefault(); selectAllComponents(); return; }

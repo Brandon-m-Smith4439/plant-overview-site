@@ -17,10 +17,12 @@ assert.ok(renderer.includes("bufferSubData"), "WebGL buffers should be reused in
 assert.ok(renderer.includes("colorCache"), "Repeated CSS color parsing should be cached.");
 assert.ok(plant.includes("renderPerformance.shouldRender"), "Plant render loop is not frame-budgeted.");
 assert.ok(plant.includes("projectedBoxVisible"), "Plant objects must be culled outside the viewport.");
+assert.ok(plant.includes("if (!projectedBoxVisible(machine)) return false"), "Off-screen animations must not keep the scene render loop active.");
 assert.ok(plant.includes("renderPerformance.maxShadowParts"), "Plant custom shadows need a bounded part budget.");
 assert.ok(studio.includes("depthRenderer.available ? 1"), "WebGL designer should not retain obsolete painter subdivisions.");
 assert.ok(studio.includes("span / 120"), "Designer grid density must be bounded for large models.");
 assert.ok(studio.includes("renderPerformance.shouldRender"), "Designer render loop is not frame-budgeted.");
+assert.ok(controller.includes("sampleCount < 30"), "Auto performance adaptation should respond promptly to sustained slow frames.");
 assert.ok(page.includes('/render-performance.js'), "Plant page does not load the performance controller.");
 assert.ok(studioPage.includes('/render-performance.js'), "Designer page does not load the performance controller.");
 console.log("Adaptive rendering, culling, bounded shadows, and WebGL reuse checks passed.");

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Build editable component-based machine models for the Monroe glass plant.">
-  <title>Machine Design Studio · v0.12.17</title>
+  <title>Machine Design Studio · v0.13.0</title>
   <link rel="stylesheet" href="../app/globals.css">
 </head>
 <body>
@@ -13,36 +13,38 @@
       <div class="studio-brand">
         <a class="studio-back-link" href="preview.html" aria-label="Return to plant layout">←</a>
         <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-        <span class="studio-version-badge">v0.12.17</span>
+        <span class="studio-version-badge">v0.13.0</span>
       </div>
       <div class="studio-top-actions" role="toolbar" aria-label="Design commands">
         <span id="save-state" class="studio-save-state">Auto-saved</span>
         <button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
         <button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
         <span class="studio-toolbar-divider"></span>
-        <button id="duplicate-component" type="button" title="Duplicate selected part (Ctrl+D)">Duplicate</button>
-        <button id="delete-component" type="button" class="danger-subtle" title="Delete selected part">Delete</button>
-        <a href="preview.html">Plant layout</a>
+        <button id="save-design" type="button" title="Save machine (Ctrl+S)">Save</button>
+        <button id="save-design-as" type="button" title="Save as a new reusable machine (Ctrl+Shift+S)">Save as...</button>
+        <button id="save-and-place-design" type="button" class="primary">Save &amp; add to layout</button>
+        <a href="preview.html" class="studio-layout-link">Open plant layout</a>
       </div>
     </header>
 
     <section class="machine-studio-workspace" aria-label="Machine design editor">
       <aside class="studio-browser-panel">
         <div class="studio-tabs studio-browser-tabs" role="tablist" aria-label="Design browser">
-          <button type="button" role="tab" data-browser-tab="designs" class="active" aria-selected="true">Library</button>
+          <button type="button" role="tab" data-browser-tab="designs" class="active" aria-selected="true">Machines</button>
           <button type="button" role="tab" data-browser-tab="parts" aria-selected="false">Parts</button>
-          <button type="button" role="tab" data-browser-tab="add" aria-selected="false">Add</button>
-          <button type="button" role="tab" data-browser-tab="plant" aria-selected="false">Plant</button>
+          <button type="button" role="tab" data-browser-tab="add" aria-selected="false">Build</button>
+          <button type="button" role="tab" data-browser-tab="plant" aria-selected="false">Place</button>
         </div>
 
         <section data-browser-panel="designs" class="studio-browser-section">
+          <div class="studio-workflow-guide" aria-label="Machine creation workflow"><span><b>1</b> Build</span><span><b>2</b> Save</span><span><b>3</b> Place</span></div>
           <div class="studio-panel-heading"><p>Design library</p><strong id="design-count">0 designs</strong></div>
           <label class="studio-field studio-search-field">Search<input id="design-search" type="search" placeholder="Machine name or type"></label>
           <div id="design-list" class="design-list" aria-label="Available machine designs"></div>
-          <details class="studio-collapsible" open>
-            <summary>Design actions</summary>
+          <details class="studio-collapsible">
+            <summary>More design actions</summary>
             <div class="studio-button-grid">
-              <button id="new-design" type="button">New</button><button id="duplicate-design" type="button">Duplicate</button>
+              <button id="new-design" type="button">New blank machine</button><button id="duplicate-design" type="button">Save a copy...</button>
               <button id="reset-design" type="button">Reset preset</button><button id="delete-design" type="button">Delete custom</button>
             </div>
             <div class="studio-button-grid compact">
@@ -120,7 +122,8 @@
               <label class="studio-field">Appearance stage<select id="new-plant-machine-stage"><option value="last">Plant today</option></select></label>
               <label class="studio-field">Placement<select id="new-plant-machine-placement"><option value="auto">Find open floor space</option><option value="center">Floor center</option><option value="origin">Plant origin</option></select></label>
             </div>
-            <button id="create-plant-machine" type="button" class="primary full-width-button">Add new machine to Plant Layout</button>
+            <button id="create-plant-machine" type="button" class="primary full-width-button">Save &amp; add machine to Plant Layout</button>
+            <button id="open-created-plant-machine" type="button" class="full-width-button success-action" hidden>Open and position this machine</button>
             <p id="create-plant-machine-status" class="studio-help">The design envelope becomes the new machine’s starting dimensions.</p>
           </section>
           <button id="sync-machine-dimensions" type="button" class="full-width-button">Match plant dimensions to this design</button>
@@ -208,7 +211,6 @@
           <p id="timeline-target-help" class="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
         </section>
 
-        <div class="orientation-cube" aria-label="Quick camera orientation"><button type="button" data-design-view="top">TOP</button><div><button type="button" data-design-view="front">FRONT</button><button type="button" data-design-view="side">RIGHT</button></div></div>
         <div class="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Right-drag orbit · Middle-drag pan · Wheel zoom · Double-click focus</span></div>
         <div id="design-toast" class="design-toast" role="status" aria-live="polite"></div>
       </section>
@@ -341,6 +343,16 @@
         </section>
       </aside>
     </section>
+
+    <dialog id="save-design-as-dialog" class="studio-dialog" aria-labelledby="save-design-as-title">
+      <form id="save-design-as-form" method="dialog">
+        <div class="studio-dialog-heading"><div><p>Reusable machine</p><h2 id="save-design-as-title">Save machine as</h2></div><button id="cancel-save-design-as" type="button" aria-label="Close">&times;</button></div>
+        <p class="studio-help">This creates a separate machine in the library. You can keep editing it or add it to the plant layout.</p>
+        <label class="studio-field">Machine name<input id="save-design-as-name" type="text" required maxlength="120" autocomplete="off"></label>
+        <label class="studio-field">Machine type<input id="save-design-as-type" type="text" required maxlength="80" autocomplete="off"></label>
+        <div class="studio-dialog-actions"><button type="button" data-close-save-as>Cancel</button><button type="submit" class="primary">Save new machine</button></div>
+      </form>
+    </dialog>
 
     <script src="depth-scene-renderer.js"></script>
     <script src="render-performance.js"></script>

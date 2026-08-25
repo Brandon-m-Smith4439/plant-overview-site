@@ -1,6 +1,12 @@
 # Monroe Glass Plant Evolution
 
-Current project version: **0.12.17**
+Current project version: **0.13.0**
+
+## Version 0.13.0
+
+Version 0.13.0 turns Machine Design Studio into a clear build-save-place workflow. New machines begin blank, reusable designs now have explicit Save and Save As actions, and saving a machine into the Plant Layout provides a direct handoff to position the newly created object. Redundant Designer controls were consolidated and the interface received a shared professional visual system.
+
+Designer orbit, pan, and wheel zoom directions now match the on-screen guidance. Rendering avoids work from off-screen animations and idle first-person pointer lock, while adaptive detail responds faster to sustained slow frames. First-person culling is more conservative around nearby and peripheral machines so large objects no longer blink out at the sides of the view.
 
 ## Version 0.12.17
 

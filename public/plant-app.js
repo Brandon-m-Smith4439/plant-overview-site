@@ -166,7 +166,7 @@
   const syncChannel = typeof window.BroadcastChannel === "function"
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
-  const APP_VERSION = "0.12.17";
+  const APP_VERSION = "0.13.0";
   const MIN_FLOOR_DIMENSION = 40;
   const MAX_FLOOR_DIMENSION = 5000;
   const MAX_FLOOR_GRID_LINES = 120;
@@ -6254,26 +6254,42 @@
 
   function projectedBoxVisible(item, margin = 180) {
     const y = Number(item.renderY ?? item.y) || 0;
-    const centerX = Number(item.x) + Number(item.w) / 2;
-    const centerZ = Number(item.z) + Number(item.d) / 2;
+    const x = Number(item.x) || 0;
+    const z = Number(item.z) || 0;
+    const width = Math.max(.01, Number(item.w) || .01);
+    const depth = Math.max(.01, Number(item.d) || .01);
+    const height = Math.max(.01, Number(item.h) || .01);
+    const centerX = x + width / 2;
+    const centerZ = z + depth / 2;
+
+    // Nearby first-person objects are intentionally kept in the scene. The old
+    // five-point screen test could drop a long machine when only a side or corner
+    // crossed the view, making it appear to blink out in peripheral vision.
+    if (state.cameraMode === "walk") {
+      const cameraX = modelCenter()[0] + state.panX;
+      const cameraZ = modelCenter()[1] + state.panZ;
+      const nearestX = clamp(cameraX, x, x + width);
+      const nearestZ = clamp(cameraZ, z, z + depth);
+      if (Math.hypot(cameraX - nearestX, cameraZ - nearestZ) <= 120) return true;
+    }
+
     const centerPoint = project(centerX, y + Number(item.h) / 2, centerZ);
-    const samples = [
-      project(Number(item.x), y, centerZ),
-      project(Number(item.x) + Number(item.w), y, centerZ),
-      project(centerX, y, Number(item.z)),
-      project(centerX, y, Number(item.z) + Number(item.d)),
-      project(centerX, y + Number(item.h), centerZ),
-    ];
+    const samples = [y, y + height].flatMap((sampleY) => (
+      [x, x + width].flatMap((sampleX) => (
+        [z, z + depth].map((sampleZ) => project(sampleX, sampleY, sampleZ))
+      ))
+    ));
     const visibleSamples = state.cameraMode === "walk"
       ? samples.filter((point) => point[3] >= WALK_NEAR_CLIP)
       : samples;
     if (!visibleSamples.length) return false;
     const anchor = state.cameraMode === "walk" && centerPoint[3] < WALK_NEAR_CLIP ? visibleSamples[0] : centerPoint;
-    const radius = Math.max(12, ...visibleSamples.map((point) => Math.hypot(point[0] - anchor[0], point[1] - anchor[1])));
-    return anchor[0] + radius >= -margin
-      && anchor[0] - radius <= canvas.width + margin
-      && anchor[1] + radius >= -margin
-      && anchor[1] - radius <= canvas.height + margin;
+    const radius = Math.max(24, ...visibleSamples.map((point) => Math.hypot(point[0] - anchor[0], point[1] - anchor[1])));
+    const safeMargin = state.cameraMode === "walk" ? Math.max(margin, 360) : margin;
+    return anchor[0] + radius >= -safeMargin
+      && anchor[0] - radius <= canvas.width + safeMargin
+      && anchor[1] + radius >= -safeMargin
+      && anchor[1] - radius <= canvas.height + safeMargin;
   }
 
   function designContainsAnimation(components) {
@@ -6288,6 +6304,7 @@
     if (state.animationsPaused || (state.editing && !state.previewObjectAnimations)) return false;
     return machines.some((machine) => {
       if (machine.visible === false || stageAlpha(machine.reveal, machine.retire) <= .01) return false;
+      if (!projectedBoxVisible(machine)) return false;
       if (machine.animationEnabled === true && machine.animationType && machine.animationType !== "none") return true;
       const design = machine.designId ? designLibrary[machine.designId] : null;
       return designContainsAnimation(design?.components);
@@ -6557,7 +6574,7 @@
     const stageMoving = Math.abs(state.stage - state.stageFloat) > .001;
     const animating = state.playing || stageMoving || hasActiveVisibleAnimations() || firstPersonMoving;
     if (!renderPerformance.shouldRender(time, {
-      interacting: state.dragging || firstPersonController?.isMoving() || state.cameraMode === "walk",
+      interacting: state.dragging || firstPersonController?.isMoving(),
       animating,
     })) return;
     const frameStartedAt = performance.now();
@@ -6888,6 +6905,14 @@
 
   addControls();
   addTimelineToolbar();
-  setStage(0);
+  const initialParams = new URLSearchParams(window.location.search);
+  const initialMachine = machines.find((machine) => machine.instanceId === initialParams.get("machine"));
+  if (initialMachine) {
+    setSingleSelection(initialMachine.instanceId);
+    if (initialParams.get("edit") === "1") setEditing(true);
+    else setStage(clamp(initialMachine.reveal, 0, stages.length - 1));
+    focusSelectedMachine();
+    showToast(`${initialMachine.name} is ready to position.`);
+  } else setStage(0);
   requestAnimationFrame(draw);
 })();

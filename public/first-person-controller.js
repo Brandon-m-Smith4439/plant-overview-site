@@ -169,7 +169,9 @@
         });
         onMovement();
       }
-      return changed || moving || pointerLocked;
+      // Pointer lock alone is not animation. Returning true while standing still
+      // forced the plant to rebuild every polygon at interaction frame rate.
+      return changed || moving;
     }
 
     function handleKeyDown(event) {

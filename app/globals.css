@@ -1118,6 +1118,256 @@ body {
   }
 }
 
+/* v0.13 professional workspace polish and consistent interaction system */
+:root {
+  --ink: #16231f;
+  --muted: #68766f;
+  --paper: #eef2ef;
+  --panel: #fbfcfa;
+  --line: #cbd5cf;
+  --orange: #df6b32;
+  --orange-dark: #b84c1d;
+  --teal: #176c63;
+  --teal-dark: #0d514b;
+  --focus-ring: 0 0 0 3px rgba(23, 108, 99, .2);
+  --panel-shadow: 0 18px 50px rgba(20, 41, 34, .14);
+}
+
+button,
+a,
+input,
+select,
+textarea,
+summary {
+  transition: border-color .14s ease, background-color .14s ease, color .14s ease, box-shadow .14s ease, transform .14s ease;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.experience {
+  border-color: #aebcb5;
+  border-radius: 16px;
+  background: #d9e0dc;
+  box-shadow: var(--panel-shadow);
+}
+
+.model-frame { background: linear-gradient(145deg, #dce3df, #cdd7d2); }
+
+.model-badge,
+.view-help,
+.model-controls {
+  border-color: rgba(255,255,255,.32);
+  border-radius: 10px;
+  background: rgba(18,34,29,.78);
+  box-shadow: 0 8px 28px rgba(10,25,20,.16);
+}
+
+.model-controls { gap: 4px; padding: 5px; }
+.model-controls button { min-height: 34px; border-radius: 7px; }
+
+.layout-editor {
+  width: min(380px, calc(100% - 36px));
+  padding: 18px;
+  border-color: rgba(202,214,208,.95);
+  border-radius: 14px;
+  background: rgba(250,252,250,.97);
+  box-shadow: 0 22px 54px rgba(16,39,31,.22);
+}
+
+.layout-editor button,
+.layout-editor select,
+.layout-editor input,
+.layout-editor textarea {
+  min-height: 38px;
+  border-color: #c5d0ca;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.layout-editor button:hover:not(:disabled) { transform: translateY(-1px); }
+.layout-editor button.primary { border-color: var(--teal-dark); background: var(--teal); }
+
+.machine-studio-shell {
+  --studio-control-height: 38px;
+  min-height: 100vh;
+  background: #e8eeea;
+}
+
+.studio-topbar {
+  min-height: 70px;
+  padding: 11px 18px;
+  border-bottom: 1px solid #c8d3cd;
+  background: rgba(250,252,250,.96);
+  box-shadow: 0 8px 28px rgba(20,41,34,.08);
+  backdrop-filter: blur(14px);
+}
+
+.studio-brand h1 { color: #14231e; letter-spacing: -.025em; }
+.studio-version-badge { border-radius: 999px; background: #e6efeb; color: var(--teal-dark); }
+
+.studio-top-actions { gap: 7px; }
+.studio-top-actions button,
+.studio-top-actions a,
+.viewport-commandbar button,
+.studio-browser-panel button,
+.studio-inspector-panel button {
+  min-height: var(--studio-control-height);
+  border-radius: 8px;
+}
+
+.studio-top-actions button:hover:not(:disabled),
+.studio-top-actions a:hover { transform: translateY(-1px); }
+
+.studio-top-actions .primary,
+.studio-browser-panel .primary,
+.studio-inspector-panel .primary {
+  border-color: var(--teal-dark);
+  background: var(--teal);
+  color: #fff;
+}
+
+.studio-layout-link { font-weight: 750; }
+.studio-save-state { padding: 6px 9px; border-radius: 999px; background: #eaf2ee; color: #35675e; }
+
+.machine-studio-workspace {
+  grid-template-columns: minmax(250px, 290px) minmax(480px, 1fr) minmax(290px, 330px);
+  min-height: calc(100vh - 70px);
+  background: #dfe7e2;
+}
+
+.studio-browser-panel,
+.studio-inspector-panel {
+  border-color: #c7d3cc;
+  background: #f7faf7;
+}
+
+.studio-tabs {
+  gap: 4px;
+  padding: 8px;
+  border-bottom-color: #d2dcd6;
+  background: #edf3ef;
+}
+
+.studio-tabs button {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #61716a;
+}
+
+.studio-tabs button.active {
+  border-color: #b8cbc2;
+  background: #fff;
+  color: var(--teal-dark);
+  box-shadow: 0 4px 12px rgba(25,59,48,.08);
+}
+
+.studio-browser-section,
+.studio-inspector-section { padding: 15px; }
+
+.design-list button,
+.component-tree-row,
+.component-add-panel,
+.create-plant-machine-panel,
+.studio-callout,
+.inspector-primary-card,
+.transform-section {
+  border-radius: 10px;
+}
+
+.design-list button.active,
+.component-tree-row.active {
+  border-color: #75a99a;
+  background: #e8f2ed;
+  box-shadow: inset 3px 0 0 var(--teal);
+}
+
+.create-plant-machine-panel {
+  border-color: #9bc0b3;
+  background: linear-gradient(145deg, #edf7f2, #f8fbf9);
+  box-shadow: 0 10px 24px rgba(26,80,64,.08);
+}
+
+.success-action {
+  border-color: #5f9d7d !important;
+  background: #e8f5ed !important;
+  color: #1f6a46 !important;
+  font-weight: 800 !important;
+}
+
+.design-viewport-panel { background: radial-gradient(circle at 50% 38%, #edf2ef 0, #d9e1dc 68%, #cdd7d1 100%); }
+
+.viewport-commandbar {
+  margin: 10px;
+  border: 1px solid rgba(194,207,200,.92);
+  border-radius: 11px;
+  background: rgba(250,252,250,.9);
+  box-shadow: 0 8px 24px rgba(20,41,34,.1);
+  backdrop-filter: blur(12px);
+}
+
+.viewport-toolrail {
+  border-radius: 11px;
+  background: rgba(250,252,250,.94);
+  box-shadow: 0 10px 28px rgba(20,41,34,.14);
+}
+
+.viewport-toolrail button { border-radius: 8px; }
+.viewport-statusbar { border-radius: 9px; background: rgba(18,34,29,.82); }
+
+.studio-field input,
+.studio-field select,
+.studio-field textarea,
+.axis-fields input,
+.timeline-target-control select {
+  min-height: var(--studio-control-height);
+  border-color: #c5d0ca;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.studio-dialog {
+  width: min(480px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #bdcbc4;
+  border-radius: 14px;
+  background: #fbfcfa;
+  color: var(--ink);
+  box-shadow: 0 28px 90px rgba(8,29,21,.28);
+}
+
+.studio-dialog::backdrop { background: rgba(10,25,20,.46); backdrop-filter: blur(4px); }
+.studio-dialog form { display: grid; gap: 14px; padding: 20px; }
+.studio-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.studio-dialog-heading p { margin: 0 0 4px; color: var(--teal); font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.studio-dialog-heading h2 { margin: 0; font-size: 24px; letter-spacing: -.025em; }
+.studio-dialog-heading > button { width: 38px; min-height: 38px; border: 1px solid #c9d3cd; border-radius: 8px; background: #fff; cursor: pointer; }
+.studio-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.studio-dialog-actions button { min-height: 40px; padding: 0 16px; border: 1px solid #bdcac3; border-radius: 8px; background: #fff; cursor: pointer; font-weight: 750; }
+.studio-dialog-actions .primary { border-color: var(--teal-dark); background: var(--teal); color: #fff; }
+
+@media (max-width: 1080px) {
+  .machine-studio-workspace { grid-template-columns: 245px minmax(420px, 1fr) 280px; }
+  .studio-top-actions .studio-layout-link { display: none; }
+}
+
+@media (max-width: 820px) {
+  .studio-topbar { align-items: flex-start; }
+  .studio-top-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .machine-studio-workspace { display: block; }
+  .studio-browser-panel,
+  .studio-inspector-panel { max-height: none; border: 0; border-bottom: 1px solid #c7d3cc; }
+  .design-viewport-panel { min-height: 68vh; }
+}
+
 .experience.editing-layout {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -4872,4 +5122,52 @@ body.timeline-dragging[data-timeline-drag-mode="end"] {
   .timeline-inspector-type-buttons {
     grid-template-columns: 1fr;
   }
+}
+
+/* Final v0.13 polish layer kept last so it supersedes legacy version patches. */
+.experience { border-radius: 16px; border-color: #aebcb5; box-shadow: var(--panel-shadow); }
+.model-frame { background: linear-gradient(145deg, #dce3df, #cdd7d2); }
+.model-badge, .view-help, .model-controls { border-radius: 10px; background: rgba(18,34,29,.78); box-shadow: 0 8px 28px rgba(10,25,20,.16); }
+.model-controls button { min-height: 34px; border-radius: 7px; }
+.layout-editor { width: min(380px, calc(100% - 36px)); padding: 18px; border-radius: 14px; background: rgba(250,252,250,.97); box-shadow: 0 22px 54px rgba(16,39,31,.22); }
+.layout-editor button, .layout-editor select, .layout-editor input, .layout-editor textarea { min-height: 38px; border-color: #c5d0ca; border-radius: 8px; }
+.layout-editor button.primary { border-color: var(--teal-dark); background: var(--teal); }
+
+.machine-studio-shell { --studio-control-height: 38px; min-height: 100vh; background: #e8eeea; }
+.studio-topbar { min-height: 70px; padding: 11px 18px; border-bottom: 1px solid #c8d3cd; background: rgba(250,252,250,.96); box-shadow: 0 8px 28px rgba(20,41,34,.08); backdrop-filter: blur(14px); }
+.studio-top-actions { gap: 7px; }
+.studio-top-actions button, .studio-top-actions a, .viewport-commandbar button, .studio-browser-panel button, .studio-inspector-panel button { min-height: var(--studio-control-height); border-radius: 8px; }
+.studio-top-actions .primary, .studio-browser-panel .primary, .studio-inspector-panel .primary { border-color: var(--teal-dark); background: var(--teal); color: #fff; }
+.studio-save-state { padding: 6px 9px; border-radius: 999px; background: #eaf2ee; color: #35675e; }
+.machine-studio-workspace { grid-template-columns: minmax(250px, 290px) minmax(480px, 1fr) minmax(290px, 330px); min-height: calc(100vh - 70px); background: #dfe7e2; }
+.studio-browser-panel, .studio-inspector-panel { border-color: #c7d3cc; background: #f7faf7; }
+.studio-tabs { gap: 4px; padding: 8px; border-bottom-color: #d2dcd6; background: #edf3ef; }
+.studio-tabs button { border: 1px solid transparent; border-radius: 8px; color: #61716a; }
+.studio-tabs button.active { border-color: #b8cbc2; background: #fff; color: var(--teal-dark); box-shadow: 0 4px 12px rgba(25,59,48,.08); }
+.studio-browser-section, .studio-inspector-section { padding: 15px; }
+.studio-workflow-guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 14px; }
+.studio-workflow-guide span { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 7px 5px; border: 1px solid #d1dcd6; border-radius: 8px; background: #fff; color: #587068; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.studio-workflow-guide b { display: grid; flex: 0 0 18px; width: 18px; height: 18px; place-items: center; border-radius: 50%; background: #e3efea; color: var(--teal-dark); font-size: 9px; }
+.design-list button, .component-tree-row, .component-add-panel, .create-plant-machine-panel, .studio-callout, .inspector-primary-card, .transform-section { border-radius: 10px; }
+.design-list button.active, .component-tree-row.active { border-color: #75a99a; background: #e8f2ed; box-shadow: inset 3px 0 0 var(--teal); }
+.create-plant-machine-panel { border-color: #9bc0b3; background: linear-gradient(145deg, #edf7f2, #f8fbf9); box-shadow: 0 10px 24px rgba(26,80,64,.08); }
+.success-action { border-color: #5f9d7d !important; background: #e8f5ed !important; color: #1f6a46 !important; font-weight: 800 !important; }
+.design-viewport-panel { background: radial-gradient(circle at 50% 38%, #edf2ef 0, #d9e1dc 68%, #cdd7d1 100%); }
+.viewport-commandbar { margin: 10px; border: 1px solid rgba(194,207,200,.92); border-radius: 11px; background: rgba(250,252,250,.9); box-shadow: 0 8px 24px rgba(20,41,34,.1); backdrop-filter: blur(12px); }
+.viewport-toolrail { border-radius: 11px; background: rgba(250,252,250,.94); box-shadow: 0 10px 28px rgba(20,41,34,.14); }
+.viewport-toolrail button { border-radius: 8px; }
+.viewport-statusbar { border-radius: 9px; background: rgba(18,34,29,.82); }
+.studio-field input, .studio-field select, .studio-field textarea, .axis-fields input, .timeline-target-control select { min-height: var(--studio-control-height); border-color: #c5d0ca; border-radius: 8px; background: #fff; }
+
+@media (max-width: 1080px) {
+  .machine-studio-workspace { grid-template-columns: 245px minmax(420px, 1fr) 280px; }
+  .studio-top-actions .studio-layout-link { display: none; }
+}
+
+@media (max-width: 820px) {
+  .studio-topbar { align-items: flex-start; }
+  .studio-top-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .machine-studio-workspace { display: block; }
+  .studio-browser-panel, .studio-inspector-panel { max-height: none; border: 0; border-bottom: 1px solid #c7d3cc; }
+  .design-viewport-panel { min-height: 68vh; }
 }

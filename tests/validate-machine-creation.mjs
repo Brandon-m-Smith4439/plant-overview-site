@@ -9,6 +9,10 @@ const html = fs.readFileSync(path.join(root, "public/machine-studio.html"), "utf
 const tsx = fs.readFileSync(path.join(root, "app/machine-studio/page.tsx"), "utf8");
 
 for (const source of [html, tsx]) {
+  assert.match(source, /id=["']save-design["']/);
+  assert.match(source, /id=["']save-design-as["']/);
+  assert.match(source, /id=["']save-and-place-design["']/);
+  assert.match(source, /id=["']save-design-as-dialog["']/);
   assert.match(source, /id=["']create-plant-machine["']/);
   assert.match(source, /id=["']new-plant-machine-name["']/);
   assert.match(source, /id=["']new-plant-machine-stage["']/);
@@ -17,6 +21,11 @@ for (const source of [html, tsx]) {
   assert.match(source, /id=["']add-machine-design-button["']/);
 }
 assert.match(studio, /function createPlantMachineFromCurrentDesign\(\)/);
+assert.match(studio, /function saveCurrentDesign\(options = \{\}\)/);
+assert.match(studio, /function saveDesignAs\(requestedName, requestedType\)/);
+assert.match(studio, /saveCurrentDesign\(\{ silent: true \}\)/);
+assert.match(studio, /function plantLayoutUrl\(machineId = ""\)/);
+assert.match(studio, /open-created-plant-machine/);
 assert.match(studio, /designId: design\.id/);
 assert.match(studio, /designScaleMode: "match"/);
 assert.match(studio, /placement_status: "designer_created"/);
@@ -36,6 +45,8 @@ assert.match(plant, /component\.embeddedMachine === true/);
 assert.match(plant, /animateDesignComponent\(child, time, design\)/);
 assert.match(plant, /machines\.push\(normalizeMachine\(incoming/);
 assert.match(plant, /localIds\.has\(incoming\.instanceId\)/);
+assert.match(plant, /initialParams\.get\("machine"\)/);
+assert.match(plant, /setSingleSelection\(initialMachine\.instanceId\)/);
 console.log("Machine creation workflow validation passed.");
 
 

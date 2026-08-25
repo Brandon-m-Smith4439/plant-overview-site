@@ -6,6 +6,8 @@ const source = fs.readFileSync(new URL("../public/plant-app.js", import.meta.url
 assert.match(source, /const reciprocalDepth = 1 \/ safeDepth;/, "First-person projection must use reciprocal depth.");
 assert.match(source, /reciprocalDepth,\s*cameraDepth,/, "Projected vertices must expose reciprocal render depth and raw camera depth.");
 assert.match(source, /state\.yaw = Math\.atan2\(Math\.sin\(state\.yaw \+ Math\.PI\), Math\.cos\(state\.yaw \+ Math\.PI\)\);/, "Orbit yaw must be converted to first-person look direction.");
+assert.match(source, /five-point screen test could drop a long machine/, "Peripheral-machine culling regression guard is missing.");
+assert.match(source, /Math\.hypot\(cameraX - nearestX, cameraZ - nearestZ\) <= 120/, "Nearby first-person machines must bypass aggressive screen culling.");
 
 function projectPoint({ x, y, z, yaw = 0, pitch = 0, width = 1000, height = 600, fov = 72 }) {
   const cosineYaw = Math.cos(yaw);

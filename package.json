@@ -8,9 +8,11 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "generate:types": "wrangler types worker-configuration.d.ts --config dist/server/wrangler.json",
+    "typecheck": "npm run build && npm run generate:types && tsc --noEmit --incremental false",
     "start": "vinext start",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "validate:js": "node --check public/depth-scene-renderer.js && node --check public/render-performance.js && node --check public/first-person-controller.js && node --check public/animation-timeline.js && node --check public/animation-timeline-workspace.js && node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern worker-configuration.d.ts",
+    "validate:js": "node --check public/depth-scene-renderer.js && node --check public/render-performance.js && node --check public/workspace-transfer.js && node --check public/first-person-controller.js && node --check public/animation-timeline.js && node --check public/animation-timeline-workspace.js && node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
     "export:machines": "python cad/export_machine_registry.py",
     "db:generate": "drizzle-kit generate",
     "validate:rendering": "node tests/validate-layout-rendering.mjs",
@@ -27,7 +29,8 @@
     "validate:design-scaling": "node tests/validate-design-scaling.mjs",
     "validate:transform-sync": "node tests/validate-transform-sync.mjs",
     "validate:structure-camera": "node tests/validate-structure-camera.mjs",
-    "validate:performance": "node tests/validate-performance.mjs",
+    "validate:performance": "node tests/validate-performance.mjs && node tests/validate-render-performance-runtime.mjs",
+    "validate:renderer": "node tests/validate-renderer-runtime.mjs",
     "validate:plant-scaling": "node tests/validate-plant-scaling.mjs",
     "validate:labels": "node tests/validate-label-system.mjs",
     "validate:first-person": "node tests/validate-first-person.mjs",
@@ -35,20 +38,22 @@
     "validate:columns": "node tests/validate-structural-columns.mjs",
     "validate:machine-creation": "node tests/validate-machine-creation.mjs",
     "validate:plant-design-add": "node tests/validate-plant-design-add.mjs",
+    "validate:layout-tools": "node tests/validate-layout-designer-tools.mjs",
     "validate:compact-envelopes": "node tests/validate-compact-envelopes.mjs",
     "validate:animation-timeline": "node tests/validate-animation-timeline.mjs",
     "validate:editor-tabs": "node tests/validate-tabbed-editors.mjs",
     "validate:timeline-workspace": "node tests/validate-timeline-workspace.mjs",
-    "validate:timeline-repair": "node tests/validate-timeline-repair.mjs"
+    "validate:timeline-repair": "node tests/validate-timeline-repair.mjs",
+    "validate:cad": "py -B cad/validate_site.py"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "next": "16.2.6",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "next": "16.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/vite-plugin": "1.54.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
@@ -57,13 +62,13 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
-    "react-server-dom-webpack": "19.2.6",
+    "eslint-config-next": "16.3.3",
+    "react-server-dom-webpack": "19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "vite": "8.2.2",
+    "wrangler": "4.126.0"
   },
   "type": "module"
 }

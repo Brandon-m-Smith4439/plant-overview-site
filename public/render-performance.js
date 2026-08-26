@@ -5,13 +5,15 @@
   const MODES = {
     auto: {
       label: "Auto",
-      pixelRatioCap: 1.35,
-      idleFps: 8,
+      pixelRatioCap: 1.2,
+      idleFps: 6,
       animationFps: 30,
-      interactionFps: 55,
+      interactionFps: 60,
       shadowLayers: 1,
-      cylinderSegments: 14,
-      maxShadowParts: 28,
+      cylinderSegments: 12,
+      maxShadowParts: 20,
+      maxShadowMachines: 28,
+      detailPixelThreshold: 22,
       pillarShadows: false,
     },
     quality: {
@@ -23,6 +25,8 @@
       shadowLayers: 2,
       cylinderSegments: 22,
       maxShadowParts: 72,
+      maxShadowMachines: 96,
+      detailPixelThreshold: 8,
       pillarShadows: true,
     },
     balanced: {
@@ -34,6 +38,8 @@
       shadowLayers: 1,
       cylinderSegments: 12,
       maxShadowParts: 24,
+      maxShadowMachines: 36,
+      detailPixelThreshold: 18,
       pillarShadows: false,
     },
     performance: {
@@ -45,6 +51,8 @@
       shadowLayers: 0,
       cylinderSegments: 8,
       maxShadowParts: 0,
+      maxShadowMachines: 0,
+      detailPixelThreshold: 30,
       pillarShadows: false,
     },
   };
@@ -74,7 +82,7 @@
     }
   }
 
-  function createRenderPerformanceController(options = {}) {
+  function createRenderPerformanceController() {
     const settings = loadSettings();
     let dirty = true;
     let interactionUntil = 0;
@@ -112,6 +120,22 @@
       return Math.round(modeConfig().maxShadowParts * adaptiveScale);
     }
 
+    function maxShadowMachines() {
+      if (shadowLayerCount() <= 0) return 0;
+      if (settings.shadows === "full") return Math.max(96, modeConfig().maxShadowMachines);
+      if (settings.shadows === "reduced") return Math.min(28, modeConfig().maxShadowMachines || 28);
+      const adaptiveScale = settings.mode === "auto"
+        ? clamp(currentPixelRatioCap / MODES.auto.pixelRatioCap, .6, 1)
+        : 1;
+      return Math.round(modeConfig().maxShadowMachines * adaptiveScale);
+    }
+
+    function detailPixelThreshold() {
+      if (settings.mode !== "auto") return modeConfig().detailPixelThreshold;
+      const adaptiveScale = clamp(MODES.auto.pixelRatioCap / currentPixelRatioCap, 1, 1.5);
+      return Math.round(modeConfig().detailPixelThreshold * adaptiveScale);
+    }
+
     function pillarShadowsEnabled() {
       if (settings.shadows === "off" || settings.shadows === "reduced") return false;
       if (settings.shadows === "full") return true;
@@ -127,12 +151,20 @@
 
     function shouldRender(time, activity = {}) {
       if (document.hidden) return false;
+      const forced = dirty || activity.force === true;
+      const continuouslyActive = activity.interacting
+        || activity.animating
+        || performance.now() < interactionUntil;
+      // A static canvas does not change between frames. Leaving it on-screen
+      // costs nothing, so wait for an explicit invalidation instead of
+      // redrawing the same plant or machine several times every second.
+      if (!forced && !continuouslyActive) return false;
       const fps = Math.max(1, targetFps(activity));
       const interval = 1000 / fps;
-      const forced = dirty || activity.force === true;
       if (!forced && time - lastRenderAt < interval) return false;
       if (forced && time - lastRenderAt < Math.min(8, interval)) return false;
-      lastRenderAt = time;
+      const elapsed = time - lastRenderAt;
+      lastRenderAt = forced || !lastRenderAt ? time : time - (elapsed % interval);
       dirty = false;
       return true;
     }
@@ -170,7 +202,7 @@
         fpsWindowStart = now;
         updateStatus();
       }
-      if (settings.mode !== "auto" || sampleCount < 30) return;
+      if (settings.mode !== "auto" || sampleCount < 24) return;
       const average = sampleTotal / sampleCount;
       sampleTotal = 0;
       sampleCount = 0;
@@ -185,11 +217,11 @@
         fastWindows = 0;
       }
       if (slowWindows >= 2) {
-        currentPixelRatioCap = clamp(currentPixelRatioCap - 0.1, 0.85, 1.45);
+        currentPixelRatioCap = clamp(currentPixelRatioCap - 0.1, 0.75, MODES.auto.pixelRatioCap);
         slowWindows = 0;
         invalidate();
       } else if (fastWindows >= 4) {
-        currentPixelRatioCap = clamp(currentPixelRatioCap + 0.05, 0.85, 1.45);
+        currentPixelRatioCap = clamp(currentPixelRatioCap + 0.05, 0.75, MODES.auto.pixelRatioCap);
         fastWindows = 0;
         invalidate();
       }
@@ -296,6 +328,8 @@
       cylinderSegments,
       shadowLayerCount,
       maxShadowParts,
+      maxShadowMachines,
+      detailPixelThreshold,
       pillarShadowsEnabled,
       recordFrame,
       mount,

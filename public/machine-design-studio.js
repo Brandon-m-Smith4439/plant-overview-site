@@ -18,11 +18,13 @@
         shadowLayerCount() { return 1; }, maxShadowParts() { return 24; },
         recordFrame() {}, mount() {},
       };
+  window.addEventListener("plant-renderer-fallback", () => renderPerformance.invalidate());
   const APP_VERSION = "0.13.0";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
   const MAX_ENVELOPE_CLEARANCE_INCHES = 120;
+  const DEFAULT_PAN_PITCH_SCALE = Math.sin(0.62);
   const DESIGN_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
   const LAYOUT_KEY = "monroe-glass-plant-layout-v6";
   const LEGACY_LAYOUT_KEY = "monroe-glass-plant-layout-v5";
@@ -42,7 +44,7 @@
   };
   const COMPONENT_TYPES = [
     "box", "cylinder", "sphere", "cone", "wedge",
-    "glassPanel", "beam", "rollerBed", "wheel", "group",
+    "glassPanel", "beam", "rollerBed", "wheel", "text", "group",
   ];
 
   function clone(value) {
@@ -148,12 +150,16 @@
     // exported designs continue to load without losing orientation.
     normalized.rotation = normalized.rotationY;
 
-    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(type)) {
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge", "text"].includes(type)) {
       normalized.w = Math.max(0.02, Number(component?.w) || 4);
       normalized.h = Math.max(0.02, Number(component?.h) || 4);
-      normalized.d = Math.max(0.02, Number(component?.d) || (type === "glassPanel" ? 0.25 : 4));
+      normalized.d = Math.max(0.02, Number(component?.d) || (["glassPanel", "text"].includes(type) ? 0.25 : 4));
       if (["cylinder", "sphere", "cone"].includes(type)) {
         normalized.segments = Math.max(8, Math.min(48, Math.round(Number(component?.segments) || 20)));
+      }
+      if (type === "text") {
+        normalized.text = String(component?.text || component?.name || "LABEL").slice(0, 120);
+        normalized.textColor = validColor(component?.textColor, "#ffffff");
       }
     } else if (type === "beam") {
       normalized.x2 = Number.isFinite(Number(component?.x2)) ? Number(component.x2) : normalized.x + 5;
@@ -520,6 +526,7 @@
     linkedMachineId: queryMachine?.instanceId || null,
     lastCreatedMachineId: null,
     showDesignEnvelope: true,
+    componentClipboard: [],
   };
 
   function currentDesign() {
@@ -745,6 +752,7 @@
         beam: "New frame beam",
         rollerBed: "New roller bed",
         wheel: "New wheel",
+        text: "New text label",
       }[type] || "New component",
       type,
       x: base.w * 0.25,
@@ -770,13 +778,14 @@
       animationPhase: 0,
       playOwnAnimation: true,
     };
-    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(type)) {
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge", "text"].includes(type)) {
       Object.assign(common, {
-        w: base.w * (type === "sphere" ? 0.3 : 0.5),
-        h: base.h * (type === "glassPanel" ? 0.65 : 0.5),
-        d: type === "glassPanel" ? 0.25 : base.d * (type === "sphere" ? 0.3 : 0.5),
+        w: type === "text" ? Math.max(3, base.w * .3) : base.w * (type === "sphere" ? 0.3 : 0.5),
+        h: type === "text" ? Math.max(1, base.h * .14) : base.h * (type === "glassPanel" ? 0.65 : 0.5),
+        d: ["glassPanel", "text"].includes(type) ? 0.25 : base.d * (type === "sphere" ? 0.3 : 0.5),
       });
       if (["cylinder", "sphere", "cone"].includes(type)) common.segments = 20;
+      if (type === "text") Object.assign(common, { text: "MACHINE LABEL", textColor: "#ffffff", color: "#176f69" });
     } else if (type === "beam") {
       Object.assign(common, { x2: base.w * 0.75, y2: 0, z2: base.d * 0.25, thickness: 2, thicknessY: 2, thicknessZ: 2 });
     } else if (type === "rollerBed") {
@@ -1084,16 +1093,9 @@
     if (!design || !components.length) return;
     pushHistory();
     const copies = components.map((component) => {
-      const copy = normalizeComponent({
-        ...clone(component),
-        id: uniqueId(component.type),
-        name: `${component.name} copy`,
-        x: component.type === "group" ? component.x : Number(component.x) + state.snapStep,
-        z: component.type === "group" ? component.z : Number(component.z) + state.snapStep,
-        x2: component.type === "beam" ? Number(component.x2) + state.snapStep : component.x2,
-        z2: component.type === "beam" ? Number(component.z2) + state.snapStep : component.z2,
-      });
-      if (copy.type === "group") translateComponent(copy, state.snapStep, 0, state.snapStep);
+      const copy = cloneComponentTreeForEmbedding(component);
+      copy.name = `${component.name} copy`;
+      translateComponent(copy, state.snapStep, 0, state.snapStep);
       return copy;
     });
     design.components.push(...copies);
@@ -1102,6 +1104,46 @@
     state.componentId = copies.at(-1)?.id || null;
     state.browserTab = "parts";
     commit(`${copies.length} component${copies.length === 1 ? "" : "s"} duplicated.`);
+  }
+
+  function copySelectedComponents({ announce = true } = {}) {
+    const components = selectionComponents();
+    if (!components.length) return false;
+    state.componentClipboard = components.map(clone);
+    if (announce) showToast(`${components.length} part${components.length === 1 ? "" : "s"} copied.`);
+    return true;
+  }
+
+  function pasteComponents() {
+    const design = currentDesign();
+    if (!design || !state.componentClipboard.length) {
+      showToast("Copy a part before pasting.");
+      return;
+    }
+    pushHistory();
+    const copies = state.componentClipboard.map((component) => {
+      return cloneComponentTreeForEmbedding(component);
+    });
+    design.components.push(...copies);
+    state.selectAllParts = false;
+    state.selectedComponentIds = new Set(copies.map((component) => component.id));
+    state.componentId = copies.at(-1)?.id || null;
+    state.browserTab = "parts";
+    commit(`${copies.length} copied part${copies.length === 1 ? "" : "s"} pasted in the original position.`);
+  }
+
+  function cutSelectedComponents() {
+    const design = currentDesign();
+    const components = selectionComponents();
+    if (!design || !components.length) return;
+    state.componentClipboard = components.map(clone);
+    pushHistory();
+    const ids = new Set(components.map((component) => component.id));
+    design.components = design.components.filter((component) => !ids.has(component.id));
+    state.selectAllParts = false;
+    state.componentId = design.components[0]?.id || null;
+    state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
+    commit(`${components.length} part${components.length === 1 ? "" : "s"} cut.`);
   }
 
   function deleteSelectedComponent() {
@@ -1370,6 +1412,9 @@
     return resolvedTimelineTarget(root, [root]);
   }
 
+  // This small ID-only adapter is also exercised directly by the nested-motion
+  // regression harness, while the live UI uses the richer target object above.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function resolveTimelineTargetIdForHit(root, pathIds) {
     return resolveTimelineTargetForHit(root, pathIds).component?.id || null;
   }
@@ -2098,9 +2143,9 @@
     const design = currentDesign();
     if (!design) {
       showToast("Create or select a design first.");
-      return;
+      return null;
     }
-    if (!saveCurrentDesign({ silent: true })) return;
+    if (!saveCurrentDesign({ silent: true })) return null;
     if (!Array.isArray(plantLayout.machines)) plantLayout.machines = [];
     const base = designBaseDimensions(design);
     const requestedName = document.getElementById("new-plant-machine-name")?.value.trim();
@@ -2187,6 +2232,7 @@
     const nameInput = document.getElementById("new-plant-machine-name");
     if (nameInput) nameInput.value = "";
     showToast(`${name} saved and added to the Plant Layout.`);
+    return machine;
   }
 
   function plantLayoutUrl(machineId = "") {
@@ -2287,7 +2333,7 @@
 
   function componentCenter(component) {
     if (component.type === "group") return selectionCenter(component.children || []);
-    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge", "text"].includes(component.type)) {
       return [component.x + component.w / 2, component.y + component.h / 2, component.z + component.d / 2];
     }
     if (component.type === "beam") {
@@ -2321,6 +2367,11 @@
     ];
   }
 
+  function signedNavigationPitchScale() {
+    const direction = state.pitch < 0 ? -1 : 1;
+    return direction * Math.max(DEFAULT_PAN_PITCH_SCALE, Math.abs(Math.sin(state.pitch)));
+  }
+
   function worldFromScreen(event) {
     const [screenX, screenY] = canvasPoint(event);
     const design = currentDesign();
@@ -2328,7 +2379,7 @@
     const centerZ = (design?.base.d || 10) / 2 + state.panZ;
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
-    const sp = Math.max(0.08, Math.sin(state.pitch));
+    const sp = signedNavigationPitchScale();
     const scale = state.zoom * Math.min(canvas.width / 50, canvas.height / 28);
     const rx = (screenX - canvas.width / 2) / scale;
     const rz = (screenY - canvas.height * 0.56) / (sp * scale);
@@ -2432,10 +2483,6 @@
     if (axis === "y") component.rotation = component.rotationY;
   }
 
-  function transformAroundComponent(component, point) {
-    return rotatePoint3(point, componentCenter(component), ...componentRotation(component));
-  }
-
   function boxVertices(component) {
     const center = componentCenter(component);
     const halfX = component.w / 2;
@@ -2454,11 +2501,6 @@
     return points.reduce((sum, point) => sum + project(...point)[2], 0) / Math.max(1, points.length);
   }
 
-  function cameraVector() {
-    const cp = Math.cos(state.pitch);
-    return [Math.sin(state.yaw) * cp, Math.sin(state.pitch), Math.cos(state.yaw) * cp];
-  }
-
   function vectorBetween(start, end) {
     return [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
   }
@@ -2469,15 +2511,6 @@
       first[2] * second[0] - first[0] * second[2],
       first[0] * second[1] - first[1] * second[0],
     ];
-  }
-
-  function dotProduct(first, second) {
-    return first[0] * second[0] + first[1] * second[1] + first[2] * second[2];
-  }
-
-  function faceNormal(points) {
-    if (points.length < 3) return [0, 0, 0];
-    return crossProduct(vectorBetween(points[0], points[1]), vectorBetween(points[0], points[2]));
   }
 
   function faceIsVisible() {
@@ -3163,27 +3196,6 @@
     return animated;
   }
 
-  function componentAnimationDelta(component, animated) {
-    const baseCenter = componentCenter(component);
-    const animatedCenter = componentCenter(animated);
-    const baseBounds = componentWorldBounds(component);
-    const animatedBounds = componentWorldBounds(animated);
-    const safeRatio = (animatedSize, baseSize) => Math.abs(baseSize) > 0.0001 ? animatedSize / baseSize : 1;
-    const baseRotation = componentRotation(component);
-    const animatedRotation = componentRotation(animated);
-    return {
-      translation: animatedCenter.map((value, index) => value - baseCenter[index]),
-      rotation: animatedRotation.map((value, index) => value - baseRotation[index]),
-      scale: [
-        safeRatio(animatedBounds.maxX - animatedBounds.minX, baseBounds.maxX - baseBounds.minX),
-        safeRatio(animatedBounds.maxY - animatedBounds.minY, baseBounds.maxY - baseBounds.minY),
-        safeRatio(animatedBounds.maxZ - animatedBounds.minZ, baseBounds.maxZ - baseBounds.minZ),
-      ],
-      alpha: Math.max(0, Number(animated.opacity ?? 1) / Math.max(0.01, Number(component.opacity ?? 1))),
-      visible: (animated.visible !== false) !== (component.visible !== false) ? animated.visible !== false : null,
-    };
-  }
-
   function multiplyComponentOpacity(component, factor) {
     const baseOpacity = Number.isFinite(Number(component.opacity)) ? Number(component.opacity) : 1;
     component.opacity = clamp(baseOpacity * factor, 0, 1);
@@ -3342,7 +3354,7 @@
       });
     }
     let primitives = [];
-    if (["box", "glassPanel"].includes(component.type)) primitives = buildBoxPrimitives(component, order);
+    if (["box", "glassPanel", "text"].includes(component.type)) primitives = buildBoxPrimitives(component, order);
     else if (component.type === "cylinder") primitives = buildVerticalCylinderPrimitives(component, order);
     else if (component.type === "sphere") primitives = buildSpherePrimitives(component, order);
     else if (component.type === "cone") primitives = buildConePrimitives(component, order);
@@ -3363,6 +3375,40 @@
     } else if (primitive.kind === "line") {
       line3d(primitive.start, primitive.end, primitive.color, primitive.width, primitive.alpha);
     }
+  }
+
+  function drawTextComponentOverlays(components) {
+    const labels = [];
+    const visit = (component, inheritedOpacity = 1) => {
+      if (!component || component.visible === false) return;
+      const opacity = inheritedOpacity * clamp(Number(component.opacity ?? 1), 0, 1);
+      if (component.type === "group") {
+        (component.children || []).forEach((child) => visit(child, opacity));
+        return;
+      }
+      if (component.type === "text" && String(component.text || "").trim()) labels.push({ component, opacity });
+    };
+    (components || []).forEach((component) => visit(component));
+    labels.forEach(({ component, opacity }) => {
+      const center = componentCenter(component);
+      const screen = project(...center);
+      const points = componentWorldPoints(component).map((point) => project(...point));
+      const width = points.length ? Math.max(...points.map((point) => point[0])) - Math.min(...points.map((point) => point[0])) : 80;
+      const height = points.length ? Math.max(...points.map((point) => point[1])) - Math.min(...points.map((point) => point[1])) : 20;
+      const fontSize = clamp(Math.min(Math.max(10, height * .58), Math.max(10, width / Math.max(2, String(component.text).length * .58))), 10, 42);
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.font = `800 ${fontSize}px Inter, Segoe UI, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = Math.max(2, fontSize * .14);
+      ctx.strokeStyle = "rgba(14,28,26,.72)";
+      ctx.fillStyle = validColor(component.textColor, "#ffffff");
+      ctx.strokeText(String(component.text), screen[0], screen[1], Math.max(30, width * .86));
+      ctx.fillText(String(component.text), screen[0], screen[1], Math.max(30, width * .86));
+      ctx.restore();
+    });
   }
 
   function drawSelectionOverlay(selection) {
@@ -3451,7 +3497,18 @@
     const maxX = design.base.w + padding;
     const minZ = -padding;
     const maxZ = design.base.d + padding;
-    polygon([[minX, 0, minZ], [maxX, 0, minZ], [maxX, 0, maxZ], [minX, 0, maxZ]], "#dce2de", "#7f8b87", 1, 1);
+    const belowFloor = state.pitch < 0;
+    const floorAlpha = belowFloor ? 0.14 : 1;
+    const gridAlpha = belowFloor ? 0.12 : 0.22;
+    const majorGridAlpha = belowFloor ? 0.2 : 0.35;
+    polygon(
+      [[minX, 0, minZ], [maxX, 0, minZ], [maxX, 0, maxZ], [minX, 0, maxZ]],
+      "#dce2de",
+      "#7f8b87",
+      1,
+      floorAlpha,
+      { transparent: belowFloor },
+    );
     const span = Math.max(maxX - minX, maxZ - minZ);
     const minimumStep = Math.max(0.5, span / 120);
     const magnitude = 10 ** Math.floor(Math.log10(minimumStep));
@@ -3462,13 +3519,13 @@
     let lineIndex = 0;
     for (let x = Math.ceil(minX / step) * step; x <= maxX; x += step) {
       const major = lineIndex % majorEvery === 0;
-      line3d([x, 0.01, minZ], [x, 0.01, maxZ], major ? "#7f8b87" : "#aab4af", major ? 1 : 0.55, major ? 0.35 : 0.22);
+      line3d([x, 0.01, minZ], [x, 0.01, maxZ], major ? "#7f8b87" : "#aab4af", major ? 1 : 0.55, major ? majorGridAlpha : gridAlpha);
       lineIndex += 1;
     }
     lineIndex = 0;
     for (let z = Math.ceil(minZ / step) * step; z <= maxZ; z += step) {
       const major = lineIndex % majorEvery === 0;
-      line3d([minX, 0.01, z], [maxX, 0.01, z], major ? "#7f8b87" : "#aab4af", major ? 1 : 0.55, major ? 0.35 : 0.22);
+      line3d([minX, 0.01, z], [maxX, 0.01, z], major ? "#7f8b87" : "#aab4af", major ? 1 : 0.55, major ? majorGridAlpha : gridAlpha);
       lineIndex += 1;
     }
     line3d([0, 0.04, 0], [design.base.w + padding * 0.25, 0.04, 0], AXIS_COLORS.x, 2, 1);
@@ -3496,7 +3553,7 @@
 
   function componentWorldPoints(component) {
     if (component.type === "group") return (component.children || []).flatMap(componentWorldPoints);
-    if (["box", "glassPanel"].includes(component.type)) return boxVertices(component);
+    if (["box", "glassPanel", "text"].includes(component.type)) return boxVertices(component);
     if (component.type === "cylinder") return verticalCylinderVertices(component, component.segments || 20, 1);
     if (component.type === "sphere") {
       const center = componentCenter(component);
@@ -3803,6 +3860,10 @@
     state.lastFrameTime = time;
     state.lastRenderedAt = time;
     updateCanvasSize();
+    const belowFloor = state.pitch < 0;
+    canvas.classList.toggle("below-floor-view", belowFloor);
+    const cameraPosition = document.getElementById("designer-camera-position");
+    if (cameraPosition) cameraPosition.textContent = belowFloor ? "Below floor · floor transparent" : "Above floor · full orbit enabled";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     depthRenderer.beginFrame(canvas.width, canvas.height, project);
     drawGrid();
@@ -3828,6 +3889,7 @@
     state.renderPrimitives.forEach(drawPrimitive);
     drawDesignEnvelope();
     depthRenderer.render();
+    drawTextComponentOverlays(components);
     const selectedIds = state.selectAllParts
       ? new Set(state.drawnComponents.map((entry) => entry.component?.id))
       : state.selectedComponentIds;
@@ -3862,12 +3924,13 @@
   function panCamera(deltaX, deltaY) {
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
-    const sp = Math.max(0.08, Math.sin(state.pitch));
+    const sp = signedNavigationPitchScale();
     const scale = state.zoom * Math.min(canvas.width / 50, canvas.height / 28);
     const rx = deltaX / Math.max(1, scale);
     const rz = deltaY / Math.max(1, sp * scale);
-    state.panX += rx * cy + rz * sy;
-    state.panZ += -rx * sy + rz * cy;
+    // Slicer-style grab navigation: the scene follows the middle-button drag.
+    state.panX -= rx * cy + rz * sy;
+    state.panZ -= -rx * sy + rz * cy;
   }
 
   function translateComponent(component, dx, dy, dz) {
@@ -3919,7 +3982,7 @@
       return;
     }
     const uniform = axis === "center";
-    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge", "text"].includes(component.type)) {
       const center = componentCenter(original);
       const scaleX = uniform || axis === "x" ? factor : 1;
       const scaleY = uniform || axis === "y" ? factor : 1;
@@ -4079,7 +4142,12 @@
       }
       targets.forEach((component) => translateComponent(component, dx, dy, dz));
     } else if (drag.tool === "rotate") {
-      let degrees = (totalDeltaX * drag.rotationTangent[0] + totalDeltaY * drag.rotationTangent[1]) * 0.7;
+      const point = canvasPoint(event);
+      const currentAngle = Math.atan2(point[1] - drag.geometry.centerScreen[1], point[0] - drag.geometry.centerScreen[0]);
+      let angleDelta = currentAngle - drag.startAngle;
+      while (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
+      while (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
+      let degrees = angleDelta * 180 / Math.PI;
       if (state.snapEnabled) degrees = Math.round(degrees / 5) * 5;
       if (drag.selectionAll) rotateSelectionTogether(targets, drag.componentsBefore, drag.pivot, degrees, drag.handle);
       else rotateComponent(targets[0], degrees, drag.handle, drag.componentsBefore[0]);
@@ -4215,7 +4283,7 @@
     if (state.drag.kind === "orbit") {
       // Grab-and-drag camera motion: the scene follows the pointer in both axes.
       state.yaw -= deltaX * 0.006;
-      state.pitch = clamp(state.pitch + deltaY * 0.004, 0.015, 1.53);
+      state.pitch = clamp(state.pitch + deltaY * 0.004, -1.53, 1.53);
     } else if (state.drag.kind === "pan") {
       panCamera(deltaX, deltaY);
     } else if (state.drag.kind === "transform") {
@@ -4231,7 +4299,8 @@
   canvas.addEventListener("wheel", (event) => {
     event.preventDefault();
     renderPerformance.noteInteraction(260);
-    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 1.1 : 0.9), 0.1, 10);
+    // Slicer-style wheel navigation: scroll up zooms in; scroll down zooms out.
+    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? 0.9 : 1.1), 0.1, 10);
   }, { passive: false });
   canvas.addEventListener("dblclick", (event) => {
     const hitResult = componentAt(event);
@@ -4695,9 +4764,12 @@
   document.getElementById("save-design")?.addEventListener("click", saveCurrentDesign);
   document.getElementById("save-design-as")?.addEventListener("click", openSaveAsDialog);
   document.getElementById("save-and-place-design")?.addEventListener("click", () => {
-    saveCurrentDesign({ silent: true });
+    const machine = createPlantMachineFromCurrentDesign();
+    if (!machine) return;
     setBrowserTab("plant");
-    document.getElementById("new-plant-machine-name")?.focus();
+    const assignment = document.getElementById("machine-assignment");
+    if (assignment) assignment.value = machine.instanceId;
+    updateAssignmentPanel();
   });
   document.getElementById("cancel-save-design-as")?.addEventListener("click", () => {
     document.getElementById("save-design-as-dialog")?.close();
@@ -4717,6 +4789,9 @@
   document.getElementById("undo-design")?.addEventListener("click", undo);
   document.getElementById("redo-design")?.addEventListener("click", redo);
   document.getElementById("duplicate-component")?.addEventListener("click", duplicateSelectedComponent);
+  document.getElementById("copy-component")?.addEventListener("click", () => copySelectedComponents());
+  document.getElementById("paste-component")?.addEventListener("click", pasteComponents);
+  document.getElementById("cut-component")?.addEventListener("click", cutSelectedComponents);
   document.getElementById("delete-component")?.addEventListener("click", deleteSelectedComponent);
   document.getElementById("move-component-up")?.addEventListener("click", () => moveComponentOrder(-1));
   document.getElementById("move-component-down")?.addEventListener("click", () => moveComponentOrder(1));
@@ -4797,14 +4872,14 @@
       }
       if (!component) return;
       pushHistory();
-      if (["name", "type", "color", "animationType", "animationAxis", "animationSecondaryAxis"].includes(field)) {
+      if (["name", "type", "color", "text", "textColor", "animationType", "animationAxis", "animationSecondaryAxis"].includes(field)) {
         if (field === "type") {
           const replacement = normalizeComponent({ ...component, type: input.value, id: component.id, name: component.name });
           const index = currentDesign().components.findIndex((item) => item.id === component.id);
           currentDesign().components[index] = replacement;
-        } else if (field === "color") {
-          component.color = validColor(input.value, component.color);
-          if (component.type === "group") {
+        } else if (field === "color" || field === "textColor") {
+          component[field] = validColor(input.value, component[field] || (field === "textColor" ? "#ffffff" : component.color));
+          if (field === "color" && component.type === "group") {
             const recolor = (item) => {
               item.color = component.color;
               if (item.type === "group") (item.children || []).forEach(recolor);
@@ -4812,6 +4887,7 @@
             (component.children || []).forEach(recolor);
           }
         } else if (["animationType", "animationAxis", "animationSecondaryAxis"].includes(field)) component[field] = input.value;
+        else if (field === "text") component.text = input.value.trim().slice(0, 120) || "LABEL";
         else component.name = input.value.trim() || component.name;
       } else {
         const number = Number(input.value);
@@ -5063,7 +5139,11 @@
       const value = Number(input.value);
       if (!machine || !Number.isFinite(value)) return;
       const field = input.dataset.instanceField;
-      if (["w","d","h"].includes(field)) resizePlantMachine(machine, field, value);
+      if (["w","d","h"].includes(field)) {
+        machine.scaleEditMode = "individual";
+        if (machine.designId) machine.designScaleMode = "stretch";
+        resizePlantMachine(machine, field, value);
+      }
       else machine[field] = value;
       saveLayout();
       updateAssignmentPanel();
@@ -5206,9 +5286,17 @@
       else saveCurrentDesign();
       return;
     }
-    if (modifier && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
+    if (modifier && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redo();
+      else undo();
+      return;
+    }
     if (modifier && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
     if (!typing && modifier && event.key.toLowerCase() === "a") { event.preventDefault(); selectAllComponents(); return; }
+    if (!typing && modifier && event.key.toLowerCase() === "c") { event.preventDefault(); copySelectedComponents(); return; }
+    if (!typing && modifier && event.key.toLowerCase() === "v") { event.preventDefault(); pasteComponents(); return; }
+    if (!typing && modifier && event.key.toLowerCase() === "x") { event.preventDefault(); cutSelectedComponents(); return; }
     if (!typing && modifier && event.key.toLowerCase() === "d") { event.preventDefault(); duplicateSelectedComponent(); return; }
     if (typing) return;
 

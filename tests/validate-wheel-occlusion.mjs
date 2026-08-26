@@ -35,7 +35,7 @@ assert.match(
 );
 
 assert.ok(renderer.includes("gl.enable(gl.DEPTH_TEST)"), "The scene renderer must keep depth testing enabled.");
-assert.ok(renderer.includes("gl.depthMask(true)") && renderer.includes("drawVertices(opaque, gl.TRIANGLES)"), "Opaque wheel and machine geometry must write to the shared depth buffer.");
+assert.ok(renderer.includes("gl.depthMask(true)") && renderer.includes("drawVertices(packedOpaque, gl.TRIANGLES)"), "Opaque wheel and machine geometry must write to the shared depth buffer.");
 assert.ok(studio.includes("buildWheelPrimitives") && studio.includes("buildCylinderPrimitives"), "Design Studio wheels must remain closed 3D cylinder geometry.");
 
 console.log("Wheel occlusion regression checks passed.");

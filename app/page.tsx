@@ -1,4 +1,6 @@
-/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-sync-scripts */
+/* eslint-disable @next/next/no-html-link-for-pages */
+import LegacyScriptLoader from "./legacy-script-loader";
+
 export default function Home() {
   return (
     <main className="site-shell">
@@ -33,7 +35,7 @@ export default function Home() {
           />
           <div className="model-badge">Editable · DXF-grounded footprint</div>
           <div className="view-help">
-            Drag to orbit · Shift-drag to pan · Scroll to zoom
+            Right-drag orbit · Middle-drag pan · Wheel zoom
           </div>
         </div>
 
@@ -70,14 +72,19 @@ export default function Home() {
         </ol>
       </nav>
 
-      <script src="/depth-scene-renderer.js" />
-      <script src="/render-performance.js" />
-      <script src="/plant-data.js" />
-      <script src="/machine-data.js" />
-      <script src="/machine-designs.js" />
-      <script src="/animation-timeline.js" />
-      <script src="/first-person-controller.js" />
-      <script src="/plant-app.js" />
+      <LegacyScriptLoader
+        sources={[
+          "/depth-scene-renderer.js",
+          "/render-performance.js",
+          "/plant-data.js",
+          "/machine-data.js",
+          "/machine-designs.js",
+          "/workspace-transfer.js",
+          "/animation-timeline.js",
+          "/first-person-controller.js",
+          "/plant-app.js",
+        ]}
+      />
     </main>
   );
 }

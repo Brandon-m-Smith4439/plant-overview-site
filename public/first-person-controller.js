@@ -47,8 +47,8 @@
         if (result && typeof result.catch === "function") {
           result.catch(() => canvas.requestPointerLock?.());
         }
-      } catch (_error) {
-        try { canvas.requestPointerLock?.(); } catch (_fallbackError) { /* Browser denied pointer lock. */ }
+      } catch {
+        try { canvas.requestPointerLock?.(); } catch { /* Browser denied pointer lock. */ }
       }
     }
 

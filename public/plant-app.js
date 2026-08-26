@@ -16,9 +16,11 @@
         shouldRender() { return true; }, invalidate() {}, noteInteraction() {},
         pixelRatio(value) { return Math.min(Number(value) || 1, 1.25); },
         cylinderSegments(value) { return Math.max(8, Math.min(14, Number(value) || 14)); },
-        shadowLayerCount() { return 1; }, maxShadowParts() { return 24; },
+        shadowLayerCount() { return 1; }, maxShadowParts() { return 24; }, maxShadowMachines() { return 36; },
+        detailPixelThreshold() { return 18; },
         pillarShadowsEnabled() { return false; }, recordFrame() {}, mount() {},
       };
+  window.addEventListener("plant-renderer-fallback", () => renderPerformance.invalidate());
   const defaultStages = [
     {
       title: "Empty shell",
@@ -166,6 +168,7 @@
   const syncChannel = typeof window.BroadcastChannel === "function"
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
+  const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
   const APP_VERSION = "0.13.0";
   const MIN_FLOOR_DIMENSION = 40;
   const MAX_FLOOR_DIMENSION = 5000;
@@ -984,6 +987,7 @@
     animationTimeOffset: 0,
     lastFrameTime: 0,
     lastRenderedAt: 0,
+    visibleAnimationsActive: false,
   };
 
   let firstPersonController = null;
@@ -2009,12 +2013,12 @@
     if (!state.editing) {
       help.textContent = state.cameraMode === "walk"
         ? "First person · WASD move · mouse look · Shift sprint · Space jump"
-        : "Drag to orbit · Shift-drag to pan · Scroll to zoom";
+        : "Right-drag orbit · Middle-drag pan · Wheel up/down zoom";
       return;
     }
     help.textContent = state.editorInteraction === "navigate"
-      ? "Navigate: drag to orbit · Shift/Space-drag to pan · scroll to zoom"
-      : "Edit: drag an object · drag empty floor to pan · Alt/right-drag to orbit";
+      ? "Navigate: right-drag orbit · middle/Shift/Space-drag pan · wheel zoom"
+      : "Edit: drag an object · middle-drag pan · right/Alt-drag orbit";
   }
 
   const BULK_MACHINE_FIELDS = new Set([
@@ -2442,8 +2446,6 @@
       instanceId: uniqueId(state.clipboard.type),
       name: `${state.clipboard.name} copy`,
       short: `${state.clipboard.short || state.clipboard.name} copy`,
-      x: Number(state.clipboard.x) + 8,
-      z: Number(state.clipboard.z) + 8,
       custom: true,
       locked: false,
       animationGroupId: "",
@@ -2453,10 +2455,9 @@
     }, machines.length);
     machines.push(pasted);
     setSingleSelection(pasted.instanceId);
-    state.clipboard = clone(pasted);
     persistLayout();
     updateEditorPanel();
-    showToast("Object pasted.");
+    showToast("Object pasted in the original position.");
   }
 
   function swapStageReferences(first, second) {
@@ -2528,6 +2529,18 @@
     showToast("Timeline stage removed.");
   }
 
+  function downloadJson(payload, filename) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  }
+
   function exportLayout() {
     const payload = {
       version: 6,
@@ -2545,15 +2558,27 @@
       walls: state.walls,
       playbackSpeed: state.playbackSpeed,
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `monroe-glass-plant-layout-v${APP_VERSION}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(link.href);
+    downloadJson(payload, `monroe-glass-plant-layout-v${APP_VERSION}.json`);
     showToast("Layout JSON exported.");
+  }
+
+  function exportWorkspace() {
+    if (!workspaceTransfer) {
+      window.alert("Full workspace transfer is unavailable. Reload the page and try again.");
+      return;
+    }
+    persistLayout();
+    const payload = workspaceTransfer.createPayload(localStorage, {
+      appVersion: APP_VERSION,
+      sourceOrigin: window.location.origin || "local-file",
+    });
+    const itemCount = Object.keys(payload.items).length;
+    if (!itemCount) {
+      window.alert("No saved Monroe Glass Plant work was found in this browser location.");
+      return;
+    }
+    downloadJson(payload, `monroe-glass-plant-workspace-${new Date().toISOString().slice(0, 10)}.json`);
+    showToast(`Full workspace exported with ${itemCount} saved data section${itemCount === 1 ? "" : "s"}.`);
   }
 
   async function importLayout(file) {
@@ -2584,6 +2609,25 @@
     } catch (error) {
       console.error(error);
       window.alert(error instanceof Error ? error.message : "The layout file could not be imported.");
+    }
+  }
+
+  async function importWorkspace(file) {
+    if (!file) return;
+    if (!workspaceTransfer) {
+      window.alert("Full workspace transfer is unavailable. Reload the page and try again.");
+      return;
+    }
+    try {
+      const payload = workspaceTransfer.validatePayload(await file.text());
+      const itemCount = Object.keys(payload.items).length;
+      if (!window.confirm(`Import ${itemCount} saved workspace section${itemCount === 1 ? "" : "s"} from ${payload.sourceOrigin || "another browser location"}? This replaces matching saved data in this browser location.`)) return;
+      workspaceTransfer.applyPayload(localStorage, payload);
+      window.alert("Full workspace imported successfully. The site will reload with the transferred layout, machines, settings, and backups.");
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      window.alert(error instanceof Error ? error.message : "The workspace file could not be imported.");
     }
   }
 
@@ -2960,8 +3004,11 @@
       </div>
 
       <div class="editor-project" data-editor-section="project" hidden>
-        <div class="editor-callout"><strong>Project data</strong><p>Export a backup before moving the project to another browser or computer. Import replaces the current browser copy.</p></div>
+        <div class="editor-callout"><strong>Move all saved work</strong><p>Use the full workspace file to move the layout, machines, custom designs, settings, and backups from preview.html into this site or another browser.</p></div>
         <div class="editor-project-actions">
+          <button type="button" data-editor-action="export-workspace">Export full workspace</button>
+          <button type="button" data-editor-action="import-workspace">Import full workspace</button>
+          <input type="file" data-workspace-file accept="application/json,.json" hidden>
           <button type="button" data-editor-action="export">Export layout</button>
           <button type="button" data-editor-action="import">Import layout</button>
           <input type="file" data-layout-file accept="application/json,.json" hidden>
@@ -3189,7 +3236,11 @@
                 const reference = machineReferenceDimensions(item);
                 const referenceValue = field === "w" ? reference.w : field === "d" ? reference.d : reference.h;
                 setMachineScalePercent(item, "uniform", Math.max(.01, value) / Math.max(.01, referenceValue) * 100);
-              } else resizeMachineAroundCenter(item, field, Math.max(.01,value));
+              } else {
+                item.scaleEditMode = "individual";
+                if (item.designId) item.designScaleMode = "stretch";
+                resizeMachineAroundCenter(item, field, Math.max(.01,value));
+              }
             }
             else if (field === "reveal") item[field] = clamp(Math.round(value),0,stages.length-1);
             else if (field === "retire") item[field] = value >= 99 ? 99 : clamp(Math.round(value),item.reveal,stages.length-1);
@@ -3520,6 +3571,13 @@
       await importLayout(fileInput.files?.[0]);
       fileInput.value = "";
     });
+    panel.querySelector("[data-editor-action='export-workspace']").addEventListener("click",exportWorkspace);
+    const workspaceFileInput = panel.querySelector("[data-workspace-file]");
+    panel.querySelector("[data-editor-action='import-workspace']").addEventListener("click",() => workspaceFileInput.click());
+    workspaceFileInput.addEventListener("change", async () => {
+      await importWorkspace(workspaceFileInput.files?.[0]);
+      workspaceFileInput.value = "";
+    });
     panel.querySelector("[data-editor-action='done']").addEventListener("click",() => setEditing(false));
     panel.querySelectorAll("[data-wall-id]").forEach((input) => {
       input.addEventListener("change",() => {
@@ -3690,12 +3748,8 @@
         const [spawnX, spawnZ] = findWalkSpawn(modelCenter()[0] + state.panX, modelCenter()[1] + state.panZ);
         state.panX = spawnX - modelCenter()[0];
         state.panZ = spawnZ - modelCenter()[1];
-        // Orbit mode stores the rotation applied to the world, while first-person
-        // mode stores the direction the camera looks. They point in opposite
-        // directions. Rotate by 180 degrees on entry so first person faces the same
-        // side of the plant that was visible in the overview instead of presenting
-        // the layout as a reversed or mirrored view.
-        state.yaw = Math.atan2(Math.sin(state.yaw + Math.PI), Math.cos(state.yaw + Math.PI));
+        // Orbit and first-person projection share the same world axes and yaw.
+        // Preserve the overview yaw so entering walk mode does not flip the plant.
         state.pitch = 0;
         state.walkVerticalOffset = 0;
         state.walkBobOffset = 0;
@@ -4150,10 +4204,13 @@
     return startInside ? [start, intersection] : [intersection, end];
   }
 
+  let suppressGeometryOutlines = false;
+
   function polygon(points, fill, stroke = null, lineWidth = 1, alpha = 1, options = {}) {
     points = clipPolygonToWalkNearPlane(points);
     if (!points || points.length < 3) return;
     if (alpha <= 0.01) return;
+    if (suppressGeometryOutlines) stroke = null;
     if (depthRenderer.available) {
       depthRenderer.addPolygon(points, fill, alpha, stroke, lineWidth, {
         transparent: alpha < 0.985,
@@ -4275,9 +4332,13 @@
     faces.forEach((face) => polygon(face.points, face.fill, face.stroke || "rgba(20,30,34,.12)", .7, alpha));
   }
 
-  function drawCylinder3d({ radiusX, radiusY, halfDepth, color, alpha = 1, pointFromLocal, segments = 18 }) {
+  function drawCylinder3d({
+    radiusX, radiusY, halfDepth, color, alpha = 1, pointFromLocal,
+    segments = 18, minimumSegments = 8, outline = true,
+  }) {
     if (alpha <= 0.01 || typeof pointFromLocal !== "function") return;
-    const count = renderPerformance.cylinderSegments(segments);
+    const requestedSegments = Math.max(minimumSegments, Math.round(Number(segments) || 18));
+    const count = Math.max(minimumSegments, Math.min(requestedSegments, renderPerformance.cylinderSegments(requestedSegments)));
     const front = [];
     const back = [];
     for (let index = 0; index < count; index += 1) {
@@ -4291,15 +4352,17 @@
     // Caps and every curved side segment are sent through the shared depth
     // renderer. Wheels therefore write to and test against the same depth
     // buffer as cabinets, floors, walls, and the rest of the machine.
-    polygon([...front].reverse(), shade(color, -.22), "rgba(15,25,28,.22)", .65, alpha);
-    polygon(back, color, "rgba(15,25,28,.22)", .65, alpha);
+    const capStroke = outline ? "rgba(15,25,28,.22)" : null;
+    const sideStroke = outline ? "rgba(15,25,28,.16)" : null;
+    polygon([...front].reverse(), shade(color, -.22), capStroke, .65, alpha);
+    polygon(back, color, capStroke, .65, alpha);
     for (let index = 0; index < count; index += 1) {
       const next = (index + 1) % count;
       const light = -.08 - .16 * (.5 + .5 * Math.cos(index / count * Math.PI * 2));
       polygon(
         [front[index], front[next], back[next], back[index]],
         shade(color, light),
-        "rgba(15,25,28,.16)",
+        sideStroke,
         .5,
         alpha,
       );
@@ -4546,15 +4609,6 @@
     }
   }
 
-  function drawCad() {
-    if (!state.showCad) return;
-    data.segments.forEach((segment) => {
-      if (!["barefoot","tempering","storage","walls","safety"].includes(segment.c)) return;
-      const [x1,z1,x2,z2] = segment.p;
-      line3d([x1,.12,z1],[x2,.12,z2],segment.k,.85,segment.c === "safety" ? .2 : .34);
-    });
-  }
-
   function drawShell() {
     const painted = clamp(state.stageFloat - 2.35);
     const wall = painted > .5 ? colors.finished : colors.shell;
@@ -4654,7 +4708,7 @@
   function designComponentCenter(component) {
     if (!component) return [0,0,0];
     if (component.type === "group") return designGroupCenter(component.children || []);
-    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge"].includes(component.type)) {
+    if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge", "text"].includes(component.type)) {
       return [
         Number(component.x) + Number(component.w) / 2,
         Number(component.y) + Number(component.h) / 2,
@@ -4686,7 +4740,7 @@
 
     const center = designComponentCenter(component);
     const rotation = designComponentRotation(component);
-    if (["box", "glassPanel"].includes(component.type)) {
+    if (["box", "glassPanel", "text"].includes(component.type)) {
       const halfWidth = Math.max(.001, Number(component.w) / 2);
       const halfHeight = Math.max(.001, Number(component.h) / 2);
       const halfDepth = Math.max(.001, Number(component.d) / 2);
@@ -5028,16 +5082,6 @@
     });
   }
 
-  function designAnimationSettingsMatch(first, second) {
-    if (!first || !second) return false;
-    const fields = [
-      "animationEnabled", "animationType", "animationAxis", "animationSecondaryAxis",
-      "animationAmount", "animationSecondaryAmount", "animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds", "animationPhase",
-    ];
-    return fields.every((field) => String(first[field] ?? "") === String(second[field] ?? ""))
-      && JSON.stringify(first.animationTimeline || null) === JSON.stringify(second.animationTimeline || null);
-  }
-
   function designComponentPathAxes(component, firstAmount, secondAmount) {
     const firstAxis = ["x", "y", "z"].includes(component.animationAxis) ? component.animationAxis : "y";
     let secondAxis = ["x", "y", "z"].includes(component.animationSecondaryAxis) ? component.animationSecondaryAxis : "z";
@@ -5346,29 +5390,6 @@
     };
   }
 
-  function designComponentAnimationDelta(component, animated) {
-    const baseCenter = designGroupCenter([component]);
-    const animatedCenter = designGroupCenter([animated]);
-    const baseBounds = designComponentBounds(component);
-    const animatedBounds = designComponentBounds(animated);
-    const ratio = (next, base) => Math.abs(base) > .0001 ? next / base : 1;
-    return {
-      translation: animatedCenter.map((value, index) => value - baseCenter[index]),
-      rotation: [
-        (Number(animated.rotationX) || 0) - (Number(component.rotationX) || 0),
-        (Number(animated.rotationY ?? animated.rotation) || 0) - (Number(component.rotationY ?? component.rotation) || 0),
-        (Number(animated.rotationZ) || 0) - (Number(component.rotationZ) || 0),
-      ],
-      scale: [
-        ratio(animatedBounds.maxX - animatedBounds.minX, baseBounds.maxX - baseBounds.minX),
-        ratio(animatedBounds.maxY - animatedBounds.minY, baseBounds.maxY - baseBounds.minY),
-        ratio(animatedBounds.maxZ - animatedBounds.minZ, baseBounds.maxZ - baseBounds.minZ),
-      ],
-      alpha: Math.max(0, Number(animated.opacity ?? 1) / Math.max(.01, Number(component.opacity ?? 1))),
-      visible: (animated.visible !== false) !== (component.visible !== false) ? animated.visible !== false : null,
-    };
-  }
-
   function applyInheritedDesignTransform(component, transform, pivot, includeRenderEffects = false) {
     const rendered = clone(component);
     ["x", "y", "z"].forEach((axis, index) => {
@@ -5664,18 +5685,55 @@
     faces.forEach((indices,index)=>polygon(indices.map((vertexIndex)=>points[vertexIndex]),shades[index]?shade(component.color,shades[index]):component.color,"rgba(15,25,28,.16)",.5,alpha));
   }
 
+  function designRollerFrame(component, index, count) {
+    const safeCount = Math.max(2, Math.round(Number(count) || Number(component.count) || 2));
+    const ratio = safeCount === 1 ? 0 : clamp(Number(index) || 0, 0, safeCount - 1) / (safeCount - 1);
+    const localCenter = [
+      Number(component.x) + Number(component.w) * ratio,
+      Number(component.y),
+      Number(component.z) + Number(component.d) / 2,
+    ];
+    return {
+      center: rotatedDesignPoint(component, localCenter, designComponentCenter(component)),
+      rotation: designComponentRotation(component),
+      radius: Math.max(.05, Number(component.thickness) / 2 || .75),
+      halfDepth: Math.max(.05, Number(component.d) / 2),
+    };
+  }
+
+  const staticVisibleDesignComponentsCache = new WeakMap();
+
+  function visibleDesignComponents(design, time) {
+    if (designHasAnimation(design)) {
+      return design.components
+        .filter((component) => component.visible !== false)
+        .map((component) => animateDesignComponent(component, time, design))
+        .flatMap(rectangularSplitDesignComponents)
+        .filter((component) => component.visible !== false);
+    }
+    if (!staticVisibleDesignComponentsCache.has(design)) {
+      staticVisibleDesignComponentsCache.set(design, design.components
+        .filter((component) => component.visible !== false)
+        .flatMap(rectangularSplitDesignComponents)
+        .filter((component) => component.visible !== false));
+    }
+    return staticVisibleDesignComponentsCache.get(design);
+  }
+
   function drawCustomDesign(machine, alpha, grow, time) {
     const design = machine.designId ? designLibrary[machine.designId] : null;
     if (!design || !Array.isArray(design.components)) return false;
-    const placement = designPlacement(machine, design);
-    const visibleComponents = design.components
-      .filter((component) => component.visible !== false)
-      .map((component) => animateDesignComponent(component, time, design))
-      .flatMap(rectangularSplitDesignComponents)
-      .filter((component) => component.visible !== false);
-    visibleComponents.forEach((component) => {
+    const previousOutlineSuppression = suppressGeometryOutlines;
+    suppressGeometryOutlines = previousOutlineSuppression || (
+      !state.editing
+      && !state.selectedMachineIds.has(machine.instanceId)
+      && design.components.length > 4
+    );
+    const visibleComponents = visibleDesignComponents(design, time);
+    try {
+      visibleComponents.forEach((component) => {
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
-      if (component.type === "box" || component.type === "glassPanel") {
+      if (component.type === "box" || component.type === "glassPanel" || component.type === "text") {
         drawDesignBox(machine, component, design, componentAlpha, grow);
       } else if (component.type === "cylinder") {
         drawDesignCylinder(machine,component,design,componentAlpha,grow,1);
@@ -5690,33 +5748,94 @@
       } else if (component.type === "rollerBed") {
         const count = Math.max(2, Math.round(Number(component.count) || 10));
         for (let index = 0; index < count; index += 1) {
-          const ratio = count === 1 ? 0 : index / (count - 1);
-          const localX = Number(component.x) + Number(component.w) * ratio;
-          const start = [localX, Number(component.y), Number(component.z)];
-          const end = [localX, Number(component.y), Number(component.z) + Number(component.d)];
-          const center = [Number(component.x)+Number(component.w)/2,Number(component.y),Number(component.z)+Number(component.d)/2];
-          const rotatedStart = rotatedDesignPoint(component,start,center);
-          const rotatedEnd = rotatedDesignPoint(component,end,center);
-          const roundedWidth = Math.max(.6, Number(component.thickness) || 1.5);
-          ctx.save();
-          ctx.lineCap = "round";
-          localLine3d(machine,
-            [placement.offsetX + rotatedStart[0] * placement.scaleX, placement.offsetY + rotatedStart[1] * placement.scaleY * grow, placement.offsetZ + rotatedStart[2] * placement.scaleZ],
-            [placement.offsetX + rotatedEnd[0] * placement.scaleX, placement.offsetY + rotatedEnd[1] * placement.scaleY * grow, placement.offsetZ + rotatedEnd[2] * placement.scaleZ],
-            component.color || "#c7d0cd",
-            roundedWidth,
-            componentAlpha,
-          );
-          ctx.restore();
+          // Match the Designer exactly: both the roller center and its cross-
+          // section rotate around the roller-bed assembly center.
+          const { center, rotation, radius, halfDepth } = designRollerFrame(component, index, count);
+          drawCylinder3d({
+            radiusX: radius,
+            radiusY: radius,
+            halfDepth,
+            color: component.color || "#c7d0cd",
+            alpha: componentAlpha,
+            segments: 6,
+            minimumSegments: 6,
+            outline: false,
+            pointFromLocal: (offset) => {
+              const rotated = rotateVector3(offset, ...rotation);
+              return designLocalPointToWorld(machine, design, [
+                center[0] + rotated[0],
+                center[1] + rotated[1],
+                center[2] + rotated[2],
+              ], grow);
+            },
+          });
         }
       } else if (component.type === "wheel") {
         drawDesignWheel(machine, component, design, componentAlpha, grow);
       }
-    });
+      });
+    } catch (error) {
+      console.error(`Custom machine ${machine.instanceId || machine.name || "unknown"} could not be drawn; using its safe layout envelope instead.`, error);
+      return false;
+    } finally {
+      suppressGeometryOutlines = previousOutlineSuppression;
+    }
     return true;
   }
 
+  let projectedBoundsCache = new WeakMap();
+
+  function projectedBoxMetrics(item) {
+    if (item && typeof item === "object" && projectedBoundsCache.has(item)) return projectedBoundsCache.get(item);
+    const x = Number(item.x) || 0;
+    const y = Number(item.renderY ?? item.y) || 0;
+    const z = Number(item.z) || 0;
+    const width = Math.max(.01, Number(item.w) || .01);
+    const depth = Math.max(.01, Number(item.d) || .01);
+    const height = Math.max(.01, Number(item.h) || .01);
+    const centerPoint = project(x + width / 2, y + height / 2, z + depth / 2);
+    const samples = [y, y + height].flatMap((sampleY) => (
+      [x, x + width].flatMap((sampleX) => (
+        [z, z + depth].map((sampleZ) => project(sampleX, sampleY, sampleZ))
+      ))
+    ));
+    const visibleSamples = state.cameraMode === "walk"
+      ? samples.filter((point) => point[3] >= WALK_NEAR_CLIP)
+      : samples;
+    const xs = visibleSamples.map((point) => point[0]);
+    const ys = visibleSamples.map((point) => point[1]);
+    const metrics = {
+      centerPoint,
+      visibleSamples,
+      span: visibleSamples.length
+        ? Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+        : 0,
+    };
+    if (item && typeof item === "object") projectedBoundsCache.set(item, metrics);
+    return metrics;
+  }
+
+  function projectedPixelSpan(item) {
+    return projectedBoxMetrics(item).span;
+  }
+
+  function shouldDrawDetailedCustomDesign(machine, design) {
+    if (!design || !Array.isArray(design.components)) return true;
+    if (state.editing || state.selectedMachineIds.has(machine.instanceId)) return true;
+    if (design.components.length <= 4) return true;
+    return projectedPixelSpan(machine) >= renderPerformance.detailPixelThreshold();
+  }
+
   function drawMachineShape(machine, alpha, grow, time) {
+    const customDesign = machine.designId ? designLibrary[machine.designId] : null;
+    if (customDesign && !shouldDrawDetailedCustomDesign(machine, customDesign)) {
+      box({
+        ...machine,
+        y: Number(machine.renderY ?? machine.y) || 0,
+        color: machine.color || "#68777a",
+      }, alpha, grow);
+      return;
+    }
     if (drawCustomDesign(machine, alpha, grow, time)) return;
     const topHeight = machine.h * grow;
     if (machine.type === "cutting") {
@@ -5852,7 +5971,6 @@
       });
     } else if (machine.type === "aFrame" || machine.type === "aFrameTruck") {
       const isTruck = machine.type === "aFrameTruck";
-      const peak = [machine.w/2,topHeight,machine.d/2];
       box(localBox(machine,0,0,machine.w,machine.d,.75,machine.color,.1),alpha,1);
       localLine(machine,[0,1,0],[machine.w,1,0],machine.color,isTruck ? 4 : 3,alpha);
       localLine(machine,[0,1,machine.d],[machine.w,1,machine.d],machine.color,isTruck ? 4 : 3,alpha);
@@ -6253,14 +6371,10 @@
   }
 
   function projectedBoxVisible(item, margin = 180) {
-    const y = Number(item.renderY ?? item.y) || 0;
     const x = Number(item.x) || 0;
     const z = Number(item.z) || 0;
     const width = Math.max(.01, Number(item.w) || .01);
     const depth = Math.max(.01, Number(item.d) || .01);
-    const height = Math.max(.01, Number(item.h) || .01);
-    const centerX = x + width / 2;
-    const centerZ = z + depth / 2;
 
     // Nearby first-person objects are intentionally kept in the scene. The old
     // five-point screen test could drop a long machine when only a side or corner
@@ -6273,15 +6387,7 @@
       if (Math.hypot(cameraX - nearestX, cameraZ - nearestZ) <= 120) return true;
     }
 
-    const centerPoint = project(centerX, y + Number(item.h) / 2, centerZ);
-    const samples = [y, y + height].flatMap((sampleY) => (
-      [x, x + width].flatMap((sampleX) => (
-        [z, z + depth].map((sampleZ) => project(sampleX, sampleY, sampleZ))
-      ))
-    ));
-    const visibleSamples = state.cameraMode === "walk"
-      ? samples.filter((point) => point[3] >= WALK_NEAR_CLIP)
-      : samples;
+    const { centerPoint, visibleSamples } = projectedBoxMetrics(item);
     if (!visibleSamples.length) return false;
     const anchor = state.cameraMode === "walk" && centerPoint[3] < WALK_NEAR_CLIP ? visibleSamples[0] : centerPoint;
     const radius = Math.max(24, ...visibleSamples.map((point) => Math.hypot(point[0] - anchor[0], point[1] - anchor[1])));
@@ -6300,14 +6406,22 @@
     ) || (component?.type === "group" && designContainsAnimation(component.children)));
   }
 
-  function hasActiveVisibleAnimations() {
+  const designAnimationPresenceCache = new WeakMap();
+
+  function designHasAnimation(design) {
+    if (!design || typeof design !== "object") return false;
+    if (!designAnimationPresenceCache.has(design)) {
+      designAnimationPresenceCache.set(design, designContainsAnimation(design.components));
+    }
+    return designAnimationPresenceCache.get(design);
+  }
+
+  function visibleEntriesHaveActiveAnimations(entries) {
     if (state.animationsPaused || (state.editing && !state.previewObjectAnimations)) return false;
-    return machines.some((machine) => {
-      if (machine.visible === false || stageAlpha(machine.reveal, machine.retire) <= .01) return false;
-      if (!projectedBoxVisible(machine)) return false;
-      if (machine.animationEnabled === true && machine.animationType && machine.animationType !== "none") return true;
+    return entries.some(({ machine }) => {
+      if (machine.animationEnabled === true && machine.animationMode && machine.animationMode !== "none") return true;
       const design = machine.designId ? designLibrary[machine.designId] : null;
-      return designContainsAnimation(design?.components);
+      return designHasAnimation(design);
     });
   }
 
@@ -6316,8 +6430,14 @@
       if (machine.visible === false) return [];
       const alpha = stageAlpha(machine.reveal,machine.retire);
       if (alpha <= .01) return [];
-      const rendered = animatedMachine(machine, time);
-      if (!projectedBoxVisible(rendered)) return [];
+      const hasLayoutMotion = machine.motionParentId
+        || machine.animationGroupId
+        || (machine.animationEnabled === true && machine.animationMode && machine.animationMode !== "none");
+      let rendered = machine;
+      if (hasLayoutMotion) {
+        rendered = animatedMachine(machine, time);
+        if (!projectedBoxVisible(rendered)) return [];
+      } else if (!projectedBoxVisible(machine)) return [];
       return [{
         kind: "machine",
         machine,
@@ -6455,7 +6575,22 @@
   }
 
   function drawSceneShadows(machineEntries, time) {
-    machineEntries.forEach(({ machine, rendered, alpha, grow }) => {
+    const shadowBudget = renderPerformance.maxShadowMachines();
+    if (shadowBudget <= 0) return;
+    const shadowEntries = machineEntries.length <= shadowBudget
+      ? machineEntries
+      : machineEntries.map((entry) => ({
+          entry,
+          selected: state.selectedMachineIds.has(entry.machine.instanceId),
+          screenSpan: projectedPixelSpan(entry.rendered),
+        }))
+        .sort((first, second) => (
+          Number(second.selected) - Number(first.selected)
+          || second.screenSpan - first.screenSpan
+        ))
+        .slice(0, shadowBudget);
+    shadowEntries.forEach((candidate) => {
+      const { machine, rendered, alpha, grow } = candidate.entry || candidate;
       if (alpha <= 0.03 || isFloorFeatureType(machine.type)) return;
       drawMachineShadowCasters(machine, rendered, alpha, grow, time);
     });
@@ -6479,6 +6614,7 @@
   function drawSceneObjects(time) {
     const overlappingIds = state.editing ? overlapIds() : new Set();
     const machineEntries = visibleMachineEntries(time);
+    state.visibleAnimationsActive = visibleEntriesHaveActiveAnimations(machineEntries);
     drawSceneShadows(machineEntries, time);
     const sceneEntries = [...visibleColumnEntries(), ...machineEntries];
     if (!depthRenderer.available) sceneEntries.sort((first,second) => first.depth-second.depth);
@@ -6533,6 +6669,105 @@
       );
       if (drawn && !priority) ordinaryLabelsDrawn += 1;
     });
+
+    machineEntries.forEach(({ rendered, alpha, grow }) => {
+      if (alpha > .08) drawDesignTextLabels(rendered, alpha, grow, time);
+    });
+  }
+
+  function drawDesignTextLabels(machine, alpha, grow, time) {
+    const design = machine.designId ? designLibrary[machine.designId] : null;
+    if (!design || !Array.isArray(design.components)) return;
+    const visit = (component, inheritedOpacity = 1) => {
+      if (!component || component.visible === false) return;
+      const opacity = inheritedOpacity * clamp(Number(component.opacity ?? 1), 0, 1);
+      if (component.type === "group") {
+        (component.children || []).forEach((child) => visit(child, opacity));
+        return;
+      }
+      if (component.type !== "text" || !String(component.text || "").trim()) return;
+      const renderedComponent = animateDesignComponent(component, time, design);
+      const center = designComponentCenter(renderedComponent);
+      const world = designLocalPointToWorld(machine, design, center, grow);
+      const widthPoint = designLocalPointToWorld(machine, design, [center[0] + Number(renderedComponent.w) / 2, center[1], center[2]], grow);
+      const screen = project(...world);
+      const widthScreen = Math.max(34, Math.hypot(...project(...widthPoint).slice(0,2).map((value, index) => value - screen[index])) * 2);
+      const fontSize = clamp(widthScreen / Math.max(3, String(renderedComponent.text).length * .58), 9, 30);
+      ctx.save();
+      ctx.globalAlpha = alpha * opacity;
+      ctx.font = `800 ${fontSize}px "Segoe UI", sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = Math.max(2, fontSize * .14);
+      ctx.strokeStyle = "rgba(14,28,26,.72)";
+      ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(renderedComponent.textColor || "") ? renderedComponent.textColor : "#ffffff";
+      ctx.strokeText(String(renderedComponent.text), screen[0], screen[1], widthScreen * .86);
+      ctx.fillText(String(renderedComponent.text), screen[0], screen[1], widthScreen * .86);
+      ctx.restore();
+    };
+    design.components.forEach((component) => visit(component));
+  }
+
+  function niceRulerStep(span) {
+    const target = Math.max(1, span / 10);
+    const magnitude = 10 ** Math.floor(Math.log10(target));
+    const normalized = target / magnitude;
+    const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    return factor * magnitude;
+  }
+
+  function drawLayoutRulers() {
+    if (!state.editing || state.cameraMode === "walk") return;
+    const [minX, minZ, maxX, maxZ] = floorBounds();
+    const y = .2;
+    const majorStep = niceRulerStep(Math.max(maxX - minX, maxZ - minZ));
+    const minorStep = majorStep / 5;
+    const tickLength = Math.max(1.4, majorStep * .055);
+    const edgeColor = "rgba(20,89,82,.9)";
+    const tickColor = "rgba(34,108,99,.76)";
+    [[minX,minZ,maxX,minZ],[maxX,minZ,maxX,maxZ],[maxX,maxZ,minX,maxZ],[minX,maxZ,minX,minZ]].forEach(([x1,z1,x2,z2]) => {
+      overlayLine3d([x1,y,z1],[x2,y,z2],edgeColor,2,1);
+    });
+
+    const labels = [];
+    const addLabel = (text, point) => labels.push({ text, point: project(...point) });
+    let index = 0;
+    for (let x = minX; x <= maxX + minorStep * .1; x += minorStep, index += 1) {
+      const major = index % 5 === 0;
+      const length = major ? tickLength : tickLength * .48;
+      overlayLine3d([x,y,minZ],[x,y,minZ + length],tickColor,major ? 1.8 : 1,major ? .95 : .62);
+      overlayLine3d([x,y,maxZ],[x,y,maxZ - length],tickColor,major ? 1.8 : 1,major ? .95 : .62);
+      if (major) addLabel(`${Math.round(x - minX)} ft`, [x,y,minZ + tickLength * 1.8]);
+    }
+    index = 0;
+    for (let z = minZ; z <= maxZ + minorStep * .1; z += minorStep, index += 1) {
+      const major = index % 5 === 0;
+      const length = major ? tickLength : tickLength * .48;
+      overlayLine3d([minX,y,z],[minX + length,y,z],tickColor,major ? 1.8 : 1,major ? .95 : .62);
+      overlayLine3d([maxX,y,z],[maxX - length,y,z],tickColor,major ? 1.8 : 1,major ? .95 : .62);
+      if (major && index > 0) addLabel(`${Math.round(z - minZ)} ft`, [minX + tickLength * 1.8,y,z]);
+    }
+
+    addLabel(`${Math.round(maxX - minX)} ft wide`, [(minX + maxX) / 2,y,minZ + tickLength * 3]);
+    addLabel(`${Math.round(maxZ - minZ)} ft long`, [minX + tickLength * 3,y,(minZ + maxZ) / 2]);
+    const pixelScale = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
+    ctx.save();
+    ctx.font = `700 ${10 * pixelScale}px "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    labels.forEach(({ text, point }) => {
+      if (point[0] < -80 || point[0] > canvas.width + 80 || point[1] < -40 || point[1] > canvas.height + 40) return;
+      const width = ctx.measureText(text).width + 8 * pixelScale;
+      const height = 17 * pixelScale;
+      ctx.fillStyle = "rgba(248,252,250,.9)";
+      ctx.fillRect(point[0] - width / 2, point[1] - height / 2, width, height);
+      ctx.strokeStyle = "rgba(34,108,99,.5)";
+      ctx.strokeRect(point[0] - width / 2, point[1] - height / 2, width, height);
+      ctx.fillStyle = "#155b55";
+      ctx.fillText(text, point[0], point[1]);
+    });
+    ctx.restore();
   }
 
   function updateCanvasSize() {
@@ -6572,11 +6807,12 @@
     requestAnimationFrame(draw);
     const firstPersonMoving = firstPersonController?.update(time) || false;
     const stageMoving = Math.abs(state.stage - state.stageFloat) > .001;
-    const animating = state.playing || stageMoving || hasActiveVisibleAnimations() || firstPersonMoving;
+    const animating = state.playing || stageMoving || state.visibleAnimationsActive || firstPersonMoving;
     if (!renderPerformance.shouldRender(time, {
       interacting: state.dragging || firstPersonController?.isMoving(),
       animating,
     })) return;
+    projectedBoundsCache = new WeakMap();
     const frameStartedAt = performance.now();
     state.lastFrameTime = time;
     const elapsed = state.lastRenderedAt ? Math.min(80, Math.max(0, time - state.lastRenderedAt)) : 16.667;
@@ -6597,6 +6833,7 @@
     drawShell();
     drawSceneObjects(time);
     depthRenderer.render();
+    drawLayoutRulers();
     renderPerformance.recordFrame(performance.now() - frameStartedAt);
   }
 
@@ -6749,6 +6986,7 @@
         }
       }
     } else {
+      if (!wantsOrbit && !wantsPan) return;
       state.dragAction = wantsPan ? "pan" : "orbit";
     }
     state.dragging = true;
@@ -6782,8 +7020,8 @@
     } else {
       state.yaw -= deltaX * .006;
       state.pitch = state.cameraMode === "walk"
-        ? clamp(state.pitch - deltaY * .003, .02, .38)
-        : clamp(state.pitch - deltaY * .004, .02, 1.48);
+        ? clamp(state.pitch + deltaY * .003, .02, .38)
+        : clamp(state.pitch + deltaY * .004, .02, 1.48);
     }
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
@@ -6806,7 +7044,7 @@
     if (state.cameraMode === "walk") return;
     event.preventDefault();
     renderPerformance.noteInteraction(260);
-    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? .9 : 1.12), .2, 10);
+    state.zoom = clamp(state.zoom * (event.deltaY > 0 ? .9 : 1.1), .2, 10);
   }, { passive: false });
 
   window.addEventListener("focus", refreshExternalProjectChanges);

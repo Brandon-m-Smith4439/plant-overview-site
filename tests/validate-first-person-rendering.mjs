@@ -5,7 +5,8 @@ const source = fs.readFileSync(new URL("../public/plant-app.js", import.meta.url
 
 assert.match(source, /const reciprocalDepth = 1 \/ safeDepth;/, "First-person projection must use reciprocal depth.");
 assert.match(source, /reciprocalDepth,\s*cameraDepth,/, "Projected vertices must expose reciprocal render depth and raw camera depth.");
-assert.match(source, /state\.yaw = Math\.atan2\(Math\.sin\(state\.yaw \+ Math\.PI\), Math\.cos\(state\.yaw \+ Math\.PI\)\);/, "Orbit yaw must be converted to first-person look direction.");
+const walkModeEntry = source.slice(source.indexOf("if (enabled) {", source.indexOf("setWalkMode =")), source.indexOf("} else {", source.indexOf("setWalkMode =")));
+assert.ok(!walkModeEntry.includes("state.yaw ="), "Entering first person must preserve overview yaw instead of flipping the plant.");
 assert.match(source, /five-point screen test could drop a long machine/, "Peripheral-machine culling regression guard is missing.");
 assert.match(source, /Math\.hypot\(cameraX - nearestX, cameraZ - nearestZ\) <= 120/, "Nearby first-person machines must bypass aggressive screen culling.");
 
@@ -35,8 +36,8 @@ assert.ok(projectPoint({ x: 2, y: 0, z: 10 }).sx > 500, "Positive world X must a
 assert.ok(projectPoint({ x: -2, y: 0, z: 10 }).sx < 500, "Negative world X must appear on the left when yaw is zero.");
 
 const orbitYaw = -0.72;
-const walkYaw = Math.atan2(Math.sin(orbitYaw + Math.PI), Math.cos(orbitYaw + Math.PI));
-const orbitViewDirection = [-Math.sin(orbitYaw), -Math.cos(orbitYaw)];
+const walkYaw = orbitYaw;
+const orbitViewDirection = [Math.sin(orbitYaw), Math.cos(orbitYaw)];
 const walkDirection = [Math.sin(walkYaw), Math.cos(walkYaw)];
 assert.ok(Math.abs(orbitViewDirection[0] - walkDirection[0]) < 1e-9);
 assert.ok(Math.abs(orbitViewDirection[1] - walkDirection[1]) < 1e-9);

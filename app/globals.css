@@ -1322,6 +1322,11 @@ summary:focus-visible {
 .viewport-toolrail button { border-radius: 8px; }
 .viewport-statusbar { border-radius: 9px; background: rgba(18,34,29,.82); }
 
+#designer-camera-position {
+  color: #b9ddd7;
+  font-weight: 700;
+}
+
 .studio-field input,
 .studio-field select,
 .studio-field textarea,
@@ -5154,8 +5159,12 @@ body.timeline-dragging[data-timeline-drag-mode="end"] {
 .success-action { border-color: #5f9d7d !important; background: #e8f5ed !important; color: #1f6a46 !important; font-weight: 800 !important; }
 .design-viewport-panel { background: radial-gradient(circle at 50% 38%, #edf2ef 0, #d9e1dc 68%, #cdd7d1 100%); }
 .viewport-commandbar { margin: 10px; border: 1px solid rgba(194,207,200,.92); border-radius: 11px; background: rgba(250,252,250,.9); box-shadow: 0 8px 24px rgba(20,41,34,.1); backdrop-filter: blur(12px); }
-.viewport-toolrail { border-radius: 11px; background: rgba(250,252,250,.94); box-shadow: 0 10px 28px rgba(20,41,34,.14); }
-.viewport-toolrail button { border-radius: 8px; }
+.viewport-toolrail { border-color: rgba(104,132,122,.48); border-radius: 11px; background: rgba(250,252,250,.97); box-shadow: 0 10px 28px rgba(20,41,34,.14); }
+.viewport-toolrail button { border-color: transparent; border-radius: 8px; color: #294b43; background: rgba(255,255,255,.76); opacity: 1; }
+.viewport-toolrail button span, .viewport-toolrail button small { color: inherit; opacity: 1; }
+.viewport-toolrail button:hover { border-color: #82a99d; color: #155f57; background: #e6f1ec; }
+.viewport-toolrail button.active { border-color: #155f57; color: #fff; background: #18786f; box-shadow: 0 4px 12px rgba(20,92,82,.24); }
+.viewport-toolrail .animation-tool-button { border-top-color: rgba(71,109,99,.34) !important; }
 .viewport-statusbar { border-radius: 9px; background: rgba(18,34,29,.82); }
 .studio-field input, .studio-field select, .studio-field textarea, .axis-fields input, .timeline-target-control select { min-height: var(--studio-control-height); border-color: #c5d0ca; border-radius: 8px; background: #fff; }
 

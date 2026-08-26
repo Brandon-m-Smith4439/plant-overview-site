@@ -120,6 +120,7 @@
     }
 
     if (!gl) {
+      canvas.hidden = true;
       return {
         available: false,
         beginFrame() {},
@@ -134,6 +135,7 @@
       program = createProgram(gl);
     } catch (error) {
       console.error("WebGL depth renderer shader setup failed.", error);
+      canvas.hidden = true;
       return {
         available: false,
         beginFrame() {},
@@ -155,8 +157,33 @@
     let minimumDepth = Infinity;
     let maximumDepth = -Infinity;
     let bufferCapacity = 0;
+    let uploadArray = new Float32Array(256);
+    const packedOpaque = [];
+    const packedTransparent = [];
+    const lineGroups = new Map();
+    let available = true;
+    let framesUntilValidationEnds = 3;
+
+    function disableRenderer(reason, error = null) {
+      if (!available) return;
+      available = false;
+      canvas.hidden = true;
+      if (error) console.warn(reason, error);
+      else console.warn(reason);
+      if (typeof window.CustomEvent === "function") {
+        window.dispatchEvent?.(new window.CustomEvent("plant-renderer-fallback", {
+          detail: { reason },
+        }));
+      }
+    }
+
+    canvas.addEventListener?.("webglcontextlost", (event) => {
+      event.preventDefault();
+      disableRenderer("The WebGL graphics context was lost. Continuing with the compatible 2D renderer.");
+    });
 
     function beginFrame(nextWidth, nextHeight, projectFunction) {
+      if (!available) return;
       width = Math.max(1, Math.round(nextWidth || 1));
       height = Math.max(1, Math.round(nextHeight || 1));
       if (canvas.width !== width || canvas.height !== height) {
@@ -164,9 +191,9 @@
         canvas.height = height;
       }
       project = projectFunction;
-      opaqueTriangles = [];
-      transparentTriangles = [];
-      lines = [];
+      opaqueTriangles.length = 0;
+      transparentTriangles.length = 0;
+      lines.length = 0;
       minimumDepth = Infinity;
       maximumDepth = -Infinity;
     }
@@ -241,7 +268,11 @@
 
     function drawVertices(vertices, mode) {
       if (!vertices.length) return;
-      const array = new Float32Array(vertices);
+      if (uploadArray.length < vertices.length) {
+        uploadArray = new Float32Array(2 ** Math.ceil(Math.log2(Math.max(256, vertices.length))));
+      }
+      uploadArray.set(vertices, 0);
+      const array = uploadArray.subarray(0, vertices.length);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       if (array.byteLength > bufferCapacity) {
         bufferCapacity = 2 ** Math.ceil(Math.log2(Math.max(256, array.byteLength)));
@@ -257,6 +288,12 @@
     }
 
     function render() {
+      if (!available) return;
+      if (typeof gl.isContextLost === "function" && gl.isContextLost()) {
+        disableRenderer("The WebGL graphics context is unavailable. Continuing with the compatible 2D renderer.");
+        return;
+      }
+      try {
       if (!program || !Number.isFinite(minimumDepth) || !Number.isFinite(maximumDepth)) {
         gl.viewport(0, 0, canvas.width, canvas.height);
         gl.clearColor(0, 0, 0, 0);
@@ -267,18 +304,18 @@
       const minimum = minimumDepth;
       const maximum = maximumDepth;
       const range = Math.max(0.0001, maximum - minimum);
-      const opaque = [];
+      packedOpaque.length = 0;
       opaqueTriangles.forEach((triangle) => {
-        triangle.vertices.forEach((vertex) => appendVertex(opaque, vertex, minimum, range, triangle.bias));
+        triangle.vertices.forEach((vertex) => appendVertex(packedOpaque, vertex, minimum, range, triangle.bias));
       });
 
       // Blend translucent geometry from far to near while still testing it against
       // opaque depth. This keeps glass readable without allowing it to paint over
       // solid cabinets, floors, walls, or machine components in front of it.
       transparentTriangles.sort((first, second) => first.depth - second.depth);
-      const transparent = [];
+      packedTransparent.length = 0;
       transparentTriangles.forEach((triangle) => {
-        triangle.vertices.forEach((vertex) => appendVertex(transparent, vertex, minimum, range, triangle.bias));
+        triangle.vertices.forEach((vertex) => appendVertex(packedTransparent, vertex, minimum, range, triangle.bias));
       });
 
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -292,33 +329,44 @@
 
       gl.disable(gl.BLEND);
       gl.depthMask(true);
-      drawVertices(opaque, gl.TRIANGLES);
+      drawVertices(packedOpaque, gl.TRIANGLES);
 
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
-      drawVertices(transparent, gl.TRIANGLES);
+      drawVertices(packedTransparent, gl.TRIANGLES);
 
       // Lines stay depth-tested. They no longer show through walls or machine
       // bodies, which was a recurring problem with the previous canvas overlays.
-      const lineGroups = new Map();
-      lines.sort((first, second) => first.depth - second.depth).forEach((line) => {
+      lineGroups.forEach((vertices) => { vertices.length = 0; });
+      lines.forEach((line) => {
         const key = String(Math.round(line.width * 2) / 2);
         if (!lineGroups.has(key)) lineGroups.set(key, []);
         const output = lineGroups.get(key);
         line.vertices.forEach((vertex) => appendVertex(output, vertex, minimum, range, line.bias));
       });
       lineGroups.forEach((vertices, key) => {
+        if (!vertices.length) return;
         gl.lineWidth(Math.max(1, Number(key)));
         drawVertices(vertices, gl.LINES);
       });
 
       gl.depthMask(true);
       gl.disable(gl.BLEND);
+      if (framesUntilValidationEnds > 0 && typeof gl.getError === "function") {
+        framesUntilValidationEnds -= 1;
+        const errorCode = gl.getError();
+        if (errorCode !== gl.NO_ERROR) {
+          disableRenderer(`WebGL reported graphics error ${errorCode}. Continuing with the compatible 2D renderer.`);
+        }
+      }
+      } catch (error) {
+        disableRenderer("WebGL could not finish drawing the plant. Continuing with the compatible 2D renderer.", error);
+      }
     }
 
     return {
-      available: true,
+      get available() { return available; },
       beginFrame,
       addPolygon,
       addLine,

@@ -465,9 +465,45 @@ Export the current layout JSON before a major update to create a portable backup
 
 Use Node.js 22.13 or newer:
 
+For normal local revision and viewing on Windows, double-click:
+
+```text
+Start Plant Overview.bat
+```
+
+The launcher finds the per-user Node.js installation, installs dependencies on
+the first run when needed, opens `http://127.0.0.1:4173`, and starts the live
+development server. Keep the command window open while working and press
+`Ctrl+C` when finished. The server listens only on this computer, so it does
+not require a Windows Firewall exception.
+
+The local address is intentionally fixed at port `4173`, matching the standalone
+`preview.html` workflow below. Because browser storage belongs to the origin
+rather than the page path, the current site can reuse the layouts, machine
+designs, backups, and rendering preferences previously saved by the preview.
+Close the old Python preview server before using the launcher. Do not allow a
+second server to move to another port. Export the layout JSON before moving
+revisions between the local and published sites.
+
+If an older `preview.html` still shows saved work that the current site cannot
+see, transfer the complete browser workspace:
+
+1. Open the preview where the saved work is visible.
+2. Choose **Edit layout → Project → Export full workspace**.
+3. Start the current site with `Start Plant Overview.bat`.
+4. Choose **Edit layout → Project → Import full workspace** and select the
+   downloaded workspace JSON.
+
+The full workspace contains every `monroe-glass-` browser-storage entry,
+including current and legacy layouts, automatic layout backups, custom machine
+designs, and rendering preferences. The normal layout-only export remains
+available for sharing just the plant layout.
+
+Manual startup:
+
 ```powershell
 npm ci
-npm run dev
+npm run dev -- --hostname 127.0.0.1 --port 4173
 ```
 
 Standalone preview:

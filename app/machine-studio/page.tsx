@@ -1,4 +1,6 @@
-/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-sync-scripts */
+/* eslint-disable @next/next/no-html-link-for-pages */
+import LegacyScriptLoader from "../legacy-script-loader";
+
 export default function MachineStudio() {
   return (
 <main className="machine-studio-shell">
@@ -48,6 +50,11 @@ export default function MachineStudio() {
 <div className="studio-panel-heading"><p>Machine parts</p><strong id="component-count">0 parts</strong></div>
 <div className="parts-quick-actions">
 <button id="select-all-components" type="button" title="Select every part (Ctrl+A)">Select all</button>
+<button id="duplicate-component" type="button" title="Duplicate selected parts (Ctrl+D)">Duplicate</button>
+<button id="copy-component" type="button" title="Copy selected parts (Ctrl+C)">Copy</button>
+<button id="cut-component" type="button" title="Cut selected parts (Ctrl+X)">Cut</button>
+<button id="paste-component" type="button" title="Paste copied parts (Ctrl+V)">Paste</button>
+<button id="delete-component" type="button" title="Delete selected parts">Delete</button>
 <button id="merge-components" type="button" disabled>Merge</button>
 <button id="ungroup-component" type="button" disabled>Separate</button>
 </div>
@@ -67,6 +74,7 @@ export default function MachineStudio() {
 <button type="button" data-add-component="cylinder"><span>●</span>Cylinder</button>
 <button type="button" data-add-component="beam"><span>╱</span>Beam</button>
 <button type="button" data-add-component="glassPanel"><span>◇</span>Glass</button>
+<button type="button" data-add-component="text"><span>T</span>Text</button>
 </div>
 <div className="shape-picker-row vertical-shape-picker">
 <label className="studio-field">Additional shape
@@ -79,6 +87,7 @@ export default function MachineStudio() {
 <optgroup label="Machine parts">
 <option value="rollerBed">Roller bed</option>
 <option value="wheel">Wheel / caster</option>
+<option value="text">Text label / sign</option>
 </optgroup>
 </select>
 </label>
@@ -182,7 +191,7 @@ export default function MachineStudio() {
 <p id="timeline-target-help" className="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
 </section>
 
-<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Right-drag orbit · Middle-drag pan · Wheel zoom · Double-click focus</span></div>
+<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Right-drag full orbit · Middle-drag pan · Wheel zoom · <span id="designer-camera-position">Above floor · full orbit enabled</span></span></div>
 <div id="design-toast" className="design-toast" role="status" aria-live="polite"></div>
 </section>
 <aside className="studio-inspector-panel">
@@ -202,7 +211,8 @@ export default function MachineStudio() {
 <section data-part-panel="properties" className="part-editor-panel">
 <div className="inspector-primary-card">
 <label className="studio-field">Part name<input data-component-field="name" type="text" /></label>
-<div className="inspector-row two"><label className="studio-field">Shape<select data-component-field="type"><option value="box">Box</option><option value="cylinder">Cylinder</option><option value="sphere">Sphere</option><option value="cone">Cone</option><option value="wedge">Wedge</option><option value="glassPanel">Glass panel</option><option value="beam">Beam</option><option value="rollerBed">Roller bed</option><option value="wheel">Wheel</option><option value="group">Merged item</option></select></label><label className="studio-field">Color<input data-component-field="color" type="color" /></label></div>
+<div className="inspector-row two"><label className="studio-field">Shape<select data-component-field="type"><option value="box">Box</option><option value="cylinder">Cylinder</option><option value="sphere">Sphere</option><option value="cone">Cone</option><option value="wedge">Wedge</option><option value="glassPanel">Glass panel</option><option value="beam">Beam</option><option value="rollerBed">Roller bed</option><option value="wheel">Wheel</option><option value="text">Text label</option><option value="group">Merged item</option></select></label><label className="studio-field">Color<input data-component-field="color" type="color" /></label></div>
+<div data-for-component="text" className="inspector-row two"><label className="studio-field">Label text<input data-component-field="text" type="text" maxLength={120} /></label><label className="studio-field">Text color<input data-component-field="textColor" type="color" /></label></div>
 <div className="visibility-row"><label className="studio-switch"><input data-component-check="visible" type="checkbox" /><span>Visible</span></label><label className="studio-field compact-field">Opacity<input data-component-field="opacity" type="number" min="0.05" max="1" step="0.05" /></label></div>
 </div>
 <div className="studio-callout"><strong>Part workflow</strong><p>Use Transform for exact position, rotation, scale, and dimensions. Use Animation to build one or more timed clips for this part.</p></div>
@@ -217,9 +227,9 @@ export default function MachineStudio() {
 </details>
 <details className="transform-section" open><summary>Dimensions</summary>
 <div className="axis-fields size-fields">
-<label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel" className="axis-x-field">Width<input data-component-field="w" type="number" min="0.01" step="0.01" /></label>
-<label data-for-component="box cylinder sphere cone wedge glassPanel wheel" className="axis-y-field">Height<input data-component-field="h" type="number" min="0.01" step="0.01" /></label>
-<label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel" className="axis-z-field">Depth<input data-component-field="d" type="number" min="0.01" step="0.01" /></label>
+<label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel text" className="axis-x-field">Width<input data-component-field="w" type="number" min="0.01" step="0.01" /></label>
+<label data-for-component="box cylinder sphere cone wedge glassPanel wheel text" className="axis-y-field">Height<input data-component-field="h" type="number" min="0.01" step="0.01" /></label>
+<label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel text" className="axis-z-field">Depth<input data-component-field="d" type="number" min="0.01" step="0.01" /></label>
 <label data-for-component="beam" className="axis-x-field">Beam length<input data-component-field="length" type="number" min="0.01" step="0.01" /></label><label data-for-component="beam" className="axis-y-field">Beam height<input data-component-field="thicknessY" type="number" min="0.01" step="0.01" /></label>
 <label data-for-component="beam" className="axis-z-field">Beam width<input data-component-field="thicknessZ" type="number" min="0.01" step="0.01" /></label>
 <label data-for-component="rollerBed">Roller diameter<input data-component-field="thickness" type="number" min="0.01" step="0.01" /></label>
@@ -292,7 +302,7 @@ export default function MachineStudio() {
 <label className="studio-switch envelope-visibility-switch"><input id="show-design-envelope" type="checkbox" defaultChecked /><span>Show envelope outline in the viewport</span></label>
 <button id="fit-envelope" type="button" className="full-width-button">Tight fit to parts</button>
 </details>
-<label className="studio-field wide">Description<textarea id="design-description" rows="4"></textarea></label>
+<label className="studio-field wide">Description<textarea id="design-description" rows={4}></textarea></label>
 </div>
 </section>
 </aside>
@@ -306,12 +316,14 @@ export default function MachineStudio() {
 <div className="studio-dialog-actions"><button type="button" data-close-save-as>Cancel</button><button type="submit" className="primary">Save new machine</button></div>
 </form>
 </dialog>
-<script src="/depth-scene-renderer.js"></script>
-<script src="/render-performance.js"></script>
-<script src="/machine-designs.js"></script>
-<script src="/animation-timeline.js"></script>
-<script src="/animation-timeline-workspace.js"></script>
-<script src="/machine-design-studio.js"></script>
+<LegacyScriptLoader sources={[
+"/depth-scene-renderer.js",
+"/render-performance.js",
+"/machine-designs.js",
+"/animation-timeline.js",
+"/animation-timeline-workspace.js",
+"/machine-design-studio.js",
+]} />
 </main>
   );
 }

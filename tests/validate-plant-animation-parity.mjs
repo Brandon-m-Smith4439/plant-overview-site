@@ -50,7 +50,8 @@ assert.match(applyTimelineFunction, /const scalePivot = designGroupCenter\(\[ani
 const drawCustomDesign = extractFunction(plant, "drawCustomDesign");
 assert.match(drawCustomDesign, /drawDesignBox\(machine, component, design, componentAlpha, grow\)/);
 assert.doesNotMatch(drawCustomDesign, /box\(scaledComponentBox\(machine, component, design\)/);
-assert.match(drawCustomDesign, /localLine3d\(machine/);
+assert.match(drawCustomDesign, /drawCylinder3d\(\{/);
+assert.match(drawCustomDesign, /designRollerFrame\(component, index, count\)/);
 
 const drawDesignWheel = extractFunction(plant, "drawDesignWheel");
 assert.match(drawDesignWheel, /designLocalPointToWorld\(machine, design/);
@@ -68,6 +69,7 @@ const plantRuntimeSource = [
   extractFunction(plant, "designComponentRotation"),
   extractFunction(plant, "rotatedDesignPoint"),
   extractFunction(plant, "designComponentCenter"),
+  extractFunction(plant, "designRollerFrame"),
   extractFunction(plant, "designComponentPoints"),
   extractFunction(plant, "designGroupCenter"),
   extractFunction(plant, "designBeamVertices"),
@@ -79,7 +81,7 @@ const plantRuntimeSource = [
   extractFunction(plant, "timelineRotationOperations"),
   extractFunction(plant, "applyDesignTimelineAnimation"),
   extractFunction(plant, "applyInheritedDesignTransform"),
-  "({ designComponentCenter, designComponentPoints, designGroupCenter, rotateDesignComponentAround, scaleDesignComponentAround, applyDesignTimelineAnimation, applyInheritedDesignTransform })",
+  "({ designComponentCenter, designComponentPoints, designRollerFrame, designGroupCenter, rotateDesignComponentAround, scaleDesignComponentAround, applyDesignTimelineAnimation, applyInheritedDesignTransform })",
 ].join("\n");
 const plantApi = vm.runInNewContext(plantRuntimeSource);
 
@@ -179,9 +181,27 @@ const studioRuntimeSource = [
   extractFunction(studio, "multiplyComponentOpacity"),
   extractFunction(studio, "applyTimelineAnimation"),
   extractFunction(studio, "applyInheritedComponentTransform"),
-  "({ componentWorldPoints, componentCenter, applyTimelineAnimation, applyInheritedComponentTransform })",
+  "({ componentWorldPoints, componentCenter, cylinderVertices, applyTimelineAnimation, applyInheritedComponentTransform })",
 ].join("\n");
 const studioApi = vm.runInNewContext(studioRuntimeSource);
+
+const rollerParitySample = { type:"rollerBed", x:1,y:2,z:3,w:8,d:6,count:7,thickness:1.8,rotationX:17,rotationY:31,rotationZ:12 };
+for (let index = 0; index < rollerParitySample.count; index += 1) {
+  const localX = rollerParitySample.x + rollerParitySample.w * index / (rollerParitySample.count - 1);
+  const designerVertices = studioApi.cylinderVertices(
+    rollerParitySample,
+    [localX, rollerParitySample.y, rollerParitySample.z + rollerParitySample.d / 2],
+    rollerParitySample.thickness / 2,
+    rollerParitySample.thickness / 2,
+    rollerParitySample.d / 2,
+    6,
+  );
+  const designerCenter = designerVertices.reduce((center, point) => center.map((value, axis) => value + point[axis] / designerVertices.length), [0,0,0]);
+  const plantFrame = plantApi.designRollerFrame(rollerParitySample, index, rollerParitySample.count);
+  plantFrame.center.forEach((value, axis) => assert.ok(Math.abs(value - designerCenter[axis]) < 1e-9, `Roller ${index} center axis ${axis} differs between views.`));
+  assert.equal(plantFrame.radius, rollerParitySample.thickness / 2, "Plant roller radius must use the saved Designer diameter.");
+  assert.equal(plantFrame.halfDepth, rollerParitySample.d / 2, "Plant roller depth must use the saved Designer depth.");
+}
 
 const sampleParts = [
   { type:"box", x:1,y:2,z:3,w:4,h:5,d:6,rotationX:17,rotationY:31,rotationZ:12 },

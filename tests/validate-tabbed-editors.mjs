@@ -10,6 +10,7 @@ const plantSource = fs.readFileSync(path.join(root, "public/plant-app.js"), "utf
 const designerSource = fs.readFileSync(path.join(root, "public/machine-design-studio.js"), "utf8");
 const previewHtml = fs.readFileSync(path.join(root, "public/preview.html"), "utf8");
 const appPage = fs.readFileSync(path.join(root, "app/page.tsx"), "utf8");
+const legacyLoader = fs.readFileSync(path.join(root, "app/legacy-script-loader.tsx"), "utf8");
 
 function count(source, token) {
   return source.split(token).length - 1;
@@ -49,9 +50,15 @@ const machineWorkspaceScript = machineHtml.indexOf('<script src="animation-timel
 const machineAppScript = machineHtml.indexOf('<script src="machine-design-studio.js"></script>');
 assert.ok(machineTimelineScript >= 0 && machineTimelineScript < machineWorkspaceScript && machineWorkspaceScript < machineAppScript, "Designer timeline modules should load before the Designer application");
 const previewTimelineScript = previewHtml.indexOf('<script src="animation-timeline.js"></script>');
+const previewWorkspaceScript = previewHtml.indexOf('<script src="workspace-transfer.js"></script>');
 const plantAppScript = previewHtml.indexOf('<script src="plant-app.js"></script>');
 assert.ok(previewTimelineScript >= 0 && previewTimelineScript < plantAppScript, "Plant timeline engine should load before the Plant application");
-assert.ok(machineTsx.includes('src="/animation-timeline.js"') && machineTsx.includes('src="/animation-timeline-workspace.js"') && machineTsx.indexOf('src="/animation-timeline.js"') < machineTsx.indexOf('src="/animation-timeline-workspace.js"') && machineTsx.indexOf('src="/animation-timeline-workspace.js"') < machineTsx.indexOf('src="/machine-design-studio.js"'), "Designer TSX should load both timeline modules first");
-assert.ok(appPage.includes('src="/animation-timeline.js"') && appPage.indexOf('src="/animation-timeline.js"') < appPage.indexOf('src="/plant-app.js"'), "Plant TSX should load the timeline engine first");
+assert.ok(previewWorkspaceScript >= 0 && previewWorkspaceScript < plantAppScript, "Workspace transfer should load before the Plant application");
+assert.ok(machineTsx.includes('"/animation-timeline.js"') && machineTsx.includes('"/animation-timeline-workspace.js"') && machineTsx.indexOf('"/animation-timeline.js"') < machineTsx.indexOf('"/animation-timeline-workspace.js"') && machineTsx.indexOf('"/animation-timeline-workspace.js"') < machineTsx.indexOf('"/machine-design-studio.js"'), "Designer TSX should load both timeline modules first");
+assert.ok(appPage.includes('"/animation-timeline.js"') && appPage.indexOf('"/animation-timeline.js"') < appPage.indexOf('"/plant-app.js"'), "Plant TSX should load the timeline engine first");
+assert.ok(appPage.includes('"/workspace-transfer.js"') && appPage.indexOf('"/workspace-transfer.js"') < appPage.indexOf('"/plant-app.js"'), "Plant TSX should load workspace transfer before the Plant application");
+assert.ok(appPage.includes("<LegacyScriptLoader") && machineTsx.includes("<LegacyScriptLoader"), "App routes should defer legacy scene scripts until React has hydrated.");
+assert.ok(legacyLoader.includes('useEffect(() => {') && legacyLoader.includes("await loadScript(source)"), "Legacy scripts should load sequentially after hydration.");
+assert.ok(!appPage.includes("<script ") && !machineTsx.includes("<script "), "App routes must not run DOM-mutating scene scripts during hydration.");
 
 console.log("Tabbed editor validation passed.");

@@ -31,7 +31,7 @@ for (const assignment of [
 }
 
 assert.ok(
-  app.includes("requestAnimationFrame(updateCanvasSize);"),
+  app.includes("requestAnimationFrame(() => updateCanvasSize(true));"),
   "Opening or closing the editor must schedule an immediate viewport resync.",
 );
 

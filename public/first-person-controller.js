@@ -45,7 +45,14 @@
       try {
         const result = canvas.requestPointerLock?.({ unadjustedMovement: true });
         if (result && typeof result.catch === "function") {
-          result.catch(() => canvas.requestPointerLock?.());
+          result.catch(() => {
+            try {
+              const fallback = canvas.requestPointerLock?.();
+              fallback?.catch?.(() => {});
+            } catch {
+              // Pointer lock is optional; the HUD keeps Capture mouse available.
+            }
+          });
         }
       } catch {
         try { canvas.requestPointerLock?.(); } catch { /* Browser denied pointer lock. */ }
@@ -90,17 +97,36 @@
     }
 
     function tryMove(camera, nextX, nextZ, radius, collision) {
-      if (!collision || canOccupy(nextX, nextZ, radius)) {
+      if (!collision) {
         return { x: nextX, z: nextZ };
       }
-      // Sliding collision: attempt each axis independently so the player glides
-      // naturally along machines, walls, and columns instead of stopping dead.
-      const xOnly = canOccupy(nextX, camera.z, radius);
-      const zOnly = canOccupy(camera.x, nextZ, radius);
-      return {
-        x: xOnly ? nextX : camera.x,
-        z: zOnly ? nextZ : camera.z,
-      };
+      // Sweep the entire movement segment. Checking only the final point lets a
+      // fast sprint or delayed frame jump completely through a narrow envelope.
+      const distance = Math.hypot(nextX - camera.x, nextZ - camera.z);
+      const stepLength = Math.max(0.15, Math.min(0.6, radius * 0.45));
+      const steps = Math.max(1, Math.ceil(distance / stepLength));
+      let currentX = camera.x;
+      let currentZ = camera.z;
+      let xBlocked = false;
+      let zBlocked = false;
+      for (let step = 1; step <= steps; step += 1) {
+        const remainingSteps = steps - step + 1;
+        const targetX = xBlocked ? currentX : currentX + (nextX - currentX) / remainingSteps;
+        const targetZ = zBlocked ? currentZ : currentZ + (nextZ - currentZ) / remainingSteps;
+        if (canOccupy(targetX, targetZ, radius)) {
+          currentX = targetX;
+          currentZ = targetZ;
+          continue;
+        }
+        // Sliding collision: attempt each axis independently so the player
+        // glides along machine envelopes, walls, and columns.
+        if (!xBlocked && canOccupy(targetX, currentZ, radius)) currentX = targetX;
+        else xBlocked = true;
+        if (!zBlocked && canOccupy(currentX, targetZ, radius)) currentZ = targetZ;
+        else zBlocked = true;
+        if (xBlocked && zBlocked) break;
+      }
+      return { x: currentX, z: currentZ };
     }
 
     function update(time) {
@@ -124,8 +150,11 @@
       const moveSpeed = config.speed * (sprinting ? 2.05 : 1) * (crouching ? 0.46 : 1);
       const forwardX = Math.sin(camera.yaw);
       const forwardZ = Math.cos(camera.yaw);
-      const rightX = Math.cos(camera.yaw);
-      const rightZ = -Math.sin(camera.yaw);
+      // Match the horizontal basis used by the plant projection. Walk yaw is
+      // converted from the Overview heading, so screen-right is the opposite
+      // of the conventional yaw-right vector.
+      const rightX = -Math.cos(camera.yaw);
+      const rightZ = Math.sin(camera.yaw);
       const targetVelocityX = ((forwardX * forwardInput + rightX * strafeInput) / inputLength) * moveSpeed;
       const targetVelocityZ = ((forwardZ * forwardInput + rightZ * strafeInput) / inputLength) * moveSpeed;
       const acceleration = (moving ? 80 : 110) * delta;
@@ -207,7 +236,9 @@
       const camera = getCamera();
       const config = settings();
       setCamera({
-        yaw: camera.yaw + event.movementX * config.sensitivity,
+        // With the Overview-matched horizontal basis, decreasing yaw turns the
+        // camera right and makes the scene move left as expected.
+        yaw: camera.yaw - event.movementX * config.sensitivity,
         pitch: clamp(camera.pitch - event.movementY * config.sensitivity, -1.35, 1.35),
       });
       onMovement();

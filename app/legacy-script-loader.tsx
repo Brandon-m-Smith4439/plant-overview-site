@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import type * as ThreeNamespace from "three";
+
+declare global {
+  interface Window {
+    THREE?: typeof ThreeNamespace;
+  }
+}
 
 const scriptLoads = new Map<string, Promise<void>>();
 
@@ -34,6 +41,14 @@ export default function LegacyScriptLoader({ sources }: { sources: string[] }) {
     let active = true;
 
     async function loadInOrder() {
+      // The legacy editors intentionally remain plain browser scripts so saved
+      // projects and the standalone preview keep working. Load Three.js through
+      // the application bundle first, then expose it to the retained renderer.
+      // If WebGL/Three cannot initialize, depth-scene-renderer.js retains its
+      // compatible Canvas/WebGL fallback path.
+      if (!window.THREE) {
+        window.THREE = await import("three");
+      }
       for (const source of sourceKey.split("\u001f")) {
         if (!active || !source) return;
         await loadScript(source);
@@ -46,6 +61,17 @@ export default function LegacyScriptLoader({ sources }: { sources: string[] }) {
 
     return () => {
       active = false;
+      const entrySource = sourceKey.split("\u001f").filter(Boolean).at(-1);
+      if (!entrySource) return;
+      window.dispatchEvent(new CustomEvent("plantlegacyteardown", {
+        detail: { source: entrySource },
+      }));
+      // Shared renderer/data scripts stay cached between routes. The final
+      // route bootstrap must run again when its DOM is mounted again.
+      scriptLoads.delete(entrySource);
+      document.querySelectorAll<HTMLScriptElement>("script[data-plant-legacy-script]").forEach((script) => {
+        if (script.dataset.plantLegacyScript === entrySource) script.remove();
+      });
     };
   }, [sourceKey]);
 

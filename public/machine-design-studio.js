@@ -3,6 +3,9 @@
 
   const canvas = document.getElementById("machine-design-canvas");
   if (!canvas) return;
+  let applicationActive = true;
+  let animationFrameId = 0;
+  let geometryPreparedFrame = 0;
 
   const ctx = canvas.getContext("2d");
   const sceneCanvas = window.createDepthCanvas?.(canvas, "depth-scene-canvas machine-depth-canvas") || null;
@@ -18,13 +21,24 @@
         shadowLayerCount() { return 1; }, maxShadowParts() { return 24; },
         recordFrame() {}, mount() {},
       };
-  window.addEventListener("plant-renderer-fallback", () => renderPerformance.invalidate());
+  const handleRendererFallback = () => renderPerformance.invalidate();
+  const handleGeometryPrepared = () => {
+    if (!applicationActive || geometryPreparedFrame) return;
+    geometryPreparedFrame = window.requestAnimationFrame(() => {
+      geometryPreparedFrame = 0;
+      renderPerformance.invalidate?.("geometry-prepared");
+    });
+  };
+  window.addEventListener("plant-renderer-fallback", handleRendererFallback);
+  window.addEventListener("plantgeometryprepared", handleGeometryPrepared);
   const APP_VERSION = "0.13.0";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
   const MAX_ENVELOPE_CLEARANCE_INCHES = 120;
   const DEFAULT_PAN_PITCH_SCALE = Math.sin(0.62);
+  const MAX_PAN_POINTER_DELTA = 160;
+  const MARQUEE_DRAG_THRESHOLD = 5;
   const DESIGN_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
   const LAYOUT_KEY = "monroe-glass-plant-layout-v6";
   const LEGACY_LAYOUT_KEY = "monroe-glass-plant-layout-v5";
@@ -34,6 +48,7 @@
     : null;
   const defaults = clone(window.PLANT_MACHINE_DESIGNS || {});
   const builtinIds = new Set(Object.keys(defaults));
+  let deletedDesignIds = new Set();
   const AXIS_COLORS = { x: "#d94b45", y: "#3f9a65", z: "#3d7fc4" };
   const TOOL_LABELS = {
     select: ["Select", "Click a part to select it"],
@@ -48,6 +63,7 @@
   ];
 
   function clone(value) {
+    if (typeof structuredClone === "function") return structuredClone(value);
     return JSON.parse(JSON.stringify(value));
   }
 
@@ -210,6 +226,16 @@
         }
       });
     }
+    if (component?.collisionEnvelope && typeof component.collisionEnvelope === "object") {
+      normalized.collisionEnvelope = {
+        x: Number(component.collisionEnvelope.x) || 0,
+        y: Number(component.collisionEnvelope.y) || 0,
+        z: Number(component.collisionEnvelope.z) || 0,
+        w: Math.max(MIN_DESIGN_ENVELOPE, Number(component.collisionEnvelope.w) || MIN_DESIGN_ENVELOPE),
+        h: Math.max(MIN_DESIGN_ENVELOPE, Number(component.collisionEnvelope.h) || MIN_DESIGN_ENVELOPE),
+        d: Math.max(MIN_DESIGN_ENVELOPE, Number(component.collisionEnvelope.d) || MIN_DESIGN_ENVELOPE),
+      };
+    } else normalized.collisionEnvelope = null;
     return normalized;
   }
 
@@ -260,44 +286,102 @@
     return axesDiffer ? "individual" : "uniform";
   }
 
-  function syncPlantObjectDimensions(machine, design) {
+  function currentPlantObjectScale(machine) {
+    const reference = {
+      w: Math.max(.01, Number(machine?.naturalW) || Number(machine?.w) || 1),
+      d: Math.max(.01, Number(machine?.naturalD) || Number(machine?.d) || 1),
+      h: Math.max(.01, Number(machine?.naturalH) || Number(machine?.h) || 1),
+    };
+    const scales = {
+      x: Math.max(.0001, Number(machine?.w) || reference.w) / reference.w,
+      y: Math.max(.0001, Number(machine?.h) || reference.h) / reference.h,
+      z: Math.max(.0001, Number(machine?.d) || reference.d) / reference.d,
+    };
+    const editMode = normalizedMachineScaleEditMode(machine?.scaleEditMode, machine);
+    if (editMode === "uniform") {
+      const values = [scales.x, scales.y, scales.z];
+      const uniform = Math.max(...values) - Math.min(...values) < .0001
+        ? values.reduce((total, value) => total + value, 0) / values.length
+        : Math.min(...values);
+      scales.x = uniform;
+      scales.y = uniform;
+      scales.z = uniform;
+    }
+    return { ...scales, editMode };
+  }
+
+  function syncPlantObjectDimensions(machine, design, { preserveScale = true } = {}) {
     if (!machine || !design?.base) return false;
-    const width = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.w) || Number(machine.w) || 1);
-    const depth = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.d) || Number(machine.d) || 1);
-    const height = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.h) || Number(machine.h) || 1);
+    const baseWidth = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.w) || Number(machine.w) || 1);
+    const baseDepth = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.d) || Number(machine.d) || 1);
+    const baseHeight = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.h) || Number(machine.h) || 1);
+    const scale = preserveScale ? currentPlantObjectScale(machine) : { x: 1, y: 1, z: 1, editMode: "uniform" };
+    const width = baseWidth * scale.x;
+    const depth = baseDepth * scale.z;
+    const height = baseHeight * scale.y;
     const oldWidth = Math.max(.01, Number(machine.w) || width);
     const oldDepth = Math.max(.01, Number(machine.d) || depth);
     const changed = Math.abs(oldWidth - width) > .0001
       || Math.abs(oldDepth - depth) > .0001
-      || Math.abs(Number(machine.h) - height) > .0001;
+      || Math.abs(Number(machine.h) - height) > .0001
+      || Math.abs((Number(machine.naturalW) || 0) - baseWidth) > .0001
+      || Math.abs((Number(machine.naturalD) || 0) - baseDepth) > .0001
+      || Math.abs((Number(machine.naturalH) || 0) - baseHeight) > .0001;
     // Preserve the plant object's center so syncing a design does not move it.
     machine.x = Number(machine.x) + (oldWidth - width) / 2;
     machine.z = Number(machine.z) + (oldDepth - depth) / 2;
     machine.w = width;
     machine.d = depth;
     machine.h = height;
-    machine.naturalW = width;
-    machine.naturalD = depth;
-    machine.naturalH = height;
-    machine.scaleXPercent = 100;
-    machine.scaleYPercent = 100;
-    machine.scaleZPercent = 100;
-    machine.scaleEditMode = "uniform";
+    machine.naturalW = baseWidth;
+    machine.naturalD = baseDepth;
+    machine.naturalH = baseHeight;
+    machine.scaleXPercent = scale.x * 100;
+    machine.scaleYPercent = scale.y * 100;
+    machine.scaleZPercent = scale.z * 100;
+    machine.scaleEditMode = scale.editMode;
+    return changed;
+  }
+
+  function syncPlantObjectName(machine, design) {
+    if (!machine || !design || machine.useDesignName === false) return false;
+    const name = String(design.name || "New machine").trim() || "New machine";
+    const short = conciseMachineName(name);
+    const changed = machine.name !== name || machine.short !== short || machine.useDesignName !== true;
+    machine.name = name;
+    machine.short = short;
+    machine.useDesignName = true;
     return changed;
   }
 
   function normalizeDesign(design, fallbackId = uniqueId("design")) {
     const base = design?.base || {};
+    const normalizedBase = {
+      x: Number(base.x) || 0,
+      y: Number(base.y) || 0,
+      z: Number(base.z) || 0,
+      w: Math.max(MIN_DESIGN_ENVELOPE, Number(base.w) || 20),
+      d: Math.max(MIN_DESIGN_ENVELOPE, Number(base.d) || 10),
+      h: Math.max(MIN_DESIGN_ENVELOPE, Number(base.h) || 8),
+    };
+    const collisionEnvelopes = (Array.isArray(design?.collisionEnvelopes) ? design.collisionEnvelopes : [])
+      .map((envelope, index) => ({
+        id: String(envelope?.id || uniqueId("envelope")),
+        name: String(envelope?.name || `Envelope box ${index + 1}`),
+        x: Number.isFinite(Number(envelope?.x)) ? Number(envelope.x) : normalizedBase.x,
+        y: Number.isFinite(Number(envelope?.y)) ? Number(envelope.y) : normalizedBase.y,
+        z: Number.isFinite(Number(envelope?.z)) ? Number(envelope.z) : normalizedBase.z,
+        w: Math.max(MIN_DESIGN_ENVELOPE, Number(envelope?.w) || normalizedBase.w),
+        h: Math.max(MIN_DESIGN_ENVELOPE, Number(envelope?.h) || normalizedBase.h),
+        d: Math.max(MIN_DESIGN_ENVELOPE, Number(envelope?.d) || normalizedBase.d),
+      }));
     return {
       id: design?.id || fallbackId,
       name: design?.name || "Untitled machine design",
       machineType: design?.machineType || "generic",
       description: design?.description || "",
-      base: {
-        w: Math.max(MIN_DESIGN_ENVELOPE, Number(base.w) || 20),
-        d: Math.max(MIN_DESIGN_ENVELOPE, Number(base.d) || 10),
-        h: Math.max(MIN_DESIGN_ENVELOPE, Number(base.h) || 8),
-      },
+      base: normalizedBase,
+      collisionEnvelopes,
       animationTimelineSettings: normalizeSharedTimelineSettings(design),
       components: (Array.isArray(design?.components) ? design.components : []).map(normalizeComponent),
       custom: design?.custom === true || !builtinIds.has(design?.id),
@@ -310,11 +394,13 @@
     try {
       const payload = JSON.parse(localStorage.getItem(DESIGN_KEY) || "null");
       saved = payload?.designs && typeof payload.designs === "object" ? payload.designs : {};
+      deletedDesignIds = new Set(Array.isArray(payload?.deletedDesignIds) ? payload.deletedDesignIds : []);
     } catch (error) {
       console.warn("Saved machine designs could not be loaded.", error);
     }
     const result = {};
     Object.entries({ ...defaults, ...saved }).forEach(([id, design]) => {
+      if (deletedDesignIds.has(id)) return;
       result[id] = normalizeDesign({ ...design, id }, id);
     });
     return result;
@@ -493,10 +579,11 @@
     pitch: 0.62,
     zoom: 1,
     panX: 0,
+    panY: 0,
     panZ: 0,
     tool: "select",
     snapEnabled: true,
-    snapStep: 0.5,
+    snapStep: 0.1,
     transformSpace: "local",
     dragging: false,
     drag: null,
@@ -523,14 +610,21 @@
     animationTimeOffset: 0,
     lastFrameTime: 0,
     lastRenderedAt: 0,
+    geometryRevision: 1,
     linkedMachineId: queryMachine?.instanceId || null,
     lastCreatedMachineId: null,
     showDesignEnvelope: true,
+    designEnvelopeId: null,
     componentClipboard: [],
   };
 
   function currentDesign() {
     return library[state.designId] || null;
+  }
+
+  function markDesignGeometryDirty({ invalidate = true } = {}) {
+    state.geometryRevision = (Number(state.geometryRevision) || 0) + 1;
+    if (invalidate) renderPerformance.invalidate?.("design-geometry");
   }
 
   function componentTimelines(components) {
@@ -599,6 +693,7 @@
   function selectAllComponents() {
     const design = currentDesign();
     if (!design?.components.length) return;
+    commitActiveInspectorEdit();
     state.selectAllParts = true;
     state.timelineTargetId = null;
     state.timelineTargetPathIds = [];
@@ -611,16 +706,36 @@
     showToast(`Selected all ${design.components.length} machine parts.`);
   }
 
-  function saveLibrary() {
+  let deferredLibrarySave = 0;
+
+  function writeLibraryNow() {
+    if (deferredLibrarySave) window.clearTimeout(deferredLibrarySave);
+    deferredLibrarySave = 0;
     const saveState = document.getElementById("save-state");
     if (saveState) saveState.textContent = "Saving…";
-    const designs = {};
-    Object.entries(library).forEach(([id, design]) => {
-      designs[id] = { ...clone(design), updatedAt: new Date().toISOString() };
-    });
-    localStorage.setItem(DESIGN_KEY, JSON.stringify({ version: 17, updatedAt: new Date().toISOString(), designs }));
+    Object.keys(library).forEach((id) => deletedDesignIds.delete(id));
+    localStorage.setItem(DESIGN_KEY, JSON.stringify({
+      version: 17,
+      updatedAt: new Date().toISOString(),
+      // JSON.stringify already walks the object graph once. Cloning every
+      // design first doubled both the allocation and traversal cost whenever
+      // a detailed component was pasted.
+      designs: library,
+      deletedDesignIds: [...deletedDesignIds],
+    }));
     broadcastProjectUpdate("design-library-updated", { designId: state?.designId || null });
     if (saveState) window.setTimeout(() => { saveState.textContent = "Auto-saved"; }, 180);
+  }
+
+  function saveLibrary({ defer = false } = {}) {
+    if (!defer) {
+      writeLibraryNow();
+      return;
+    }
+    const saveState = document.getElementById("save-state");
+    if (saveState) saveState.textContent = "Saving...";
+    if (deferredLibrarySave) window.clearTimeout(deferredLibrarySave);
+    deferredLibrarySave = window.setTimeout(writeLibraryNow, 70);
   }
 
   function saveLayout() {
@@ -631,7 +746,7 @@
     broadcastProjectUpdate("layout-updated", { machineId: state?.linkedMachineId || null });
   }
 
-  function syncLinkedMachineToCurrentDesign() {
+  function syncLinkedMachineToCurrentDesign({ syncName = false } = {}) {
     if (!state.designId) return;
     const design = currentDesign();
     if (!design) return;
@@ -639,22 +754,25 @@
     const linkedMachine = state.linkedMachineId
       ? plantLayout.machines.find((item) => item.instanceId === state.linkedMachineId)
       : null;
-    if (linkedMachine && linkedMachine.designId !== state.designId) {
+    const linkedDesignChanged = Boolean(linkedMachine && linkedMachine.designId !== state.designId);
+    if (linkedDesignChanged) {
       linkedMachine.designId = state.designId;
       linkedMachine.designScaleMode = normalizedDesignScaleMode(linkedMachine.designScaleMode);
+      linkedMachine.useDesignName = true;
       changed = true;
     }
     plantLayout.machines.forEach((machine) => {
       machine.designScaleMode = normalizedDesignScaleMode(machine.designScaleMode);
-      if (machine.designId === state.designId && machine.designScaleMode === "match") {
-        changed = syncPlantObjectDimensions(machine, design) || changed;
-      }
+      if (machine.designId !== state.designId) return;
+      if (syncName || (linkedDesignChanged && machine === linkedMachine)) changed = syncPlantObjectName(machine, design) || changed;
+      changed = syncPlantObjectDimensions(machine, design) || changed;
     });
     if (changed) saveLayout();
   }
 
   if (queryMachine && state.designId) {
     queryMachine.designId = state.designId;
+    syncPlantObjectDimensions(queryMachine, currentDesign());
     saveLibrary();
     saveLayout();
   }
@@ -679,13 +797,16 @@
 
   function restoreHistory(item) {
     if (!item?.design) return;
+    const previousName = library[item.designId]?.name || "";
     library[item.designId] = normalizeDesign(item.design, item.designId);
     state.designId = item.designId;
     state.componentId = item.componentId;
     state.selectedComponentIds = new Set(item.selectedComponentIds || (item.componentId ? [item.componentId] : []));
     state.selectAllParts = item.selectAllParts === true;
+    state.designEnvelopeId = null;
+    markDesignGeometryDirty({ invalidate: false });
     saveLibrary();
-    syncLinkedMachineToCurrentDesign();
+    syncLinkedMachineToCurrentDesign({ syncName: previousName !== library[item.designId].name });
     updateInterface();
   }
 
@@ -721,20 +842,61 @@
     showToast.timeoutId = window.setTimeout(() => toast.classList.remove("visible"), 2200);
   }
 
-  function commit(message = "") {
+  function commit(message = "", { syncName = false } = {}) {
     const design = currentDesign();
     if (!design) return;
+    componentAnimationPresenceCache = new WeakMap();
     design.updatedAt = new Date().toISOString();
-    saveLibrary();
-    syncLinkedMachineToCurrentDesign();
+    markDesignGeometryDirty({ invalidate: false });
+    window.plantGeometryPrep?.prepareDesign(design);
+    saveLibrary({ defer: true });
+    syncLinkedMachineToCurrentDesign({ syncName });
     updateInterface();
     if (message) showToast(message);
   }
 
-  function snapValue(value) {
+  function snapToSelectedStep(value) {
     if (!state.snapEnabled) return value;
     const step = Math.max(0.01, state.snapStep);
     return Math.round(value / step) * step;
+  }
+
+  function snapValue(value) {
+    return snapToSelectedStep(value);
+  }
+
+  function snapRotationDegrees(value) {
+    return snapToSelectedStep(value);
+  }
+
+  function snapScaleFactor(value) {
+    if (!state.snapEnabled) return value;
+    // Scale inputs are displayed as percentages, so a 0.5 snap step means
+    // half-percent scaling while the same selection means 0.5 ft or 0.5 degrees for
+    // move and rotate.
+    return Math.max(0.05, snapToSelectedStep(value * 100) / 100);
+  }
+
+  function updateSnapStepControls() {
+    const step = Math.max(0.01, Number(state.snapStep) || 0.1);
+    const stepText = Number(step.toFixed(3)).toString();
+    const enabled = state.snapEnabled !== false;
+    const select = document.getElementById("snap-step");
+    if (select) {
+      select.disabled = !enabled;
+      select.value = stepText;
+    }
+    const summary = document.getElementById("snap-step-summary");
+    if (summary) summary.textContent = enabled
+      ? `${stepText} ft move / ${stepText} deg rotate / ${stepText}% scale`
+      : "Free movement, rotation, and scaling";
+    document.querySelectorAll("[data-component-field]").forEach((input) => {
+      if (["x", "y", "z", "x2", "y2", "z2", "rotationX", "rotationY", "rotationZ"].includes(input.dataset.componentField)) {
+        input.step = stepText;
+      }
+    });
+    document.querySelectorAll("[data-component-envelope-field]").forEach((input) => { input.step = stepText; });
+    document.querySelectorAll("[data-component-scale]").forEach((input) => { input.step = stepText; });
   }
 
   function newComponent(type) {
@@ -755,9 +917,9 @@
         text: "New text label",
       }[type] || "New component",
       type,
-      x: base.w * 0.25,
-      y: 0,
-      z: base.d * 0.25,
+      x: (Number(base.x) || 0) + base.w * 0.25,
+      y: Number(base.y) || 0,
+      z: (Number(base.z) || 0) + base.d * 0.25,
       color: type === "glassPanel" ? "#8fc6d4" : type === "wheel" ? "#20272a" : "#68777a",
       opacity: type === "glassPanel" ? 0.55 : 1,
       visible: true,
@@ -787,7 +949,14 @@
       if (["cylinder", "sphere", "cone"].includes(type)) common.segments = 20;
       if (type === "text") Object.assign(common, { text: "MACHINE LABEL", textColor: "#ffffff", color: "#176f69" });
     } else if (type === "beam") {
-      Object.assign(common, { x2: base.w * 0.75, y2: 0, z2: base.d * 0.25, thickness: 2, thicknessY: 2, thicknessZ: 2 });
+      Object.assign(common, {
+        x2: (Number(base.x) || 0) + base.w * 0.75,
+        y2: Number(base.y) || 0,
+        z2: (Number(base.z) || 0) + base.d * 0.25,
+        thickness: 2,
+        thicknessY: 2,
+        thicknessZ: 2,
+      });
     } else if (type === "rollerBed") {
       Object.assign(common, { w: base.w * 0.5, d: base.d * 0.5, count: 8, thickness: 1.5 });
     } else if (type === "wheel") {
@@ -883,10 +1052,10 @@
     // design. Users can intentionally resize the envelope later with Tight fit.
     const sourceCenterX = (sourceBounds.minX + sourceBounds.maxX) / 2;
     const sourceCenterZ = (sourceBounds.minZ + sourceBounds.maxZ) / 2;
-    const targetCenterX = Number(design.base?.w || 0) / 2;
-    const targetCenterZ = Number(design.base?.d || 0) / 2;
+    const targetCenterX = (Number(design.base?.x) || 0) + Number(design.base?.w || 0) / 2;
+    const targetCenterZ = (Number(design.base?.z) || 0) + Number(design.base?.d || 0) / 2;
     const dx = targetCenterX - sourceCenterX;
-    const dy = -sourceBounds.minY;
+    const dy = (Number(design.base?.y) || 0) - sourceBounds.minY;
     const dz = targetCenterZ - sourceCenterZ;
     children.forEach((child) => translateComponent(child, dx, dy, dz));
 
@@ -924,8 +1093,14 @@
   }
 
   function selectDesign(id) {
-    if (!library[id]) return;
+    if (!library[id] || id === state.designId) return;
+    commitActiveInspectorEdit();
+    const designList = document.getElementById("design-list");
+    const canReuseDesignList = Array.from(designList?.querySelectorAll("[data-design-id]") || [])
+      .some((button) => button.dataset.designId === id);
     state.designId = id;
+    window.plantGeometryPrep?.prepareDesign(library[id]);
+    state.designEnvelopeId = null;
     state.componentId = library[id].components[0]?.id || null;
     state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
     state.selectAllParts = false;
@@ -934,9 +1109,16 @@
     state.timelineClipId = null;
     state.history.length = 0;
     state.future.length = 0;
-    syncLinkedMachineToCurrentDesign();
+    markDesignGeometryDirty({ invalidate: false });
     fitView();
-    updateInterface();
+    // Static designs render only when explicitly invalidated. Mark the canvas
+    // dirty immediately so the newly selected machine appears on the next
+    // animation frame instead of waiting for another viewport interaction.
+    renderPerformance.invalidate?.("design-switch");
+    // Existing machines can take the lightweight selection-only path. Newly
+    // created, imported, or Save As designs need one complete list refresh so
+    // their row appears immediately without leaving and reopening Designer.
+    updateInterface({ designSwitch: canReuseDesignList });
   }
 
   function selectComponent(
@@ -948,6 +1130,7 @@
   ) {
     const design = currentDesign();
     if (id && !design?.components.some((component) => component.id === id)) return;
+    commitActiveInspectorEdit();
     state.selectAllParts = false;
     if (!id) {
       state.componentId = null;
@@ -1066,25 +1249,30 @@
     state.selectAllParts = false;
     state.componentId = library[id].components[0]?.id || null;
     state.selectedComponentIds = new Set(state.componentId ? [state.componentId] : []);
-    commit("Preset restored.");
+    commit("Preset restored.", { syncName: true });
   }
 
-  function deleteDesign() {
-    const id = state.designId;
-    if (!id) return;
-    if (builtinIds.has(id)) {
-      showToast("Built-in presets cannot be deleted.");
-      return;
-    }
-    if (!window.confirm(`Delete ${library[id].name}? Machines using it will return to their built-in model.`)) return;
+  function deleteDesign(requestedId = null) {
+    const id = typeof requestedId === "string" ? requestedId : state.designId;
+    const design = library[id];
+    if (!id || !design) return;
+    if (!window.confirm(`Delete ${design.name} from the machine library? Plant objects using it will return to their built-in model.`)) return;
     plantLayout.machines.forEach((machine) => {
       if (machine.designId === id) machine.designId = "";
     });
     saveLayout();
+    deletedDesignIds.add(id);
     delete library[id];
     saveLibrary();
-    selectDesign(Object.keys(library)[0] || "");
-    showToast("Custom design deleted.");
+    const nextId = Object.keys(library)[0] || "";
+    if (id === state.designId) {
+      state.designId = null;
+      if (nextId) selectDesign(nextId);
+      else createDesign();
+    } else {
+      updateInterface();
+    }
+    showToast(`${design.name} deleted from the machine library.`);
   }
 
   function duplicateSelectedComponent() {
@@ -1269,7 +1457,7 @@
     if (label) label.innerHTML = `<strong>${escapeHtml(title)}</strong> · ${escapeHtml(help)}`;
   }
 
-  function setBrowserTab(tab) {
+  function setBrowserTab(tab, { refresh = true } = {}) {
     state.browserTab = tab;
     document.querySelectorAll("[data-browser-tab]").forEach((button) => {
       const active = button.dataset.browserTab === tab;
@@ -1279,9 +1467,11 @@
     document.querySelectorAll("[data-browser-panel]").forEach((panel) => {
       panel.hidden = panel.dataset.browserPanel !== tab;
     });
+    if (refresh && tab === "add") updateEmbeddedMachinePicker();
+    if (refresh && tab === "plant") updateAssignmentPanel();
   }
 
-  function setInspectorTab(tab) {
+  function setInspectorTab(tab, { refresh = true } = {}) {
     state.inspectorTab = tab;
     document.querySelectorAll("[data-inspector-tab]").forEach((button) => {
       const active = button.dataset.inspectorTab === tab;
@@ -1291,6 +1481,7 @@
     document.querySelectorAll("[data-inspector-panel]").forEach((panel) => {
       panel.hidden = panel.dataset.inspectorPanel !== tab;
     });
+    if (refresh && tab === "design") updateDesignFields({ includeEnvelope: true });
   }
 
 
@@ -1734,13 +1925,28 @@
     if (count) count.textContent = `${Object.keys(library).length} design${Object.keys(library).length === 1 ? "" : "s"}`;
     if (!list) return;
     list.innerHTML = designs.map((design) => `
-      <button type="button" data-design-id="${escapeHtml(design.id)}" class="${design.id === state.designId ? "active" : ""}">
-        <span>${escapeHtml(design.name)}</span>
-        <small>${escapeHtml(design.machineType)} · ${design.components.length} parts${builtinIds.has(design.id) ? " · preset" : " · custom"}</small>
-      </button>
+      <div class="design-list-row ${design.id === state.designId ? "active" : ""}">
+        <button type="button" data-design-id="${escapeHtml(design.id)}" class="design-list-select ${design.id === state.designId ? "active" : ""}">
+          <span>${escapeHtml(design.name)}</span>
+          <small>${escapeHtml(design.machineType)} · ${design.components.length} parts${builtinIds.has(design.id) ? " · preset" : " · custom"}</small>
+        </button>
+        <button type="button" class="design-list-delete" data-delete-design-id="${escapeHtml(design.id)}" title="Delete ${escapeHtml(design.name)}" aria-label="Delete ${escapeHtml(design.name)}">&times;</button>
+      </div>
     `).join("") || `<p class="studio-empty">No designs match this search.</p>`;
     list.querySelectorAll("[data-design-id]").forEach((button) => {
       button.addEventListener("click", () => selectDesign(button.dataset.designId));
+    });
+    list.querySelectorAll("[data-delete-design-id]").forEach((button) => {
+      button.addEventListener("click", () => deleteDesign(button.dataset.deleteDesignId));
+    });
+  }
+
+  function updateDesignListSelection() {
+    const list = document.getElementById("design-list");
+    if (!list) return;
+    list.querySelectorAll("[data-design-id]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.designId === state.designId);
+      button.closest(".design-list-row")?.classList.toggle("active", button.dataset.designId === state.designId);
     });
   }
 
@@ -1779,22 +1985,28 @@
       d: bounds.maxZ - bounds.minZ,
       h: bounds.maxY - bounds.minY,
     };
-    const outside = bounds.minX < -0.0005
-      || bounds.minY < -0.0005
-      || bounds.minZ < -0.0005
-      || bounds.maxX > design.base.w + 0.0005
-      || bounds.maxY > design.base.h + 0.0005
-      || bounds.maxZ > design.base.d + 0.0005;
-    status.textContent = `Envelope ${design.base.w.toFixed(3)} × ${design.base.d.toFixed(3)} × ${design.base.h.toFixed(3)} ft · Tight part bounds ${geometry.w.toFixed(3)} × ${geometry.d.toFixed(3)} × ${geometry.h.toFixed(3)} ft${outside ? " · Some geometry extends outside the envelope." : ""}`;
+    const baseX = Number(design.base.x) || 0;
+    const baseY = Number(design.base.y) || 0;
+    const baseZ = Number(design.base.z) || 0;
+    const outside = bounds.minX < baseX - 0.0005
+      || bounds.minY < baseY - 0.0005
+      || bounds.minZ < baseZ - 0.0005
+      || bounds.maxX > baseX + design.base.w + 0.0005
+      || bounds.maxY > baseY + design.base.h + 0.0005
+      || bounds.maxZ > baseZ + design.base.d + 0.0005;
+    status.textContent = `Envelope at ${baseX.toFixed(3)}, ${baseY.toFixed(3)}, ${baseZ.toFixed(3)} ft · Size ${design.base.w.toFixed(3)} × ${design.base.d.toFixed(3)} × ${design.base.h.toFixed(3)} ft · Tight part bounds ${geometry.w.toFixed(3)} × ${geometry.d.toFixed(3)} × ${geometry.h.toFixed(3)} ft${outside ? " · Some geometry extends outside the envelope." : ""}`;
     status.classList.toggle("warning", outside);
   }
 
-  function updateDesignFields() {
+  function updateDesignFields({ includeEnvelope = true } = {}) {
     const design = currentDesign();
     const map = {
       "design-name": design?.name || "",
       "design-machine-type": design?.machineType || "",
       "design-description": design?.description || "",
+      "design-base-x": design?.base.x ?? 0,
+      "design-base-y": design?.base.y ?? 0,
+      "design-base-z": design?.base.z ?? 0,
       "design-base-w": design?.base.w || "",
       "design-base-d": design?.base.d || "",
       "design-base-h": design?.base.h || "",
@@ -1804,13 +2016,62 @@
       if (input && document.activeElement !== input) input.value = String(value);
     });
     const deleteButton = document.getElementById("delete-design");
-    if (deleteButton) deleteButton.disabled = !design || builtinIds.has(design.id);
+    if (deleteButton) {
+      deleteButton.disabled = !design;
+      deleteButton.textContent = "Delete machine";
+      deleteButton.title = design ? `Delete ${design.name}` : "Select a machine to delete";
+    }
     const resetButton = document.getElementById("reset-design");
     if (resetButton) resetButton.disabled = !design || !defaults[design.id];
     const showEnvelope = document.getElementById("show-design-envelope");
     if (showEnvelope && document.activeElement !== showEnvelope) showEnvelope.checked = state.showDesignEnvelope;
-    updateEnvelopeStatus(design);
+    updateDesignEnvelopeShapeEditor(design);
+    if (includeEnvelope) updateEnvelopeStatus(design);
   }
+
+  function designEnvelopePieces(design = currentDesign()) {
+    if (!design) return [];
+    if (!Array.isArray(design.collisionEnvelopes)) design.collisionEnvelopes = [];
+    return design.collisionEnvelopes;
+  }
+
+  function selectedDesignEnvelopePiece(design = currentDesign()) {
+    const pieces = designEnvelopePieces(design);
+    let selected = pieces.find((piece) => piece.id === state.designEnvelopeId) || null;
+    if (!selected && pieces.length) {
+      selected = pieces[0];
+      state.designEnvelopeId = selected.id;
+    }
+    return selected;
+  }
+
+  function updateDesignEnvelopeShapeEditor(design = currentDesign()) {
+    const pieces = designEnvelopePieces(design);
+    const selected = selectedDesignEnvelopePiece(design);
+    const picker = document.getElementById("design-envelope-piece");
+    const signature = pieces.map((piece) => `${piece.id}:${piece.name}`).join("|");
+    if (picker && picker.dataset.signature !== signature) {
+      picker.dataset.signature = signature;
+      picker.innerHTML = pieces.length
+        ? pieces.map((piece, index) => `<option value="${escapeHtml(piece.id)}">${escapeHtml(piece.name || `Envelope box ${index + 1}`)}</option>`).join("")
+        : `<option value="">Base rectangle (automatic)</option>`;
+    }
+    if (picker) {
+      picker.disabled = pieces.length === 0;
+      picker.value = selected?.id || "";
+    }
+    document.querySelectorAll("[data-design-envelope-field]").forEach((input) => {
+      const field = input.dataset.designEnvelopeField;
+      input.disabled = !selected;
+      if (document.activeElement !== input) input.value = selected ? String(selected[field]) : "";
+    });
+    const count = document.getElementById("design-envelope-piece-count");
+    if (count) count.textContent = pieces.length ? `${pieces.length} editable box${pieces.length === 1 ? "" : "es"}` : "Base rectangle";
+    document.getElementById("duplicate-design-envelope-piece")?.toggleAttribute("disabled", !selected);
+    document.getElementById("remove-design-envelope-piece")?.toggleAttribute("disabled", !selected);
+  }
+
+  let componentListStructureSignature = "";
 
   function updateComponentList() {
     const list = document.getElementById("component-list");
@@ -1820,6 +2081,17 @@
     const components = (design?.components || []).filter((component) => !query || `${component.name} ${component.type}`.toLowerCase().includes(query));
     if (count) count.textContent = `${design?.components.length || 0} part${design?.components.length === 1 ? "" : "s"}`;
     if (!list) return;
+    const structureSignature = `${state.designId}|${query}|${components.map((component) => [
+      component.id, component.name, component.type, component.color, component.visible !== false,
+      component.embeddedMachine === true, componentHasAnimation(component),
+    ].join(":" )).join("|")}`;
+    if (componentListStructureSignature === structureSignature) {
+      list.querySelectorAll("[data-component-row]").forEach((row) => {
+        row.classList.toggle("active", state.selectAllParts || state.selectedComponentIds.has(row.dataset.componentRow));
+      });
+      return;
+    }
+    componentListStructureSignature = structureSignature;
     list.innerHTML = components.map((component, index) => `
       <div class="component-tree-row ${state.selectAllParts || state.selectedComponentIds.has(component.id) ? "active" : ""}" data-component-row="${escapeHtml(component.id)}">
         <button type="button" class="component-visibility" data-toggle-component="${escapeHtml(component.id)}" title="${component.visible === false ? "Show" : "Hide"} component" aria-label="${component.visible === false ? "Show" : "Hide"} ${escapeHtml(component.name)}">${component.visible === false ? "○" : "●"}</button>
@@ -1905,6 +2177,9 @@
     document.getElementById("ungroup-component")?.toggleAttribute("disabled", component?.type !== "group");
     document.getElementById("move-component-up")?.toggleAttribute("disabled", !component);
     document.getElementById("move-component-down")?.toggleAttribute("disabled", !component);
+    document.querySelectorAll("[data-mirror-component]").forEach((button) => {
+      button.toggleAttribute("disabled", selectedCount === 0);
+    });
     if (!selectedCount || !section) return;
 
     const primary = component || selected[0];
@@ -2029,6 +2304,47 @@
     const standardPause = section.querySelector("[data-standard-animation-pause]");
     if (standardPause) standardPause.hidden = isFourStep;
 
+    const envelope = !bulkSelection ? primary.collisionEnvelope : null;
+    section.querySelectorAll("[data-component-envelope-field]").forEach((input) => {
+      const field = input.dataset.componentEnvelopeField;
+      input.disabled = !envelope;
+      if (document.activeElement !== input) input.value = envelope ? String(envelope[field]) : "";
+    });
+    const envelopeStatus = document.getElementById("component-envelope-status");
+    if (envelopeStatus) envelopeStatus.textContent = bulkSelection
+      ? "Select one part to edit its individual envelope."
+      : envelope
+        ? "This part envelope is active in the layout and first-person collision system."
+        : "No individual envelope yet. Add one fitted to this part.";
+    document.getElementById("fit-component-envelope")?.toggleAttribute("disabled", bulkSelection || !primary);
+    document.getElementById("remove-component-envelope")?.toggleAttribute("disabled", bulkSelection || !envelope);
+
+  }
+
+  function commitActiveInspectorEdit() {
+    const active = document.activeElement;
+    if (!active || typeof active.matches !== "function") return;
+    if (!active.matches([
+      "[data-component-field]",
+      "[data-component-scale]",
+      "[data-component-check]",
+      "[data-component-envelope-field]",
+      "[data-group-child-field]",
+      "[data-group-child-check]",
+      "#design-name",
+      "#design-machine-type",
+      "#design-description",
+      "#design-base-x",
+      "#design-base-y",
+      "#design-base-z",
+      "#design-base-w",
+      "#design-base-d",
+      "#design-base-h",
+    ].join(","))) return;
+    // Text and number inputs emit their pending change synchronously as focus
+    // leaves. Do this while the old selection is still current so that a click
+    // on another part cannot apply the previous part's transform values to it.
+    active.blur();
   }
 
   function visibleDesignColor(design) {
@@ -2164,6 +2480,7 @@
       instanceId,
       name,
       short: conciseMachineName(name),
+      useDesignName: !requestedName,
       type,
       category: "equipment",
       reveal,
@@ -2296,19 +2613,45 @@
     }
   }
 
-  function updateInterface() {
-    updateDesignList();
-    updateEmbeddedMachinePicker();
-    updateDesignFields();
+  let deferredDesignSwitchRefresh = 0;
+  let deferredDesignSwitchTimer = 0;
+
+  function scheduleDesignSwitchPanelRefresh() {
+    if (deferredDesignSwitchRefresh) window.cancelAnimationFrame(deferredDesignSwitchRefresh);
+    if (deferredDesignSwitchTimer) window.clearTimeout(deferredDesignSwitchTimer);
+    const designId = state.designId;
+    deferredDesignSwitchRefresh = window.requestAnimationFrame(() => {
+      deferredDesignSwitchRefresh = 0;
+      // A zero-delay task after requestAnimationFrame lets the browser paint the
+      // new machine first. Saved plant linking and secondary panels still catch
+      // up immediately afterward, and rapid clicks collapse to the final choice.
+      deferredDesignSwitchTimer = window.setTimeout(() => {
+        deferredDesignSwitchTimer = 0;
+        if (state.designId !== designId) return;
+        syncLinkedMachineToCurrentDesign();
+        if (state.browserTab === "add") updateEmbeddedMachinePicker();
+        if (state.inspectorTab === "design") updateEnvelopeStatus(currentDesign());
+        if (state.timelineOpen || state.partTab === "animation") updateAnimationTimelineUI();
+        if (state.browserTab === "plant") updateAssignmentPanel();
+      }, 0);
+    });
+  }
+
+  function updateInterface({ designSwitch = false } = {}) {
+    if (designSwitch) updateDesignListSelection();
+    else updateDesignList();
+    if (!designSwitch) updateEmbeddedMachinePicker();
+    updateDesignFields({ includeEnvelope: !designSwitch });
     updateComponentList();
     updateComponentProperties();
-    updateAnimationTimelineUI();
-    updateAssignmentPanel();
+    if (!designSwitch) updateAnimationTimelineUI();
+    if (!designSwitch) updateAssignmentPanel();
     updateHistoryButtons();
-    setBrowserTab(state.browserTab);
-    setInspectorTab(state.inspectorTab);
+    setBrowserTab(state.browserTab, { refresh: false });
+    setInspectorTab(state.inspectorTab, { refresh: false });
     setPartTab(state.partTab);
     updateToolLabel();
+    if (designSwitch) scheduleDesignSwitchPanelRefresh();
   }
 
   function selectionBounds(components = selectionComponents()) {
@@ -2345,9 +2688,10 @@
 
   function project(x, y, z) {
     const design = currentDesign();
-    const centerX = (design?.base.w || 20) / 2 + state.panX;
-    const centerZ = (design?.base.d || 10) / 2 + state.panZ;
+    const centerX = (Number(design?.base.x) || 0) + (design?.base.w || 20) / 2 + state.panX;
+    const centerZ = (Number(design?.base.z) || 0) + (design?.base.d || 10) / 2 + state.panZ;
     x -= centerX;
+    y -= state.panY;
     z -= centerZ;
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
@@ -2359,6 +2703,33 @@
     return [canvas.width / 2 + rx * scale, canvas.height * 0.56 - (y * cp - rz * sp) * scale, y * sp + rz * cp];
   }
 
+  function rendererViewState() {
+    const design = currentDesign();
+    return {
+      mode: "orbit",
+      centerX: (Number(design?.base.x) || 0) + (design?.base.w || 20) / 2 + state.panX,
+      centerZ: (Number(design?.base.z) || 0) + (design?.base.d || 10) / 2 + state.panZ,
+      yaw: state.yaw,
+      pitch: state.pitch,
+      scale: state.zoom * Math.min(canvas.width / 50, canvas.height / 28),
+      originY: .56,
+      depthRange: Math.max(100, Math.hypot(design?.base.w || 20, design?.base.d || 10, design?.base.h || 8) * 12),
+    };
+  }
+
+  function drawRetainedObject(key, revision, callback) {
+    const shouldBuild = typeof depthRenderer.beginObject !== "function"
+      || depthRenderer.beginObject(key, revision) !== false;
+    if (!shouldBuild) return false;
+    callback();
+    depthRenderer.endObject?.();
+    return true;
+  }
+
+  function designGeometrySignature(design, animationTick = "static") {
+    return [state.designId, state.geometryRevision, design?.updatedAt || "", animationTick].join("|");
+  }
+
   function canvasPoint(event) {
     const rect = canvas.getBoundingClientRect();
     return [
@@ -2367,22 +2738,36 @@
     ];
   }
 
-  function signedNavigationPitchScale() {
+  function navigationPitchScale() {
     const direction = state.pitch < 0 ? -1 : 1;
     return direction * Math.max(DEFAULT_PAN_PITCH_SCALE, Math.abs(Math.sin(state.pitch)));
+  }
+
+  function stabilizedPanDelta(deltaX, deltaY) {
+    const screenX = Number(deltaX) || 0;
+    const screenY = Number(deltaY) || 0;
+    const distance = Math.hypot(screenX, screenY);
+    if (distance <= MAX_PAN_POINTER_DELTA) return [screenX, screenY];
+    // Keep genuine movement from low-frequency pointer events. Only reject a
+    // very large discontinuity (for example, a cursor warp after capture),
+    // which avoids both the former 16px slow-down and occasional camera fling.
+    const limitScale = MAX_PAN_POINTER_DELTA / distance;
+    return [screenX * limitScale, screenY * limitScale];
   }
 
   function worldFromScreen(event) {
     const [screenX, screenY] = canvasPoint(event);
     const design = currentDesign();
-    const centerX = (design?.base.w || 20) / 2 + state.panX;
-    const centerZ = (design?.base.d || 10) / 2 + state.panZ;
+    const centerX = (Number(design?.base.x) || 0) + (design?.base.w || 20) / 2 + state.panX;
+    const centerZ = (Number(design?.base.z) || 0) + (design?.base.d || 10) / 2 + state.panZ;
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
-    const sp = signedNavigationPitchScale();
+    const cp = Math.cos(state.pitch);
+    const sp = navigationPitchScale();
     const scale = state.zoom * Math.min(canvas.width / 50, canvas.height / 28);
     const rx = (screenX - canvas.width / 2) / scale;
-    const rz = (screenY - canvas.height * 0.56) / (sp * scale);
+    const verticalScreenWorld = (screenY - canvas.height * 0.56) / scale;
+    const rz = (verticalScreenWorld - state.panY * cp) / sp;
     return [centerX + rx * cy + rz * sy, centerZ - rx * sy + rz * cy];
   }
 
@@ -2483,6 +2868,58 @@
     if (axis === "y") component.rotation = component.rotationY;
   }
 
+  function rotationMatrixFromEuler(rotation = [0, 0, 0]) {
+    const xAxis = rotateVector3([1, 0, 0], ...rotation);
+    const yAxis = rotateVector3([0, 1, 0], ...rotation);
+    const zAxis = rotateVector3([0, 0, 1], ...rotation);
+    return [
+      [xAxis[0], yAxis[0], zAxis[0]],
+      [xAxis[1], yAxis[1], zAxis[1]],
+      [xAxis[2], yAxis[2], zAxis[2]],
+    ];
+  }
+
+  function multiplyRotationMatrices(first, second) {
+    return first.map((row, rowIndex) => row.map((_, columnIndex) => (
+      first[rowIndex][0] * second[0][columnIndex]
+      + first[rowIndex][1] * second[1][columnIndex]
+      + first[rowIndex][2] * second[2][columnIndex]
+    )));
+  }
+
+  function transposeRotationMatrix(matrix) {
+    return matrix[0].map((_, columnIndex) => matrix.map((row) => row[columnIndex]));
+  }
+
+  function transformVectorByMatrix(matrix, vector) {
+    return matrix.map((row) => row[0] * vector[0] + row[1] * vector[1] + row[2] * vector[2]);
+  }
+
+  function rotationMatrixForAxis(axis, degrees, vectors = null) {
+    const rotation = axis === "x" ? [degrees, 0, 0] : axis === "z" ? [0, 0, degrees] : [0, degrees, 0];
+    const localRotation = rotationMatrixFromEuler(rotation);
+    if (!vectors) return localRotation;
+    const basis = [
+      [vectors.x[0], vectors.y[0], vectors.z[0]],
+      [vectors.x[1], vectors.y[1], vectors.z[1]],
+      [vectors.x[2], vectors.y[2], vectors.z[2]],
+    ];
+    return multiplyRotationMatrices(multiplyRotationMatrices(basis, localRotation), transposeRotationMatrix(basis));
+  }
+
+  function setComponentRotationFromMatrix(component, matrix) {
+    const rotationY = Math.asin(clamp(matrix[2][0], -1, 1));
+    const cosineY = Math.cos(rotationY);
+    const rotationX = Math.abs(cosineY) > 0.000001
+      ? Math.atan2(matrix[2][1], matrix[2][2])
+      : Math.atan2(-matrix[1][2], matrix[1][1]);
+    const rotationZ = Math.abs(cosineY) > 0.000001 ? Math.atan2(matrix[1][0], matrix[0][0]) : 0;
+    component.rotationX = rotationX * 180 / Math.PI;
+    component.rotationY = rotationY * 180 / Math.PI;
+    component.rotationZ = rotationZ * 180 / Math.PI;
+    component.rotation = component.rotationY;
+  }
+
   function boxVertices(component) {
     const center = componentCenter(component);
     const halfX = component.w / 2;
@@ -2503,14 +2940,6 @@
 
   function vectorBetween(start, end) {
     return [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
-  }
-
-  function crossProduct(first, second) {
-    return [
-      first[1] * second[2] - first[2] * second[1],
-      first[2] * second[0] - first[0] * second[2],
-      first[0] * second[1] - first[1] * second[0],
-    ];
   }
 
   function faceIsVisible() {
@@ -2649,11 +3078,9 @@
     });
   }
 
-  function beamVertices(component) {
-    const center = componentCenter(component);
-    const rotation = componentRotation(component);
-    const start = rotatePoint3([component.x, component.y, component.z], center, ...rotation);
-    const end = rotatePoint3([component.x2, component.y2, component.z2], center, ...rotation);
+  function beamSourceFrame(component) {
+    const start = [component.x, component.y, component.z];
+    const end = [component.x2, component.y2, component.z2];
     const direction = [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
     const length = Math.max(0.0001, Math.hypot(...direction));
     const forward = direction.map((value) => value / length);
@@ -2670,6 +3097,13 @@
       side[2] * forward[0] - side[0] * forward[2],
       side[0] * forward[1] - side[1] * forward[0],
     ];
+    return { start, end, forward, side, up };
+  }
+
+  function beamVertices(component) {
+    const center = componentCenter(component);
+    const rotation = componentRotation(component);
+    const { start, end, side, up } = beamSourceFrame(component);
     const halfSide = Math.max(0.03, Number(component.thicknessZ || component.thickness) * 0.08);
     const halfUp = Math.max(0.03, Number(component.thicknessY || component.thickness) * 0.08);
     const corner = (point, sideSign, upSign) => [
@@ -2680,7 +3114,7 @@
     return [
       corner(start, -1, -1), corner(start, 1, -1), corner(start, 1, 1), corner(start, -1, 1),
       corner(end, -1, -1), corner(end, 1, -1), corner(end, 1, 1), corner(end, -1, 1),
-    ];
+    ].map((point) => rotatePoint3(point, center, ...rotation));
   }
 
   function buildPrismPrimitives(component, vertices, order, color = component.color, alpha = component.opacity, subOrderOffset = 0) {
@@ -3432,6 +3866,65 @@
     ctx.restore();
   }
 
+  function marqueeScreenRect(drag = state.drag) {
+    if (!drag || drag.kind !== "marquee") return null;
+    const left = Math.min(drag.startX, drag.currentX);
+    const top = Math.min(drag.startY, drag.currentY);
+    return {
+      left,
+      top,
+      right: Math.max(drag.startX, drag.currentX),
+      bottom: Math.max(drag.startY, drag.currentY),
+      width: Math.abs(drag.currentX - drag.startX),
+      height: Math.abs(drag.currentY - drag.startY),
+    };
+  }
+
+  function drawSelectionMarquee() {
+    const rectangle = marqueeScreenRect();
+    if (!rectangle || !state.drag?.moved) return;
+    ctx.save();
+    ctx.fillStyle = "rgba(42, 132, 255, 0.18)";
+    ctx.strokeStyle = "rgba(102, 181, 255, 0.96)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    ctx.fillRect(rectangle.left, rectangle.top, rectangle.width, rectangle.height);
+    ctx.strokeRect(rectangle.left, rectangle.top, rectangle.width, rectangle.height);
+    ctx.restore();
+  }
+
+  function componentIntersectsMarquee(component, rectangle) {
+    if (!component || component.visible === false || !rectangle) return false;
+    const points = componentScreenPoints(component);
+    if (!points.length) return false;
+    const left = Math.min(...points.map((point) => point[0]));
+    const right = Math.max(...points.map((point) => point[0]));
+    const top = Math.min(...points.map((point) => point[1]));
+    const bottom = Math.max(...points.map((point) => point[1]));
+    return right >= rectangle.left
+      && left <= rectangle.right
+      && bottom >= rectangle.top
+      && top <= rectangle.bottom;
+  }
+
+  function updateMarqueeSelection(drag = state.drag) {
+    const rectangle = marqueeScreenRect(drag);
+    if (!rectangle || !drag?.moved) return;
+    const selectedIds = new Set(drag.initialSelectedIds || []);
+    state.drawnComponents.forEach((entry) => {
+      if (componentIntersectsMarquee(entry.renderedComponent, rectangle) && entry.component?.id) {
+        selectedIds.add(entry.component.id);
+      }
+    });
+    state.selectAllParts = false;
+    state.selectedComponentIds = selectedIds;
+    state.componentId = [...selectedIds].at(-1) || null;
+    state.timelineTargetId = selectedIds.size === 1 ? state.componentId : null;
+    state.timelineTargetPathIds = state.timelineTargetId ? [state.timelineTargetId] : [];
+    state.timelineClipId = null;
+    renderPerformance.invalidate();
+  }
+
 
   function convexHullXZ(points) {
     const unique = [...new Map(points.map((point) => [`${point[0].toFixed(5)}:${point[2].toFixed(5)}`, point])).values()]
@@ -3493,10 +3986,13 @@
     const design = currentDesign();
     if (!design) return;
     const padding = Math.max(5, Math.max(design.base.w, design.base.d) * 0.3);
-    const minX = -padding;
-    const maxX = design.base.w + padding;
-    const minZ = -padding;
-    const maxZ = design.base.d + padding;
+    const baseX = Number(design.base.x) || 0;
+    const baseY = Number(design.base.y) || 0;
+    const baseZ = Number(design.base.z) || 0;
+    const minX = Math.min(0, baseX) - padding;
+    const maxX = Math.max(0, baseX + design.base.w) + padding;
+    const minZ = Math.min(0, baseZ) - padding;
+    const maxZ = Math.max(0, baseZ + design.base.d) + padding;
     const belowFloor = state.pitch < 0;
     const floorAlpha = belowFloor ? 0.14 : 1;
     const gridAlpha = belowFloor ? 0.12 : 0.22;
@@ -3528,9 +4024,9 @@
       line3d([minX, 0.01, z], [maxX, 0.01, z], major ? "#7f8b87" : "#aab4af", major ? 1 : 0.55, major ? majorGridAlpha : gridAlpha);
       lineIndex += 1;
     }
-    line3d([0, 0.04, 0], [design.base.w + padding * 0.25, 0.04, 0], AXIS_COLORS.x, 2, 1);
-    line3d([0, 0.04, 0], [0, 0.04, design.base.d + padding * 0.25], AXIS_COLORS.z, 2, 1);
-    line3d([0, 0, 0], [0, design.base.h + padding * 0.3, 0], AXIS_COLORS.y, 2, 1);
+    line3d([0, 0.04, 0], [maxX - padding * 0.75, 0.04, 0], AXIS_COLORS.x, 2, 1);
+    line3d([0, 0.04, 0], [0, 0.04, maxZ - padding * 0.75], AXIS_COLORS.z, 2, 1);
+    line3d([0, 0, 0], [0, Math.max(0, baseY + design.base.h) + padding * 0.3, 0], AXIS_COLORS.y, 2, 1);
   }
 
   function drawDesignEnvelope() {
@@ -3539,9 +4035,12 @@
     const w = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.w) || MIN_DESIGN_ENVELOPE);
     const d = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.d) || MIN_DESIGN_ENVELOPE);
     const h = Math.max(MIN_DESIGN_ENVELOPE, Number(design.base.h) || MIN_DESIGN_ENVELOPE);
+    const x = Number(design.base.x) || 0;
+    const y = Number(design.base.y) || 0;
+    const z = Number(design.base.z) || 0;
     const corners = [
-      [0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d],
-      [0, h, 0], [w, h, 0], [w, h, d], [0, h, d],
+      [x, y, z], [x+w, y, z], [x+w, y, z+d], [x, y, z+d],
+      [x, y+h, z], [x+w, y+h, z], [x+w, y+h, z+d], [x, y+h, z+d],
     ];
     const edges = [
       [0,1],[1,2],[2,3],[3,0],
@@ -3549,6 +4048,39 @@
       [0,4],[1,5],[2,6],[3,7],
     ];
     edges.forEach(([start, end]) => line3d(corners[start], corners[end], "#187d74", 1.5, 0.72));
+    designEnvelopePieces(design).forEach((envelope) => {
+      const selected = envelope.id === state.designEnvelopeId;
+      drawWireEnvelope(envelope, selected ? "#e46d3a" : "#8a52b8", selected ? .98 : .7, selected ? 2.2 : 1.45);
+    });
+  }
+
+  function drawWireEnvelope(envelope, color, alpha = .8, width = 1.35) {
+    if (!envelope) return;
+    const x = Number(envelope.x) || 0;
+    const y = Number(envelope.y) || 0;
+    const z = Number(envelope.z) || 0;
+    const w = Math.max(MIN_DESIGN_ENVELOPE, Number(envelope.w) || MIN_DESIGN_ENVELOPE);
+    const h = Math.max(MIN_DESIGN_ENVELOPE, Number(envelope.h) || MIN_DESIGN_ENVELOPE);
+    const d = Math.max(MIN_DESIGN_ENVELOPE, Number(envelope.d) || MIN_DESIGN_ENVELOPE);
+    const corners = [
+      [x,y,z], [x+w,y,z], [x+w,y,z+d], [x,y,z+d],
+      [x,y+h,z], [x+w,y+h,z], [x+w,y+h,z+d], [x,y+h,z+d],
+    ];
+    [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]
+      .forEach(([start, end]) => line3d(corners[start], corners[end], color, width, alpha));
+  }
+
+  function drawComponentEnvelopes(components) {
+    if (!state.showDesignEnvelope) return;
+    const visit = (component) => {
+      if (!component) return;
+      if (component.collisionEnvelope) {
+        const selected = state.selectedComponentIds.has(component.id) || state.selectAllParts;
+        drawWireEnvelope(component.collisionEnvelope, selected ? "#e46d3a" : "#397fc0", selected ? .95 : .58, selected ? 2 : 1.15);
+      }
+      if (component.type === "group") (component.children || []).forEach(visit);
+    };
+    (components || []).forEach(visit);
   }
 
   function componentWorldPoints(component) {
@@ -3649,14 +4181,13 @@
 
   function componentLocalAxes(component) {
     if (component?.type === "beam") {
-      const center = componentCenter(component);
-      const start = rotatePoint3([component.x, component.y, component.z], center, ...componentRotation(component));
-      const end = rotatePoint3([component.x2, component.y2, component.z2], center, ...componentRotation(component));
-      const x = normalizedVector(vectorBetween(start, end), [1,0,0]);
-      const helper = Math.abs(x[1]) < .88 ? [0,1,0] : [0,0,1];
-      const z = normalizedVector(crossProduct(x, helper), [0,0,1]);
-      const y = normalizedVector(crossProduct(z, x), [0,1,0]);
-      return { x, y, z };
+      const rotation = componentRotation(component);
+      const frame = beamSourceFrame(component);
+      return {
+        x: normalizedVector(rotateVector3(frame.forward, ...rotation), [1,0,0]),
+        y: normalizedVector(rotateVector3(frame.up, ...rotation), [0,1,0]),
+        z: normalizedVector(rotateVector3(frame.side, ...rotation), [0,0,1]),
+      };
     }
     const rotation = component ? componentRotation(component) : [0,0,0];
     return {
@@ -3839,24 +4370,35 @@
     }
   }
 
+  let componentAnimationPresenceCache = new WeakMap();
+
   function componentHasAnimation(component) {
     if (!component) return false;
+    if (componentAnimationPresenceCache.has(component)) return componentAnimationPresenceCache.get(component);
+    let animated = false;
     if (component.animationTimeline && Array.isArray(component.animationTimeline.clips)) {
-      return component.animationTimeline.enabled !== false && component.animationTimeline.clips.some((clip) => clip.enabled !== false)
+      animated = component.animationTimeline.enabled !== false && component.animationTimeline.clips.some((clip) => clip.enabled !== false)
         || (component.type === "group" && (component.children || []).some(componentHasAnimation));
+    } else if (component.visible === false) {
+      animated = component.type === "group" && (component.children || []).some(componentHasAnimation);
+    } else if (component.animationEnabled === true && component.animationType && component.animationType !== "none") {
+      animated = true;
+    } else {
+      animated = component.type === "group" && (component.children || []).some(componentHasAnimation);
     }
-    if (component.visible === false) return component.type === "group" && (component.children || []).some(componentHasAnimation);
-    if (component.animationEnabled === true && component.animationType && component.animationType !== "none") return true;
-    return component.type === "group" && (component.children || []).some(componentHasAnimation);
+    componentAnimationPresenceCache.set(component, animated);
+    return animated;
   }
 
   function draw(time) {
-    requestAnimationFrame(draw);
+    if (!applicationActive) return;
+    animationFrameId = requestAnimationFrame(draw);
     const design = currentDesign();
     const sourceComponents = design?.components || [];
     const animating = state.previewAnimations && sourceComponents.some(componentHasAnimation);
     if (!renderPerformance.shouldRender(time, { interacting: state.dragging, animating })) return;
     const frameStartedAt = performance.now();
+    renderPerformance.beginProfile?.();
     state.lastFrameTime = time;
     state.lastRenderedAt = time;
     updateCanvasSize();
@@ -3865,20 +4407,40 @@
     const cameraPosition = document.getElementById("designer-camera-position");
     if (cameraPosition) cameraPosition.textContent = belowFloor ? "Below floor · floor transparent" : "Above floor · full orbit enabled";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    depthRenderer.beginFrame(canvas.width, canvas.height, project);
-    drawGrid();
+    depthRenderer.beginFrame(canvas.width, canvas.height, project, rendererViewState());
+    renderPerformance.beginPhase?.("grid");
+    drawRetainedObject(
+      "designer:grid",
+      `${design?.base?.x}|${design?.base?.y}|${design?.base?.z}|${design?.base?.w}|${design?.base?.h}|${design?.base?.d}`,
+      drawGrid,
+    );
 
-    const components = sourceComponents.map((component) => animatedComponent(component, time));
-    const shadowLimit = renderPerformance.maxShadowParts();
-    if (shadowLimit > 0) components.slice(0, shadowLimit).forEach(drawDesignerShadow);
-    state.renderPrimitives = components.flatMap((component, index) => buildComponentPrimitives(component, index));
-    state.renderPrimitives.sort((first, second) => {
-      const depthDifference = first.depth - second.depth;
-      if (Math.abs(depthDifference) > 0.00001) return depthDifference;
-      const firstLayer = first.kind === "line" ? 2 : first.alpha < 0.985 ? 1 : 0;
-      const secondLayer = second.kind === "line" ? 2 : second.alpha < 0.985 ? 1 : 0;
-      return firstLayer - secondLayer || first.order - second.order;
-    });
+    const animationTick = animating ? Math.floor(time / (renderPerformance.animationSampleMs?.() || 33)) : "static";
+    const geometrySignature = designGeometrySignature(design, animationTick);
+    let components = state.lastRenderedComponents || sourceComponents;
+    renderPerformance.beginPhase?.("geometry");
+    const rebuildGeometry = typeof depthRenderer.beginObject !== "function"
+      || depthRenderer.beginObject(`designer:design:${state.designId}`, geometrySignature) !== false;
+    if (rebuildGeometry) {
+      components = sourceComponents.map((component) => (
+        componentHasAnimation(component) ? animatedComponent(component, time) : component
+      ));
+      state.lastRenderedComponents = components;
+      const shadowLimit = renderPerformance.maxShadowParts();
+      if (shadowLimit > 0) components.slice(0, shadowLimit).forEach(drawDesignerShadow);
+      state.renderPrimitives = components.flatMap((component, index) => buildComponentPrimitives(component, index));
+      state.renderPrimitives.sort((first, second) => {
+        const depthDifference = first.depth - second.depth;
+        if (Math.abs(depthDifference) > 0.00001) return depthDifference;
+        const firstLayer = first.kind === "line" ? 2 : first.alpha < 0.985 ? 1 : 0;
+        const secondLayer = second.kind === "line" ? 2 : second.alpha < 0.985 ? 1 : 0;
+        return firstLayer - secondLayer || first.order - second.order;
+      });
+      state.renderPrimitives.forEach(drawPrimitive);
+      drawDesignEnvelope();
+      drawComponentEnvelopes(sourceComponents);
+      depthRenderer.endObject?.();
+    }
     state.hitPrimitives = state.renderPrimitives;
     state.drawnComponents = components.map((component, index) => ({
       component: sourceComponents[index],
@@ -3886,9 +4448,10 @@
       depth: project(...componentCenter(component))[2],
       order: index,
     })).sort((first, second) => first.depth - second.depth || first.order - second.order);
-    state.renderPrimitives.forEach(drawPrimitive);
-    drawDesignEnvelope();
+    renderPerformance.beginPhase?.("gpu");
     depthRenderer.render();
+    renderPerformance.setRendererStats?.(depthRenderer.getStats?.());
+    renderPerformance.beginPhase?.("overlays");
     drawTextComponentOverlays(components);
     const selectedIds = state.selectAllParts
       ? new Set(state.drawnComponents.map((entry) => entry.component?.id))
@@ -3898,7 +4461,9 @@
       .map((entry) => entry.renderedComponent);
     drawSelectionOverlay(selectedRendered);
     drawGizmo();
+    drawSelectionMarquee();
     updateTimelinePlayhead(time);
+    renderPerformance.endPhase?.();
     renderPerformance.recordFrame(performance.now() - frameStartedAt);
   }
 
@@ -3906,6 +4471,7 @@
     const design = currentDesign();
     if (!design) return;
     state.panX = 0;
+    state.panY = 0;
     state.panZ = 0;
     state.zoom = clamp(20 / Math.max(design.base.w, design.base.d, design.base.h * 1.4), 0.45, 2.4);
   }
@@ -3915,8 +4481,9 @@
     const components = selectionComponents();
     if (!design || !components.length) return;
     const center = selectionCenter(components);
-    state.panX = center[0] - design.base.w / 2;
-    state.panZ = center[2] - design.base.d / 2;
+    state.panX = center[0] - ((Number(design.base.x) || 0) + design.base.w / 2);
+    state.panY = center[1];
+    state.panZ = center[2] - ((Number(design.base.z) || 0) + design.base.d / 2);
     state.zoom = clamp(components.length > 1 ? 20 / Math.max(design.base.w, design.base.d, design.base.h * 1.4) : state.zoom * 1.2, 0.25, 4);
     showToast(components.length > 1 ? `Focused ${components.length} selected parts.` : `Focused ${components[0].name}.`);
   }
@@ -3924,16 +4491,28 @@
   function panCamera(deltaX, deltaY) {
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
-    const sp = signedNavigationPitchScale();
+    const cp = Math.cos(state.pitch);
+    const sp = Math.sin(state.pitch);
     const scale = state.zoom * Math.min(canvas.width / 50, canvas.height / 28);
-    const rx = deltaX / Math.max(1, scale);
-    const rz = deltaY / Math.max(1, sp * scale);
-    // Slicer-style grab navigation: the scene follows the middle-button drag.
+    const [safeDeltaX, safeDeltaY] = stabilizedPanDelta(deltaX, deltaY);
+    const rx = safeDeltaX / Math.max(1, scale);
+    const screenVertical = safeDeltaY / Math.max(1, scale);
+    const rz = screenVertical * sp;
+    // Follow the camera's screen-up vector. Near a horizontal view vertical
+    // drag moves the camera target vertically; near a top view it moves across
+    // floor depth. Their squared projection always sums to one, so the model
+    // follows the pointer at the same speed for every pitch.
     state.panX -= rx * cy + rz * sy;
+    state.panY += screenVertical * cp;
     state.panZ -= -rx * sy + rz * cy;
   }
 
   function translateComponent(component, dx, dy, dz) {
+    if (component.collisionEnvelope) {
+      component.collisionEnvelope.x += dx;
+      component.collisionEnvelope.y += dy;
+      component.collisionEnvelope.z += dz;
+    }
     if (component.type === "group") {
       (component.children || []).forEach((child) => translateComponent(child, dx, dy, dz));
       return;
@@ -3953,7 +4532,7 @@
       Object.assign(component, clone(original));
       const children = component.children || [];
       const originals = original.children || [];
-      rotateSelectionTogether(children, originals, selectionCenter(originals), degrees, axis);
+      rotateSelectionByEuler(children, originals, selectionCenter(originals), degrees, axis);
       component.rotationX = (Number(original.rotationX) || 0) + (axis === "x" ? degrees : 0);
       component.rotationY = (Number(original.rotationY ?? original.rotation) || 0) + (axis === "y" ? degrees : 0);
       component.rotationZ = (Number(original.rotationZ) || 0) + (axis === "z" ? degrees : 0);
@@ -4037,10 +4616,11 @@
     }
   }
 
-  function rotateSelectionTogether(components, originals, pivot, degrees, axis) {
+  function rotateSelectionByEuler(components, originals, pivot, degrees, axis) {
     const rotationVector = axis === "x" ? [degrees, 0, 0] : axis === "z" ? [0, 0, degrees] : [0, degrees, 0];
     components.forEach((component, index) => {
       const original = originals[index];
+      if (!original) return;
       Object.assign(component, clone(original));
       const originalCenter = componentCenter(original);
       const offset = [originalCenter[0] - pivot[0], originalCenter[1] - pivot[1], originalCenter[2] - pivot[2]];
@@ -4051,6 +4631,92 @@
       const source = axis === "x" ? rotationX : axis === "z" ? rotationZ : rotationY;
       setComponentRotation(component, axis, source + degrees);
     });
+  }
+
+  function rotateComponentTreeAroundPivot(component, original, pivot, rotationMatrix) {
+    Object.assign(component, clone(original));
+    if (component.type === "group") {
+      const children = component.children || [];
+      const originalChildren = original.children || [];
+      children.forEach((child, index) => {
+        if (originalChildren[index]) rotateComponentTreeAroundPivot(child, originalChildren[index], pivot, rotationMatrix);
+      });
+    } else {
+      const originalCenter = componentCenter(original);
+      const offset = [originalCenter[0] - pivot[0], originalCenter[1] - pivot[1], originalCenter[2] - pivot[2]];
+      const rotatedOffset = transformVectorByMatrix(rotationMatrix, offset);
+      const targetCenter = [pivot[0] + rotatedOffset[0], pivot[1] + rotatedOffset[1], pivot[2] + rotatedOffset[2]];
+      translateComponent(component, targetCenter[0] - originalCenter[0], targetCenter[1] - originalCenter[1], targetCenter[2] - originalCenter[2]);
+    }
+    const originalRotation = rotationMatrixFromEuler(componentRotation(original));
+    setComponentRotationFromMatrix(component, multiplyRotationMatrices(rotationMatrix, originalRotation));
+  }
+
+  function rotateSelectionTogether(components, originals, pivot, degrees, axis, rotationVectors = null) {
+    const rotationMatrix = rotationMatrixForAxis(axis, degrees, rotationVectors);
+    components.forEach((component, index) => {
+      const original = originals[index];
+      if (original) rotateComponentTreeAroundPivot(component, original, pivot, rotationMatrix);
+    });
+  }
+
+  function mirrorPointAcrossAxis(point, pivot, axis) {
+    const result = [...point];
+    const axisIndex = { x: 0, y: 1, z: 2 }[axis];
+    result[axisIndex] = pivot[axisIndex] * 2 - result[axisIndex];
+    return result;
+  }
+
+  function mirrorComponentTree(component, original, pivot, axis) {
+    Object.assign(component, clone(original));
+    const reflection = axis === "x"
+      ? [[-1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      : axis === "y"
+        ? [[1, 0, 0], [0, -1, 0], [0, 0, 1]]
+        : [[1, 0, 0], [0, 1, 0], [0, 0, -1]];
+
+    if (component.type === "group") {
+      const children = component.children || [];
+      const originalChildren = original.children || [];
+      children.forEach((child, index) => {
+        if (originalChildren[index]) mirrorComponentTree(child, originalChildren[index], pivot, axis);
+      });
+    } else if (component.type === "beam") {
+      const start = mirrorPointAcrossAxis([original.x, original.y, original.z], pivot, axis);
+      const end = mirrorPointAcrossAxis([original.x2, original.y2, original.z2], pivot, axis);
+      [component.x, component.y, component.z] = start;
+      [component.x2, component.y2, component.z2] = end;
+    } else {
+      const originalCenter = componentCenter(original);
+      const targetCenter = mirrorPointAcrossAxis(originalCenter, pivot, axis);
+      translateComponent(
+        component,
+        targetCenter[0] - originalCenter[0],
+        targetCenter[1] - originalCenter[1],
+        targetCenter[2] - originalCenter[2],
+      );
+    }
+
+    // Reflection changes handedness. Reflecting both the world and local axes
+    // produces an equivalent right-handed rotation that existing renderers can
+    // store without negative dimensions or scale values.
+    const originalRotation = rotationMatrixFromEuler(componentRotation(original));
+    const mirroredRotation = multiplyRotationMatrices(
+      multiplyRotationMatrices(reflection, originalRotation),
+      reflection,
+    );
+    setComponentRotationFromMatrix(component, mirroredRotation);
+  }
+
+  function mirrorSelection(axis) {
+    if (!["x", "y", "z"].includes(axis)) return;
+    const components = selectionComponents();
+    if (!components.length) return;
+    pushHistory();
+    const originals = components.map(clone);
+    const pivot = selectionCenter(originals);
+    components.forEach((component, index) => mirrorComponentTree(component, originals[index], pivot, axis));
+    commit(`Mirrored ${components.length > 1 ? `${components.length} selected parts` : components[0].name} across ${axis.toUpperCase()}.`);
   }
 
   function scaleSelectionTogether(components, originals, pivot, factor, axis) {
@@ -4148,9 +4814,10 @@
       while (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
       while (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
       let degrees = angleDelta * 180 / Math.PI;
-      if (state.snapEnabled) degrees = Math.round(degrees / 5) * 5;
-      if (drag.selectionAll) rotateSelectionTogether(targets, drag.componentsBefore, drag.pivot, degrees, drag.handle);
-      else rotateComponent(targets[0], degrees, drag.handle, drag.componentsBefore[0]);
+      degrees = snapRotationDegrees(degrees);
+      if (drag.selectionAll || targets[0].type === "group") {
+        rotateSelectionTogether(targets, drag.componentsBefore, drag.pivot, degrees, drag.handle, drag.geometry.vectors);
+      } else rotateComponent(targets[0], degrees, drag.handle, drag.componentsBefore[0]);
     } else if (drag.tool === "scale") {
       let factor;
       if (drag.handle === "center") {
@@ -4177,14 +4844,15 @@
         }
       }
       factor = clamp(factor, 0.05, 20);
-      if (state.snapEnabled) factor = Math.max(0.05, Math.round(factor / 0.05) * 0.05);
+      factor = snapScaleFactor(factor);
       if (drag.selectionAll) scaleSelectionTogether(targets, drag.componentsBefore, drag.pivot, factor, drag.handle);
       else scaleComponent(targets[0], factor, drag.handle, drag.componentsBefore[0]);
     }
+    markDesignGeometryDirty({ invalidate: false });
     updateComponentProperties();
   }
 
-  function finishPointer() {
+  function finishPointer(event) {
     if (state.drag?.kind === "transform") {
       const design = currentDesign();
       const current = state.drag.targetIds.map((id) => design?.components.find((component) => component.id === id)).filter(Boolean);
@@ -4192,9 +4860,35 @@
         pushHistory(state.drag.historyBefore);
         commit(`${TOOL_LABELS[state.drag.tool][0]} applied to ${state.drag.selectionAll ? "the entire machine" : "the selected part"}.`);
       }
+    } else if (state.drag?.kind === "marquee") {
+      const drag = state.drag;
+      if (event?.type === "pointercancel") {
+        state.selectAllParts = drag.initialSelectAllParts === true;
+        state.selectedComponentIds = new Set(drag.initialSelectedIds || []);
+        state.componentId = drag.initialComponentId || null;
+        state.timelineTargetId = drag.initialTimelineTargetId || null;
+        state.timelineTargetPathIds = [...(drag.initialTimelineTargetPathIds || [])];
+        state.timelineClipId = drag.initialTimelineClipId || null;
+      } else {
+        if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+          const [currentX, currentY] = canvasPoint(event);
+          drag.currentX = currentX;
+          drag.currentY = currentY;
+          drag.moved = drag.moved
+            || Math.hypot(currentX - drag.startX, currentY - drag.startY) >= MARQUEE_DRAG_THRESHOLD;
+        }
+        updateMarqueeSelection(drag);
+        if (drag.moved) {
+          updateInterface();
+          const count = state.selectedComponentIds.size;
+          showToast(count ? `Selected ${count} machine part${count === 1 ? "" : "s"}.` : "No machine parts were inside the selection box.");
+        }
+      }
     }
     state.dragging = false;
     state.drag = null;
+    canvas.style.cursor = state.tool === "pan" ? "grab" : "default";
+    renderPerformance.invalidate();
   }
 
   // Middle-button dragging pans the 3D scene. Cancel the browser's native
@@ -4211,6 +4905,7 @@
   canvas.addEventListener("pointerdown", (event) => {
     if (event.button === 1) event.preventDefault();
     if (event.button > 2) return;
+    commitActiveInspectorEdit();
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
     state.dragging = true;
@@ -4231,7 +4926,24 @@
       // geometry so a handle remains draggable even when it is visually
       // located inside another solid component.
       const overlayHandle = ["move", "rotate", "scale"].includes(state.tool) ? gizmoHit(event) : null;
-      if (overlayHandle && selectionComponents().length) {
+      if (event.ctrlKey && !initialHit && !overlayHandle) {
+        const [startX, startY] = canvasPoint(event);
+        state.drag = {
+          kind: "marquee",
+          startX,
+          startY,
+          currentX: startX,
+          currentY: startY,
+          moved: false,
+          initialSelectedIds: new Set(state.selectedComponentIds),
+          initialComponentId: state.componentId,
+          initialSelectAllParts: state.selectAllParts,
+          initialTimelineTargetId: state.timelineTargetId,
+          initialTimelineTargetPathIds: [...state.timelineTargetPathIds],
+          initialTimelineClipId: state.timelineClipId,
+        };
+        canvas.style.cursor = "crosshair";
+      } else if (overlayHandle && selectionComponents().length) {
         beginTransform(event, overlayHandle);
       } else {
         const hitResult = initialHitResult || componentAt(event);
@@ -4286,6 +4998,13 @@
       state.pitch = clamp(state.pitch + deltaY * 0.004, -1.53, 1.53);
     } else if (state.drag.kind === "pan") {
       panCamera(deltaX, deltaY);
+    } else if (state.drag.kind === "marquee") {
+      const [currentX, currentY] = canvasPoint(event);
+      state.drag.currentX = currentX;
+      state.drag.currentY = currentY;
+      state.drag.moved = state.drag.moved
+        || Math.hypot(currentX - state.drag.startX, currentY - state.drag.startY) >= MARQUEE_DRAG_THRESHOLD;
+      updateMarqueeSelection(state.drag);
     } else if (state.drag.kind === "transform") {
       applyTransform(event);
     }
@@ -4734,9 +5453,11 @@
 
   document.getElementById("snap-enabled")?.addEventListener("change", (event) => {
     state.snapEnabled = event.target.checked;
+    updateSnapStepControls();
   });
   document.getElementById("snap-step")?.addEventListener("change", (event) => {
-    state.snapStep = Math.max(0.01, Number(event.target.value) || 0.5);
+    state.snapStep = Math.max(0.01, Number(event.target.value) || 0.1);
+    updateSnapStepControls();
   });
   document.querySelectorAll("[data-transform-space]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -4800,6 +5521,9 @@
     "design-name": ["name", "text"],
     "design-machine-type": ["machineType", "text"],
     "design-description": ["description", "text"],
+    "design-base-x": ["x", "position"],
+    "design-base-y": ["y", "position"],
+    "design-base-z": ["z", "position"],
     "design-base-w": ["w", "base"],
     "design-base-d": ["d", "base"],
     "design-base-h": ["h", "base"],
@@ -4809,9 +5533,20 @@
       const design = currentDesign();
       if (!design) return;
       pushHistory();
-      if (kind === "base") design.base[field] = Math.max(MIN_DESIGN_ENVELOPE, Number(event.target.value) || design.base[field]);
+      if (kind === "base") design.base[field] = Math.max(MIN_DESIGN_ENVELOPE, snapToSelectedStep(Number(event.target.value) || design.base[field]));
+      else if (kind === "position") {
+        const previous = Number(design.base[field]) || 0;
+        const value = Number(event.target.value);
+        design.base[field] = Number.isFinite(value) ? snapToSelectedStep(value) : design.base[field];
+        const delta = design.base[field] - previous;
+        // Camera panning is relative to the envelope center on X/Z. Counter
+        // that center shift so moving the envelope is visibly independent from
+        // the camera instead of appearing fixed in the viewport.
+        if (field === "x") state.panX -= delta;
+        if (field === "z") state.panZ -= delta;
+      }
       else design[field] = event.target.value.trim() || (field === "name" ? design.name : "");
-      commit();
+      commit("", { syncName: field === "name" });
       if (kind === "base") fitView();
     });
   });
@@ -4890,8 +5625,11 @@
         else if (field === "text") component.text = input.value.trim().slice(0, 120) || "LABEL";
         else component.name = input.value.trim() || component.name;
       } else {
-        const number = Number(input.value);
+        let number = Number(input.value);
         if (!Number.isFinite(number)) return;
+        if (["x", "y", "z", "x2", "y2", "z2", "rotationX", "rotationY", "rotationZ", "w", "h", "d", "size", "thickness", "thicknessY", "thicknessZ", "length"].includes(field)) {
+          number = snapToSelectedStep(number);
+        }
         if (["w", "h", "d", "size", "thickness", "thicknessY", "thicknessZ"].includes(field)) {
           const previous = Math.max(.0001, Number(component[field]) || Number(component.thickness) || 1);
           component[field] = Math.max(field === "d" && component.type === "wheel" ? 0.05 : 0.02, number);
@@ -4937,7 +5675,8 @@
           if (component.type === "group") {
             const axis = field.at(-1).toLowerCase();
             const current = Number(component[field]) || 0;
-            rotateComponent(component, number - current, axis, clone(component));
+            const original = clone(component);
+            rotateSelectionTogether([component], [original], componentCenter(original), number - current, axis);
           } else {
             component[field] = number;
             if (field === "rotationY") component.rotation = number;
@@ -4948,11 +5687,51 @@
     });
   });
 
+  document.getElementById("fit-component-envelope")?.addEventListener("click", () => {
+    const component = selectedComponent();
+    if (!component || selectionComponents().length !== 1) return;
+    const bounds = componentWorldBounds(component);
+    pushHistory();
+    component.collisionEnvelope = {
+      x: bounds.minX,
+      y: bounds.minY,
+      z: bounds.minZ,
+      w: Math.max(MIN_DESIGN_ENVELOPE, bounds.maxX - bounds.minX),
+      h: Math.max(MIN_DESIGN_ENVELOPE, bounds.maxY - bounds.minY),
+      d: Math.max(MIN_DESIGN_ENVELOPE, bounds.maxZ - bounds.minZ),
+    };
+    commit("Individual part envelope fitted.");
+  });
+
+  document.getElementById("remove-component-envelope")?.addEventListener("click", () => {
+    const component = selectedComponent();
+    if (!component?.collisionEnvelope || selectionComponents().length !== 1) return;
+    pushHistory();
+    component.collisionEnvelope = null;
+    commit("Individual part envelope removed.");
+  });
+
+  document.querySelectorAll("[data-component-envelope-field]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const component = selectedComponent();
+      const envelope = component?.collisionEnvelope;
+      const value = Number(input.value);
+      if (!envelope || selectionComponents().length !== 1 || !Number.isFinite(value)) return;
+      pushHistory();
+      const field = input.dataset.componentEnvelopeField;
+      const snapped = snapToSelectedStep(value);
+      envelope[field] = ["w", "h", "d"].includes(field)
+        ? Math.max(MIN_DESIGN_ENVELOPE, snapped)
+        : snapped;
+      commit("Individual part envelope updated.");
+    });
+  });
+
   document.querySelectorAll("[data-component-scale]").forEach((input) => {
     input.addEventListener("change", () => {
       const components = selectionComponents();
       if (!components.length) return;
-      const requested = Number(input.value);
+      const requested = snapToSelectedStep(Number(input.value));
       if (!Number.isFinite(requested)) return;
       const axis = input.dataset.componentScale;
       pushHistory();
@@ -4969,6 +5748,10 @@
       });
       commit(`Scale updated for ${components.length} part${components.length === 1 ? "" : "s"}.`);
     });
+  });
+
+  document.querySelectorAll("[data-mirror-component]").forEach((button) => {
+    button.addEventListener("click", () => mirrorSelection(button.dataset.mirrorComponent));
   });
 
   document.querySelectorAll("[data-component-check]").forEach((input) => {
@@ -5049,7 +5832,10 @@
     if (!design || !component) return;
     pushHistory();
     const center = componentCenter(component);
-    translateComponent(component, design.base.w / 2 - center[0], -Math.min(0, component.y), design.base.d / 2 - center[2]);
+    const targetX = (Number(design.base.x) || 0) + design.base.w / 2;
+    const targetZ = (Number(design.base.z) || 0) + design.base.d / 2;
+    const bounds = componentWorldBounds(component);
+    translateComponent(component, targetX - center[0], (Number(design.base.y) || 0) - bounds.minY, targetZ - center[2]);
     commit("Component centered.");
   });
 
@@ -5061,8 +5847,9 @@
     const components = selectionComponents();
     if (!components.length) return;
     pushHistory();
-    if (components.length > 1) rotateSelectionTogether(components, components.map(clone), selectionCenter(components), degrees, axis);
-    else rotateComponent(components[0], degrees, axis, clone(components[0]));
+    if (components.length > 1 || components[0].type === "group") {
+      rotateSelectionTogether(components, components.map(clone), selectionCenter(components), degrees, axis);
+    } else rotateComponent(components[0], degrees, axis, clone(components[0]));
     commit(`Rotated ${components.length > 1 ? `${components.length} selected parts` : axis.toUpperCase()} ${degrees > 0 ? "+" : ""}${degrees}°.`);
   }
   document.getElementById("rotate-negative")?.addEventListener("click", () => rotateSelectedBy(-90));
@@ -5092,6 +5879,95 @@
     };
   }
 
+  function baseEnvelopePiece(design, name = "Envelope box 1") {
+    return {
+      id: uniqueId("envelope"),
+      name,
+      x: Number(design?.base?.x) || 0,
+      y: Number(design?.base?.y) || 0,
+      z: Number(design?.base?.z) || 0,
+      w: Math.max(MIN_DESIGN_ENVELOPE, Number(design?.base?.w) || 1),
+      h: Math.max(MIN_DESIGN_ENVELOPE, Number(design?.base?.h) || 1),
+      d: Math.max(MIN_DESIGN_ENVELOPE, Number(design?.base?.d) || 1),
+    };
+  }
+
+  document.getElementById("design-envelope-piece")?.addEventListener("change", (event) => {
+    state.designEnvelopeId = event.target.value || null;
+    updateDesignEnvelopeShapeEditor();
+    renderPerformance.invalidate?.("envelope-piece-selection");
+  });
+
+  document.getElementById("add-design-envelope-piece")?.addEventListener("click", () => {
+    const design = currentDesign();
+    if (!design) return;
+    pushHistory();
+    const pieces = designEnvelopePieces(design);
+    const source = selectedDesignEnvelopePiece(design) || baseEnvelopePiece(design);
+    const index = pieces.length + 1;
+    const piece = {
+      ...clone(source),
+      id: uniqueId("envelope"),
+      name: `Envelope box ${index}`,
+    };
+    if (pieces.length) piece.x += Math.max(state.snapStep, piece.w * .15);
+    pieces.push(piece);
+    state.designEnvelopeId = piece.id;
+    commit(pieces.length === 1 ? "Editable machine envelope created." : "Envelope box added; move or resize it to shape the hitbox.");
+  });
+
+  document.getElementById("duplicate-design-envelope-piece")?.addEventListener("click", () => {
+    const design = currentDesign();
+    const source = selectedDesignEnvelopePiece(design);
+    if (!design || !source) return;
+    pushHistory();
+    const pieces = designEnvelopePieces(design);
+    const piece = {
+      ...clone(source),
+      id: uniqueId("envelope"),
+      name: `Envelope box ${pieces.length + 1}`,
+      x: Number(source.x) + Math.max(state.snapStep, Number(source.w) * .15),
+    };
+    pieces.push(piece);
+    state.designEnvelopeId = piece.id;
+    commit("Envelope box duplicated.");
+  });
+
+  document.getElementById("remove-design-envelope-piece")?.addEventListener("click", () => {
+    const design = currentDesign();
+    const selected = selectedDesignEnvelopePiece(design);
+    if (!design || !selected) return;
+    pushHistory();
+    design.collisionEnvelopes = designEnvelopePieces(design).filter((piece) => piece.id !== selected.id);
+    state.designEnvelopeId = design.collisionEnvelopes[0]?.id || null;
+    commit(design.collisionEnvelopes.length ? "Envelope box removed." : "Custom shape removed; the automatic envelope is active.");
+  });
+
+  document.getElementById("reset-design-envelope-shape")?.addEventListener("click", () => {
+    const design = currentDesign();
+    if (!design) return;
+    pushHistory();
+    const piece = baseEnvelopePiece(design);
+    design.collisionEnvelopes = [piece];
+    state.designEnvelopeId = piece.id;
+    commit("Machine hitbox reset to one editable base box.");
+  });
+
+  document.querySelectorAll("[data-design-envelope-field]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const piece = selectedDesignEnvelopePiece();
+      const value = Number(input.value);
+      if (!piece || !Number.isFinite(value)) return;
+      pushHistory();
+      const field = input.dataset.designEnvelopeField;
+      const snapped = snapToSelectedStep(value);
+      piece[field] = ["w", "h", "d"].includes(field)
+        ? Math.max(MIN_DESIGN_ENVELOPE, snapped)
+        : snapped;
+      commit("Machine envelope shape updated.");
+    });
+  });
+
   document.getElementById("fit-envelope")?.addEventListener("click", () => {
     const design = currentDesign();
     if (!design || !design.components.length) return;
@@ -5108,12 +5984,9 @@
     );
     const clearance = clearanceInches / 12;
     pushHistory();
-    design.components.forEach((component) => translateComponent(
-      component,
-      clearance - bounds.minX,
-      clearance - bounds.minY,
-      clearance - bounds.minZ,
-    ));
+    design.base.x = bounds.minX - clearance;
+    design.base.y = bounds.minY - clearance;
+    design.base.z = bounds.minZ - clearance;
     design.base.w = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxX - bounds.minX + clearance * 2);
     design.base.h = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxY - bounds.minY + clearance * 2);
     design.base.d = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxZ - bounds.minZ + clearance * 2);
@@ -5168,7 +6041,7 @@
     const design = currentDesign();
     if (!machine) return;
     machine.designScaleMode = normalizedDesignScaleMode(event.target.value);
-    if (machine.designScaleMode === "match" && design) syncPlantObjectDimensions(machine, design);
+    if (machine.designScaleMode === "match" && design) syncPlantObjectDimensions(machine, design, { preserveScale: false });
     saveLayout();
     updateAssignmentPanel();
     showToast(machine.designScaleMode === "match"
@@ -5184,7 +6057,9 @@
     if (!machine || !design) { showToast("Choose a plant object and design first."); return; }
     machine.designId = design.id;
     machine.designScaleMode = "match";
-    syncPlantObjectDimensions(machine, design);
+    machine.useDesignName = true;
+    syncPlantObjectName(machine, design);
+    syncPlantObjectDimensions(machine, design, { preserveScale: false });
     state.linkedMachineId = machine.instanceId;
     saveLayout();
     updateAssignmentPanel();
@@ -5197,7 +6072,9 @@
     if (!machine || !design) { showToast("Choose a plant object first."); return; }
     machine.designId = design.id;
     machine.designScaleMode = normalizedDesignScaleMode(document.getElementById("assignment-scale-mode")?.value);
-    if (machine.designScaleMode === "match") syncPlantObjectDimensions(machine, design);
+    machine.useDesignName = true;
+    syncPlantObjectName(machine, design);
+    if (machine.designScaleMode === "match") syncPlantObjectDimensions(machine, design, { preserveScale: false });
     state.linkedMachineId = machine.instanceId;
     saveLayout();
     updateAssignmentPanel();
@@ -5215,7 +6092,9 @@
       if (machine.type === source.type) {
         machine.designId = design.id;
         machine.designScaleMode = scaleMode;
-        if (scaleMode === "match") syncPlantObjectDimensions(machine, design);
+        machine.useDesignName = true;
+        syncPlantObjectName(machine, design);
+        if (scaleMode === "match") syncPlantObjectDimensions(machine, design, { preserveScale: false });
         count += 1;
       }
     });
@@ -5228,6 +6107,7 @@
     const machine = plantLayout.machines.find((item) => item.instanceId === id);
     if (!machine) { showToast("Choose a plant object first."); return; }
     machine.designId = "";
+    machine.useDesignName = false;
     if (state.linkedMachineId === machine.instanceId) state.linkedMachineId = null;
     saveLayout();
     updateAssignmentPanel();
@@ -5328,9 +6208,22 @@
   });
 
   const viewportPanel = canvas.closest(".design-viewport-panel");
-  if (viewportPanel) renderPerformance.mount(viewportPanel, {
-    buttonHost: viewportPanel.querySelector(".viewport-settings") || viewportPanel,
-  });
+  if (viewportPanel) {
+    const viewportSettings = viewportPanel.querySelector(".viewport-settings");
+    renderPerformance.mount(viewportPanel, {
+      buttonHost: viewportSettings || viewportPanel,
+    });
+    const performanceButton = viewportPanel.querySelector(".render-performance-button");
+    if (viewportSettings && performanceButton && !performanceButton.closest(".viewport-performance-group")) {
+      const performanceGroup = document.createElement("div");
+      performanceGroup.className = "viewport-control-group viewport-performance-group";
+      const performanceLabel = document.createElement("span");
+      performanceLabel.className = "viewport-control-label";
+      performanceLabel.textContent = "Rendering";
+      performanceGroup.append(performanceLabel, performanceButton);
+      viewportSettings.appendChild(performanceGroup);
+    }
+  }
   window.addEventListener("renderperformancechange", () => {
     updateCanvasSize();
     renderPerformance.invalidate();
@@ -5358,7 +6251,28 @@
   });
   window.addEventListener("focus", reloadPlantLayout);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) reloadPlantLayout(); });
-  window.addEventListener("pagehide", () => syncChannel?.close());
+  function teardownMachineDesigner(event) {
+    if (event?.detail?.source && event.detail.source !== "/machine-design-studio.js") return;
+    if (!applicationActive) return;
+    applicationActive = false;
+    if (animationFrameId) window.cancelAnimationFrame(animationFrameId);
+    if (geometryPreparedFrame) window.cancelAnimationFrame(geometryPreparedFrame);
+    if (deferredDesignSwitchRefresh) window.cancelAnimationFrame(deferredDesignSwitchRefresh);
+    if (deferredDesignSwitchTimer) window.clearTimeout(deferredDesignSwitchTimer);
+    if (deferredLibrarySave) writeLibraryNow();
+    depthRenderer.dispose?.();
+    sceneCanvas?.remove();
+    syncChannel?.close();
+    window.removeEventListener("plant-renderer-fallback", handleRendererFallback);
+    window.removeEventListener("plantgeometryprepared", handleGeometryPrepared);
+    window.removeEventListener("plantlegacyteardown", teardownMachineDesigner);
+  }
+  window.addEventListener("plantlegacyteardown", teardownMachineDesigner);
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) teardownMachineDesigner();
+  });
   setTool("select");
-  requestAnimationFrame(draw);
+  updateSnapStepControls();
+  window.plantGeometryPrep?.prepareDesign(currentDesign());
+  animationFrameId = requestAnimationFrame(draw);
 })();

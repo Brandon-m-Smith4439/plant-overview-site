@@ -34,11 +34,15 @@ export default function MachineStudio() {
 <div className="studio-panel-heading"><p>Design library</p><strong id="design-count">0 designs</strong></div>
 <label className="studio-field studio-search-field">Search<input id="design-search" type="search" placeholder="Machine name or type" /></label>
 <div id="design-list" className="design-list" aria-label="Available machine designs"></div>
+<div className="design-library-primary-actions" aria-label="Selected machine actions">
+<button id="new-design" type="button" className="library-action library-action-new"><span aria-hidden="true">+</span>New machine</button>
+<button id="duplicate-design" type="button" className="library-action library-action-copy">Save a copy...</button>
+<button id="delete-design" type="button" className="library-action library-action-delete danger-subtle">Delete machine</button>
+</div>
 <details className="studio-collapsible">
 <summary>More design actions</summary>
 <div className="studio-button-grid">
-<button id="new-design" type="button">New blank machine</button><button id="duplicate-design" type="button">Save a copy...</button>
-<button id="reset-design" type="button">Reset preset</button><button id="delete-design" type="button">Delete custom</button>
+<button id="reset-design" type="button">Reset selected preset</button>
 </div>
 <div className="studio-button-grid compact">
 <button id="export-design" type="button">Export JSON</button><button id="import-design" type="button">Import JSON</button>
@@ -142,6 +146,8 @@ export default function MachineStudio() {
 </aside>
 <section className="design-viewport-panel">
 <div className="viewport-commandbar">
+<div className="viewport-control-group viewport-camera-group">
+<span className="viewport-control-label">Camera</span>
 <div role="group" aria-label="Camera views" className="view-buttons">
 <button type="button" data-design-view="iso" className="active" title="Isometric view (0)">Iso</button>
 <button type="button" data-design-view="front" title="Front view (1)">Front</button>
@@ -149,15 +155,26 @@ export default function MachineStudio() {
 <button type="button" data-design-view="top" title="Top view (3)">Top</button>
 <button type="button" data-design-view="fit" title="Fit model (F)">Fit</button>
 </div>
+</div>
 <div className="viewport-settings">
+<div className="viewport-control-group viewport-axes-group">
+<span className="viewport-control-label">Transform axes</span>
 <div className="transform-space-toggle" role="group" aria-label="Transform orientation">
 <button type="button" data-transform-space="local" className="active" aria-pressed="true" title="Follow the selected part">Local</button>
 <button type="button" data-transform-space="world" aria-pressed="false" title="Follow the design grid">World</button>
 </div>
-<div className="snap-controls">
+</div>
+<div className="viewport-control-group viewport-motion-group">
+<span className="viewport-control-label">Motion preview</span>
 <button id="preview-design-animations" type="button" className="active">Pause animations</button>
+</div>
+<div className="viewport-control-group viewport-snap-group">
+<span className="viewport-control-label">Gizmo snapping</span>
+<div className="snap-controls">
 <label className="studio-switch"><input id="snap-enabled" type="checkbox" defaultChecked /><span>Snap</span></label>
-<label>Step<select id="snap-step" defaultValue="0.5"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+<label className="snap-step-control"><span>Step</span><select id="snap-step" defaultValue="0.1"><option value="0.01">0.01</option><option value="0.025">0.025</option><option value="0.05">0.05</option><option value="0.075">0.075</option><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+<span id="snap-step-summary" className="snap-step-summary">0.1 ft / 0.1 deg / 0.1%</span>
+</div>
 </div>
 </div>
 </div>
@@ -191,7 +208,7 @@ export default function MachineStudio() {
 <p id="timeline-target-help" className="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
 </section>
 
-<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Right-drag full orbit · Middle-drag pan · Wheel zoom · <span id="designer-camera-position">Above floor · full orbit enabled</span></span></div>
+<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Ctrl+left-drag box select · Right-drag orbit · Middle-drag pan · Wheel zoom · <span id="designer-camera-position">Above floor · full orbit enabled</span></span></div>
 <div id="design-toast" className="design-toast" role="status" aria-live="polite"></div>
 </section>
 <aside className="studio-inspector-panel">
@@ -223,6 +240,7 @@ export default function MachineStudio() {
 <div className="transform-subheading">Rotation</div><div className="axis-fields rotation-axis-fields"><label className="axis-x-field">X<input data-component-field="rotationX" type="number" step="1" /></label><label className="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1" /></label><label className="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1" /></label></div>
 <div className="rotation-row rotation-actions"><label className="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis" defaultValue="y"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">−90°</button><button id="rotate-positive" type="button">+90°</button><button id="reset-rotation" type="button">Reset</button></div>
 <div className="transform-subheading">Scale (%)</div><div className="axis-fields four"><label>All<input data-component-scale="uniform" type="number" min="1" max="10000" step="1" /></label><label className="axis-x-field">X<input data-component-scale="x" type="number" min="1" max="10000" step="1" /></label><label className="axis-y-field">Y<input data-component-scale="y" type="number" min="1" max="10000" step="1" /></label><label className="axis-z-field">Z<input data-component-scale="z" type="number" min="1" max="10000" step="1" /></label></div>
+<div className="transform-subheading">Mirror</div><div className="mirror-actions" role="group" aria-label="Mirror selected parts"><button type="button" data-mirror-component="x">Mirror X</button><button type="button" data-mirror-component="y">Mirror Y</button><button type="button" data-mirror-component="z">Mirror Z</button></div>
 <button id="center-component" type="button" className="full-width-button">Center on machine</button>
 </details>
 <details className="transform-section" open><summary>Dimensions</summary>
@@ -237,6 +255,12 @@ export default function MachineStudio() {
 <label data-for-component="cylinder sphere cone">Smoothness<input data-component-field="segments" type="number" min="8" max="48" step="1" /></label>
 </div>
 <p className="transform-help"><strong>Local scaling:</strong> X changes length/width, Y changes height, and Z changes depth. Beam X changes its length while Y and Z change its rectangular cross-section.</p>
+</details>
+<details className="transform-section part-envelope-panel"><summary>Individual part envelope / hitbox</summary>
+<p id="component-envelope-status" className="transform-help">Add an independent collision envelope to this part, then edit its exact position and size.</p>
+<div className="axis-fields"><label className="axis-x-field">X<input data-component-envelope-field="x" type="number" step="0.01" /></label><label className="axis-y-field">Y<input data-component-envelope-field="y" type="number" step="0.01" /></label><label className="axis-z-field">Z<input data-component-envelope-field="z" type="number" step="0.01" /></label></div>
+<div className="axis-fields size-fields"><label className="axis-x-field">Width<input data-component-envelope-field="w" type="number" min="0.01" step="0.01" /></label><label className="axis-y-field">Height<input data-component-envelope-field="h" type="number" min="0.01" step="0.01" /></label><label className="axis-z-field">Depth<input data-component-envelope-field="d" type="number" min="0.01" step="0.01" /></label></div>
+<div className="envelope-part-actions"><button id="fit-component-envelope" type="button">Add / tight fit to part</button><button id="remove-component-envelope" type="button" className="danger-subtle">Remove part envelope</button></div>
 </details>
 <details className="transform-section" data-for-component="beam"><summary>Beam endpoints</summary><div className="axis-fields"><label className="axis-x-field">End X<input data-component-field="x2" type="number" step="0.1" /></label><label className="axis-y-field">End Y<input data-component-field="y2" type="number" step="0.1" /></label><label className="axis-z-field">End Z<input data-component-field="z2" type="number" step="0.1" /></label></div></details>
 </section>
@@ -297,10 +321,20 @@ export default function MachineStudio() {
 <details className="transform-section wide design-envelope-panel" open>
 <summary>Design envelope</summary>
 <div className="axis-fields size-fields envelope-size-fields"><label className="axis-x-field">Width (ft)<input id="design-base-w" type="number" min="0.01" step="0.01" /></label><label className="axis-z-field">Depth (ft)<input id="design-base-d" type="number" min="0.01" step="0.01" /></label><label className="axis-y-field">Height (ft)<input id="design-base-h" type="number" min="0.01" step="0.01" /></label></div>
+<div className="transform-subheading envelope-position-heading">Envelope position (ft)</div>
+<div className="axis-fields envelope-position-fields"><label className="axis-x-field">X<input id="design-base-x" type="number" step="0.01" /></label><label className="axis-y-field">Y<input id="design-base-y" type="number" step="0.01" /></label><label className="axis-z-field">Z<input id="design-base-z" type="number" step="0.01" /></label></div>
 <p id="design-envelope-status" className="transform-help envelope-status">The envelope can be as small as 0.01 ft on each axis.</p>
+<section className="machine-envelope-shape" aria-labelledby="machine-envelope-shape-heading">
+<div className="studio-panel-heading compact"><p id="machine-envelope-shape-heading">Walk-around shape</p><span id="design-envelope-piece-count">Base rectangle</span></div>
+<p className="transform-help">Build the machine hitbox from multiple boxes. Two overlapping boxes can form an L shape; add more for detailed walk-around clearance.</p>
+<label className="studio-field">Envelope piece<select id="design-envelope-piece"><option value="">Base rectangle</option></select></label>
+<div className="axis-fields"><label className="axis-x-field">X<input data-design-envelope-field="x" type="number" step="0.01" /></label><label className="axis-y-field">Y<input data-design-envelope-field="y" type="number" step="0.01" /></label><label className="axis-z-field">Z<input data-design-envelope-field="z" type="number" step="0.01" /></label></div>
+<div className="axis-fields size-fields"><label className="axis-x-field">Width<input data-design-envelope-field="w" type="number" min="0.01" step="0.01" /></label><label className="axis-y-field">Height<input data-design-envelope-field="h" type="number" min="0.01" step="0.01" /></label><label className="axis-z-field">Depth<input data-design-envelope-field="d" type="number" min="0.01" step="0.01" /></label></div>
+<div className="envelope-shape-actions"><button id="add-design-envelope-piece" type="button">Add box</button><button id="duplicate-design-envelope-piece" type="button">Duplicate</button><button id="remove-design-envelope-piece" type="button" className="danger-subtle">Remove</button><button id="reset-design-envelope-shape" type="button">Use one base box</button></div>
+</section>
 <div className="envelope-fit-options"><label className="studio-field">Fit parts<select id="envelope-fit-scope"><option value="all">All parts</option><option value="visible">Visible parts only</option></select></label><label className="studio-field">Edge clearance (in)<input id="envelope-fit-clearance" type="number" min="0" max="120" step="0.125" defaultValue="0" /></label></div>
 <label className="studio-switch envelope-visibility-switch"><input id="show-design-envelope" type="checkbox" defaultChecked /><span>Show envelope outline in the viewport</span></label>
-<button id="fit-envelope" type="button" className="full-width-button">Tight fit to parts</button>
+<button id="fit-envelope" type="button" className="full-width-button">Move &amp; tight fit to parts</button>
 </details>
 <label className="studio-field wide">Description<textarea id="design-description" rows={4}></textarea></label>
 </div>
@@ -318,7 +352,10 @@ export default function MachineStudio() {
 </dialog>
 <LegacyScriptLoader sources={[
 "/depth-scene-renderer.js",
+"/three-depth-scene-renderer.js",
 "/render-performance.js",
+"/spatial-index.js",
+"/geometry-prep-client.js",
 "/machine-designs.js",
 "/animation-timeline.js",
 "/animation-timeline-workspace.js",

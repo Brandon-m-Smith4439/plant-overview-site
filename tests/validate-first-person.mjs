@@ -71,11 +71,27 @@ listeners.get("document:keydown")?.({
 controller.update(1000);
 controller.update(1100);
 assert.ok(camera.z > 0, "Holding W must move continuously along the camera forward direction.");
+listeners.get("document:keyup")?.({ code: "KeyW" });
+controller.update(1200);
+controller.update(1300);
+camera = { ...camera, yaw: Math.PI };
+const beforeStrafe = camera.x;
+listeners.get("document:keydown")?.({
+  key: "d",
+  code: "KeyD",
+  target: { matches: () => false },
+  preventDefault() {},
+  repeat: false,
+});
+controller.update(1400);
+controller.update(1500);
+assert.ok(camera.x > beforeStrafe, "D must move toward the same screen-right side shown in the Overview.");
+listeners.get("document:keyup")?.({ code: "KeyD" });
 const beforeLook = camera.yaw;
 documentMock.pointerLockElement = canvasMock;
 listeners.get("document:pointerlockchange")?.();
 listeners.get("document:mousemove")?.({ movementX: 20, movementY: 0 });
-assert.ok(camera.yaw > beforeLook, "Moving the mouse right must rotate the first-person camera right.");
+assert.ok(camera.yaw < beforeLook, "Moving the mouse right must rotate the corrected first-person camera right.");
 documentMock.pointerLockElement = null;
 listeners.get("document:pointerlockchange")?.();
 assert.equal(exitRequests, 1, "Releasing pointer lock with Escape must request a one-step first-person exit.");

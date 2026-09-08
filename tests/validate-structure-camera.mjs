@@ -30,7 +30,54 @@ assert.ok(plant.includes("clamp(state.pitch + deltaY * .004") && studio.includes
 assert.ok(studio.includes("-1.53, 1.53"), "Designer vertical orbit must cross below the floor plane.");
 assert.ok(studio.includes('const belowFloor = state.pitch < 0;'), "Designer must detect below-floor camera positions.");
 assert.ok(studio.includes('{ transparent: belowFloor }'), "Designer floor must become translucent below the model.");
-assert.ok(studio.includes("function signedNavigationPitchScale()") && studio.includes("direction * Math.max(DEFAULT_PAN_PITCH_SCALE"), "Designer pan and screen mapping must reverse below-floor direction without a sensitivity spike.");
+assert.ok(studio.includes("state.panY += screenVertical * cp") && studio.includes("const rz = screenVertical * sp"), "Designer panning must follow camera screen-up without slowing at horizontal pitch.");
+assert.ok(studio.includes("MAX_PAN_POINTER_DELTA = 160;") && studio.includes("function stabilizedPanDelta("), "Designer panning must preserve normal pointer movement while rejecting only cursor-warp spikes.");
+const pointerMoveStart = studio.indexOf('canvas.addEventListener("pointermove", (event) => {');
+const pointerMoveEnd = studio.indexOf('canvas.addEventListener("pointerup", finishPointer);', pointerMoveStart);
+const pointerMove = studio.slice(pointerMoveStart, pointerMoveEnd);
+assert.ok(pointerMove.includes('state.drag.kind === "orbit"') && pointerMove.includes('state.drag.kind === "pan"'), "Designer camera input must use one shared orbit and pan path.");
+assert.ok(!pointerMove.includes("state.pitch < 0") && !pointerMove.includes("belowFloor"), "Designer camera controls must not switch direction or sensitivity below the floor.");
+assert.ok(studio.includes("event.deltaY > 0 ? 0.9 : 1.1"), "Designer wheel zoom must use one consistent direction at every camera angle.");
+const projectedVerticalDrag = (pitch, deltaY, scale) => {
+  const screenVertical = deltaY / scale;
+  const panY = screenVertical * Math.cos(pitch);
+  const panZ = screenVertical * Math.sin(pitch);
+  return (panY * Math.cos(pitch) + panZ * Math.sin(pitch)) * scale;
+};
+for (const scale of [8, 40, 100, 500]) {
+  for (const pitch of [-1.5, -1.2, -0.62, -0.025, 0, 0.025, 0.62, 1.2, 1.5]) {
+    const movement = projectedVerticalDrag(pitch, 16, scale);
+    assert.ok(Math.abs(movement - 16) < 1e-9, `Vertical middle-drag must remain 1:1 at pitch ${pitch} and scale ${scale}.`);
+  }
+}
+const stabilizePanDelta = (deltaX, deltaY) => {
+  const screenX = Number(deltaX) || 0;
+  const screenY = Number(deltaY) || 0;
+  const distance = Math.hypot(screenX, screenY);
+  if (distance <= 160) return [screenX, screenY];
+  const limitScale = 160 / distance;
+  return [screenX * limitScale, screenY * limitScale];
+};
+assert.deepEqual(stabilizePanDelta(40, 2), [40, 2], "Normal diagonal movement must retain both pointer axes.");
+const stabilizedDiagonal = stabilizePanDelta(400, 400);
+assert.ok(Math.abs(Math.hypot(...stabilizedDiagonal) - 160) < 1e-9, "Only a cursor-warp-sized diagonal spike should be limited.");
+const projectedHorizontalDrag = (pitch, yaw, deltaX) => {
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const rx = deltaX;
+  const panX = -(rx * cy);
+  const panZ = rx * sy;
+  return {
+    x: -(panX * cy - panZ * sy),
+    y: Math.sin(pitch) * -(panX * sy + panZ * cy),
+  };
+};
+for (const yaw of [-2.1, -0.72, 0, 0.9, 2.4]) {
+  for (const pitch of [-1.2, -0.62, 0.62, 1.2]) {
+    const movement = projectedHorizontalDrag(pitch, yaw, 16);
+    assert.ok(Math.abs(movement.x - 16) < 1e-9 && Math.abs(movement.y) < 1e-9, "Horizontal middle-drag must stay horizontal at every tested camera angle.");
+  }
+}
 assert.ok(!css.includes("#machine-design-canvas.below-floor-view"), "Below-floor viewing must keep the same environment color as above the floor.");
 assert.ok(plant.includes("if (!wantsOrbit && !wantsPan) return;"), "Plant view must reserve ordinary left-drag for editing instead of camera orbit.");
 assert.ok(css.includes("walkthrough-reticle"), "Walkthrough reticle styling is missing.");

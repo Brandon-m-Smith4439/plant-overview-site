@@ -37,4 +37,13 @@ controller.noteInteraction(180);
 now = 140;
 assert.equal(controller.shouldRender(140, { interacting: true }), true, "Active camera movement must continue rendering smoothly.");
 
+const initialDetailBudget = controller.maxDetailedParts();
+const initialMachineBudget = controller.maxDetailedMachines();
+for (let index = 0; index < 24; index += 1) {
+  now += 40;
+  controller.recordFrame(40);
+}
+assert.ok(controller.maxDetailedParts() < initialDetailBudget, "Auto mode must lower geometry complexity after sustained slow frames.");
+assert.ok(controller.maxDetailedMachines() < initialMachineBudget, "Auto mode must lower the number of fully detailed distant machines after sustained slow frames.");
+
 console.log("On-demand static rendering and interaction redraw checks passed.");

@@ -75,7 +75,10 @@ export default function Home() {
       <LegacyScriptLoader
         sources={[
           "/depth-scene-renderer.js",
+          "/three-depth-scene-renderer.js",
           "/render-performance.js",
+          "/spatial-index.js",
+          "/geometry-prep-client.js",
           "/plant-data.js",
           "/machine-data.js",
           "/machine-designs.js",

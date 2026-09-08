@@ -36,8 +36,14 @@ assert.ok(!designerPaste.includes("translateComponent("), "Pasted Designer parts
 const plantPaste = plant.slice(plant.indexOf("function pasteMachine()"), plant.indexOf("function swapStageReferences("));
 assert.ok(!plantPaste.includes("+ 8") && !plantPaste.includes("state.clipboard = clone(pasted)"), "Pasted layout objects must retain the copied coordinates on every paste.");
 assert.match(studio, /currentAngle - drag\.startAngle/, "Rotation dragging must use the selected object's current screen-space pivot.");
-assert.ok(studio.includes("DEFAULT_PAN_PITCH_SCALE") && studio.includes("function signedNavigationPitchScale()") && studio.match(/const sp = signedNavigationPitchScale\(\);/g)?.length >= 2,
-  "Below-floor middle-button movement must reverse direction without increasing sensitivity.");
+assert.ok(studio.includes("const screenVertical = safeDeltaY / Math.max(1, scale)") && studio.includes("state.panY += screenVertical * cp"),
+  "Middle-button movement must follow the camera screen-up vector at every pitch.");
+assert.ok(studio.includes("function stabilizedPanDelta(") && !studio.includes("PAN_AXIS_LOCK_RATIO") && studio.includes("Math.hypot(screenX, screenY)"),
+  "Middle-button panning must preserve diagonal motion without an abrupt axis lock.");
+assert.ok(studio.includes("MAX_PAN_POINTER_DELTA = 160") && studio.includes("safeDeltaX") && studio.includes("safeDeltaY"),
+  "Middle-button panning must preserve low-frequency pointer movement while rejecting cursor-warp spikes.");
+assert.ok(studio.includes("const rz = screenVertical * sp") && studio.includes("y -= state.panY"),
+  "Vertical panning must combine floor depth and world height without losing motion near a horizontal view.");
 assert.match(studio, /state\.drag = \{ kind: "orbit" \}/,
   "Right-button orbit must use the direct orbit direction on both sides of the floor.");
 assert.match(studio, /state\.pitch = clamp\(state\.pitch \+ deltaY \* 0\.004, -1\.53, 1\.53\)/,

@@ -17,12 +17,16 @@ assert.ok(plant.includes("function structuralColumns()"), "Automatic structural-
 assert.ok(plant.includes('key: `grid:${ix}:${iz}`'), "Generated columns need stable coordinate-based identifiers.");
 assert.ok(plant.includes("outsideOriginal"), "Generated columns must be limited to floor extensions outside the original CAD footprint.");
 assert.ok(plant.includes("hiddenColumnKeys"), "Generated pillar visibility must persist independently of legacy CAD indices.");
+assert.ok(plant.includes("normalizeColumnOverrides") && plant.includes("columnOverridesRevision"), "Moved pillar coordinates must persist and invalidate the structural cache.");
+assert.ok(plant.includes('state.dragAction = "column"') && plant.includes("setColumnPosition(column.key, nextX, nextZ)"), "Visible pillars must support direct drag-to-move editing.");
+assert.ok(plant.includes('data-column-position-field="x"') && plant.includes('data-column-position-field="z"'), "Selected pillars need exact X/Z coordinate controls.");
 assert.ok(plant.includes("invalidateStructuralColumns()"), "Floor and grid edits must invalidate the cached structural layout.");
 assert.ok(plant.includes('data-column-grid-check="autoExtend"'), "Structure controls need an automatic-extension switch.");
 assert.ok(plant.includes('data-column-grid-field="spacingX"'), "Structure controls need X bay spacing.");
 assert.ok(plant.includes('data-column-grid-field="spacingZ"'), "Structure controls need Z bay spacing.");
 assert.ok(plant.includes("for (const column of structuralColumns())"), "First-person collision must include generated columns.");
 assert.ok(css.includes(".column-grid-controls"), "Automatic-column controls need dedicated styling.");
+assert.ok(css.includes(".column-position-controls"), "Movable-pillar controls need dedicated styling.");
 
 const cadBounds = [-233.33, -212.5, 237.5, 50];
 const grid = { spacingX: 40, spacingZ: 30, anchorX: -220.04, anchorZ: -199.97 };

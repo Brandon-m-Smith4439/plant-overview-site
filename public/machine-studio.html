@@ -41,11 +41,15 @@
           <div class="studio-panel-heading"><p>Design library</p><strong id="design-count">0 designs</strong></div>
           <label class="studio-field studio-search-field">Search<input id="design-search" type="search" placeholder="Machine name or type"></label>
           <div id="design-list" class="design-list" aria-label="Available machine designs"></div>
+          <div class="design-library-primary-actions" aria-label="Selected machine actions">
+            <button id="new-design" type="button" class="library-action library-action-new"><span aria-hidden="true">+</span>New machine</button>
+            <button id="duplicate-design" type="button" class="library-action library-action-copy">Save a copy...</button>
+            <button id="delete-design" type="button" class="library-action library-action-delete danger-subtle">Delete machine</button>
+          </div>
           <details class="studio-collapsible">
             <summary>More design actions</summary>
             <div class="studio-button-grid">
-              <button id="new-design" type="button">New blank machine</button><button id="duplicate-design" type="button">Save a copy...</button>
-              <button id="reset-design" type="button">Reset preset</button><button id="delete-design" type="button">Delete custom</button>
+              <button id="reset-design" type="button">Reset selected preset</button>
             </div>
             <div class="studio-button-grid compact">
               <button id="export-design" type="button">Export JSON</button><button id="import-design" type="button">Import JSON</button>
@@ -153,22 +157,35 @@
 
       <section class="design-viewport-panel">
         <div class="viewport-commandbar">
-          <div role="group" aria-label="Camera views" class="view-buttons">
-            <button type="button" data-design-view="iso" class="active" title="Isometric view (0)">Iso</button>
-            <button type="button" data-design-view="front" title="Front view (1)">Front</button>
-            <button type="button" data-design-view="side" title="Right view (2)">Right</button>
-            <button type="button" data-design-view="top" title="Top view (3)">Top</button>
-            <button type="button" data-design-view="fit" title="Fit model (F)">Fit</button>
+          <div class="viewport-control-group viewport-camera-group">
+            <span class="viewport-control-label">Camera</span>
+            <div role="group" aria-label="Camera views" class="view-buttons">
+              <button type="button" data-design-view="iso" class="active" title="Isometric view (0)">Iso</button>
+              <button type="button" data-design-view="front" title="Front view (1)">Front</button>
+              <button type="button" data-design-view="side" title="Right view (2)">Right</button>
+              <button type="button" data-design-view="top" title="Top view (3)">Top</button>
+              <button type="button" data-design-view="fit" title="Fit model (F)">Fit</button>
+            </div>
           </div>
           <div class="viewport-settings">
-            <div class="transform-space-toggle" role="group" aria-label="Transform orientation">
-              <button type="button" data-transform-space="local" class="active" aria-pressed="true" title="Follow the selected part">Local</button>
-              <button type="button" data-transform-space="world" aria-pressed="false" title="Follow the design grid">World</button>
+            <div class="viewport-control-group viewport-axes-group">
+              <span class="viewport-control-label">Transform axes</span>
+              <div class="transform-space-toggle" role="group" aria-label="Transform orientation">
+                <button type="button" data-transform-space="local" class="active" aria-pressed="true" title="Follow the selected part">Local</button>
+                <button type="button" data-transform-space="world" aria-pressed="false" title="Follow the design grid">World</button>
+              </div>
             </div>
-            <div class="snap-controls">
+            <div class="viewport-control-group viewport-motion-group">
+              <span class="viewport-control-label">Motion preview</span>
               <button id="preview-design-animations" type="button" class="active">Pause animations</button>
-              <label class="studio-switch"><input id="snap-enabled" type="checkbox" checked><span>Snap</span></label>
-              <label>Step<select id="snap-step"><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5" selected>0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+            </div>
+            <div class="viewport-control-group viewport-snap-group">
+              <span class="viewport-control-label">Gizmo snapping</span>
+              <div class="snap-controls">
+                <label class="studio-switch"><input id="snap-enabled" type="checkbox" checked><span>Snap</span></label>
+                <label class="snap-step-control"><span>Step</span><select id="snap-step"><option value="0.01">0.01</option><option value="0.025">0.025</option><option value="0.05">0.05</option><option value="0.075">0.075</option><option value="0.1" selected>0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+                <span id="snap-step-summary" class="snap-step-summary">0.1 ft / 0.1 deg / 0.1%</span>
+              </div>
             </div>
           </div>
         </div>
@@ -218,7 +235,7 @@
           <p id="timeline-target-help" class="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
         </section>
 
-        <div class="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Right-drag full orbit · Middle-drag pan · Wheel zoom · <span id="designer-camera-position">Above floor · full orbit enabled</span></span></div>
+        <div class="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Ctrl+left-drag box select · Right-drag orbit · Middle-drag pan · Wheel zoom · <span id="designer-camera-position">Above floor · full orbit enabled</span></span></div>
         <div id="design-toast" class="design-toast" role="status" aria-live="polite"></div>
       </section>
 
@@ -253,6 +270,7 @@
                 <div class="transform-subheading">Rotation</div><div class="axis-fields rotation-axis-fields"><label class="axis-x-field">X<input data-component-field="rotationX" type="number" step="1"></label><label class="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1"></label><label class="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1"></label></div>
                 <div class="rotation-row rotation-actions"><label class="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis"><option value="x">X</option><option value="y" selected>Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">−90°</button><button id="rotate-positive" type="button">+90°</button><button id="reset-rotation" type="button">Reset</button></div>
                 <div class="transform-subheading">Scale (%)</div><div class="axis-fields four"><label>All<input data-component-scale="uniform" type="number" min="1" max="10000" step="1"></label><label class="axis-x-field">X<input data-component-scale="x" type="number" min="1" max="10000" step="1"></label><label class="axis-y-field">Y<input data-component-scale="y" type="number" min="1" max="10000" step="1"></label><label class="axis-z-field">Z<input data-component-scale="z" type="number" min="1" max="10000" step="1"></label></div>
+                <div class="transform-subheading">Mirror</div><div class="mirror-actions" role="group" aria-label="Mirror selected parts"><button type="button" data-mirror-component="x">Mirror X</button><button type="button" data-mirror-component="y">Mirror Y</button><button type="button" data-mirror-component="z">Mirror Z</button></div>
                 <button id="center-component" type="button" class="full-width-button">Center on machine</button>
               </details>
               <details class="transform-section" open><summary>Dimensions</summary>
@@ -267,6 +285,12 @@
                   <label data-for-component="cylinder sphere cone">Smoothness<input data-component-field="segments" type="number" min="8" max="48" step="1"></label>
                 </div>
                 <p class="transform-help"><strong>Local scaling:</strong> X changes length/width, Y changes height, and Z changes depth. Beam X changes its length while Y and Z change its rectangular cross-section.</p>
+              </details>
+              <details class="transform-section part-envelope-panel"><summary>Individual part envelope / hitbox</summary>
+                <p id="component-envelope-status" class="transform-help">Add an independent collision envelope to this part, then edit its exact position and size.</p>
+                <div class="axis-fields"><label class="axis-x-field">X<input data-component-envelope-field="x" type="number" step="0.01"></label><label class="axis-y-field">Y<input data-component-envelope-field="y" type="number" step="0.01"></label><label class="axis-z-field">Z<input data-component-envelope-field="z" type="number" step="0.01"></label></div>
+                <div class="axis-fields size-fields"><label class="axis-x-field">Width<input data-component-envelope-field="w" type="number" min="0.01" step="0.01"></label><label class="axis-y-field">Height<input data-component-envelope-field="h" type="number" min="0.01" step="0.01"></label><label class="axis-z-field">Depth<input data-component-envelope-field="d" type="number" min="0.01" step="0.01"></label></div>
+                <div class="envelope-part-actions"><button id="fit-component-envelope" type="button">Add / tight fit to part</button><button id="remove-component-envelope" type="button" class="danger-subtle">Remove part envelope</button></div>
               </details>
               <details class="transform-section" data-for-component="beam"><summary>Beam endpoints</summary><div class="axis-fields"><label class="axis-x-field">End X<input data-component-field="x2" type="number" step="0.1"></label><label class="axis-y-field">End Y<input data-component-field="y2" type="number" step="0.1"></label><label class="axis-z-field">End Z<input data-component-field="z2" type="number" step="0.1"></label></div></details>
             </section>
@@ -341,10 +365,20 @@
             <details class="transform-section wide design-envelope-panel" open>
               <summary>Design envelope</summary>
               <div class="axis-fields size-fields envelope-size-fields"><label class="axis-x-field">Width (ft)<input id="design-base-w" type="number" min="0.01" step="0.01"></label><label class="axis-z-field">Depth (ft)<input id="design-base-d" type="number" min="0.01" step="0.01"></label><label class="axis-y-field">Height (ft)<input id="design-base-h" type="number" min="0.01" step="0.01"></label></div>
+              <div class="transform-subheading envelope-position-heading">Envelope position (ft)</div>
+              <div class="axis-fields envelope-position-fields"><label class="axis-x-field">X<input id="design-base-x" type="number" step="0.01"></label><label class="axis-y-field">Y<input id="design-base-y" type="number" step="0.01"></label><label class="axis-z-field">Z<input id="design-base-z" type="number" step="0.01"></label></div>
               <p id="design-envelope-status" class="transform-help envelope-status">The envelope can be as small as 0.01 ft on each axis.</p>
+              <section class="machine-envelope-shape" aria-labelledby="machine-envelope-shape-heading">
+                <div class="studio-panel-heading compact"><p id="machine-envelope-shape-heading">Walk-around shape</p><span id="design-envelope-piece-count">Base rectangle</span></div>
+                <p class="transform-help">Build the machine hitbox from multiple boxes. Two overlapping boxes can form an L shape; add more for detailed walk-around clearance.</p>
+                <label class="studio-field">Envelope piece<select id="design-envelope-piece"><option value="">Base rectangle</option></select></label>
+                <div class="axis-fields"><label class="axis-x-field">X<input data-design-envelope-field="x" type="number" step="0.01"></label><label class="axis-y-field">Y<input data-design-envelope-field="y" type="number" step="0.01"></label><label class="axis-z-field">Z<input data-design-envelope-field="z" type="number" step="0.01"></label></div>
+                <div class="axis-fields size-fields"><label class="axis-x-field">Width<input data-design-envelope-field="w" type="number" min="0.01" step="0.01"></label><label class="axis-y-field">Height<input data-design-envelope-field="h" type="number" min="0.01" step="0.01"></label><label class="axis-z-field">Depth<input data-design-envelope-field="d" type="number" min="0.01" step="0.01"></label></div>
+                <div class="envelope-shape-actions"><button id="add-design-envelope-piece" type="button">Add box</button><button id="duplicate-design-envelope-piece" type="button">Duplicate</button><button id="remove-design-envelope-piece" type="button" class="danger-subtle">Remove</button><button id="reset-design-envelope-shape" type="button">Use one base box</button></div>
+              </section>
               <div class="envelope-fit-options"><label class="studio-field">Fit parts<select id="envelope-fit-scope"><option value="all">All parts</option><option value="visible">Visible parts only</option></select></label><label class="studio-field">Edge clearance (in)<input id="envelope-fit-clearance" type="number" min="0" max="120" step="0.125" value="0"></label></div>
               <label class="studio-switch envelope-visibility-switch"><input id="show-design-envelope" type="checkbox" checked><span>Show envelope outline in the viewport</span></label>
-              <button id="fit-envelope" type="button" class="full-width-button">Tight fit to parts</button>
+              <button id="fit-envelope" type="button" class="full-width-button">Move &amp; tight fit to parts</button>
             </details>
             <label class="studio-field wide">Description<textarea id="design-description" rows="4"></textarea></label>
           </div>
@@ -363,7 +397,10 @@
     </dialog>
 
     <script src="depth-scene-renderer.js"></script>
+    <script src="three-depth-scene-renderer.js"></script>
     <script src="render-performance.js"></script>
+    <script src="spatial-index.js"></script>
+    <script src="geometry-prep-client.js"></script>
     <script src="machine-designs.js"></script>
     <script src="animation-timeline.js"></script>
     <script src="animation-timeline-workspace.js"></script>

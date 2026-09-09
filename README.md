@@ -2,6 +2,30 @@
 
 Current project version: **0.13.0**
 
+## Full-production rendering performance
+
+The production renderer retains stationary sections of animated designs, shares
+opaque animated primitive meshes, and updates their transforms instead of
+rebuilding the whole machine. Shape-specific rollers, wheels and beams retain
+their existing geometry rules and reuse buffers. Distant curves use fewer
+segments without dropping overview components; distant internal animation is
+sampled at 20 or 30 Hz and nearby animation at 60 Hz. Layout controls, saved
+designs, envelopes, scales and storage keys are unchanged.
+
+Use **Performance → Run 10-second benchmark** for a quick comparison, or
+**Run 60-second stability check** while zooming out/in and walking around the
+fully loaded Today's Production stage. Warm up the view first and compare the
+same camera, window size, mode and saved layout. Export the result to compare
+FPS, CPU submission time, p95/p99 frame intervals, geometry growth and context
+losses. GPU timing appears only on browsers/drivers supporting asynchronous
+WebGL timer queries; unavailable GPU timing is not reported as zero cost.
+
+Run `npm run validate:production-performance` for the synthetic retained-buffer,
+animation batching, transform parity, eviction and context-recovery regressions.
+These tests use real Three.js geometry with a simulated driver, not browser FPS.
+Existing saved production work must be benchmarked in its original browser and
+origin; a clean default scene is not a substitute for the customized plant.
+
 ## Version 0.13.0
 
 Version 0.13.0 turns Machine Design Studio into a clear build-save-place workflow. New machines begin blank, reusable designs now have explicit Save and Save As actions, and saving a machine into the Plant Layout provides a direct handoff to position the newly created object. Redundant Designer controls were consolidated and the interface received a shared professional visual system.

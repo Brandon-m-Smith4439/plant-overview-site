@@ -2,6 +2,7 @@
   "use strict";
 
   const legacyFactory = window.createDepthSceneRenderer;
+  const colorCache = new Map();
 
   function nextPowerOfTwo(value) {
     return 2 ** Math.ceil(Math.log2(Math.max(1, value)));
@@ -12,6 +13,8 @@
   }
 
   function parseColor(value, opacity = 1) {
+    const cacheKey = `${value}:${opacity}`;
+    if (colorCache.has(cacheKey)) return colorCache.get(cacheKey);
     const input = String(value || "#68777a").trim();
     let red = 104;
     let green = 119;
@@ -36,11 +39,19 @@
       blue = Number(rgb[3]);
       alpha = rgb[4] === undefined ? 1 : Number(rgb[4]);
     }
-    return [clamp(red / 255, 0, 1), clamp(green / 255, 0, 1), clamp(blue / 255, 0, 1), clamp(alpha * opacity, 0, 1)];
+    const result = [clamp(red / 255, 0, 1), clamp(green / 255, 0, 1), clamp(blue / 255, 0, 1), clamp(alpha * opacity, 0, 1)];
+    if (colorCache.size >= 512) colorCache.delete(colorCache.keys().next().value);
+    colorCache.set(cacheKey, result);
+    return result;
   }
 
   function createRecorder() {
     return { opaquePositions: [], opaqueColors: [], transparentPositions: [], transparentColors: [], linePositions: [], lineColors: [] };
+  }
+
+  function resetRecorder(record) {
+    for (const key of ["opaquePositions", "opaqueColors", "transparentPositions", "transparentColors", "linePositions", "lineColors"]) record[key].length = 0;
+    return record;
   }
 
   function createThreeRenderer(canvas) {
@@ -81,6 +92,16 @@
     let disposed = false;
     let available = true;
     let instanceUploads = 0;
+    let geometryBuilds = 0;
+    let geometryUpdates = 0;
+    let cacheHits = 0;
+    let resizeCount = 0;
+    let contextLosses = 0;
+    let transientGroup = null;
+    const gl = renderer.getContext?.();
+    const timer = gl?.createQuery ? gl.getExtension("EXT_disjoint_timer_query_webgl2") : null;
+    const gpuQueries = [];
+    let gpuMs = null;
     let stats = { renderer: "three-retained", calls: 0, triangles: 0, lines: 0, retainedObjects: 0, instances: 0, instanceUploads: 0 };
 
     const scratchPosition = new THREE.Vector3();
@@ -88,7 +109,8 @@
     const scratchQuaternion = new THREE.Quaternion();
     const scratchScale = new THREE.Vector3();
     const scratchMatrix = new THREE.Matrix4();
-    const scratchEuler = new THREE.Euler();
+    // Plant applies X, then Y, then Z to points (Three's extrinsic ZYX).
+    const scratchEuler = new THREE.Euler(0, 0, 0, "ZYX");
     const scratchColor = new THREE.Color();
 
     const vertexShader = `
@@ -189,9 +211,12 @@
     }
 
     function geometry(positions, colors) {
+      geometryBuilds += 1;
       const result = new THREE.BufferGeometry();
       result.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
       result.setAttribute("color", new THREE.Float32BufferAttribute(colors, 4));
+      result.attributes.position.setUsage(THREE.DynamicDrawUsage);
+      result.attributes.color.setUsage(THREE.DynamicDrawUsage);
       result.computeBoundingSphere();
       return result;
     }
@@ -223,6 +248,84 @@
       group?.traverse?.((object) => object.geometry?.dispose?.());
       if (group?.parent) group.parent.remove(group);
     }
+
+    function updateGroup(group, record) {
+      if (!group) return buildGroup(record);
+      const channels = [
+        ["opaquePositions", "opaqueColors", opaqueMaterial, false, 0],
+        ["transparentPositions", "transparentColors", transparentMaterial, false, 1],
+        ["linePositions", "lineColors", lineMaterial, true, 2],
+      ];
+      // Reuse buffers while topology fits. Reallocate only a changed channel,
+      // never the complete machine just because a moving part changed position.
+      for (const [positionKey, colorKey, material, lines, order] of channels) {
+        const positions = record[positionKey];
+        const colors = record[colorKey];
+        let child = group.children.find((item) => item.material === material);
+        if (!positions.length) {
+          if (child) child.visible = false;
+          continue;
+        }
+        if (!child) {
+          child = lines ? new THREE.LineSegments(geometry(positions, colors), material)
+            : new THREE.Mesh(geometry(positions, colors), material);
+          child.frustumCulled = false;
+          child.renderOrder = order;
+          group.add(child);
+        } else {
+          const buffer = child.geometry;
+          if (buffer.attributes.position.array.length < positions.length) {
+            buffer.dispose();
+            child.geometry = geometry(positions, colors);
+          } else {
+            buffer.attributes.position.array.set(positions);
+            buffer.attributes.color.array.set(colors);
+            buffer.attributes.position.needsUpdate = true;
+            buffer.attributes.color.needsUpdate = true;
+            geometryUpdates += 1;
+          }
+        }
+        child.geometry.setDrawRange(0, positions.length / 3);
+        child.visible = true;
+      }
+      group.visible = true;
+      return group;
+    }
+
+    function invalidateTemplate(key) {
+      // Instance batches borrow template buffers: detach every borrower first.
+      geometryInstanceBatches.forEach((entry, batchKey) => {
+        if (entry.templateKey !== key) return;
+        disposeGeometryInstanceBatch(entry);
+        geometryInstanceBatches.delete(batchKey);
+      });
+      disposeGroup(templates.get(key)?.group);
+      templates.delete(key);
+    }
+
+    function onContextLost(event) {
+      event.preventDefault();
+      contextLosses += 1;
+      available = false;
+      canvas.hidden = true;
+      gpuQueries.length = 0;
+      gpuMs = null;
+      window.dispatchEvent?.(new window.CustomEvent("plant-renderer-fallback", {
+        detail: { reason: "webgl-context-lost" },
+      }));
+    }
+
+    function onContextRestored() {
+      if (disposed) return;
+      clearRetained();
+      available = true;
+      canvas.hidden = false;
+      window.dispatchEvent?.(new window.CustomEvent("plant-renderer-fallback", {
+        detail: { reason: "webgl-context-restored" },
+      }));
+    }
+    canvas.addEventListener("webglcontextlost", onContextLost);
+    canvas.addEventListener("webglcontextrestored", onContextRestored);
 
     function appendVertex(targetPositions, targetColors, point, color) {
       targetPositions.push(Number(point[0]) || 0, Number(point[1]) || 0, Number(point[2]) || 0);
@@ -256,33 +359,37 @@
     function beginFrame(nextWidth, nextHeight, project, view = {}) {
       if (disposed) return;
       frame += 1;
-      width = Math.max(1, Math.round(nextWidth || 1));
-      height = Math.max(1, Math.round(nextHeight || 1));
-      renderer.setSize(width, height, false);
+      const nextW = Math.max(1, Math.round(nextWidth || 1));
+      const nextH = Math.max(1, Math.round(nextHeight || 1));
+      if (nextW !== width || nextH !== height || !resizeCount) {
+        width = nextW;
+        height = nextH;
+        renderer.setSize(width, height, false);
+        resizeCount += 1;
+      }
       viewProjection.value.copy(matrixForView(view));
       retained.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       templates.forEach((entry) => { entry.used = false; });
       instanceBatches.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });
       geometryInstanceBatches.forEach((entry) => { entry.used = false; entry.group.visible = false; });
-      transient = createRecorder();
+      resetRecorder(transient);
       current = transient;
     }
 
     function beginObject(key, revision = "") {
+      if (!available) { current = transient; return true; }
       if (!key) return true;
       const existing = retained.get(key);
       if (existing && existing.revision === String(revision)) {
+        cacheHits += 1;
         existing.used = true;
         existing.lastUsed = frame;
         existing.group.visible = true;
         current = transient;
         return false;
       }
-      if (existing) {
-        disposeGroup(existing.group);
-        retained.delete(key);
-      }
-      current = createRecorder();
+      current = existing?.record ? resetRecorder(existing.record) : createRecorder();
+      current.previousGroup = existing?.group;
       current.key = String(key);
       current.revision = String(revision);
       return true;
@@ -293,10 +400,10 @@
         current = transient;
         return;
       }
-      const group = buildGroup(current);
+      const group = updateGroup(current.previousGroup, current);
       group.visible = true;
       scene.add(group);
-      retained.set(current.key, { revision: current.revision, group, used: true, lastUsed: frame });
+      retained.set(current.key, { revision: current.revision, group, record: current, used: true, lastUsed: frame });
       current = transient;
     }
 
@@ -310,8 +417,7 @@
         return false;
       }
       if (existing) {
-        disposeGroup(existing.group);
-        templates.delete(key);
+        invalidateTemplate(key);
       }
       current = createRecorder();
       current.templateKey = String(key);
@@ -337,13 +443,20 @@
       });
       templates.forEach((entry, key) => {
         if (prefix && !key.startsWith(prefix)) return;
-        disposeGroup(entry.group);
-        templates.delete(key);
+        invalidateTemplate(key);
       });
       geometryInstanceBatches.forEach((entry, key) => {
         if (prefix && !key.startsWith(prefix)) return;
         disposeGeometryInstanceBatch(entry);
         geometryInstanceBatches.delete(key);
+      });
+      instanceBatches.forEach((entry, key) => {
+        if (prefix && !key.startsWith(prefix)) return;
+        scene.remove(entry.mesh);
+        entry.mesh.dispose();
+        entry.mesh.geometry.dispose();
+        entry.mesh.material.dispose();
+        instanceBatches.delete(key);
       });
     }
 
@@ -379,6 +492,7 @@
     }
 
     function composeInstanceMatrix(instance) {
+      if (instance.matrix?.length === 16) return scratchMatrix.fromArray(instance.matrix);
       scratchEuler.set(...instanceEulerRadians(instance));
       scratchQuaternion.setFromEuler(scratchEuler);
       scratchPosition.set(Number(instance.x) || 0, Number(instance.y) || 0, Number(instance.z) || 0);
@@ -399,6 +513,7 @@
       if (!entry || entry.capacity < boxes.length) {
         if (entry) {
           scene.remove(entry.mesh);
+          entry.mesh.dispose();
           entry.mesh.geometry.dispose();
           entry.mesh.material.dispose();
         }
@@ -450,7 +565,10 @@
     function disposeGeometryInstanceBatch(entry) {
       if (!entry) return;
       if (entry.group?.parent) entry.group.parent.remove(entry.group);
-      (entry.meshes || []).forEach((mesh) => mesh.material?.dispose?.());
+      (entry.meshes || []).forEach((mesh) => {
+        mesh.dispose?.();
+        mesh.material?.dispose?.();
+      });
     }
 
     function createGeometryInstanceBatch(key, templateKey, template, capacity) {
@@ -471,6 +589,7 @@
         key,
         templateKey,
         templateRevision: template.revision,
+        template,
         revision: null,
         capacity,
         count: 0,
@@ -495,6 +614,7 @@
         || entry.capacity < instances.length
         || entry.templateKey !== templateKey
         || entry.templateRevision !== template.revision
+        || entry.template !== template
       ) {
         if (entry) disposeGeometryInstanceBatch(entry);
         entry = createGeometryInstanceBatch(key, templateKey, template, nextPowerOfTwo(instances.length));
@@ -522,11 +642,10 @@
     function render() {
       if (disposed || !available) return;
       if (current?.key) endObject();
-      let transientGroup = null;
       if (transient.opaquePositions.length || transient.transparentPositions.length || transient.linePositions.length) {
-        transientGroup = buildGroup(transient);
-        scene.add(transientGroup);
-      }
+        transientGroup = updateGroup(transientGroup, transient);
+        if (!transientGroup.parent) scene.add(transientGroup);
+      } else if (transientGroup) transientGroup.visible = false;
       retained.forEach((entry, key) => {
         if (!entry.used && frame - entry.lastUsed > 180) {
           disposeGroup(entry.group);
@@ -535,8 +654,7 @@
       });
       templates.forEach((entry, key) => {
         if (!entry.used && frame - entry.lastUsed > 180) {
-          disposeGroup(entry.group);
-          templates.delete(key);
+          invalidateTemplate(key);
         }
       });
       geometryInstanceBatches.forEach((entry, key) => {
@@ -548,19 +666,35 @@
       instanceBatches.forEach((entry, key) => {
         if (!entry.used && frame - entry.lastUsed > 180) {
           scene.remove(entry.mesh);
+          entry.mesh.dispose();
           entry.mesh.geometry.dispose();
           entry.mesh.material.dispose();
           instanceBatches.delete(key);
         }
       });
       try {
-        renderer.render(scene, camera);
+        if (timer) {
+          const disjoint = gl.getParameter(timer.GPU_DISJOINT_EXT);
+          while (gpuQueries.length && (disjoint || gl.getQueryParameter(gpuQueries[0], gl.QUERY_RESULT_AVAILABLE))) {
+            const query = gpuQueries.shift();
+            if (!disjoint) gpuMs = gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6;
+            gl.deleteQuery(query);
+          }
+          if (disjoint) gpuMs = null;
+        }
+        const query = timer && gpuQueries.length < 4 ? gl.createQuery() : null;
+        if (query) gl.beginQuery(timer.TIME_ELAPSED_EXT, query);
+        try { renderer.render(scene, camera); } finally {
+          if (query) {
+            gl.endQuery(timer.TIME_ELAPSED_EXT);
+            gpuQueries.push(query);
+          }
+        }
         const failedProgram = renderer.info.programs?.find((program) => program.diagnostics?.runnable === false);
         if (failedProgram) throw new Error("The GPU rejected a retained-renderer shader program.");
       } catch (error) {
         available = false;
         canvas.hidden = true;
-        if (transientGroup) disposeGroup(transientGroup);
         console.warn("Three.js retained renderer failed; switching this viewport to the compatible renderer.", error);
         if (typeof window.CustomEvent === "function") {
           window.dispatchEvent?.(new window.CustomEvent("plant-renderer-fallback", {
@@ -579,12 +713,25 @@
         instances: [...instanceBatches.values()].reduce((total, entry) => total + entry.mesh.count, 0)
           + [...geometryInstanceBatches.values()].reduce((total, entry) => total + entry.count, 0),
         instanceUploads,
+        geometryBuilds,
+        geometryUpdates,
+        cacheHits,
+        resizeCount,
+        contextLosses,
+        geometries: renderer.info.memory?.geometries || 0,
+        textures: renderer.info.memory?.textures || 0,
+        gpuMs,
+        gpuTimingSupported: Boolean(timer),
       };
-      if (transientGroup) disposeGroup(transientGroup);
     }
 
     function dispose() {
       disposed = true;
+      available = false;
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
+      disposeGroup(transientGroup);
+      gpuQueries.splice(0).forEach((query) => gl.deleteQuery(query));
       clearRetained();
       instanceBatches.forEach((entry) => {
         scene.remove(entry.mesh);
@@ -616,7 +763,7 @@
       addLine,
       render,
       dispose,
-      getStats: () => ({ ...stats }),
+      getStats: () => ({ ...stats, contextLosses, available }),
     };
   }
 

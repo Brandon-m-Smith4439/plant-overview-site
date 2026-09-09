@@ -3515,6 +3515,10 @@ summary:focus-visible {
   opacity: .55;
 }
 
+.render-performance-benchmark-actions [data-performance-export] {
+  grid-column: 1 / -1;
+}
+
 .render-performance-benchmark-status {
   margin: 7px 0 0;
   color: #51615f;

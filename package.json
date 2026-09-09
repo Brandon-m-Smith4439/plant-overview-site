@@ -35,6 +35,7 @@
     "validate:overlap-performance": "node tests/validate-overlap-performance.mjs",
     "validate:renderer": "node tests/validate-renderer-runtime.mjs",
     "validate:retained-renderer": "node tests/validate-retained-three-performance.mjs",
+    "validate:production-performance": "node tests/validate-production-performance.mjs",
     "validate:deep-performance": "node tests/validate-deep-performance-pass.mjs",
     "validate:overview-stability": "node tests/validate-overview-stability.mjs",
     "validate:transition-envelope-visuals": "node tests/validate-transition-envelope-visuals.mjs",

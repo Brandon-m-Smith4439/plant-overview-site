@@ -45,5 +45,19 @@ for (let index = 0; index < 24; index += 1) {
 }
 assert.ok(controller.maxDetailedParts() < initialDetailBudget, "Auto mode must lower geometry complexity after sustained slow frames.");
 assert.ok(controller.maxDetailedMachines() < initialMachineBudget, "Auto mode must lower the number of fully detailed distant machines after sustained slow frames.");
+assert.equal(controller.pixelRatio(2),1.2,"CPU-bound frames should reduce work before lowering resolution");
+
+const gpuController=context.window.createRenderPerformanceController();
+gpuController.setRendererStats({gpuMs:30,gpuTimingSupported:true});
+for(let i=0;i<24;i++) { now+=40; gpuController.recordFrame(4); }
+assert.ok(gpuController.pixelRatio(2)<1.2,"GPU pressure must reduce resolution even when CPU submission is fast");
+
+const benchmarkController=context.window.createRenderPerformanceController();
+benchmarkController.startBenchmark(1000);
+for(let i=0;i<26;i++) { now+=40; benchmarkController.recordFrame(3); }
+assert.equal(benchmarkController.benchmarkResult.p95FrameMs,3,"CPU submission remains separately reported");
+assert.equal(benchmarkController.benchmarkResult.p95IntervalMs,40,"frame cadence must expose stalls hidden by short CPU submissions");
+assert.equal(benchmarkController.benchmarkResult.onePercentLowFps,25);
+assert.equal(benchmarkController.benchmarkResult.gpuTimingSupported,false,"unsupported GPU timing must be explicit");
 
 console.log("On-demand static rendering and interaction redraw checks passed.");

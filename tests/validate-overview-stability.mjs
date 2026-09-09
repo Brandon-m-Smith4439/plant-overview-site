@@ -13,9 +13,9 @@ assert.doesNotMatch(plant, /shouldFreezeInternalDesignAnimation/, "Overview cutt
 assert.match(plant, /function representativeDesignComponents[\s\S]*"glassPanel", "wheel", "text", "rollerBed", "wedge"/, "Compact LOD must sample recognizable details across the complete machine.");
 assert.doesNotMatch(plant, /const previousLevel = machineLodHistory/, "Returning to a zoom level must not remain trapped behind directional LOD history.");
 assert.match(plant, /\|\| lodLevel < 2/, "Repeated overview machines must support instancing at silhouette LOD.");
-assert.match(plant, /drawCustomDesign\(canonical, 1, 1, time, lodLevel\)/, "Instanced templates must match their selected overview LOD.");
+assert.match(plant, /drawCustomDesign\(canonical, 1, 1, time, lodLevel, null, machineCurveSegments\(entries\[0\]\.rendered\)\)/, "Instanced templates must match their selected overview LOD and curve detail.");
 assert.match(plant, /state\.cameraMode !== "walk"[\s\S]*single footprint shadow/, "Overview shadows must use stable machine footprints.");
-assert.match(plant, /: machineHasLayoutMotion\(entry\.machine\)/, "Internal component animation must not churn overview shadows.");
+assert.match(plant, /const shadowMoves = machineHasLayoutMotion\(entry\.machine\)/, "Internal component animation must not churn contact shadows in either camera mode.");
 assert.match(performanceController, /return modeConfig\(\)\.maxShadowMachines;/, "Auto performance must keep a stable shadow-caster count.");
 assert.match(performanceController, /slowWindows >= 2 && adaptiveElapsed >= 1200/, "Auto detail reduction must require sustained slow frames.");
 assert.match(performanceController, /fastWindows >= 12 && adaptiveElapsed >= 3000/, "Auto detail recovery must not oscillate rapidly.");

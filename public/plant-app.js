@@ -4573,11 +4573,21 @@
   }
 
   function drawRetainedObject(key, revision, callback) {
+    if (!depthRenderer.available) {
+      callback();
+      return true;
+    }
     const shouldBuild = typeof depthRenderer.beginObject !== "function"
       || depthRenderer.beginObject(key, revision) !== false;
     if (!shouldBuild) return false;
-    callback();
-    depthRenderer.endObject?.();
+    const previousReusableState = recordingReusableGeometry;
+    recordingReusableGeometry = depthRenderer.retained === true;
+    try {
+      callback();
+    } finally {
+      recordingReusableGeometry = previousReusableState;
+      depthRenderer.endObject?.();
+    }
     return true;
   }
 
@@ -5004,7 +5014,7 @@
   }
 
   function line3d(start, end, color, width = 1, alpha = 1) {
-    const clipped = clipLineToWalkNearPlane(start, end);
+    const clipped = recordingReusableGeometry ? [start, end] : clipLineToWalkNearPlane(start, end);
     if (!clipped) return;
     [start, end] = clipped;
     if (depthRenderer.available) {
@@ -6317,7 +6327,7 @@
   }
 
   function drawDesignCylinder(machine, component, design, alpha, grow, topScale = 1) {
-    const count = renderPerformance.cylinderSegments(component.segments || 20);
+    const count = Math.min(designSegmentCap, renderPerformance.cylinderSegments(component.segments || 20));
     const center = [
       Number(component.x)+Number(component.w)/2,
       Number(component.y)+Number(component.h)/2,
@@ -6348,7 +6358,7 @@
   }
 
   function drawDesignSphere(machine, component, design, alpha, grow) {
-    const longitude = Math.max(8, renderPerformance.cylinderSegments(component.segments || 20));
+    const longitude = Math.max(8, Math.min(designSegmentCap, renderPerformance.cylinderSegments(component.segments || 20)));
     const latitude=Math.max(6,Math.round(longitude/2));
     const center=[Number(component.x)+Number(component.w)/2,Number(component.y)+Number(component.h)/2,Number(component.z)+Number(component.d)/2];
     const rings=[];
@@ -6396,18 +6406,44 @@
   }
 
   const staticVisibleDesignComponentsCache = new WeakMap();
-  let animatedVisibleDesignComponentsCache = new WeakMap();
+  const animatedVisibleDesignComponentsCache = new WeakMap();
+  const designRenderPartitionCache = new WeakMap();
+  let designSegmentCap = Infinity;
+
+  function designRenderPartition(design) {
+    if (designRenderPartitionCache.has(design)) return designRenderPartitionCache.get(design);
+    const stationary = [];
+    const moving = [];
+    for (const component of design.components || []) {
+      if (component.visible === false) continue;
+      (designContainsAnimation([component]) ? moving : stationary).push(component);
+    }
+    const result = { stationary: stationary.flatMap(rectangularSplitDesignComponents), moving };
+    designRenderPartitionCache.set(design, result);
+    return result;
+  }
+
+  function sampledMovingComponents(design, time) {
+    // Three bounded distance bands share samples between copies of a design.
+    let samples = animatedVisibleDesignComponentsCache.get(design);
+    if (!samples) {
+      samples = new Map();
+      animatedVisibleDesignComponentsCache.set(design, samples);
+    }
+    const key = `${time}:${state.editing}:${state.previewObjectAnimations}:${state.animationsPaused}:${state.animationTimeOffset}`;
+    if (samples.has(key)) return samples.get(key);
+    const parts = designRenderPartition(design).moving
+      .map((component) => animateDesignComponent(component, time, design))
+      .flatMap(rectangularSplitDesignComponents)
+      .filter((component) => component.visible !== false);
+    if (samples.size >= 4) samples.delete(samples.keys().next().value);
+    samples.set(key, parts);
+    return parts;
+  }
 
   function visibleDesignComponents(design, time) {
     if (designHasAnimation(design)) {
-      if (animatedVisibleDesignComponentsCache.has(design)) return animatedVisibleDesignComponentsCache.get(design);
-      const visible = design.components
-        .filter((component) => component.visible !== false)
-        .map((component) => animateDesignComponent(component, time, design))
-        .flatMap(rectangularSplitDesignComponents)
-        .filter((component) => component.visible !== false);
-      animatedVisibleDesignComponentsCache.set(design, visible);
-      return visible;
+      return [...designRenderPartition(design).stationary, ...sampledMovingComponents(design, time)];
     }
     if (!staticVisibleDesignComponentsCache.has(design)) {
       staticVisibleDesignComponentsCache.set(design, design.components
@@ -6437,17 +6473,20 @@
       .map((index) => components[index]);
   }
 
-  function drawCustomDesign(machine, alpha, grow, time, lodLevel = 3) {
+  function drawCustomDesign(machine, alpha, grow, time, lodLevel = 3, componentsOverride = null, segmentCap = machineCurveSegments(machine)) {
     const design = machine.designId ? designLibrary[machine.designId] : null;
     if (!design || !Array.isArray(design.components)) return false;
     const previousOutlineSuppression = suppressGeometryOutlines;
+    const previousSegmentCap = designSegmentCap;
+    designSegmentCap = segmentCap;
     suppressGeometryOutlines = previousOutlineSuppression || (
       !state.editing
       && !state.selectedMachineIds.has(machine.instanceId)
       && designRenderPartCount(design) > 4
     );
-    const visibleComponents = visibleDesignComponents(design, time);
-    const renderComponents = lodLevel >= 3 ? visibleComponents : representativeDesignComponents(visibleComponents);
+    const visibleComponents = componentsOverride || visibleDesignComponents(design, time);
+    // Distance detail reduces curve tessellation, not the machine's parts.
+    const renderComponents = lodLevel >= 2 ? visibleComponents : representativeDesignComponents(visibleComponents);
     try {
       renderComponents.forEach((component) => {
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
@@ -6463,12 +6502,6 @@
         drawDesignWedge(machine,component,design,componentAlpha,grow);
       } else if (component.type === "beam") {
         drawDesignBeam(machine,component,design,componentAlpha,grow);
-      } else if (component.type === "rollerBed" && lodLevel < 3) {
-        drawDesignBox(machine, {
-          ...component,
-          y: Number(component.y) - Math.max(.05, Number(component.thickness) || .75) / 2,
-          h: Math.max(.1, Number(component.thickness) || 1.5),
-        }, design, componentAlpha, grow);
       } else if (component.type === "rollerBed") {
         const count = Math.max(2, Math.round(Number(component.count) || 10));
         for (let index = 0; index < count; index += 1) {
@@ -6503,6 +6536,7 @@
       return false;
     } finally {
       suppressGeometryOutlines = previousOutlineSuppression;
+      designSegmentCap = previousSegmentCap;
     }
     return true;
   }
@@ -6626,7 +6660,10 @@
       level = walkLevel;
       walkLodHistory.set(machine.instanceId, level);
     }
-    if (level >= 2 && detailedMachineBudgetRemaining <= 0 && minimumOverviewLevel < 2) level = 1;
+    // Every submitted machine keeps recognizable geometry. Offscreen and
+    // behind-camera equipment is still culled before drawing; exhausting the
+    // per-frame budget must not turn visible machines into solid boxes.
+    if (!isFloorFeatureType(machine.type)) level = Math.max(2, level);
     if (level >= 2 && detailedMachineBudgetRemaining > 0) detailedMachineBudgetRemaining -= 1;
     machineLodDecisionCache.set(machine, level);
     return level;
@@ -7292,7 +7329,7 @@
     const entries = [];
     const spatialIndex = currentMachineSpatialIndex();
     const overviewBounds = state.cameraMode === "walk" ? null : overheadViewBounds();
-    const sourceMachines = state.cameraMode === "walk" && spatialIndex
+    const indexedMachines = state.cameraMode === "walk" && spatialIndex
       ? spatialIndex.queryPoint(
           modelCenter()[0] + state.panX,
           modelCenter()[1] + state.panZ,
@@ -7301,13 +7338,17 @@
       : overviewBounds && spatialIndex
         ? spatialIndex.queryBounds(overviewBounds).map((entry) => entry.machine)
         : machines;
+    // Moving machines can enter the view from outside their saved index cell.
+    const sourceMachines = new Set(indexedMachines);
+    machines.forEach((machine) => { if (machineHasLayoutMotion(machine)) sourceMachines.add(machine); });
     for (const machine of sourceMachines) {
       if (machine.visible === false) continue;
       const alpha = stageAlpha(machine.reveal,machine.retire);
       if (alpha <= .01) continue;
+      const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
       let walkDistanceAlpha = 1;
       if (state.cameraMode === "walk") {
-        const distance = firstPersonDistanceToBox(machine);
+        const distance = firstPersonDistanceToBox(rendered);
         const drawDistance = renderPerformance.walkDrawDistance();
         const wasVisible = walkVisibleMachineIds.has(machine.instanceId);
         const visibilityLimit = drawDistance + (wasVisible ? WALK_DRAW_HYSTERESIS : WALK_DRAW_HYSTERESIS * .45);
@@ -7321,17 +7362,12 @@
         const fadeProgress = clamp((distance - fadeStart) / (WALK_DRAW_HYSTERESIS * 2), 0, 1);
         walkDistanceAlpha = 1 - fadeProgress * fadeProgress * (3 - 2 * fadeProgress);
       }
-      const hasLayoutMotion = machineHasLayoutMotion(machine);
-      let rendered = machine;
-      if (hasLayoutMotion) {
-        rendered = animatedMachine(machine, time);
-        if (!projectedBoxVisible(rendered)) continue;
-      } else if (!projectedBoxVisible(machine)) continue;
+      if (!projectedBoxVisible(rendered)) continue;
       entries.push({
         kind: "machine",
         machine,
         rendered,
-        alpha: alpha * walkDistanceAlpha * (Number(rendered.renderAlpha) || 1),
+        alpha: alpha * walkDistanceAlpha * (Number.isFinite(Number(rendered.renderAlpha)) ? Number(rendered.renderAlpha) : 1),
         grow: clamp(state.stageFloat - machine.reveal + 1),
         depth: sceneDepth(rendered.x+rendered.w/2,rendered.z+rendered.d/2),
       });
@@ -7453,7 +7489,8 @@
     const design = rendered.designId ? designLibrary[rendered.designId] : null;
     if (
       state.cameraMode === "walk"
-      && (machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 3)
+      && (!state.selectedMachineIds.has(machine.instanceId)
+        || machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 3)
     ) {
       // Animated component shadows and far-detail shadow pieces can cross one
       // another at walking height. A retained footprint stays grounded and
@@ -7508,7 +7545,8 @@
         .sort((first, second) => (
           Number(second.selected) - Number(first.selected)
           || (state.cameraMode === "walk"
-            ? first.walkDistanceBucket - second.walkDistanceBucket
+            ? (first.walkDistanceBucket - (first.retainedWalkShadow ? 2 : 0))
+              - (second.walkDistanceBucket - (second.retainedWalkShadow ? 2 : 0))
               || Number(second.retainedWalkShadow) - Number(first.retainedWalkShadow)
               || String(first.entry.machine.instanceId).localeCompare(String(second.entry.machine.instanceId))
             : second.screenSpan - first.screenSpan)
@@ -7524,32 +7562,31 @@
     const animatedEntries = [];
     const staticEntries = [];
     normalizedEntries.forEach((entry) => {
-      const design = entry.rendered.designId ? designLibrary[entry.rendered.designId] : null;
-      const shadowMoves = state.cameraMode === "walk"
-        ? machineHasGeometryAnimation(entry.machine, design)
-        : machineHasLayoutMotion(entry.machine);
+      // Internal motion uses a stable contact footprint in both camera modes.
+      const shadowMoves = machineHasLayoutMotion(entry.machine);
       (shadowMoves ? animatedEntries : staticEntries).push(entry);
     });
     const settingsRevision = [
+      state.cameraMode,
       renderPerformance.shadowLayerCount(),
       renderPerformance.maxShadowParts(),
       shadowBudget,
     ].join(":");
     if (staticEntries.length) {
       const revision = `${settingsRevision}|${staticEntries.map(({ machine, rendered, alpha, grow }) => (
-        `${renderedMachineRevision(machine, rendered, alpha, grow)}:${objectRenderIdentity(rendered.designId ? designLibrary[rendered.designId] : null)}`
+        `${renderedMachineRevision(machine, rendered, alpha, grow)}:${objectRenderIdentity(rendered.designId ? designLibrary[rendered.designId] : null)}:${machineLodLevel(rendered)}:${state.selectedMachineIds.has(machine.instanceId)}`
       )).join("|")}`;
       drawRetainedObject("plant:shadows:static", revision, () => {
         staticEntries.forEach(({ machine, rendered, alpha, grow }) => drawMachineShadowCasters(machine, rendered, alpha, grow, time));
       });
     }
     if (animatedEntries.length) {
-      const animationTick = Math.floor(time / (renderPerformance.animationSampleMs?.() || 33));
-      const revision = `${settingsRevision}:${animationTick}|${animatedEntries.map(({ machine, rendered, alpha, grow }) => (
-        renderedMachineRevision(machine, rendered, alpha, grow)
-      )).join("|")}`;
-      drawRetainedObject("plant:shadows:animated", revision, () => {
-        animatedEntries.forEach(({ machine, rendered, alpha, grow }) => drawMachineShadowCasters(machine, rendered, alpha, grow, time));
+      animatedEntries.forEach(({ machine, rendered, alpha, grow }) => {
+        const sampleTime = machineAnimationSampleTime(rendered, time);
+        const shadowMachine = animatedMachine(machine, sampleTime);
+        const revision = `${settingsRevision}:${sampleTime}:${renderedMachineRevision(machine, shadowMachine, alpha, grow)}`;
+        drawRetainedObject(`plant:shadows:moving:${machine.instanceId}`, revision,
+          () => drawMachineShadowCasters(machine, shadowMachine, alpha, grow, sampleTime));
       });
     }
     if (!renderPerformance.pillarShadowsEnabled()) return;
@@ -7569,7 +7606,8 @@
 
   function drawSharedDesignInstances(machineEntries, time) {
     if (
-      typeof depthRenderer.beginTemplate !== "function"
+      !depthRenderer.available
+      || typeof depthRenderer.beginTemplate !== "function"
       || typeof depthRenderer.addGeometryInstances !== "function"
     ) return new Set();
     const groups = new Map();
@@ -7587,7 +7625,7 @@
         || alpha < .985
         || grow < .999
       ) return;
-      const key = `${rendered.designId}:${rendered.color || "#68777a"}:lod-${lodLevel}`;
+      const key = `${rendered.designId}:${rendered.color || "#68777a"}:lod-${lodLevel}:curves-${machineCurveSegments(rendered)}`;
       if (!groups.has(key)) groups.set(key, { key, design, lodLevel, entries: [] });
       groups.get(key).entries.push(entry);
     });
@@ -7624,7 +7662,7 @@
         const previousReusableState = recordingReusableGeometry;
         recordingReusableGeometry = true;
         try {
-          drawCustomDesign(canonical, 1, 1, time, lodLevel);
+          drawCustomDesign(canonical, 1, 1, time, lodLevel, null, machineCurveSegments(entries[0].rendered));
         } finally {
           recordingReusableGeometry = previousReusableState;
           depthRenderer.endTemplate();
@@ -7651,6 +7689,129 @@
       }
     });
     return instancedIds;
+  }
+
+  const machineCurveHistory = new Map();
+  function machineCurveSegments(machine) {
+    const maximum = renderPerformance.cylinderSegments(32);
+    if (state.editing || state.selectedMachineIds.has(machine.instanceId)
+      || renderPerformance.settings?.mode === "quality") return maximum;
+    const span = projectedPixelSpan(machine) / Math.max(.75, renderPerformance.pixelRatio(window.devicePixelRatio));
+    const previous = machineCurveHistory.get(machine.instanceId) || 8;
+    // Hysteresis keeps topology stable while the camera crosses a distance band.
+    const segments = span > (previous > 8 ? 110 : 145) ? maximum : 8;
+    machineCurveHistory.set(machine.instanceId, segments);
+    return segments;
+  }
+
+  function machineAnimationSampleTime(machine, time) {
+    const span = projectedPixelSpan(machine) / Math.max(.75, renderPerformance.pixelRatio(window.devicePixelRatio));
+    const interval = state.selectedMachineIds.has(machine.instanceId) || span > 220
+      ? 1000 / 60 : span > 85 ? 1000 / 30 : 1000 / 20;
+    // Sample the shared clock; never advance an offscreen object's private clock.
+    return state.animationsPaused ? state.animationPausedAt : Math.floor(time / interval) * interval;
+  }
+
+  function affineMatrixFromPoints(origin, x, y, z) {
+    return [
+      x[0]-origin[0], x[1]-origin[1], x[2]-origin[2], 0,
+      y[0]-origin[0], y[1]-origin[1], y[2]-origin[2], 0,
+      z[0]-origin[0], z[1]-origin[1], z[2]-origin[2], 0,
+      origin[0], origin[1], origin[2], 1,
+    ];
+  }
+
+  function designInstanceMatrix(machine, design, component = null) {
+    const base = component || designBaseDimensions(design, machine);
+    const origin = [Number(base.x), Number(base.y), Number(base.z)];
+    const dimensions = component ? [Number(base.w), Number(base.h), Number(base.d)] : [1,1,1];
+    const world = (point) => component
+      ? designPointToWorld(machine, component, design, point)
+      : designLocalPointToWorld(machine, design, point);
+    return affineMatrixFromPoints(world(origin), ...dimensions.map((size, axis) => (
+      world(origin.map((value, index) => value + (axis === index ? size : 0)))
+    )));
+  }
+
+  function recordGeometryTemplate(key, revision, callback) {
+    if (depthRenderer.beginTemplate(key, revision) === false) return;
+    const previous = recordingReusableGeometry;
+    const previousOutlines = suppressGeometryOutlines;
+    recordingReusableGeometry = true;
+    suppressGeometryOutlines = true;
+    try { callback(); } finally {
+      recordingReusableGeometry = previous;
+      suppressGeometryOutlines = previousOutlines;
+      depthRenderer.endTemplate();
+    }
+  }
+
+  function drawProductionDesignInstances(entries, time) {
+    const handled = new Set();
+    if (!depthRenderer.available || !depthRenderer.addGeometryInstances || state.editing) return handled;
+    const batches = new Map();
+    const queue = (key, templateKey, instance, revision) => {
+      if (!batches.has(key)) batches.set(key, { templateKey, instances: [], revisions: [] });
+      const batch = batches.get(key);
+      batch.instances.push(instance);
+      batch.revisions.push(revision);
+    };
+    for (const { machine, rendered, alpha, grow } of entries) {
+      const design = designLibrary[rendered.designId];
+      if (!design || !machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 2
+        || state.selectedMachineIds.has(machine.instanceId) || alpha < .9999 || grow < .9999) continue;
+      const partition = designRenderPartition(design);
+      const segments = machineCurveSegments(rendered);
+      const sampleTime = machineAnimationSampleTime(rendered, time);
+      const base = designBaseDimensions(design, rendered);
+      const placementRevision = renderedMachineRevision(machine, rendered, alpha, grow);
+      const designRevision = objectRenderIdentity(design);
+      if (partition.stationary.length) {
+        const templateKey = `plant:production-static:${rendered.designId}:${rendered.color}:${segments}`;
+        recordGeometryTemplate(templateKey, designRevision, () => {
+          const canonical = { ...rendered, x:0, y:0, renderY:0, z:0, w:base.w, h:base.h, d:base.d,
+            rotation:0, rotationX:0, rotationY:0, rotationZ:0, scaleEditMode:"individual", designScaleMode:"stretch" };
+          drawCustomDesign(canonical, 1, 1, time, 3, partition.stationary, segments);
+        });
+        queue(`${templateKey}:batch`, templateKey, { matrix: designInstanceMatrix(rendered, design) }, placementRevision);
+      }
+      const fallback = [];
+      const moving = sampledMovingComponents(design, sampleTime);
+      moving.forEach((component, index) => {
+        const opacity = Number(component.opacity ?? 1);
+        // These shapes are affine: keep one unit mesh and upload transforms.
+        // Beams, wheels and roller assemblies retain the shape-aware renderer.
+        if (!["box", "glassPanel", "text", "cylinder", "cone", "sphere", "wedge"].includes(component.type)
+          || opacity < .9999 || ![component.w, component.h, component.d].every((value) => Number(value) >= .002)) {
+          fallback.push(component);
+          return;
+        }
+        const color = component.color || rendered.color || "#68777a";
+        const curveCount = Math.min(segments, renderPerformance.cylinderSegments(component.segments || 20));
+        const templateKey = `plant:moving-part:${component.type}:${color}:${curveCount}`;
+        recordGeometryTemplate(templateKey, "unit-v1", () => {
+          const unit = { x:0,y:0,z:0,w:1,h:1,d:1,rotation:0,rotationX:0,rotationY:0,rotationZ:0,
+            scaleEditMode:"individual", designScaleMode:"stretch", color };
+          const part = { ...unit, type:component.type, segments:curveCount };
+          const unitDesign = { base: {x:0,y:0,z:0,w:1,h:1,d:1} };
+          if (["box", "glassPanel", "text"].includes(part.type)) drawDesignBox(unit, part, unitDesign, 1);
+          else if (part.type === "sphere") drawDesignSphere(unit, part, unitDesign, 1, 1);
+          else if (part.type === "wedge") drawDesignWedge(unit, part, unitDesign, 1, 1);
+          else drawDesignCylinder(unit, part, unitDesign, 1, 1, part.type === "cone" ? 0 : 1);
+        });
+        queue(`${templateKey}:batch`, templateKey, { matrix: designInstanceMatrix(rendered, design, component) },
+          `${placementRevision}:${designRevision}:${sampleTime}:${component.id || index}`);
+      });
+      if (fallback.length) {
+        drawRetainedObject(`plant:production-moving:${machine.instanceId}`,
+          `${placementRevision}:${designRevision}:${sampleTime}:${segments}`, () => {
+            drawCustomDesign(rendered, alpha, grow, sampleTime, 3, fallback, segments);
+          });
+      }
+      handled.add(machine.instanceId);
+    }
+    batches.forEach((batch, key) => depthRenderer.addGeometryInstances(key, batch.templateKey, batch.instances, batch.revisions.join("|")));
+    return handled;
   }
 
   // The viewer is drawn on a 2D canvas, so there is no hardware depth buffer.
@@ -7720,6 +7881,7 @@
     }
     const instancedProxyIds = new Set(instancedProxyEntries.map(({ machine }) => machine.instanceId));
     const instancedDesignIds = drawSharedDesignInstances(machineEntries, time);
+    drawProductionDesignInstances(machineEntries, time).forEach((id) => instancedDesignIds.add(id));
     const sceneEntries = [
       ...(useInstancedColumns ? [] : columnEntries),
       ...machineEntries.filter(({ machine }) => !instancedProxyIds.has(machine.instanceId)),
@@ -7733,7 +7895,7 @@
       }
       const { machine, rendered, alpha, grow } = entry;
       const design = rendered.designId ? designLibrary[rendered.designId] : null;
-      const animated = machineHasGeometryAnimation(machine, design);
+      const animated = !instancedDesignIds.has(machine.instanceId) && machineHasGeometryAnimation(machine, design);
       const revision = [
         rendered.x, rendered.y, rendered.z, rendered.w, rendered.h, rendered.d,
         rendered.rotationX, rendered.rotationY ?? rendered.rotation, rendered.rotationZ,
@@ -7742,6 +7904,7 @@
         alpha.toFixed(3), grow.toFixed(3), rendered.crane?.height || "", rendered.crane?.capacity || "",
         animated ? Math.floor(time / (renderPerformance.animationSampleMs?.() || 33)) : "static",
         design ? objectRenderIdentity(design) : "",
+        machineCurveSegments(rendered),
       ].join("|");
       drawRetainedObject(`plant:machine:${machine.instanceId}`, revision, () => {
         drawCrane(rendered,alpha);
@@ -7951,7 +8114,6 @@
     detailedDesignDecisionCache = new WeakMap();
     detailedMachineDecisionCache = new WeakMap();
     machineLodDecisionCache = new WeakMap();
-    animatedVisibleDesignComponentsCache = new WeakMap();
     visibleColumnEntriesCache = null;
     const frameStartedAt = performance.now();
     renderPerformance.beginProfile?.();

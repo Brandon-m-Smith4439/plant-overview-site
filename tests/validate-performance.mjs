@@ -32,7 +32,7 @@ assert.ok(plant.includes("renderPerformance.detailPixelThreshold"), "Small custo
 assert.ok(plant.includes("renderPerformance.maxDetailedParts") && controller.includes("maxDetailedParts"), "Nested custom-machine detail needs a bounded per-frame part budget.");
 assert.ok(plant.includes("shouldDrawDetailedMachine") && controller.includes("maxDetailedMachines"), "Whole-plant rendering needs a zoom-aware machine-detail budget.");
 assert.ok(plant.includes("const cellSize = 40") && plant.includes("const tested = new Set()"), "Layout overlap detection needs a spatial broad phase instead of all-pairs checks.");
-assert.ok(plant.includes("} else if (!projectedBoxVisible(machine)) continue;"), "Static off-screen machines must be rejected without animation cloning.");
+assert.ok(plant.includes("const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;") && plant.includes("if (!projectedBoxVisible(rendered)) continue;"), "Static off-screen machines must be rejected without animation cloning, and moving machines must use current bounds.");
 assert.ok(plant.includes("projectedBoundsCache") && plant.includes("projectedBoxMetrics"), "Repeated object-bound projections must be cached within each rendered frame.");
 assert.match(plant, /shouldRender\([\s\S]*?\)\) return;\s*projectedBoundsCache = new WeakMap\(\);/, "Skipped frames must not allocate a new projection cache.");
 assert.ok(plant.includes("staticVisibleDesignComponentsCache") && plant.includes("animatedVisibleDesignComponentsCache") && plant.includes("designAnimationPresenceCache"), "Static designs, animated frame results, and animation presence must be cached.");

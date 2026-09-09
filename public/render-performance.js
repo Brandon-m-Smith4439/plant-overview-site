@@ -126,7 +126,13 @@
     let benchmark = null;
     let benchmarkResult = null;
     let benchmarkButton = null;
+    let stabilityButton = null;
     let benchmarkStatusNode = null;
+    let previousFrameAt = null;
+    let cadenceTotal = 0;
+    let cadenceCount = 0;
+    let gpuTotal = 0;
+    let gpuCount = 0;
 
     function modeConfig() {
       return MODES[settings.mode] || MODES.auto;
@@ -232,6 +238,7 @@
 
     function targetFps(activity = {}) {
       const config = modeConfig();
+      if (benchmark) return config.interactionFps;
       if (activity.interacting || performance.now() < interactionUntil) return config.interactionFps;
       if (activity.animating) return config.animationFps;
       return config.idleFps;
@@ -290,6 +297,8 @@
       const finished = benchmark;
       benchmark = null;
       const durations = finished.samples.map((sample) => sample.durationMs);
+      const intervals = finished.samples.map((sample) => sample.intervalMs).filter((value) => value !== null);
+      const counters = finished.samples.map((sample) => sample.renderer || {});
       const wallTimeMs = Math.max(1, performance.now() - finished.startedAt);
       const phaseTotals = Object.create(null);
       finished.samples.forEach((sample) => Object.entries(sample.phases || {}).forEach(([name, duration]) => {
@@ -306,6 +315,15 @@
         fps: finished.samples.length * 1000 / wallTimeMs,
         averageFrameMs: durations.reduce((total, value) => total + value, 0) / Math.max(1, durations.length),
         p95FrameMs: percentile(durations, .95),
+        // CPU submission and actual frame cadence are different measurements.
+        p95IntervalMs: percentile(intervals, .95),
+        p99IntervalMs: percentile(intervals, .99),
+        onePercentLowFps: percentile(intervals, .99) > 0 ? 1000 / percentile(intervals, .99) : null,
+        peakGeometries: Math.max(0, ...counters.map((sample) => sample.geometries || 0)),
+        geometryBuildsDuringRun: (counters.at(-1)?.geometryBuilds || 0) - (counters[0]?.geometryBuilds || 0),
+        contextLossesDuringRun: (counters.at(-1)?.contextLosses || 0) - (counters[0]?.contextLosses || 0),
+        geometryResourceGrowth: (counters.at(-1)?.geometries || 0) - (counters[0]?.geometries || 0),
+        gpuTimingSupported: rendererStats?.gpuTimingSupported === true,
         maximumFrameMs: Math.max(0, ...durations),
         phases: averagePhases,
         renderer: rendererStats ? { ...rendererStats } : null,
@@ -318,8 +336,9 @@
         benchmarkButton.disabled = false;
         benchmarkButton.textContent = "Run 10-second benchmark";
       }
+      if (stabilityButton) stabilityButton.disabled = false;
       if (benchmarkStatusNode) {
-        benchmarkStatusNode.textContent = `${benchmarkResult.fps.toFixed(1)} FPS | ${benchmarkResult.averageFrameMs.toFixed(1)} ms average | ${benchmarkResult.p95FrameMs.toFixed(1)} ms p95`;
+        benchmarkStatusNode.textContent = `${benchmarkResult.fps.toFixed(1)} FPS | ${benchmarkResult.averageFrameMs.toFixed(1)} ms CPU | ${benchmarkResult.p95IntervalMs.toFixed(1)} ms p95 frame interval`;
       }
       updateStatus();
       return benchmarkResult;
@@ -329,14 +348,16 @@
       if (benchmark) return false;
       benchmark = {
         startedAt: performance.now(),
-        durationMs: Math.max(1000, Number(durationMs) || 10000),
+        durationMs: clamp(Number(durationMs) || 10000, 1000, 60000),
         samples: [],
       };
       benchmarkResult = null;
+      previousFrameAt = null;
       if (benchmarkButton) {
         benchmarkButton.disabled = true;
         benchmarkButton.textContent = "Benchmark running...";
       }
+      if (stabilityButton) stabilityButton.disabled = true;
       if (benchmarkStatusNode) benchmarkStatusNode.textContent = "Move or orbit the view while the benchmark runs.";
       invalidate();
       return true;
@@ -355,20 +376,26 @@
 
     function recordFrame(durationMs) {
       if (!Number.isFinite(durationMs) || durationMs < 0) return;
+      const now = performance.now();
+      const intervalMs = previousFrameAt === null ? null : Math.max(0, now - previousFrameAt);
+      previousFrameAt = now;
       const completedProfile = finishProfile();
       if (benchmark) {
         benchmark.samples.push({
           at: performance.now() - benchmark.startedAt,
           durationMs,
+          intervalMs,
           phases: { ...completedProfile },
           renderer: rendererStats ? { ...rendererStats } : null,
         });
         if (performance.now() - benchmark.startedAt >= benchmark.durationMs) completeBenchmark();
       }
       sampleTotal += durationMs;
+      // Ignore idle/background gaps for adaptation, but retain them in a benchmark.
+      if (intervalMs !== null && intervalMs < 250) { cadenceTotal += intervalMs; cadenceCount += 1; }
+      if (Number.isFinite(rendererStats?.gpuMs)) { gpuTotal += rendererStats.gpuMs; gpuCount += 1; }
       sampleCount += 1;
       fpsFrameCount += 1;
-      const now = performance.now();
       if (now - fpsWindowStart >= 1000) {
         measuredFps = fpsFrameCount * 1000 / Math.max(1, now - fpsWindowStart);
         fpsFrameCount = 0;
@@ -377,12 +404,16 @@
       }
       if (settings.mode !== "auto" || sampleCount < 12) return;
       const average = sampleTotal / sampleCount;
+      const cadence = cadenceCount ? cadenceTotal / cadenceCount : 0;
+      const gpuAverage = gpuCount ? gpuTotal / gpuCount : 0;
       sampleTotal = 0;
       sampleCount = 0;
-      if (average > 18.5) {
+      cadenceTotal = 0; cadenceCount = 0; gpuTotal = 0; gpuCount = 0;
+      const pressure = Math.max(average, gpuAverage, cadence > 22 ? cadence : 0);
+      if (pressure > 18.5) {
         slowWindows += 1;
         fastWindows = 0;
-      } else if (average < 13) {
+      } else if (average < 13 && gpuAverage < 13 && cadence < 19) {
         fastWindows += 1;
         slowWindows = 0;
       } else {
@@ -391,11 +422,9 @@
       }
       const adaptiveElapsed = now - lastAdaptiveChangeAt;
       if (slowWindows >= 2 && adaptiveElapsed >= 1200) {
-        const severe = average > 34;
-        const sceneHeavy = Number(rendererStats?.calls) > 120
-          || Number(rendererStats?.triangles) > 180000
-          || Number(phaseAverages.get("machines")) > Number(phaseAverages.get("gpu"));
-        const resolutionStep = sceneHeavy ? (severe ? .08 : .04) : (severe ? .16 : .09);
+        const severe = pressure > 34;
+        const sceneHeavy = average > 18.5 && average >= gpuAverage;
+        const resolutionStep = sceneHeavy ? 0 : (severe ? .16 : .09);
         const complexityStep = sceneHeavy ? (severe ? .25 : .14) : (severe ? .14 : .08);
         currentPixelRatioCap = clamp(currentPixelRatioCap - resolutionStep, 0.75, MODES.auto.pixelRatioCap);
         currentComplexityScale = clamp(currentComplexityScale - complexityStep, .35, 1);
@@ -437,7 +466,7 @@
           .map(([name, duration]) => `${name} ${duration.toFixed(1)}ms`)
           .join(" · ");
         const gpu = rendererStats
-          ? `${rendererStats.renderer || "renderer"} · ${rendererStats.calls || 0} calls · ${rendererStats.triangles || 0} tris · ${rendererStats.retainedObjects || 0} cached · ${rendererStats.instances || 0} instances`
+          ? `${rendererStats.renderer || "renderer"} · ${rendererStats.calls || 0} calls · ${rendererStats.triangles || 0} tris · ${rendererStats.retainedObjects || 0} cached · ${rendererStats.instances || 0} instances · ${rendererStats.geometries || 0} buffers · GPU ${Number.isFinite(rendererStats.gpuMs) ? `${rendererStats.gpuMs.toFixed(1)}ms` : "timing unavailable"}`
           : "Renderer metrics become available after the first frame.";
         diagnosticsNode.textContent = `${gpu}${phases ? `\nCPU · ${phases}` : ""}`;
       }
@@ -494,6 +523,7 @@
         <p class="render-performance-diagnostics" data-performance-diagnostics></p>
         <div class="render-performance-benchmark-actions">
           <button type="button" data-performance-benchmark>Run 10-second benchmark</button>
+          <button type="button" data-performance-stability>Run 60-second stability check</button>
           <button type="button" data-performance-export disabled>Export result</button>
         </div>
         <p class="render-performance-benchmark-status" data-performance-benchmark-status>No benchmark recorded yet.</p>
@@ -507,6 +537,7 @@
       statusNode = panel.querySelector("[data-performance-status]");
       diagnosticsNode = panel.querySelector("[data-performance-diagnostics]");
       benchmarkButton = panel.querySelector("[data-performance-benchmark]");
+      stabilityButton = panel.querySelector("[data-performance-stability]");
       benchmarkStatusNode = panel.querySelector("[data-performance-benchmark-status]");
       const exportButton = panel.querySelector("[data-performance-export]");
       const mode = panel.querySelector("[data-performance-mode]");
@@ -526,6 +557,7 @@
       shadows.addEventListener("change", () => applySettings({ shadows: shadows.value }));
       showFps.addEventListener("change", () => applySettings({ showFps: showFps.checked }));
       benchmarkButton.addEventListener("click", () => startBenchmark(10000));
+      stabilityButton.addEventListener("click", () => startBenchmark(60000));
       exportButton.addEventListener("click", exportBenchmark);
       window.addEventListener("renderbenchmarkcomplete", () => { exportButton.disabled = !benchmarkResult; });
       updateStatus();

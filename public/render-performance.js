@@ -99,6 +99,7 @@
   }
 
   function createRenderPerformanceController() {
+    let disposed = false;
     const settings = loadSettings();
     let dirty = true;
     let interactionUntil = 0;
@@ -115,6 +116,7 @@
     let fpsWindowStart = performance.now();
     let panel = null;
     let fpsBadge = null;
+    let alwaysShowFps = false;
     let statusNode = null;
     let diagnosticsNode = null;
     let activeProfile = null;
@@ -128,6 +130,7 @@
     let benchmarkButton = null;
     let stabilityButton = null;
     let benchmarkStatusNode = null;
+    let benchmarkCompleteListener = null;
     let previousFrameAt = null;
     let cadenceTotal = 0;
     let cadenceCount = 0;
@@ -245,6 +248,7 @@
     }
 
     function shouldRender(time, activity = {}) {
+      if (disposed) return false;
       if (document.hidden) return false;
       const forced = dirty || activity.force === true;
       const continuouslyActive = Boolean(benchmark)
@@ -266,10 +270,12 @@
     }
 
     function invalidate() {
+      if (disposed) return;
       dirty = true;
     }
 
     function noteInteraction(duration = 180) {
+      if (disposed) return;
       interactionUntil = Math.max(interactionUntil, performance.now() + duration);
       dirty = true;
     }
@@ -375,6 +381,7 @@
     }
 
     function recordFrame(durationMs) {
+      if (disposed) return;
       if (!Number.isFinite(durationMs) || durationMs < 0) return;
       const now = performance.now();
       const intervalMs = previousFrameAt === null ? null : Math.max(0, now - previousFrameAt);
@@ -431,9 +438,11 @@
         slowWindows = 0;
         lastAdaptiveChangeAt = now;
         invalidate();
-        const notify = () => window.dispatchEvent(new CustomEvent("renderperformancechange", {
-          detail: { ...settings, adaptive: true },
-        }));
+        const notify = () => {
+          if (!disposed) window.dispatchEvent(new CustomEvent("renderperformancechange", {
+            detail: { ...settings, adaptive: true },
+          }));
+        };
         if (typeof queueMicrotask === "function") queueMicrotask(notify);
         else notify();
       } else if (fastWindows >= 12 && adaptiveElapsed >= 3000) {
@@ -442,9 +451,11 @@
         fastWindows = 0;
         lastAdaptiveChangeAt = now;
         invalidate();
-        const notify = () => window.dispatchEvent(new CustomEvent("renderperformancechange", {
-          detail: { ...settings, adaptive: true },
-        }));
+        const notify = () => {
+          if (!disposed) window.dispatchEvent(new CustomEvent("renderperformancechange", {
+            detail: { ...settings, adaptive: true },
+          }));
+        };
         if (typeof queueMicrotask === "function") queueMicrotask(notify);
         else notify();
       }
@@ -457,7 +468,7 @@
       const text = `${MODES[settings.mode].label} · ${Math.round(measuredFps || config.animationFps)} FPS · ${pixelRatio(window.devicePixelRatio).toFixed(2)}×${detailText} · shadows ${shadowText}`;
       if (statusNode) statusNode.textContent = text;
       if (fpsBadge) {
-        fpsBadge.hidden = !settings.showFps;
+        fpsBadge.hidden = !(alwaysShowFps || settings.showFps);
         fpsBadge.textContent = `${Math.round(measuredFps || config.animationFps)} FPS`;
       }
       if (diagnosticsNode) {
@@ -486,6 +497,15 @@
 
     function mount(frame, optionsOverride = {}) {
       if (!frame || panel) return panel;
+      alwaysShowFps = optionsOverride.alwaysShowFps === true;
+      if (optionsOverride.showControls === false) {
+        fpsBadge = document.createElement("div");
+        fpsBadge.className = "render-fps-badge";
+        fpsBadge.hidden = !alwaysShowFps;
+        frame.appendChild(fpsBadge);
+        updateStatus();
+        return fpsBadge;
+      }
       const buttonHost = optionsOverride.buttonHost || frame.querySelector(".model-controls") || frame;
       const button = document.createElement("button");
       button.type = "button";
@@ -559,16 +579,44 @@
       benchmarkButton.addEventListener("click", () => startBenchmark(10000));
       stabilityButton.addEventListener("click", () => startBenchmark(60000));
       exportButton.addEventListener("click", exportBenchmark);
-      window.addEventListener("renderbenchmarkcomplete", () => { exportButton.disabled = !benchmarkResult; });
+      benchmarkCompleteListener = () => { exportButton.disabled = !benchmarkResult; };
+      window.addEventListener("renderbenchmarkcomplete", benchmarkCompleteListener);
       updateStatus();
       return panel;
     }
 
+    const handleVisibilityChange = () => { if (!document.hidden) invalidate(); };
     window.addEventListener("resize", invalidate);
     window.addEventListener("focus", invalidate);
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) invalidate(); });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("input", invalidate, true);
     document.addEventListener("change", invalidate, true);
+
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      benchmark = null;
+      window.removeEventListener("resize", invalidate);
+      window.removeEventListener("focus", invalidate);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("input", invalidate, true);
+      document.removeEventListener("change", invalidate, true);
+      if (benchmarkCompleteListener) {
+        window.removeEventListener("renderbenchmarkcomplete", benchmarkCompleteListener);
+      }
+      panel?.remove();
+      fpsBadge?.remove();
+      panel = null;
+      fpsBadge = null;
+      statusNode = null;
+      diagnosticsNode = null;
+      benchmarkButton = null;
+      stabilityButton = null;
+      benchmarkStatusNode = null;
+      rendererStats = null;
+      activeProfile = null;
+      phaseAverages.clear();
+    }
 
     return {
       settings,
@@ -595,6 +643,7 @@
       startBenchmark,
       exportBenchmark,
       mount,
+      dispose,
       get measuredFps() { return measuredFps; },
       get benchmarkResult() { return benchmarkResult ? { ...benchmarkResult } : null; },
     };

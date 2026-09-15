@@ -109,7 +109,8 @@ def main() -> None:
     ]
     for feature in required_editor_features:
         assert feature in script, feature
-    assert "const color = blendHexColors(colors.steel, colors.yellow, painted);" in script
+    assert "const painted = paintProgress(state.paint.columnStageId, 3);" in script
+    assert "const color = blendHexColors(state.paint.columnBefore, state.paint.columnAfter, painted);" in script
     assert "box({ x:x-size/2,z:z-size/2,w:size,d:size,h:22,color });" in script
 
     for asset in ("plant-data.js", "machine-data.js", "plant-app.js"):

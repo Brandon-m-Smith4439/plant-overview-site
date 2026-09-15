@@ -12,6 +12,7 @@ assert.equal(packageJson.dependencies.three, "0.160.1", "Three.js must be a repr
 assert.match(loader, /await import\("three"\)/, "the application must load Three.js before legacy renderer scripts");
 assert.match(retainedRenderer, /powerPreference:\s*"high-performance"/, "the retained renderer should request the high-performance GPU");
 assert.match(retainedRenderer, /function beginObject/, "the renderer must retain individual scene objects");
+assert.match(retainedRenderer, /CACHE_RETENTION_MS/, "stale renderer resources must expire by elapsed time when FPS is low");
 assert.match(retainedRenderer, /InstancedMesh/, "the renderer must support hardware instancing");
 assert.match(retainedRenderer, /getStats/, "the renderer must expose diagnostic counters");
 assert.match(retainedRenderer, /scratchEuler\.set\(\.\.\.instanceEulerRadians\(instance\)\)/, "instanced geometry must use the plant-to-Three rotation conversion");
@@ -23,6 +24,8 @@ assert.match(plant, /addBoxInstances\("plant:structural-columns"/, "plant pillar
 assert.match(plant, /addBoxInstances\("plant:machine-lod-proxies"/, "distant machine proxies should render as an instanced batch");
 assert.match(plant, /function machineLodLevel/, "plant rendering must use multi-level detail");
 assert.match(plant, /minimumOverviewLevel/, "overview LOD must preserve recognizable machine detail");
+assert.match(plant, /transitioningStaticEntries/, "timeline transitions must not rebuild every settled machine shadow");
+assert.match(plant, /cachedProductionInstanceMatrix/, "sampled production animations must reuse unchanged transform matrices");
 assert.match(plant, /currentMachineSpatialIndex/, "first-person visibility should use the shared spatial index");
 assert.match(plant, /currentWalkSpatialIndex/, "first-person collision should use the shared spatial index");
 assert.match(designer, /designGeometrySignature/, "Designer geometry should retain unchanged scene data");

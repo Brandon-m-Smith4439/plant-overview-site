@@ -5,15 +5,25 @@ import vm from "node:vm";
 const source = fs.readFileSync(new URL("../public/render-performance.js", import.meta.url), "utf8");
 let now = 16;
 const listeners = new Map();
+function addListener(key, listener) {
+  if (!listeners.has(key)) listeners.set(key, new Set());
+  listeners.get(key).add(listener);
+}
+function removeListener(key, listener) {
+  listeners.get(key)?.delete(listener);
+  if (!listeners.get(key)?.size) listeners.delete(key);
+}
 const context = {
   window: {
-    addEventListener(type, listener) { listeners.set(type, listener); },
+    addEventListener(type, listener) { addListener(`window:${type}`, listener); },
+    removeEventListener(type, listener) { removeListener(`window:${type}`, listener); },
     dispatchEvent() {},
     devicePixelRatio: 1,
   },
   document: {
     hidden: false,
-    addEventListener(type, listener) { listeners.set(type, listener); },
+    addEventListener(type, listener) { addListener(`document:${type}`, listener); },
+    removeEventListener(type, listener) { removeListener(`document:${type}`, listener); },
   },
   localStorage: {
     getItem() { return null; },
@@ -59,5 +69,10 @@ assert.equal(benchmarkController.benchmarkResult.p95FrameMs,3,"CPU submission re
 assert.equal(benchmarkController.benchmarkResult.p95IntervalMs,40,"frame cadence must expose stalls hidden by short CPU submissions");
 assert.equal(benchmarkController.benchmarkResult.onePercentLowFps,25);
 assert.equal(benchmarkController.benchmarkResult.gpuTimingSupported,false,"unsupported GPU timing must be explicit");
+
+controller.dispose();
+gpuController.dispose();
+benchmarkController.dispose();
+assert.equal(listeners.size, 0, "Disposed route controllers must release every global invalidation listener.");
 
 console.log("On-demand static rendering and interaction redraw checks passed.");

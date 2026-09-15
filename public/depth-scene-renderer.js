@@ -127,6 +127,7 @@
         addPolygon() {},
         addLine() {},
         render() {},
+        dispose() {},
       };
     }
 
@@ -142,6 +143,7 @@
         addPolygon() {},
         addLine() {},
         render() {},
+        dispose() {},
       };
     }
 
@@ -162,6 +164,7 @@
     const packedTransparent = [];
     const lineGroups = new Map();
     let available = true;
+    let disposed = false;
     let framesUntilValidationEnds = 3;
 
     function disableRenderer(reason, error = null) {
@@ -177,10 +180,11 @@
       }
     }
 
-    canvas.addEventListener?.("webglcontextlost", (event) => {
+    const onContextLost = (event) => {
       event.preventDefault();
       disableRenderer("The WebGL graphics context was lost. Continuing with the compatible 2D renderer.");
-    });
+    };
+    canvas.addEventListener?.("webglcontextlost", onContextLost);
 
     function beginFrame(nextWidth, nextHeight, projectFunction) {
       if (!available) return;
@@ -365,12 +369,31 @@
       }
     }
 
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      available = false;
+      canvas.removeEventListener?.("webglcontextlost", onContextLost);
+      try { gl.finish?.(); } catch {}
+      if (buffer) gl.deleteBuffer(buffer);
+      if (program) gl.deleteProgram(program);
+      gl.getExtension?.("WEBGL_lose_context")?.loseContext?.();
+      opaqueTriangles.length = 0;
+      transparentTriangles.length = 0;
+      lines.length = 0;
+      lineGroups.clear();
+      canvas.width = 1;
+      canvas.height = 1;
+      program = null;
+    }
+
     return {
       get available() { return available; },
       beginFrame,
       addPolygon,
       addLine,
       render,
+      dispose,
     };
   }
 

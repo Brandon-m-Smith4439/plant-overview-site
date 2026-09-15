@@ -9,6 +9,7 @@ const page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8"
 const studioPage = fs.readFileSync(new URL("../app/machine-studio/page.tsx", import.meta.url), "utf8");
 
 assert.ok(controller.includes("createRenderPerformanceController"), "Shared adaptive renderer controller is missing.");
+assert.ok(controller.includes("function dispose()"), "Shared performance controllers must clean up after route changes.");
 assert.ok(controller.includes("animationFps: 60"), "Active render modes should target 60 FPS.");
 assert.ok(controller.includes("interactionFps: 60"), "Interactive camera movement should target a smooth display rate.");
 assert.ok(controller.includes("pixelRatioCap: 1.2"), "Auto render-resolution cap is missing.");
@@ -20,7 +21,8 @@ assert.ok(renderer.includes("uploadArray.subarray"), "WebGL uploads must reuse t
 assert.ok(renderer.includes("packedOpaque.length = 0") && renderer.includes("packedTransparent.length = 0"), "Packed vertex arrays must be reused across frames.");
 assert.ok(!renderer.includes('powerPreference: "high-performance"') && !renderer.includes("desynchronized: true"), "WebGL startup must avoid graphics-driver-specific context flags that can leave Windows systems with a black viewport.");
 assert.ok(renderer.includes("webglcontextlost") && renderer.includes("get available()"), "The renderer must fall back to the compatible 2D path if the graphics context fails.");
-assert.ok(plant.includes('addEventListener("plant-renderer-fallback"') && studio.includes('addEventListener("plant-renderer-fallback"'), "Both viewports must redraw immediately after switching to the compatible renderer.");
+assert.ok(renderer.includes("WEBGL_lose_context") && renderer.includes("dispose"), "Compatible renderers must release their WebGL context during route teardown.");
+assert.ok(plant.includes('addLifecycleListener(window, "plant-renderer-fallback"') && studio.includes('addLifecycleListener(window, "plant-renderer-fallback"'), "Both viewports must redraw immediately after switching to the compatible renderer.");
 assert.ok(!renderer.includes("lines.sort("), "Depth-tested line batches should not pay for an unused CPU depth sort.");
 assert.ok(renderer.includes("colorCache"), "Repeated CSS color parsing should be cached.");
 assert.ok(plant.includes("renderPerformance.shouldRender"), "Plant render loop is not frame-budgeted.");

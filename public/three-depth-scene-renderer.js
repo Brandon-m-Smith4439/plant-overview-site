@@ -103,6 +103,13 @@
     const gpuQueries = [];
     let gpuMs = null;
     let stats = { renderer: "three-retained", calls: 0, triangles: 0, lines: 0, retainedObjects: 0, instances: 0, instanceUploads: 0 };
+    let frameTime = 0;
+    const CACHE_RETENTION_FRAMES = 180;
+    // Frame-count-only eviction creates a feedback loop on a struggling scene:
+    // at 15 FPS an obsolete resource survived four times longer than at 60 FPS.
+    // Keep the old frame guard for deterministic/offline rendering, but also
+    // retire unused timeline and LOD resources after a fixed wall-clock window.
+    const CACHE_RETENTION_MS = 3500;
 
     const scratchPosition = new THREE.Vector3();
     const scratchOffset = new THREE.Vector3();
@@ -359,6 +366,9 @@
     function beginFrame(nextWidth, nextHeight, project, view = {}) {
       if (disposed) return;
       frame += 1;
+      frameTime = typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
       const nextW = Math.max(1, Math.round(nextWidth || 1));
       const nextH = Math.max(1, Math.round(nextHeight || 1));
       if (nextW !== width || nextH !== height || !resizeCount) {
@@ -384,6 +394,7 @@
         cacheHits += 1;
         existing.used = true;
         existing.lastUsed = frame;
+        existing.lastUsedAt = frameTime;
         existing.group.visible = true;
         current = transient;
         return false;
@@ -403,7 +414,14 @@
       const group = updateGroup(current.previousGroup, current);
       group.visible = true;
       scene.add(group);
-      retained.set(current.key, { revision: current.revision, group, record: current, used: true, lastUsed: frame });
+      retained.set(current.key, {
+        revision: current.revision,
+        group,
+        record: current,
+        used: true,
+        lastUsed: frame,
+        lastUsedAt: frameTime,
+      });
       current = transient;
     }
 
@@ -413,6 +431,7 @@
       if (existing && existing.revision === String(revision)) {
         existing.used = true;
         existing.lastUsed = frame;
+        existing.lastUsedAt = frameTime;
         current = transient;
         return false;
       }
@@ -431,7 +450,13 @@
         return;
       }
       const group = buildGroup(current);
-      templates.set(current.templateKey, { revision: current.revision, group, used: true, lastUsed: frame });
+      templates.set(current.templateKey, {
+        revision: current.revision,
+        group,
+        used: true,
+        lastUsed: frame,
+        lastUsedAt: frameTime,
+      });
       current = transient;
     }
 
@@ -473,7 +498,7 @@
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
       scene.add(mesh);
-      const entry = { key, capacity, mesh, revision: null, used: true, lastUsed: frame };
+      const entry = { key, capacity, mesh, revision: null, used: true, lastUsed: frame, lastUsedAt: frameTime };
       instanceBatches.set(key, entry);
       return entry;
     }
@@ -524,6 +549,7 @@
         entry.mesh.visible = true;
         entry.used = true;
         entry.lastUsed = frame;
+        entry.lastUsedAt = frameTime;
         return false;
       }
       boxes.forEach((box, index) => {
@@ -548,6 +574,7 @@
       entry.revision = revisionKey;
       entry.used = true;
       entry.lastUsed = frame;
+      entry.lastUsedAt = frameTime;
       instanceUploads += 1;
       return true;
     }
@@ -597,6 +624,7 @@
         meshes,
         used: true,
         lastUsed: frame,
+        lastUsedAt: frameTime,
       };
       geometryInstanceBatches.set(key, entry);
       return entry;
@@ -608,6 +636,7 @@
       if (!template) return false;
       template.used = true;
       template.lastUsed = frame;
+      template.lastUsedAt = frameTime;
       let entry = geometryInstanceBatches.get(key);
       if (
         !entry
@@ -636,7 +665,13 @@
       entry.group.visible = true;
       entry.used = true;
       entry.lastUsed = frame;
+      entry.lastUsedAt = frameTime;
       return true;
+    }
+
+    function cacheEntryExpired(entry) {
+      return frame - entry.lastUsed > CACHE_RETENTION_FRAMES
+        || frameTime - (entry.lastUsedAt ?? frameTime) > CACHE_RETENTION_MS;
     }
 
     function render() {
@@ -647,24 +682,24 @@
         if (!transientGroup.parent) scene.add(transientGroup);
       } else if (transientGroup) transientGroup.visible = false;
       retained.forEach((entry, key) => {
-        if (!entry.used && frame - entry.lastUsed > 180) {
+        if (!entry.used && cacheEntryExpired(entry)) {
           disposeGroup(entry.group);
           retained.delete(key);
         }
       });
       templates.forEach((entry, key) => {
-        if (!entry.used && frame - entry.lastUsed > 180) {
+        if (!entry.used && cacheEntryExpired(entry)) {
           invalidateTemplate(key);
         }
       });
       geometryInstanceBatches.forEach((entry, key) => {
-        if (!entry.used && frame - entry.lastUsed > 180) {
+        if (!entry.used && cacheEntryExpired(entry)) {
           disposeGeometryInstanceBatch(entry);
           geometryInstanceBatches.delete(key);
         }
       });
       instanceBatches.forEach((entry, key) => {
-        if (!entry.used && frame - entry.lastUsed > 180) {
+        if (!entry.used && cacheEntryExpired(entry)) {
           scene.remove(entry.mesh);
           entry.mesh.dispose();
           entry.mesh.geometry.dispose();
@@ -744,7 +779,15 @@
       opaqueMaterial.dispose();
       transparentMaterial.dispose();
       lineMaterial.dispose();
+      // A client-side route change can otherwise leave the retired Designer
+      // WebGL context resident until garbage collection. Explicitly return it
+      // before the Plant Overview creates its own high-performance context.
+      try { gl?.finish?.(); } catch {}
+      renderer.forceContextLoss?.();
+      renderer.renderLists?.dispose?.();
       renderer.dispose();
+      canvas.width = 1;
+      canvas.height = 1;
     }
 
     return {

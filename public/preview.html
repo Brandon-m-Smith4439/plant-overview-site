@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Editable 3D construction timeline for the Monroe glass plant.">
   <title>Monroe Glass Plant Evolution · v0.13.0</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="plant-icon.png" type="image/png" sizes="512x512">
+  <link rel="apple-touch-icon" href="plant-icon.png">
   <link rel="stylesheet" href="../app/globals.css">
 </head>
 <body>
@@ -16,14 +19,13 @@
       </div>
       <div class="masthead-actions">
         <nav class="site-nav" aria-label="Model tools"><a class="active" href="preview.html">Plant layout</a><a href="machine-studio.html">Machine Design Studio</a></nav>
-        <p class="source-note">Model Studio <strong>v0.13.0</strong> · Grounded in <strong>Monroe Archs w Updates 1-23-25 (002).dwg</strong></p>
+        <p class="source-note">Model Studio <strong>v0.13.0</strong></p>
       </div>
     </header>
 
     <section id="plant-app" class="experience" aria-label="Interactive glass plant model">
       <div class="model-frame">
         <canvas id="plant-canvas" aria-label="Interactive 3D model of the Monroe glass plant"></canvas>
-        <div class="model-badge">Editable · DXF-grounded footprint</div>
         <div class="view-help">Right-drag orbit · Middle-drag pan · Wheel zoom</div>
       </div>
       <aside class="stage-panel" aria-live="polite">
@@ -43,6 +45,7 @@
       <ol id="timeline-stages"><li class="active"><button type="button">Empty shell</button></li></ol>
     </nav>
   </main>
+  <script src="editor-access.js"></script>
   <script src="depth-scene-renderer.js"></script>
   <script src="three-depth-scene-renderer.js"></script>
   <script src="render-performance.js"></script>

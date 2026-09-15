@@ -3,11 +3,27 @@
   const equipmentData = window.PLANT_MACHINE_DATA;
   const canvas = document.getElementById("plant-canvas");
   if (!canvas || !data || !equipmentData) return;
+  const VIEWPORT_RUNTIME_KEY = "__MONROE_ACTIVE_VIEWPORT_RUNTIME__";
+  const previousViewportRuntime = window[VIEWPORT_RUNTIME_KEY];
+  if (previousViewportRuntime?.dispose) {
+    try { previousViewportRuntime.dispose(); }
+    catch (error) { console.warn("The previous plant viewport could not be fully released.", error); }
+  }
+  const viewportRuntimeToken = {};
   let applicationActive = true;
   let animationFrameId = 0;
   let geometryPreparedFrame = 0;
+  const lifecycleListeners = [];
+  function addLifecycleListener(target, type, listener, options) {
+    target?.addEventListener?.(type, listener, options);
+    lifecycleListeners.push(() => target?.removeEventListener?.(type, listener, options));
+  }
+  function removeLifecycleListeners() {
+    lifecycleListeners.splice(0).forEach((remove) => remove());
+  }
 
   const ctx = canvas.getContext("2d");
+  const modelFrame = canvas.closest(".model-frame");
   const timelineEngine = window.MachineAnimationTimeline || null;
   const sceneCanvas = window.createDepthCanvas?.(canvas, "depth-scene-canvas plant-depth-canvas") || null;
   const depthRenderer = sceneCanvas && window.createDepthSceneRenderer
@@ -33,135 +49,144 @@
       renderPerformance.invalidate?.("geometry-prepared");
     });
   };
-  window.addEventListener("plant-renderer-fallback", handleRendererFallback);
-  window.addEventListener("plantgeometryprepared", handleGeometryPrepared);
+  addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
+  addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
   const defaultStages = [
     {
       title: "Empty shell",
       short: "Empty shell",
       era: "Starting point",
-      description: "The production floor begins as an open industrial shell. The footprint, column locations, and production zones are grounded in the glass-plant areas of the facility drawing.",
+      description: "Before equipment arrives, the glass-production footprint is a clear industrial shell. The CAD-derived floor bounds and structural grid establish the scale, working lanes, and future production zones that guide every stage that follows.",
       details: ["Open floor", "Unfinished columns", "CAD footprint"],
     },
     {
       title: "Trenches dug",
       short: "Trenches",
       era: "Underground work",
-      description: "Utility trenches cut across the future equipment lanes, establishing routes for power, air, water, and process connections before the floor is restored.",
+      description: "Crews open the concrete along planned equipment corridors so utilities can reach each future work center. These trenches define the hidden network for electrical power, compressed air, process water, drainage, and machine connections.",
       details: ["Floor opened", "Utility routes", "Machine drops"],
     },
     {
       title: "Utilities set",
       short: "Utilities",
       era: "Infrastructure",
-      description: "Underground services are placed and the trenches are closed. Marked connection points remain ready for the tempering, cutting, and material-handling equipment.",
+      description: "The underground services are installed, tested, and covered as the production floor is restored. Clearly located connection points remain ready for cutting, tempering, filtration, and material-handling equipment without reopening major sections of concrete.",
       details: ["Services placed", "Floor patched", "Drops marked"],
     },
     {
       title: "Walls painted",
       short: "Paint",
       era: "Interior finish",
-      description: "The plant shell changes from raw industrial surfaces to a brighter finished workspace, and every structural pillar receives a full-height yellow finish.",
+      description: "The unfinished shell begins to read as a purpose-built production space. Fresh wall finishes brighten the work area, improve visual consistency, and create a cleaner background for equipment, safety markings, and daily operations.",
       details: ["Bright walls", "Full yellow pillars", "Finished shell"],
     },
     {
       title: "Safety yellow",
       short: "Safety yellow",
       era: "Visual safety",
-      description: "Aisles, impact zones, and equipment clearances are marked after the pillars have been fully painted yellow.",
+      description: "High-visibility finishes and floor markings establish the plant's safety language. Travel aisles, impact areas, equipment clearances, and structural hazards become easier to recognize before production traffic begins.",
       details: ["Aisle markings", "Impact zones", "Protected clearances"],
     },
     {
       title: "Crane runways set",
       short: "Crane steel",
       era: "Material handling",
-      description: "Blue GORBEL runway steel is set over the processing lanes. The heavy-equipment bay receives the separate 5-ton bridge structure documented in the installation photos.",
+      description: "Blue GORBEL runway steel is erected above the processing lanes to support safe glass handling at each work center. The heavy-equipment bay receives its separate 5-ton bridge structure, matching the installation sequence documented in the project photos.",
       details: ["Blue runways", "GORBEL bridges", "5-ton bay"],
     },
     {
       title: "Barefoot tables set",
       short: "Barefoot",
       era: "Machine 1 of 8",
-      description: "The Barefoot cutting tables are placed in the western production area using the drawing’s Barefoot label and its 3 x 6 and 4 x 9 table callouts.",
+      description: "The Barefoot cutting tables become the first major processing equipment placed in the western production area. Their positions follow the drawing's named Barefoot location and the 3 × 6 and 4 × 9 table callouts, establishing the beginning of the cutting workflow.",
       details: ["DWG named", "Cutting tables", "West production area"],
     },
     {
       title: "SQ4020 waterjet set",
       short: "Waterjet",
       era: "Machine 2 of 8",
-      description: "The SQ4020 waterjet appears at its named DWG installation detail. Its cutting table, abrasive tank, pump connection, and controller envelope follow the drawing coordinates.",
+      description: "The SQ4020 waterjet is set at its named installation location in the facility drawing. The cutting table, abrasive system, pump connection, and controller are arranged as one coordinated cell so shaped-glass processing can join the main production flow.",
       details: ["DWG named", "SQ4020", "Cutout station"],
     },
     {
       title: "Waterjet filtration set",
       short: "Filtration",
       era: "Machine 3 of 8",
-      description: "The waterjet pump, table tanks, abrasive-removal equipment, and controller are added as their own installation step beside the SQ4020.",
+      description: "The supporting filtration and water-management equipment is installed beside the SQ4020. Pumps, table tanks, abrasive-removal components, and controls complete the utility loop required for reliable waterjet operation.",
       details: ["DWG named", "Pump & tanks", "Water treatment"],
     },
     {
       title: "Kodiak 10-45 set",
       short: "Kodiak",
       era: "Machine 4 of 8",
-      description: "The Kodiak 10-45 is installed beneath its 1,000-lb GORBEL bridge. The machine identity comes directly from the photos; the location is correlated to the compact CAD equipment cluster.",
+      description: "The Kodiak 10-45 is positioned beneath its 1,000-lb GORBEL bridge, giving operators overhead assistance for moving heavy glass. The equipment identity is photo-confirmed and its placement is correlated to the compact machine cluster shown in the facility plan.",
       details: ["Photo identified", "CAD correlated", "GORBEL 1000 lb"],
     },
     {
       title: "Denver Surface #1 set",
       short: "Denver #1",
       era: "Machine 5 of 8",
-      description: "The first Denver Surface unit is added at the western repeated equipment footprint beside the drawing’s roller-replacement clearance.",
+      description: "The first Denver Surface unit is installed at the western repeated equipment footprint. Its working envelope respects the roller-replacement clearance shown in the drawing while the overhead bridge supports glass loading and service access.",
       details: ["Photo identified", "Repeated CAD footprint", "GORBEL 1000 lb"],
     },
     {
       title: "Denver Surface #2 set",
       short: "Denver #2",
       era: "Machine 6 of 8",
-      description: "The second Denver Surface unit is added independently at the eastern copy of the same CAD footprint, matching the paired installation seen in the photos.",
+      description: "A second Denver Surface unit is added at the eastern copy of the same planned footprint. Together, the paired machines expand edge-processing capacity while retaining independent crane coverage and maintenance clearance.",
       details: ["Second unit", "Mirrored placement", "Own crane bridge"],
     },
     {
       title: "Tempering furnace set",
       short: "Furnace",
       era: "Machine 7 of 8",
-      description: "The tempering furnace oven is assembled from the multi-truck delivery beneath the yellow 5-ton bridge. Its model position follows the DWG oven-layer block cluster.",
+      description: "The tempering furnace is assembled from its multi-truck delivery beneath the yellow 5-ton bridge. Its long process line follows the oven-layer block cluster in the facility drawing, creating the plant's central heat-treatment path.",
       details: ["Oven CAD layers", "8-truck arrival", "5-ton bridge"],
     },
     {
       title: "Fuze Cube set",
       short: "Fuze Cube",
       era: "Machine 8 of 8",
-      description: "The Fuze Cube is installed at the point directly named in the facility drawing, east of the core processing line.",
+      description: "The Fuze Cube is installed at its directly named location east of the core processing line. This dedicated finishing station adds another specialized operation while remaining connected to the plant's established glass-handling route.",
       details: ["DWG named", "Exact drawing anchor", "Dedicated bridge"],
     },
     {
       title: "First raw glass",
       short: "Raw glass",
       era: "Material arrival",
-      description: "The first sheets of raw glass arrive and populate the storage racks. Material flow can now be traced from receiving through the newly installed equipment.",
+      description: "The first raw glass sheets arrive and begin filling the storage racks, turning the completed installation into an active material system. For the first time, the route from receiving and storage through cutting, processing, and tempering can be followed across the floor.",
       details: ["Raw lites", "Storage racks", "Material flow"],
     },
     {
       title: "Plant offices built",
       short: "Plant offices",
       era: "Support spaces",
-      description: "Plant-floor support offices and quality spaces are completed within the glass operation, adding the daily coordination points needed for startup.",
+      description: "Plant-floor offices, quality areas, and team support spaces are completed inside the glass operation. These rooms provide the nearby coordination, inspection, and production support needed to move from equipment installation into controlled startup.",
       details: ["Floor offices", "Quality space", "Team support"],
     },
     {
       title: "First production",
       short: "First production",
       era: "Startup",
-      description: "The line comes alive. Glass advances through the production sequence, status beacons switch on, and the plant reaches its first working output.",
+      description: "The line comes alive as glass advances through the coordinated production sequence for the first time. Operators, material-handling equipment, and status systems work together to produce the plant's first completed output and validate the new process.",
       details: ["Line active", "First output", "Startup team"],
     },
     {
       title: "Plant today",
       short: "Today",
       era: "Current state",
-      description: "The glass plant operates as a connected system: incoming glass, cutting, tempering, storage, quality, and production support working across one floor.",
+      description: "Today the glass plant operates as one connected production system. Incoming raw glass, storage, cutting, specialty processing, tempering, quality checks, and plant support are linked across the floor in the layout developed through every earlier stage.",
       details: ["Full operation", "Connected flow", "Current plant"],
     },
+  ];
+
+  const legacyStageDescriptionPrefixes = [
+    "The production floor begins", "Utility trenches cut", "Underground services are placed",
+    "The plant shell changes", "Aisles, impact zones", "Blue GORBEL runway steel",
+    "The Barefoot cutting tables", "The SQ4020 waterjet appears", "The waterjet pump",
+    "The Kodiak 10-45 is installed", "The first Denver Surface unit", "The second Denver Surface unit",
+    "The tempering furnace oven", "The Fuze Cube is installed", "The first sheets of raw glass",
+    "Plant-floor support offices", "The line comes alive", "The glass plant operates",
   ];
 
   const cadBounds = data.bounds;
@@ -176,6 +201,7 @@
   const OLDER_STORAGE_KEY = "monroe-glass-plant-layout-v4";
   const OLDEST_STORAGE_KEY = "monroe-glass-plant-layout-v3";
   const BACKUP_STORAGE_KEY = "monroe-glass-plant-layout-v6-backup";
+  const VIEWER_PREFERENCES_KEY = "monroe-glass-plant-viewer-preferences-v1";
   const MIGRATION_BACKUP_KEY = "monroe-glass-plant-layout-v5-before-v0.4";
   const DESIGN_STORAGE_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
   const SYNC_CHANNEL_NAME = "monroe-glass-plant-sync-v1";
@@ -198,7 +224,60 @@
   };
   const WALL_IDS = ["west", "east", "south", "north-west", "north-east"];
   const defaultWalls = Object.fromEntries(WALL_IDS.map((id) => [id, true]));
+  const defaultPaintSettings = Object.freeze({
+    wallStageId: "stage-4",
+    columnStageId: "stage-4",
+    wallBefore: "#a6aaa7",
+    wallAfter: "#e9e7df",
+    columnBefore: "#596365",
+    columnAfter: "#e3ad28",
+  });
+  const defaultRoofSettings = Object.freeze({
+    enabled: true,
+    overviewVisible: false,
+    splitPercent: 50,
+    leftHeight: 50,
+    rightHeight: 75,
+    trussSpacing: 24,
+    roofColor: "#79878b",
+    trussColor: "#11181c",
+  });
   const defaultDesignLibrary = window.PLANT_MACHINE_DESIGNS || {};
+
+  function normalizePaintSettings(value) {
+    const color = (candidate, fallback) => /^#[0-9a-f]{6}$/i.test(String(candidate || "")) ? String(candidate) : fallback;
+    return {
+      wallStageId: String(value?.wallStageId || defaultPaintSettings.wallStageId),
+      columnStageId: String(value?.columnStageId || defaultPaintSettings.columnStageId),
+      wallBefore: color(value?.wallBefore, defaultPaintSettings.wallBefore),
+      wallAfter: color(value?.wallAfter, defaultPaintSettings.wallAfter),
+      columnBefore: color(value?.columnBefore, defaultPaintSettings.columnBefore),
+      columnAfter: color(value?.columnAfter, defaultPaintSettings.columnAfter),
+    };
+  }
+
+  function normalizeRoofSettings(value) {
+    const color = (candidate, fallback) => /^#[0-9a-f]{6}$/i.test(String(candidate || "")) ? String(candidate) : fallback;
+    return {
+      enabled: value?.enabled !== false,
+      overviewVisible: value?.overviewVisible === true,
+      splitPercent: clamp(Number(value?.splitPercent) || defaultRoofSettings.splitPercent, 10, 90),
+      leftHeight: clamp(Number(value?.leftHeight) || defaultRoofSettings.leftHeight, 25, 140),
+      rightHeight: clamp(Number(value?.rightHeight) || defaultRoofSettings.rightHeight, 25, 140),
+      trussSpacing: clamp(Number(value?.trussSpacing) || defaultRoofSettings.trussSpacing, 10, 80),
+      roofColor: color(value?.roofColor, defaultRoofSettings.roofColor),
+      trussColor: color(value?.trussColor, defaultRoofSettings.trussColor),
+    };
+  }
+
+  function loadViewerPreferences() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(VIEWER_PREFERENCES_KEY) || "null");
+      return { labelTextMode: saved?.labelTextMode === "abbreviated" ? "abbreviated" : saved?.labelTextMode === "off" ? "off" : "full" };
+    } catch {
+      return { labelTextMode: "full" };
+    }
+  }
 
   function normalizeFloor(value) {
     return {
@@ -617,11 +696,16 @@
       showLabel: machine.showLabel !== false,
       labelUseMachineName: labelUsesMachineName,
       labelText: labelUsesMachineName ? "" : String(machine.labelText || machine.name || "Object"),
+      labelAbbreviation: String(machine.labelAbbreviation || "").trim(),
       labelTextColor: /^#[0-9a-f]{6}$/i.test(String(machine.labelTextColor || "")) ? machine.labelTextColor : "#ffffff",
       labelBackgroundColor: /^#[0-9a-f]{6}$/i.test(String(machine.labelBackgroundColor || "")) ? machine.labelBackgroundColor : "#141c20",
       labelSizePercent: clamp(Number(machine.labelSizePercent) || 100, 50, 250),
       labelFontWeight: ["regular", "semibold", "bold"].includes(machine.labelFontWeight) ? machine.labelFontWeight : "semibold",
       labelUppercase: machine.labelUppercase === true,
+      labelAnchorXPercent: clamp(Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50, 0, 100),
+      labelAnchorYPercent: clamp(Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100, 0, 100),
+      labelAnchorZPercent: clamp(Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50, 0, 100),
+      labelHeightOffset: clamp(Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4, 0, 60),
       category: machine.category || objectCategory(machine.type),
       designId: machine.designId || defaultDesignForType(machine.type),
       designScaleMode: normalizedDesignScaleMode(machine.designScaleMode || (isFloorFeatureType(machine.type) ? "stretch" : "preserve")),
@@ -913,15 +997,26 @@
 
   function normalizeStages(stageList) {
     const source = Array.isArray(stageList) && stageList.length ? stageList : defaultStages;
-    return source.map((stage,index) => ({
-      id: stage.id || `stage-${index + 1}`,
-      title: stage.title || `Stage ${index + 1}`,
-      short: stage.short || stage.title || `Stage ${index + 1}`,
-      era: stage.era || "Project phase",
-      dateLabel: stage.dateLabel || "",
-      description: stage.description || "",
-      details: Array.isArray(stage.details) ? stage.details : [],
-    }));
+    return source.map((stage,index) => {
+      const template = defaultStages[index];
+      const id = stage.id || `stage-${index + 1}`;
+      const isBuiltIn = Boolean(template) && (id === `stage-${index + 1}` || stage.title === template.title);
+      const legacyPrefix = legacyStageDescriptionPrefixes[index];
+      const shouldRefreshDescription = isBuiltIn && (!stage.description || (legacyPrefix && stage.description.startsWith(legacyPrefix)));
+      return {
+        id,
+        title: stage.title || `Stage ${index + 1}`,
+        short: stage.short || stage.title || `Stage ${index + 1}`,
+        era: stage.era || "Project phase",
+        dateLabel: stage.dateLabel || "",
+        description: shouldRefreshDescription ? template.description : (stage.description || ""),
+        details: Array.isArray(stage.details) ? stage.details : [],
+      };
+    });
+  }
+
+  function normalizeStageDuration(value) {
+    return clamp(Math.round((Number(value) || 5) / 5) * 5, 5, 120);
   }
 
   function loadLayout() {
@@ -937,7 +1032,10 @@
           hiddenColumnKeys: Array.isArray(current.hiddenColumnKeys) ? current.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(current.columnOverrides),
           walls: { ...defaultWalls, ...(current.walls || {}) },
+          paint: normalizePaintSettings(current.paint),
+          roof: normalizeRoofSettings(current.roof),
           playbackSpeed: Number(current.playbackSpeed) || 1,
+          stageDurationSeconds: normalizeStageDuration(current.stageDurationSeconds),
         };
       }
       const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -955,7 +1053,10 @@
           hiddenColumnKeys: Array.isArray(legacy.hiddenColumnKeys) ? legacy.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(legacy.columnOverrides),
           walls: { ...defaultWalls, ...(legacy.walls || {}) },
+          paint: normalizePaintSettings(legacy.paint),
+          roof: normalizeRoofSettings(legacy.roof),
           playbackSpeed: Number(legacy.playbackSpeed) || 1,
+          stageDurationSeconds: normalizeStageDuration(legacy.stageDurationSeconds),
         };
       }
       const older = JSON.parse(localStorage.getItem(OLDER_STORAGE_KEY) || "null");
@@ -969,7 +1070,10 @@
           hiddenColumnKeys: Array.isArray(older.hiddenColumnKeys) ? older.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(older.columnOverrides),
           walls: { ...defaultWalls, ...(older.walls || {}) },
+          paint: normalizePaintSettings(older.paint),
+          roof: normalizeRoofSettings(older.roof),
           playbackSpeed: Number(older.playbackSpeed) || 1,
+          stageDurationSeconds: normalizeStageDuration(older.stageDurationSeconds),
         };
       }
       const oldest = JSON.parse(localStorage.getItem(OLDEST_STORAGE_KEY) || "null");
@@ -983,7 +1087,10 @@
           hiddenColumnKeys: Array.isArray(oldest.hiddenColumnKeys) ? oldest.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(oldest.columnOverrides),
           walls: { ...defaultWalls, ...(oldest.walls || {}) },
+          paint: normalizePaintSettings(oldest.paint),
+          roof: normalizeRoofSettings(oldest.roof),
           playbackSpeed: 1,
+          stageDurationSeconds: 5,
         };
       }
     } catch (error) {
@@ -998,7 +1105,10 @@
       hiddenColumnKeys: [],
       columnOverrides: {},
       walls: { ...defaultWalls },
+      paint: normalizePaintSettings(defaultPaintSettings),
+      roof: normalizeRoofSettings(defaultRoofSettings),
       playbackSpeed: 1,
+      stageDurationSeconds: 5,
     };
   }
 
@@ -1036,6 +1146,7 @@
     panZ: 0,
   });
 
+  const viewerPreferences = loadViewerPreferences();
   const state = {
     yaw: OVERVIEW_CAMERA.yaw,
     pitch: OVERVIEW_CAMERA.pitch,
@@ -1063,8 +1174,9 @@
     pointerX: 0,
     pointerY: 0,
     showCad: false,
-    showLabels: true,
+    showLabels: viewerPreferences.labelTextMode !== "off",
     labelMode: "smart",
+    labelTextMode: viewerPreferences.labelTextMode,
     playing: false,
     playAt: 0,
     editing: false,
@@ -1074,6 +1186,7 @@
     snapSize: 0.1,
     spacePressed: false,
     playbackSpeed: savedLayout.playbackSpeed,
+    stageDurationSeconds: savedLayout.stageDurationSeconds,
     history: [],
     future: [],
     dragSnapshot: null,
@@ -1085,6 +1198,8 @@
     hiddenColumns: new Set(savedLayout.hiddenColumns),
     hiddenColumnKeys: new Set(savedLayout.hiddenColumnKeys || []),
     walls: savedLayout.walls,
+    paint: normalizePaintSettings(savedLayout.paint),
+    roof: normalizeRoofSettings(savedLayout.roof),
     previewObjectAnimations: false,
     animationsPaused: false,
     animationPausedAt: 0,
@@ -1095,6 +1210,8 @@
   };
 
   let firstPersonController = null;
+  let openFirstPersonOptions = () => {};
+  let showWalkthroughInvitation = () => {};
   let walkReturnView = null;
   let walkStartedFullscreen = false;
   const WALK_DRAW_HYSTERESIS = 32;
@@ -1151,7 +1268,8 @@
           "name", "short", "type", "x", "y", "z", "w", "d", "h",
           "naturalW", "naturalD", "naturalH", "scaleXPercent", "scaleYPercent", "scaleZPercent", "scaleEditMode",
           "rotationX", "rotationY", "rotationZ", "rotation", "color", "visible", "locked", "showLabel", "useDesignName",
-          "labelUseMachineName", "labelText", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase",
+          "labelUseMachineName", "labelText", "labelAbbreviation", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase",
+          "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset",
         ];
         synchronizedFields.forEach((field) => {
           if (incoming[field] !== undefined && String(machine[field] ?? "") !== String(incoming[field] ?? "")) {
@@ -1222,7 +1340,10 @@
       hiddenColumnKeys: [...state.hiddenColumnKeys],
       columnOverrides: clone(columnOverrides),
       walls: clone(state.walls),
+      paint: clone(state.paint),
+      roof: clone(state.roof),
       playbackSpeed: state.playbackSpeed,
+      stageDurationSeconds: state.stageDurationSeconds,
     };
   }
 
@@ -1244,7 +1365,10 @@
     columnOverridesRevision += 1;
     invalidateStructuralColumns();
     state.walls = { ...defaultWalls, ...(snapshot.walls || {}) };
+    state.paint = normalizePaintSettings(snapshot.paint);
+    state.roof = normalizeRoofSettings(snapshot.roof);
     state.playbackSpeed = Number(snapshot.playbackSpeed) || 1;
+    state.stageDurationSeconds = normalizeStageDuration(snapshot.stageDurationSeconds);
     state.stage = clamp(state.stage, 0, stages.length - 1);
     state.stageFloat = state.stage;
     const availableIds = new Set(machines.map((item) => item.instanceId));
@@ -1295,7 +1419,10 @@
         hiddenColumnKeys: [...state.hiddenColumnKeys],
         columnOverrides,
         walls: state.walls,
+        paint: state.paint,
+        roof: state.roof,
         playbackSpeed: state.playbackSpeed,
+        stageDurationSeconds: state.stageDurationSeconds,
       }));
       try { syncChannel?.postMessage({ source: "plant-layout", type: "layout-updated", at: Date.now() }); } catch (error) { console.warn("Layout update could not be broadcast.", error); }
     } catch (error) {
@@ -1320,6 +1447,7 @@
         machine.labelUseMachineName = true;
         machine.labelText = "";
       }
+      if (resetCustom) machine.labelAbbreviation = "";
     });
     persistLayout();
     renderPerformance.invalidate();
@@ -2522,6 +2650,9 @@
       if (field === "labelText") {
         input.value = machine.labelUseMachineName === false ? String(machine.labelText || "") : machine.name;
         input.placeholder = machine.name;
+      } else if (field === "labelAbbreviation") {
+        input.value = String(machine.labelAbbreviation || "");
+        input.placeholder = compactMachineLabel(machine, machineLabelProfile(machine));
       } else input.value = String(machine[field] ?? "");
     });
     panel.querySelectorAll("[data-label-check]").forEach((input) => {
@@ -2704,6 +2835,12 @@
     panel.querySelectorAll("[data-column-grid-field]").forEach((input) => {
       input.value = String(columnGrid[input.dataset.columnGridField]);
     });
+    panel.querySelectorAll("[data-roof-field]").forEach((input) => {
+      input.value = String(state.roof[input.dataset.roofField]);
+    });
+    panel.querySelectorAll("[data-roof-check]").forEach((input) => {
+      input.checked = Boolean(state.roof[input.dataset.roofCheck]);
+    });
     const autoColumns = panel.querySelector("[data-column-grid-check='autoExtend']");
     if (autoColumns) autoColumns.checked = columnGrid.autoExtend !== false;
     structuralColumns();
@@ -2776,6 +2913,19 @@
     });
     panel.querySelectorAll("[data-wall-id]").forEach((input) => {
       input.checked = state.walls[input.dataset.wallId] !== false;
+    });
+    panel.querySelectorAll("[data-paint-stage]").forEach((input) => {
+      const field = input.dataset.paintStage;
+      input.innerHTML = stages.map((stage, index) => (
+        `<option value="${escapeHtml(stage.id)}">${String(index + 1).padStart(2, "0")} · ${escapeHtml(stage.short)}</option>`
+      )).join("");
+      const requested = state.paint[field];
+      input.value = stages.some((stage) => stage.id === requested)
+        ? requested
+        : (stages[Math.min(3, stages.length - 1)]?.id || stages[0]?.id || "");
+    });
+    panel.querySelectorAll("[data-paint-color]").forEach((input) => {
+      input.value = state.paint[input.dataset.paintColor];
     });
 
     const objectSearch = panel.querySelector("[data-object-search]");
@@ -2913,6 +3063,7 @@
     if (stages.length <= 2) return;
     pushHistory();
     const removed = state.stage;
+    const removedStageId = stages[removed]?.id;
     stages.splice(removed, 1);
     machines.forEach((machine) => {
       if (machine.reveal === removed) machine.reveal = Math.max(0, removed - 1);
@@ -2922,6 +3073,9 @@
     });
     state.stage = clamp(removed, 0, stages.length - 1);
     state.stageFloat = state.stage;
+    const replacementPaintStageId = stages[state.stage]?.id || stages[0]?.id;
+    if (state.paint.wallStageId === removedStageId) state.paint.wallStageId = replacementPaintStageId;
+    if (state.paint.columnStageId === removedStageId) state.paint.columnStageId = replacementPaintStageId;
     persistLayout();
     buildTimeline();
     setStage(state.stage);
@@ -2957,7 +3111,9 @@
       hiddenColumnKeys: [...state.hiddenColumnKeys],
       columnOverrides,
       walls: state.walls,
+      paint: state.paint,
       playbackSpeed: state.playbackSpeed,
+      stageDurationSeconds: state.stageDurationSeconds,
     };
     downloadJson(payload, `monroe-glass-plant-layout-v${APP_VERSION}.json`);
     showToast("Layout JSON exported.");
@@ -3000,7 +3156,9 @@
       columnOverridesRevision += 1;
       invalidateStructuralColumns();
       state.walls = { ...defaultWalls, ...(payload.walls || {}) };
+      state.paint = normalizePaintSettings(payload.paint);
       state.playbackSpeed = Number(payload.playbackSpeed) || 1;
+      state.stageDurationSeconds = normalizeStageDuration(payload.stageDurationSeconds);
       state.stage = clamp(state.stage, 0, stages.length - 1);
       state.stageFloat = state.stage;
       clearMachineSelection();
@@ -3035,6 +3193,12 @@
   }
 
   function setEditing(enabled) {
+    if (enabled && !state.editing && !window.monroeEditorAccess?.hasAccess?.()) {
+      window.monroeEditorAccess?.requestAccess?.().then((granted) => {
+        if (granted) setEditing(true);
+      });
+      return;
+    }
     state.editing = enabled;
     state.playing = false;
     state.previewObjectAnimations = !enabled;
@@ -3049,7 +3213,9 @@
     if (button) {
       button.classList.toggle("active",enabled);
       button.setAttribute("aria-pressed",String(enabled));
-      button.textContent = enabled ? "Close editor" : "Edit layout";
+      button.setAttribute("aria-label", enabled ? "Close layout editor" : "Edit layout");
+      button.dataset.tooltip = enabled ? "Close layout editor" : "Edit layout";
+      button.innerHTML = enabled ? "&#10005;" : "&#9998;";
     }
     if (play) play.hidden = enabled;
     if (enabled) {
@@ -3059,6 +3225,13 @@
     requestAnimationFrame(() => updateCanvasSize(true));
     updateEditorHelp();
     updateEditorPanel();
+  }
+
+  function navigateAfterPlantRelease(target) {
+    teardownPlantApplication();
+    // Allow queued GPU commands and context-loss cleanup to finish before the
+    // Designer requests another hardware context in this browser process.
+    window.setTimeout(() => window.location.assign(target), 120);
   }
 
   function createEditorPanel(frame) {
@@ -3244,14 +3417,22 @@
           <legend>Layout label</legend>
           <p data-label-source-summary>Select one object to edit its label.</p>
           <label class="wide">Label text<input type="text" data-label-field="labelText" data-needs-selection placeholder="Uses the machine name"></label>
+          <label class="wide">Abbreviated label<input type="text" data-label-field="labelAbbreviation" data-needs-selection placeholder="Automatically shortened when left blank"></label>
           <div class="label-format-grid">
             <label>Text color<input type="color" data-label-field="labelTextColor" data-needs-selection value="#ffffff"></label>
             <label>Background<input type="color" data-label-field="labelBackgroundColor" data-needs-selection value="#141c20"></label>
             <label>Size (%)<input type="number" data-label-field="labelSizePercent" data-needs-selection min="50" max="250" step="5" value="100"></label>
             <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
           </div>
+          <div class="label-pointer-grid">
+            <label>Pointer X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="5" value="50"></label>
+            <label>Pointer Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="5" value="100"></label>
+            <label>Pointer Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="5" value="50"></label>
+            <label>Label offset (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="1" value="4"></label>
+          </div>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
+            <button type="button" data-editor-action="center-label-pointer" data-needs-selection>Center pointer</button>
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
@@ -3404,6 +3585,23 @@
           </div>
           <p class="floor-limit-note">Supported range: 40–5,000 ft. Grid spacing adapts automatically on large floors.</p>
         </fieldset>
+        <fieldset class="roof-controls">
+          <legend>Roof and truss configuration</legend>
+          <p>The left section uses the lower roof height; the right section begins at the split point and uses the higher roof.</p>
+          <div class="roof-checks">
+            <label><input type="checkbox" data-roof-check="enabled"> Roof enabled in first person</label>
+            <label><input type="checkbox" data-roof-check="overviewVisible"> Show roof in overview</label>
+          </div>
+          <div class="roof-control-grid">
+            <label>Split from left (%)<input type="number" min="10" max="90" step="5" data-roof-field="splitPercent"></label>
+            <label>Left height (ft)<input type="number" min="25" max="140" step="1" data-roof-field="leftHeight"></label>
+            <label>Right height (ft)<input type="number" min="25" max="140" step="1" data-roof-field="rightHeight"></label>
+            <label>Truss spacing (ft)<input type="number" min="10" max="80" step="1" data-roof-field="trussSpacing"></label>
+            <label>Roof color<input type="color" data-roof-field="roofColor"></label>
+            <label>Truss color<input type="color" data-roof-field="trussColor"></label>
+          </div>
+          <button type="button" data-editor-action="roof-defaults">Restore 50 / 75 ft roof defaults</button>
+        </fieldset>
         <fieldset class="column-grid-controls">
           <legend>Automatic structural columns</legend>
           <label class="column-grid-toggle"><input type="checkbox" data-column-grid-check="autoExtend" checked> Extend the CAD column grid into new floor sections</label>
@@ -3413,6 +3611,19 @@
           </div>
           <p data-column-grid-summary>Column grid ready.</p>
           <button type="button" data-editor-action="column-grid-defaults">Restore 40 × 30 ft CAD bay spacing</button>
+        </fieldset>
+        <fieldset class="paint-controls">
+          <legend>Paint schedule and colors</legend>
+          <p>Choose when the finish transitions happen and the colors shown before and after each stage.</p>
+          <div class="paint-control-grid">
+            <label class="paint-stage-field">Walls painted at<select data-paint-stage="wallStageId"></select></label>
+            <label>Wall before<input type="color" data-paint-color="wallBefore"></label>
+            <label>Wall after<input type="color" data-paint-color="wallAfter"></label>
+            <label class="paint-stage-field">Pillars painted at<select data-paint-stage="columnStageId"></select></label>
+            <label>Pillar before<input type="color" data-paint-color="columnBefore"></label>
+            <label>Pillar after<input type="color" data-paint-color="columnAfter"></label>
+          </div>
+          <button type="button" data-editor-action="paint-defaults">Restore paint defaults</button>
         </fieldset>
         <fieldset class="wall-controls">
           <legend>Exterior wall sections</legend>
@@ -3572,7 +3783,11 @@
       const standalone = /preview\.html$/i.test(window.location.pathname);
       const target = standalone ? "machine-studio.html" : "/machine-studio";
       const query = machine ? `?machine=${encodeURIComponent(machine.instanceId)}` : "";
-      window.open(`${target}${query}`, "_blank", "noopener");
+      // Keep the editor and viewer in one tab. Opening a second tab left the
+      // original full plant renderer resident on the GPU; returning from the
+      // Designer then created another complete plant renderer and could cut
+      // the foreground viewport to roughly 12 FPS on integrated graphics.
+      navigateAfterPlantRelease(`${target}${query}`);
     });
     panel.querySelector("[data-editor-action='sync-design-dimensions']")?.addEventListener("click", () => {
       const machine = selectedMachine();
@@ -3760,10 +3975,18 @@
           const value = input.value.trim();
           machine.labelUseMachineName = !value || value === machine.name;
           machine.labelText = machine.labelUseMachineName ? "" : value;
+        } else if (field === "labelAbbreviation") {
+          machine.labelAbbreviation = input.value.trim();
         } else if (["labelTextColor", "labelBackgroundColor"].includes(field)) {
           if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
         } else if (field === "labelSizePercent") {
           machine.labelSizePercent = clamp(Number(input.value) || 100, 50, 250);
+        } else if (["labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent"].includes(field)) {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine[field] = clamp(value, 0, 100);
+        } else if (field === "labelHeightOffset") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelHeightOffset = clamp(value, 0, 60);
         } else if (field === "labelFontWeight") {
           machine.labelFontWeight = ["regular", "semibold", "bold"].includes(input.value) ? input.value : "semibold";
         }
@@ -3789,10 +4012,23 @@
       pushHistory();
       machine.labelUseMachineName = true;
       machine.labelText = "";
+      machine.labelAbbreviation = "";
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
       showToast(`Label reset to ${machine.name}.`);
+    });
+    panel.querySelector("[data-editor-action='center-label-pointer']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      if (!machine || selectedMachines().length !== 1) return;
+      pushHistory();
+      machine.labelAnchorXPercent = 50;
+      machine.labelAnchorYPercent = 100;
+      machine.labelAnchorZPercent = 50;
+      machine.labelHeightOffset = 4;
+      persistLayout();
+      updateEditorPanel();
+      showToast("Label pointer centered above the machine.");
     });
     panel.querySelector("[data-editor-action='refresh-labels']")?.addEventListener("click", () => {
       pushHistory();
@@ -3927,6 +4163,41 @@
       showToast("CAD column spacing restored to 40 × 30 ft.");
     });
 
+    panel.querySelectorAll("[data-roof-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const field = input.dataset.roofField;
+        pushHistory();
+        if (["roofColor", "trussColor"].includes(field)) {
+          if (/^#[0-9a-f]{6}$/i.test(input.value)) state.roof[field] = input.value;
+        } else {
+          const ranges = {
+            splitPercent: [10, 90], leftHeight: [25, 140], rightHeight: [25, 140], trussSpacing: [10, 80],
+          };
+          const [minimum, maximum] = ranges[field] || [0, 500];
+          state.roof[field] = clamp(Number(input.value) || state.roof[field], minimum, maximum);
+        }
+        persistLayout();
+        updateEditorPanel();
+        showToast("Roof configuration updated.");
+      });
+    });
+    panel.querySelectorAll("[data-roof-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        pushHistory();
+        state.roof[input.dataset.roofCheck] = input.checked;
+        persistLayout();
+        updateEditorPanel();
+        showToast(input.dataset.roofCheck === "enabled" ? (input.checked ? "Roof enabled." : "Roof removed.") : (input.checked ? "Roof shown in the overview." : "Roof hidden from the overview."));
+      });
+    });
+    panel.querySelector("[data-editor-action='roof-defaults']")?.addEventListener("click", () => {
+      pushHistory();
+      state.roof = normalizeRoofSettings(defaultRoofSettings);
+      persistLayout();
+      updateEditorPanel();
+      showToast("Roof restored to the 50 / 75 ft split configuration.");
+    });
+
     panel.querySelectorAll("[data-stage-field]").forEach((input) => {
       input.addEventListener("change", () => {
         const stage = currentStage();
@@ -3959,7 +4230,7 @@
     });
     panel.querySelector("[data-editor-action='open-new-machine-designer']")?.addEventListener("click", () => {
       const standalone = /preview\.html$/i.test(window.location.pathname);
-      window.open(standalone ? "machine-studio.html" : "/machine-studio", "_blank", "noopener");
+      navigateAfterPlantRelease(standalone ? "machine-studio.html" : "/machine-studio");
     });
     panel.querySelector("[data-editor-action='add-design-machine']")?.addEventListener("click", () => {
       refreshDesignLibrary();
@@ -4062,6 +4333,7 @@
       state.selectedColumnKey = null;
       invalidateStructuralColumns();
       state.walls = { ...defaultWalls };
+      state.roof = normalizeRoofSettings(defaultRoofSettings);
       clearMachineSelection();
       state.stage = 0;
       state.stageFloat = 0;
@@ -4086,6 +4358,31 @@
       workspaceFileInput.value = "";
     });
     panel.querySelector("[data-editor-action='done']").addEventListener("click",() => setEditing(false));
+    panel.querySelectorAll("[data-paint-stage]").forEach((input) => {
+      input.addEventListener("change", () => {
+        pushHistory();
+        state.paint[input.dataset.paintStage] = input.value;
+        persistLayout();
+        updateEditorPanel();
+        showToast(input.dataset.paintStage === "wallStageId" ? "Wall paint stage updated." : "Pillar paint stage updated.");
+      });
+    });
+    panel.querySelectorAll("[data-paint-color]").forEach((input) => {
+      input.addEventListener("change", () => {
+        pushHistory();
+        state.paint[input.dataset.paintColor] = input.value;
+        persistLayout();
+        updateEditorPanel();
+        showToast("Plant paint colors updated.");
+      });
+    });
+    panel.querySelector("[data-editor-action='paint-defaults']")?.addEventListener("click", () => {
+      pushHistory();
+      state.paint = normalizePaintSettings(defaultPaintSettings);
+      persistLayout();
+      updateEditorPanel();
+      showToast("Wall and pillar paint defaults restored.");
+    });
     panel.querySelectorAll("[data-wall-id]").forEach((input) => {
       input.addEventListener("change",() => {
         pushHistory();
@@ -4137,9 +4434,10 @@
   }
 
   async function toggleModelFullscreen(frame) {
+    const fullScreenTarget = document.querySelector(".site-shell") || frame;
     try {
-      if (document.fullscreenElement === frame) await document.exitFullscreen();
-      else await frame.requestFullscreen();
+      if (document.fullscreenElement === fullScreenTarget) await document.exitFullscreen();
+      else await fullScreenTarget.requestFullscreen();
     } catch (error) {
       console.warn("Full-screen mode could not be opened.", error);
       showToast("Full-screen mode is unavailable in this browser.");
@@ -4149,10 +4447,14 @@
   function updateFullscreenControl(frame) {
     const button = frame.querySelector("[data-toggle='fullscreen']");
     if (!button) return;
-    const active = document.fullscreenElement === frame;
+    const active = document.fullscreenElement === (document.querySelector(".site-shell") || frame);
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
-    button.textContent = active ? "Exit full screen" : "Full screen";
+    button.setAttribute("aria-label", active ? "Exit full screen" : "Full screen");
+    button.dataset.tooltip = active ? "Exit full screen" : "Full screen";
+    button.innerHTML = active
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
   }
 
   function addControls() {
@@ -4162,16 +4464,97 @@
     controls.className = "model-controls";
     controls.innerHTML = `
       <button type="button" data-view="overview" aria-label="Reset to overview">Overview</button>
-      <button type="button" data-view="low" aria-label="Low-angle overview">Low angle</button>
-      <button type="button" data-view="top" aria-label="View from above">Floor plan</button>
       <button type="button" data-toggle="walk" aria-pressed="false">First person</button>
-      <button type="button" data-toggle="labels" class="active" aria-pressed="true" title="Cycle between smart, all, and hidden labels">Smart labels</button>
-      <button type="button" data-toggle="animations" class="active" aria-pressed="false">Pause motion</button>
-      <button type="button" data-toggle="fullscreen" aria-pressed="false">Full screen</button>
-      <button type="button" data-toggle="editor" aria-pressed="false">Edit layout</button>
     `;
     frame.appendChild(controls);
-    renderPerformance.mount(frame, { buttonHost: controls });
+    const fullscreenToggle = document.createElement("button");
+    fullscreenToggle.type = "button";
+    fullscreenToggle.className = "fullscreen-toggle-button viewer-icon-button";
+    fullscreenToggle.dataset.toggle = "fullscreen";
+    fullscreenToggle.setAttribute("aria-pressed", "false");
+    frame.appendChild(fullscreenToggle);
+    const editLayout = document.createElement("button");
+    editLayout.type = "button";
+    editLayout.className = "layout-edit-button";
+    editLayout.dataset.toggle = "editor";
+    editLayout.setAttribute("aria-pressed", "false");
+    editLayout.setAttribute("aria-label", "Edit layout");
+    editLayout.dataset.tooltip = "Edit layout";
+    editLayout.innerHTML = "&#9998;";
+    frame.appendChild(editLayout);
+    const motionToggle = document.createElement("button");
+    motionToggle.type = "button";
+    motionToggle.className = "motion-toggle-button";
+    motionToggle.dataset.toggle = "animations";
+    motionToggle.setAttribute("aria-pressed", "false");
+    motionToggle.setAttribute("aria-label", "Pause motion");
+    motionToggle.dataset.tooltip = "Pause motion";
+    motionToggle.innerHTML = '<span class="pause-glyph" aria-hidden="true"><i></i><i></i></span>';
+    frame.appendChild(motionToggle);
+    const labelOptionsToggle = document.createElement("button");
+    labelOptionsToggle.type = "button";
+    labelOptionsToggle.className = "label-options-button viewer-icon-button";
+    labelOptionsToggle.setAttribute("aria-label", "Label and roof options");
+    labelOptionsToggle.setAttribute("aria-expanded", "false");
+    labelOptionsToggle.dataset.tooltip = "Labels and roof";
+    labelOptionsToggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12l4 6-4 6H4z"/><circle cx="8" cy="12" r="1.5"/></svg>';
+    frame.appendChild(labelOptionsToggle);
+    const labelOptions = document.createElement("section");
+    labelOptions.className = "label-options-popover";
+    labelOptions.hidden = true;
+    labelOptions.innerHTML = `
+      <div class="label-options-heading"><strong>View labels</strong><span>Choose the amount of label text shown.</span></div>
+      <div class="label-mode-options" role="group" aria-label="Label display style">
+        <button type="button" data-label-display="full">Full names</button>
+        <button type="button" data-label-display="abbreviated">Abbreviated</button>
+        <button type="button" data-label-display="off">Off</button>
+      </div>
+      <label class="roof-overview-toggle"><input type="checkbox" data-roof-overview> Show roof in overview</label>
+      <span class="label-options-note">Roof remains available in first person when enabled in the editor.</span>
+    `;
+    frame.appendChild(labelOptions);
+    const updateLabelOptions = () => {
+      labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
+        const active = button.dataset.labelDisplay === state.labelTextMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      const roofToggle = labelOptions.querySelector("[data-roof-overview]");
+      if (roofToggle) roofToggle.checked = Boolean(state.roof.overviewVisible);
+      labelOptionsToggle.classList.toggle("active", state.labelTextMode !== "off");
+    };
+    const closeLabelOptions = () => {
+      labelOptions.hidden = true;
+      labelOptionsToggle.setAttribute("aria-expanded", "false");
+    };
+    labelOptionsToggle.addEventListener("click", () => {
+      labelOptions.hidden = !labelOptions.hidden;
+      labelOptionsToggle.setAttribute("aria-expanded", String(!labelOptions.hidden));
+      if (!labelOptions.hidden) updateLabelOptions();
+    });
+    labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.labelTextMode = button.dataset.labelDisplay;
+        state.showLabels = state.labelTextMode !== "off";
+        try { localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify({ labelTextMode: state.labelTextMode })); } catch {}
+        labelVisualStates.clear();
+        updateLabelOptions();
+        renderPerformance.invalidate?.("label-display-mode");
+        showToast(state.labelTextMode === "full" ? "Full machine labels shown." : state.labelTextMode === "abbreviated" ? "Abbreviated machine labels shown." : "Machine labels hidden.");
+      });
+    });
+    labelOptions.querySelector("[data-roof-overview]")?.addEventListener("change", (event) => {
+      pushHistory();
+      state.roof.overviewVisible = event.target.checked;
+      persistLayout();
+      updateLabelOptions();
+      showToast(event.target.checked ? "Roof shown in the overview." : "Roof hidden from the overview.");
+    });
+    addLifecycleListener(document, "pointerdown", (event) => {
+      if (!labelOptions.hidden && !labelOptions.contains(event.target) && event.target !== labelOptionsToggle) closeLabelOptions();
+    });
+    updateLabelOptions();
+    renderPerformance.mount(frame, { showControls: false, alwaysShowFps: true });
     createEditorPanel(frame);
     const play = document.createElement("button");
     play.type = "button";
@@ -4180,10 +4563,6 @@
     play.innerHTML = `<span>▶</span> Play progress`;
     frame.appendChild(play);
 
-    const legend = document.createElement("div");
-    legend.className = "model-legend";
-    legend.innerHTML = `<span><i class="dwg"></i>DWG named</span><span><i class="correlated"></i>Photo + CAD</span><span><i class="crane"></i>Crane system</span>`;
-    frame.appendChild(legend);
     const reticle = document.createElement("div");
     reticle.className = "walkthrough-reticle";
     reticle.hidden = true;
@@ -4199,7 +4578,7 @@
         <span data-first-person-lock>Click the model to capture the mouse</span>
       </div>
       <div class="first-person-keys" aria-label="First-person controls">
-        <span><b>WASD</b> move</span><span><b>Mouse</b> look</span><span><b>Shift</b> sprint</span><span><b>Space</b> jump</span><span><b>Ctrl/C</b> crouch</span><span><b>Esc</b> exit</span>
+        <span><b>WASD</b> move</span><span><b>Mouse</b> look</span><span><b>Shift</b> sprint</span><span><b>Space</b> jump</span><span><b>Ctrl/C</b> crouch</span><span><b>Esc</b> options</span>
       </div>
       <div class="first-person-actions">
         <button type="button" data-first-person-action="capture">Capture mouse</button>
@@ -4225,10 +4604,64 @@
     `;
     frame.appendChild(firstPersonHud);
 
+    const firstPersonMenu = document.createElement("section");
+    firstPersonMenu.className = "first-person-menu";
+    firstPersonMenu.hidden = true;
+    firstPersonMenu.setAttribute("aria-label", "First-person options");
+    firstPersonMenu.innerHTML = `
+      <div class="first-person-menu-card">
+        <p>Walkthrough paused</p>
+        <h2>First-person options</h2>
+        <span>Continue walking, return to the overview while keeping it full screen, or exit back to the centered page view.</span>
+        <div>
+          <button type="button" data-first-person-menu="resume" class="primary">Continue walking</button>
+          <button type="button" data-first-person-menu="overview">Overview · full screen</button>
+          <button type="button" data-first-person-menu="exit">Exit to page</button>
+        </div>
+      </div>
+    `;
+    frame.appendChild(firstPersonMenu);
+
+    const walkthroughInvite = document.createElement("section");
+    walkthroughInvite.className = "walkthrough-invite";
+    walkthroughInvite.hidden = true;
+    walkthroughInvite.setAttribute("role", "status");
+    walkthroughInvite.innerHTML = `
+      <button type="button" class="walkthrough-invite-close" data-walkthrough-invite="dismiss" aria-label="Dismiss walkthrough suggestion">&times;</button>
+      <span class="walkthrough-invite-icon" aria-hidden="true">&#8594;</span>
+      <div><strong>Give the plant a walkthrough</strong><span>Step onto the finished production floor in first person.</span></div>
+      <button type="button" class="primary" data-walkthrough-invite="start">Start walking</button>
+    `;
+    frame.appendChild(walkthroughInvite);
+    const dismissWalkthroughInvitation = () => {
+      walkthroughInvite.hidden = true;
+      frame.querySelector("[data-toggle='walk']")?.classList.remove("walkthrough-highlight");
+    };
+    showWalkthroughInvitation = () => {
+      walkthroughInvite.hidden = false;
+      frame.querySelector("[data-toggle='walk']")?.classList.add("walkthrough-highlight");
+    };
+    walkthroughInvite.querySelector("[data-walkthrough-invite='dismiss']")?.addEventListener("click", dismissWalkthroughInvitation);
+    walkthroughInvite.querySelector("[data-walkthrough-invite='start']")?.addEventListener("click", () => {
+      dismissWalkthroughInvitation();
+      frame.querySelector("[data-toggle='walk']")?.click();
+    });
+
+    const setFirstPersonMenu = (open) => {
+      if (state.cameraMode !== "walk") open = false;
+      firstPersonMenu.hidden = !open;
+      firstPersonHud.hidden = open || state.cameraMode !== "walk";
+      if (open) {
+        firstPersonController?.release?.();
+        window.requestAnimationFrame(() => firstPersonMenu.querySelector("button")?.focus());
+      }
+    };
+    openFirstPersonOptions = setFirstPersonMenu;
+
     const updateFirstPersonHud = (locked) => {
       const lockText = firstPersonHud.querySelector("[data-first-person-lock]");
       const capture = firstPersonHud.querySelector("[data-first-person-action='capture']");
-      if (lockText) lockText.textContent = locked ? "Mouse captured · Esc exits first person" : "Click the model to capture the mouse · Esc exits";
+      if (lockText) lockText.textContent = locked ? "Mouse captured · Esc opens options" : "Click the model to capture the mouse · Esc opens options";
       if (capture) capture.hidden = locked;
       frame.classList.toggle("pointer-locked", locked);
     };
@@ -4263,11 +4696,11 @@
       onLockChange: updateFirstPersonHud,
       onMovement: () => renderPerformance.noteInteraction(120),
       onExitRequest: () => {
-        if (state.cameraMode === "walk" && !walkModeTransitioning) setWalkMode?.(false);
+        if (state.cameraMode === "walk" && !walkModeTransitioning) setFirstPersonMenu(true);
       },
     }) || null;
 
-    setWalkMode = (enabled) => {
+    setWalkMode = (enabled, options = {}) => {
       const experience = frame.closest(".experience");
       const siteShell = frame.closest(".site-shell");
       if (enabled === (state.cameraMode === "walk")) {
@@ -4280,6 +4713,7 @@
       experience?.classList.toggle("first-person-active", enabled);
       siteShell?.classList.toggle("first-person-site", enabled);
       reticle.hidden = !enabled;
+      firstPersonMenu.hidden = true;
       firstPersonHud.hidden = !enabled;
       const walkButton = frame.querySelector("[data-toggle='walk']");
       if (walkButton) {
@@ -4288,6 +4722,8 @@
         walkButton.textContent = enabled ? "Exit first person" : "First person";
       }
       if (enabled) {
+        dismissWalkthroughInvitation();
+        closeLabelOptions();
         setEditing(false);
         document.activeElement?.blur?.();
         canvas.tabIndex = 0;
@@ -4304,11 +4740,34 @@
         state.pitch = 0;
         state.walkVerticalOffset = 0;
         state.walkBobOffset = 0;
-        walkStartedFullscreen = !document.fullscreenElement;
-        if (walkStartedFullscreen) frame.requestFullscreen?.().catch(() => {});
         firstPersonController?.start({ capture: false });
-        firstPersonController?.capture();
-        showToast("First person started. Use WASD and the mouse; press Esc to exit.");
+        const fullscreenTarget = siteShell || frame;
+        const captureWalkthrough = () => {
+          canvasSizeDirty = true;
+          renderPerformance.invalidate?.("first-person-fullscreen");
+          firstPersonController?.capture();
+        };
+        if (document.fullscreenElement) {
+          walkStartedFullscreen = true;
+          captureWalkthrough();
+        } else if (typeof fullscreenTarget?.requestFullscreen === "function") {
+          walkStartedFullscreen = false;
+          try {
+            const request = fullscreenTarget.requestFullscreen();
+            Promise.resolve(request).then(() => {
+              walkStartedFullscreen = Boolean(document.fullscreenElement);
+              updateFullscreenControl(frame);
+              captureWalkthrough();
+            }).catch((error) => {
+              console.warn("First-person fullscreen could not be opened; using the full-window fallback.", error);
+              captureWalkthrough();
+            });
+          } catch (error) {
+            console.warn("First-person fullscreen could not be opened; using the full-window fallback.", error);
+            captureWalkthrough();
+          }
+        } else captureWalkthrough();
+        showToast("First person started full screen. Use WASD and the mouse; press Esc for options.");
       } else {
         walkModeTransitioning = true;
         firstPersonController?.stop();
@@ -4316,7 +4775,15 @@
         state.walkBobOffset = 0;
         if (walkReturnView) Object.assign(state, walkReturnView);
         walkReturnView = null;
-        if (walkStartedFullscreen && document.fullscreenElement === frame) document.exitFullscreen?.().catch(() => {});
+        const shouldExitFullscreen = options.exitFullscreen !== false;
+        const shouldCenterView = options.centerView !== false && shouldExitFullscreen;
+        const centerOverview = () => {
+          if (!shouldCenterView) return;
+          window.requestAnimationFrame(() => experience?.scrollIntoView?.({ behavior: "smooth", block: "center" }));
+        };
+        if (shouldExitFullscreen && document.fullscreenElement) {
+          document.exitFullscreen?.().then(centerOverview).catch(centerOverview);
+        } else centerOverview();
         walkStartedFullscreen = false;
         walkModeTransitioning = false;
         showToast("Returned to the overview camera.");
@@ -4349,6 +4816,26 @@
       });
     });
 
+    firstPersonMenu.querySelector("[data-first-person-menu='resume']")?.addEventListener("click", () => {
+      setFirstPersonMenu(false);
+      firstPersonController?.capture();
+    });
+    firstPersonMenu.querySelector("[data-first-person-menu='overview']")?.addEventListener("click", async () => {
+      const siteShell = frame.closest(".site-shell");
+      let fullscreenReady = Boolean(document.fullscreenElement);
+      if (!document.fullscreenElement) {
+        try {
+          await (siteShell || frame).requestFullscreen?.();
+          fullscreenReady = Boolean(document.fullscreenElement);
+        }
+        catch (error) { console.warn("Full-screen overview could not be opened.", error); }
+      }
+      setWalkMode(false, { exitFullscreen: !fullscreenReady, centerView: !fullscreenReady });
+    });
+    firstPersonMenu.querySelector("[data-first-person-menu='exit']")?.addEventListener("click", () => {
+      setWalkMode(false, { exitFullscreen: true, centerView: true });
+    });
+
     document.querySelectorAll("[data-view]").forEach((button) => {
       button.addEventListener("click", () => {
         if (state.cameraMode === "walk") setWalkMode(false);
@@ -4369,7 +4856,7 @@
         }
       });
     });
-    document.querySelectorAll("[data-toggle]").forEach((button) => {
+    frame.querySelectorAll("[data-toggle]").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.dataset.toggle === "editor") {
           if (state.cameraMode === "walk") setWalkMode(false);
@@ -4393,9 +4880,14 @@
             state.animationsPaused = true;
             state.animationPausedAt = now;
           }
-          button.classList.toggle("active", !state.animationsPaused);
+          const motionLabel = state.animationsPaused ? "Resume motion" : "Pause motion";
+          button.classList.toggle("active", state.animationsPaused);
           button.setAttribute("aria-pressed", String(state.animationsPaused));
-          button.textContent = state.animationsPaused ? "Resume motion" : "Pause motion";
+          button.setAttribute("aria-label", motionLabel);
+          button.dataset.tooltip = motionLabel;
+          button.innerHTML = state.animationsPaused
+            ? '<span class="play-glyph" aria-hidden="true"></span>'
+            : '<span class="pause-glyph" aria-hidden="true"><i></i><i></i></span>';
           showToast(state.animationsPaused ? "All model animations paused in place." : "Model animations resumed from the paused frame.");
           return;
         }
@@ -4419,14 +4911,15 @@
         }
       });
     });
-    document.addEventListener("fullscreenchange", () => {
+    addLifecycleListener(document, "fullscreenchange", () => {
       updateFullscreenControl(frame);
-      if (state.cameraMode === "walk" && walkStartedFullscreen && !document.fullscreenElement) setWalkMode(false);
+      if (state.cameraMode === "walk" && walkStartedFullscreen && !document.fullscreenElement) setFirstPersonMenu(true);
     });
     updateFullscreenControl(frame);
     play.addEventListener("click", () => {
+      if (!state.playing && state.stage >= stages.length - 1) setStage(0);
       state.playing = !state.playing;
-      state.playAt = performance.now() + 1200 / state.playbackSpeed;
+      state.playAt = performance.now() + state.stageDurationSeconds * 1000;
       play.classList.toggle("active", state.playing);
       play.innerHTML = state.playing ? `<span>Ⅱ</span> Pause progress` : `<span>▶</span> Play progress`;
     });
@@ -4442,16 +4935,21 @@
         <span>Scrub timeline</span>
         <input id="timeline-scrubber" type="range" min="0" max="${Math.max(0, stages.length - 1)}" value="${state.stage}" step="1">
       </label>
-      <label class="timeline-speed-label" for="timeline-speed">
-        <span>Playback</span>
-        <select id="timeline-speed">
-          <option value="0.5">0.5×</option>
-          <option value="1">1×</option>
-          <option value="1.5">1.5×</option>
-          <option value="2">2×</option>
+      <label class="timeline-duration-label" for="timeline-duration">
+        <span>Time between stages</span>
+        <select id="timeline-duration">
+          <option value="5">5 seconds</option>
+          <option value="10">10 seconds</option>
+          <option value="15">15 seconds</option>
+          <option value="20">20 seconds</option>
+          <option value="25">25 seconds</option>
+          <option value="30">30 seconds</option>
+          <option value="35">35 seconds</option>
+          <option value="40">40 seconds</option>
+          <option value="45">45 seconds</option>
+          <option value="60">60 seconds</option>
         </select>
       </label>
-      <button type="button" data-open-timeline-editor>Edit timeline</button>
     `;
     timeline.prepend(toolbar);
     if (!timeline.querySelector(".timeline-track-scroll")) {
@@ -4466,18 +4964,13 @@
     }
     const scrubber = toolbar.querySelector("#timeline-scrubber");
     scrubber.addEventListener("input", () => setStage(Number(scrubber.value)));
-    const speed = toolbar.querySelector("#timeline-speed");
-    speed.value = String(state.playbackSpeed);
-    speed.addEventListener("change", () => {
-      state.playbackSpeed = Number(speed.value) || 1;
+    const duration = toolbar.querySelector("#timeline-duration");
+    duration.value = String(normalizeStageDuration(state.stageDurationSeconds));
+    duration.addEventListener("change", () => {
+      state.stageDurationSeconds = normalizeStageDuration(duration.value);
+      if (state.playing) state.playAt = performance.now() + state.stageDurationSeconds * 1000;
       persistLayout();
-      showToast(`Playback speed set to ${state.playbackSpeed}×.`);
-    });
-    toolbar.querySelector("[data-open-timeline-editor]").addEventListener("click", () => {
-      if (!state.editing) setEditing(true);
-      state.editorTool = "timeline";
-      clearMachineSelection();
-      updateEditorPanel();
+      showToast(`${state.stageDurationSeconds} seconds between stages.`);
     });
   }
 
@@ -4544,6 +5037,27 @@
       canvas.height * .57 - (y * cp - rz * sp) * scale,
       y * sp + rz * cp,
     ];
+  }
+
+  function displayedWallSections() {
+    const sections = wallSections();
+    const roofIsVisible = state.roof.enabled && (state.cameraMode === "walk" || state.roof.overviewVisible);
+    if (!roofIsVisible) return sections;
+    const bounds = floorBounds();
+    const splitX = bounds[0] + (bounds[2] - bounds[0]) * state.roof.splitPercent / 100;
+    const heightAt = (x) => x < splitX ? state.roof.leftHeight : state.roof.rightHeight;
+    const result = [];
+    sections.forEach((section) => {
+      const horizontalWall = section.w > section.d;
+      const sectionEnd = section.x + section.w;
+      if (horizontalWall && section.x < splitX && sectionEnd > splitX) {
+        result.push({ ...section, w: splitX - section.x, h: state.roof.leftHeight });
+        result.push({ ...section, x: splitX, w: sectionEnd - splitX, h: state.roof.rightHeight });
+      } else {
+        result.push({ ...section, h: heightAt(section.x + section.w / 2) });
+      }
+    });
+    return result;
   }
 
   function rendererViewState() {
@@ -5052,6 +5566,8 @@
   }
 
   let labelRects = [];
+  const labelVisualStates = new Map();
+  let labelTransitionsActive = true;
 
   const PRIMARY_LABEL_TYPES = new Set([
     "cutting", "waterjet", "filtration", "kodiak", "denver", "furnace",
@@ -5099,6 +5615,15 @@
       first.bottom <= second.top ||
       first.top >= second.bottom
     );
+  }
+
+  function paddedLabelRectangle(rectangle, padding) {
+    return {
+      left: rectangle.left - padding,
+      right: rectangle.right + padding,
+      top: rectangle.top - padding,
+      bottom: rectangle.bottom + padding,
+    };
   }
 
   function machineLabelProfile(machine) {
@@ -5160,29 +5685,86 @@
     return `${(boundary >= Math.floor(profile.maxChars * .55) ? clipped.slice(0, boundary) : clipped).trim()}…`;
   }
 
-  function shouldShowSmartLabel(profile, selected, current) {
+  function displayMachineLabel(machine, profile) {
+    if (state.labelTextMode === "abbreviated") {
+      const customAbbreviation = String(machine?.labelAbbreviation || "").trim();
+      if (customAbbreviation) return machine?.labelUppercase ? customAbbreviation.toUpperCase() : customAbbreviation;
+      return compactMachineLabel(machine, profile);
+    }
+    const value = machineLabelText(machine);
+    const maximum = Math.max(20, Math.round(profile.maxChars * 1.8));
+    if (value.length <= maximum) return value;
+    return `${value.slice(0, maximum - 1).trim()}\u2026`;
+  }
+
+  function smartLabelMinimumRank(wasVisible = false) {
+    const effectiveZoom = state.zoom + (wasVisible ? .07 : 0);
+    if (effectiveZoom < .22) return 4;
+    if (effectiveZoom < .34) return 3;
+    if (effectiveZoom < .52) return 2;
+    return 1;
+  }
+
+  function shouldShowSmartLabel(profile, selected, current, wasVisible = false) {
     if (selected || current) return true;
     if (state.labelMode === "all") return true;
     if (profile.rank <= 0) return false;
-    if (state.zoom < .38) return profile.rank >= 4;
-    if (state.zoom < .62) return profile.rank >= 3;
-    if (state.zoom < 1.02) return profile.rank >= 2;
-    return profile.rank >= 1;
+    return profile.rank >= smartLabelMinimumRank(wasVisible);
   }
 
   function smartLabelBudget() {
-    if (state.cameraMode === "walk") return state.labelMode === "all" ? 14 : 7;
+    if (state.cameraMode === "walk") return state.labelMode === "all" ? 16 : 10;
     if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
+    if (state.labelTextMode === "full" && state.zoom >= .72) return Number.POSITIVE_INFINITY;
     const rect = canvas.getBoundingClientRect();
-    const viewportBudget = Math.floor((rect.width * rect.height) / 52000);
-    const zoomFactor = clamp(state.zoom, .35, 1.45);
-    return Math.round(clamp(viewportBudget * zoomFactor, 5, 30));
+    const viewportBudget = Math.floor((rect.width * rect.height) / 36000);
+    const zoomFactor = clamp(state.zoom, .72, 1.45);
+    return Math.round(clamp(viewportBudget * zoomFactor, 12, 48));
+  }
+
+  function smartLabelRepeatLimit(profile) {
+    if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
+    if (state.cameraMode !== "walk" && state.labelTextMode === "full" && state.zoom >= .72) return Number.POSITIVE_INFINITY;
+    if (state.cameraMode === "walk") return profile.rank >= 3 ? 2 : 1;
+    if (state.zoom < .55) return profile.rank >= 3 ? 2 : 1;
+    if (state.zoom < 1.05) return profile.rank >= 3 ? 2 : 1;
+    return profile.rank >= 3 ? 3 : 2;
+  }
+
+  function updateLabelVisualState(key, targetVisible, time) {
+    const visual = labelVisualStates.get(key) || {
+      alpha: 0,
+      targetVisible: false,
+      lastTime: time - 16.667,
+      lastSeen: time,
+      slot: 0,
+      drawX: null,
+      drawY: null,
+    };
+    const elapsed = clamp(time - visual.lastTime, 0, 80);
+    const duration = targetVisible ? 115 : 190;
+    const blend = 1 - Math.exp(-elapsed / duration);
+    visual.alpha += ((targetVisible ? 1 : 0) - visual.alpha) * blend;
+    if (visual.alpha < .012 && !targetVisible) visual.alpha = 0;
+    if (visual.alpha > .988 && targetVisible) visual.alpha = 1;
+    visual.targetVisible = targetVisible;
+    visual.lastTime = time;
+    visual.lastSeen = time;
+    labelVisualStates.set(key, visual);
+    if ((targetVisible && visual.alpha < 1) || (!targetVisible && visual.alpha > 0)) labelTransitionsActive = true;
+    return { visual, elapsed };
+  }
+
+  function trimLabelVisualStates(activeKeys, time) {
+    labelVisualStates.forEach((visual, key) => {
+      if (!activeKeys.has(key) && time - visual.lastSeen > 800) labelVisualStates.delete(key);
+    });
   }
 
   function machineLabelZoomScale(depth = 0) {
     if (state.cameraMode === "walk") {
-      const horizon = Math.max(1, renderPerformance.walkDrawDistance());
-      return clamp(1.08 - Math.max(0, depth) / horizon * .38, .7, 1.08);
+      const labelHorizon = 96;
+      return clamp(1.58 - Math.max(0, depth) / labelHorizon * .34, 1.22, 1.58);
     }
     // Make zoom communicate hierarchy: compact tags keep the full-floor view
     // readable, while close inspection gets comfortably larger labels.
@@ -5190,89 +5772,194 @@
   }
 
   function label(text, x, y, z, color, options = {}) {
-    if (!state.showLabels || state.labelMode === "off") return false;
-    const point = project(x, y, z);
-    if (state.cameraMode === "walk" && point[3] < WALK_NEAR_CLIP) return false;
+    if (!state.showLabels || state.labelMode === "off") return { drawn: false, targetVisible: false };
+    const labelKey = String(options.labelKey || text);
+    const labelTime = Number(options.time) || state.lastFrameTime;
+    const previousVisual = labelVisualStates.get(labelKey);
+    let targetVisible = Boolean(options.visibleTarget);
+    const anchorPoint = project(x, y, z);
+    const point = project(x, y + Math.max(0, Number(options.labelLiftFeet) || 0), z);
     const rect = canvas.getBoundingClientRect();
     const pixelScale = canvas.width / Math.max(1, rect.width);
     const priority = Boolean(options.priority);
+    const selected = Boolean(options.selected);
+    const current = Boolean(options.current);
+    const screenMargin = 28 * pixelScale;
+    const projectionVisible = !(state.cameraMode === "walk" && point[3] < WALK_NEAR_CLIP) && !(
+      point[0] < -screenMargin || point[0] > canvas.width + screenMargin ||
+      point[1] < -screenMargin || point[1] > canvas.height + screenMargin
+    );
+    targetVisible = targetVisible && projectionVisible;
+    if (state.cameraMode === "walk") {
+      const walkLabelDistance = previousVisual?.targetVisible ? 104 : 92;
+      targetVisible = targetVisible && point[3] <= walkLabelDistance;
+    }
     const zoomScale = machineLabelZoomScale(point[3]);
-    const cssFontSize = (Number(options.cssSize) || 10) * zoomScale + (priority ? .7 : 0);
+    const cssFontSize = (Number(options.cssSize) || 10) * zoomScale + (selected ? .8 : 0);
     const fontSize = Math.max(6.5 * pixelScale, cssFontSize * pixelScale);
-    const paddingX = clamp(5.6 * zoomScale, 3.6, 7.4) * pixelScale;
-    const height = Math.max(12 * pixelScale, (cssFontSize + 6.5 * zoomScale) * pixelScale);
-    const topGap = Math.max(3, 5 * zoomScale) * pixelScale;
+    const paddingX = clamp(6.4 * zoomScale, 4.5, 8) * pixelScale;
+    const indicatorSpace = clamp(8 * zoomScale, 5.5, 10) * pixelScale;
+    const height = Math.max(13 * pixelScale, (cssFontSize + 7.5 * zoomScale) * pixelScale);
+    const topGap = Math.max(4, 6 * zoomScale) * pixelScale;
+    const collisionGap = clamp(3.5 * zoomScale, 2.5, 5.5) * pixelScale;
     ctx.save();
     const fontWeight = options.fontWeight === "bold" ? 750 : options.fontWeight === "regular" ? 450 : 600;
     ctx.font = `${fontWeight} ${fontSize}px "Segoe UI", sans-serif`;
-    const width = ctx.measureText(text).width + paddingX * 2;
-    const labelX = clamp(point[0], width / 2 + 3 * pixelScale, canvas.width - width / 2 - 3 * pixelScale);
+    const width = ctx.measureText(text).width + paddingX * 2 + indicatorSpace;
+    const clampX = (value) => clamp(value, width / 2 + 4 * pixelScale, canvas.width - width / 2 - 4 * pixelScale);
+    const labelX = clampX(point[0]);
     const baseY = point[1] - height - topGap;
-    const step = height + 4 * pixelScale;
-    const offsets = priority ? [0, -step, step, -step * 2, step * 2] : [0, -step, step, -step * 2];
-    let rectangle = null;
-    let drawY = baseY;
-    for (const offset of offsets) {
-      const candidateY = baseY + offset;
-      const candidate = {
-        left: labelX - width / 2,
-        right: labelX + width / 2,
-        top: candidateY,
-        bottom: candidateY + height,
-      };
-      const onCanvas = candidate.right > 0 && candidate.left < canvas.width && candidate.bottom > 0 && candidate.top < canvas.height;
-      if (onCanvas && !labelRects.some((used) => rectanglesIntersect(candidate, used))) {
-        rectangle = candidate;
-        drawY = candidateY;
-        break;
+    const step = height + collisionGap;
+    const side = Array.from(labelKey).reduce((sum, character) => sum + character.charCodeAt(0), 0) % 2 ? 1 : -1;
+    const sideOffset = width * .56 + 12 * pixelScale;
+    const placements = [
+      [side * sideOffset, 0],
+      [-side * sideOffset, 0],
+      [side * sideOffset, -step],
+      [-side * sideOffset, -step],
+      [side * sideOffset * .7, -step * 2],
+      [-side * sideOffset * .7, -step * 2],
+      [0, -step * 3],
+      [side * sideOffset * .45, -step * 4],
+      [-side * sideOffset * .45, -step * 4],
+    ];
+    const preferredSlot = clamp(Math.round(Number(previousVisual?.slot) || 0), 0, placements.length - 1);
+    const slotOrder = state.cameraMode === "walk"
+      ? [0]
+      : [preferredSlot, ...placements.map((_, index) => index).filter((index) => index !== preferredSlot)];
+    let targetRectangle = null;
+    let targetSlot = preferredSlot;
+    if (targetVisible) {
+      for (const slot of slotOrder) {
+        const [offsetX, offsetY] = placements[slot];
+        const candidateX = clampX(labelX + offsetX);
+        const candidateY = baseY + offsetY;
+        const candidate = {
+          left: candidateX - width / 2,
+          right: candidateX + width / 2,
+          top: candidateY,
+          bottom: candidateY + height,
+        };
+        const onCanvas = candidate.right > 0 && candidate.left < canvas.width && candidate.bottom > 0 && candidate.top < canvas.height;
+        const collisionBox = paddedLabelRectangle(candidate, collisionGap);
+        const collides = labelRects.some((used) => rectanglesIntersect(collisionBox, used));
+        const holdingPreferredSlot = slot === preferredSlot && previousVisual && labelTime < (previousVisual.slotHoldUntil || 0);
+        if (onCanvas && (state.cameraMode === "walk" || !collides || holdingPreferredSlot)) {
+          targetRectangle = candidate;
+          targetSlot = slot;
+          break;
+        }
       }
     }
-    if (!rectangle && !priority) {
-      ctx.restore();
-      return false;
+    if (!targetRectangle && (priority || options.forceVisible) && targetVisible) {
+      const fallbackX = clampX(labelX + side * sideOffset);
+      targetRectangle = {
+        left: fallbackX - width / 2,
+        right: fallbackX + width / 2,
+        top: baseY,
+        bottom: baseY + height,
+      };
+      targetSlot = 0;
     }
-    rectangle ||= {
-      left: labelX - width / 2,
-      right: labelX + width / 2,
+    targetVisible = Boolean(targetRectangle);
+    const { visual, elapsed } = updateLabelVisualState(labelKey, targetVisible, labelTime);
+    if (targetRectangle) {
+      const targetX = (targetRectangle.left + targetRectangle.right) / 2;
+      const targetY = targetRectangle.top;
+      if (!Number.isFinite(visual.drawX) || !Number.isFinite(visual.drawY)) {
+        visual.drawX = targetX;
+        visual.drawY = targetY;
+      } else if (state.cameraMode === "walk") {
+        visual.drawX = targetX;
+        visual.drawY = targetY;
+      } else {
+        const positionBlend = 1 - Math.exp(-elapsed / 24);
+        visual.drawX += (targetX - visual.drawX) * positionBlend;
+        visual.drawY += (targetY - visual.drawY) * positionBlend;
+        if (Math.abs(targetX - visual.drawX) > .1 || Math.abs(targetY - visual.drawY) > .1) labelTransitionsActive = true;
+      }
+      if (visual.slot !== targetSlot) visual.slotHoldUntil = labelTime + 180;
+      visual.slot = targetSlot;
+    }
+    if (visual.alpha <= 0 || !Number.isFinite(visual.drawX) || !Number.isFinite(visual.drawY)) {
+      ctx.restore();
+      return { drawn: false, targetVisible };
+    }
+    const drawY = visual.drawY;
+    const rectangle = {
+      left: visual.drawX - width / 2,
+      right: visual.drawX + width / 2,
       top: drawY,
       bottom: drawY + height,
     };
-    labelRects.push(rectangle);
-    if (priority && Math.abs(drawY - baseY) > 1) {
+    if (visual.alpha > .12) labelRects.push(paddedLabelRectangle(rectangle, collisionGap));
+    const labelAlpha = (selected ? .99 : current ? .96 : clamp(.82 + zoomScale * .09, .87, .95)) * visual.alpha;
+    ctx.globalAlpha = labelAlpha;
+    const savedBackground = String(options.backgroundColor || "");
+    const customBackground = /^#[0-9a-f]{6}$/i.test(savedBackground) &&
+      !["#141c20", "#132126"].includes(savedBackground.toLowerCase());
+    const background = customBackground ? options.backgroundColor : selected ? "#2b241b" : current ? "#142827" : "#132126";
+    const accent = selected ? "#f5b353" : current ? "#52b7aa" : color;
+    if (targetVisible) {
+      const leaderX = clamp(anchorPoint[0], rectangle.left + 5 * pixelScale, rectangle.right - 5 * pixelScale);
+      const leaderY = rectangle.bottom;
       ctx.beginPath();
-      ctx.moveTo(point[0], point[1] - 3 * pixelScale);
-      ctx.lineTo(labelX, drawY + height);
-      ctx.strokeStyle = "rgba(34,48,52,.34)";
-      ctx.lineWidth = Math.max(1, pixelScale * .75);
+      ctx.moveTo(leaderX, leaderY);
+      ctx.lineTo(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale);
+      ctx.strokeStyle = "rgba(9,18,21,.78)";
+      ctx.lineWidth = Math.max(3.2, pixelScale * 3.1);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(leaderX, leaderY);
+      ctx.lineTo(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1.5, pixelScale * 1.65);
       ctx.stroke();
     }
-    ctx.globalAlpha = priority ? .98 : clamp(.72 + zoomScale * .14, .79, .91);
-    ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(String(options.backgroundColor || "")) ? options.backgroundColor : "#172429";
+    const radius = Math.min(6 * pixelScale, height * .28);
+    ctx.shadowColor = "rgba(3,10,13,.28)";
+    ctx.shadowBlur = Math.max(2, 5.5 * zoomScale * pixelScale);
+    ctx.shadowOffsetY = Math.max(1, 1.5 * pixelScale);
+    ctx.fillStyle = background;
     if (typeof ctx.roundRect === "function") {
       ctx.beginPath();
-      ctx.roundRect(rectangle.left, drawY, width, height, Math.min(height / 2, 5.5 * zoomScale * pixelScale));
+      ctx.roundRect(rectangle.left, drawY, width, height, radius);
       ctx.fill();
     } else ctx.fillRect(rectangle.left, drawY, width, height);
-    ctx.strokeStyle = "rgba(235,246,242,.32)";
-    ctx.lineWidth = Math.max(.75, pixelScale * .7);
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = selected ? "rgba(245,179,83,.82)" : current ? "rgba(82,183,170,.62)" : "rgba(220,235,232,.25)";
+    ctx.lineWidth = Math.max(.8, pixelScale * (selected ? 1.05 : .7));
     if (typeof ctx.roundRect === "function") {
       ctx.beginPath();
-      ctx.roundRect(rectangle.left, drawY, width, height, Math.min(height / 2, 5.5 * zoomScale * pixelScale));
+      ctx.roundRect(rectangle.left, drawY, width, height, radius);
       ctx.stroke();
     } else ctx.strokeRect(rectangle.left, drawY, width, height);
-    ctx.fillStyle = color;
-    ctx.fillRect(
-      rectangle.left + Math.max(2, 3.5 * zoomScale * pixelScale),
-      drawY,
-      Math.max(8 * pixelScale, width - Math.max(4, 7 * zoomScale * pixelScale)),
-      Math.max(1.5, 2 * zoomScale * pixelScale),
-    );
+    ctx.fillStyle = accent;
+    const accentWidth = Math.max(2, 2.4 * zoomScale * pixelScale);
+    const accentInset = Math.max(3, 4 * zoomScale * pixelScale);
+    if (typeof ctx.roundRect === "function") {
+      ctx.beginPath();
+      ctx.roundRect(rectangle.left + accentInset, drawY + height * .25, accentWidth, height * .5, accentWidth / 2);
+      ctx.fill();
+    } else ctx.fillRect(rectangle.left + accentInset, drawY + height * .25, accentWidth, height * .5);
     ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(String(options.textColor || "")) ? options.textColor : "#ffffff";
-    ctx.textAlign = "center";
+    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, labelX, drawY + height / 2 + pixelScale * .15);
+    ctx.fillText(text, rectangle.left + paddingX + indicatorSpace, drawY + height / 2 + pixelScale * .15);
+    if (targetVisible) {
+      ctx.beginPath();
+      ctx.arc(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale, Math.max(3.6, 3.2 * pixelScale), 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(9,18,21,.86)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale, Math.max(2, 1.9 * pixelScale), 0, Math.PI * 2);
+      ctx.fillStyle = accent;
+      ctx.fill();
+    }
     ctx.restore();
-    return true;
+    return { drawn: true, targetVisible };
   }
 
   function drawFloor() {
@@ -5301,11 +5988,122 @@
   }
 
   function drawShell() {
-    const painted = clamp(state.stageFloat - 2.35);
-    const wall = painted > .5 ? colors.finished : colors.shell;
-    wallSections().forEach((section) => {
+    const painted = paintProgress(state.paint.wallStageId, 3);
+    const wall = blendHexColors(state.paint.wallBefore, state.paint.wallAfter, painted);
+    displayedWallSections().forEach((section) => {
       if (state.walls[section.id] !== false) box({ ...section, color: wall });
     });
+  }
+
+  function roofSections() {
+    const bounds = floorBounds();
+    const splitX = bounds[0] + (bounds[2] - bounds[0]) * state.roof.splitPercent / 100;
+    return [
+      { x1: bounds[0], x2: splitX, z1: bounds[1], z2: bounds[3], height: state.roof.leftHeight },
+      { x1: splitX, x2: bounds[2], z1: bounds[1], z2: bounds[3], height: state.roof.rightHeight },
+    ].filter((section) => section.x2 - section.x1 > 1);
+  }
+
+  function drawTrussMember(start, end, thickness, color, alpha) {
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const dz = end[2] - start[2];
+    const horizontalLength = Math.hypot(dx, dy);
+    const size = Math.max(.35, Number(thickness) || .35);
+    if (Math.abs(dz) > horizontalLength) {
+      box({
+        x: start[0] - size / 2,
+        y: start[1] - size / 2,
+        z: Math.min(start[2], end[2]),
+        w: size,
+        h: size,
+        d: Math.max(size, Math.abs(dz)),
+        color,
+      }, alpha);
+      return;
+    }
+    box({
+      x: (start[0] + end[0]) / 2 - horizontalLength / 2,
+      y: (start[1] + end[1]) / 2 - size / 2,
+      z: (start[2] + end[2]) / 2 - size / 2,
+      w: Math.max(size, horizontalLength),
+      h: size,
+      d: size,
+      rotationZ: Math.atan2(dy, dx) * 180 / Math.PI,
+      color,
+    }, alpha);
+  }
+
+  function drawRoofTruss(section, z, alpha) {
+    const bottomY = section.height - 5;
+    const topY = section.height - 1.1;
+    const bayCount = Math.max(3, Math.min(8, Math.round((section.x2 - section.x1) / 24)));
+    const bayWidth = (section.x2 - section.x1) / bayCount;
+    drawTrussMember([section.x1, bottomY, z], [section.x2, bottomY, z], .78, state.roof.trussColor, alpha);
+    drawTrussMember([section.x1, topY, z], [section.x2, topY, z], .62, state.roof.trussColor, alpha);
+    for (let bay = 0; bay < bayCount; bay += 1) {
+      const x1 = section.x1 + bay * bayWidth;
+      const x2 = x1 + bayWidth;
+      if (bay % 2 === 0) drawTrussMember([x1, bottomY, z], [x2, topY, z], .58, state.roof.trussColor, alpha);
+      else drawTrussMember([x1, topY, z], [x2, bottomY, z], .58, state.roof.trussColor, alpha);
+    }
+  }
+
+  function drawRoof() {
+    if (!state.roof.enabled || (state.cameraMode !== "walk" && !state.roof.overviewVisible)) return;
+    const walking = state.cameraMode === "walk";
+    const panelAlpha = walking ? 1 : .18;
+    const trussAlpha = walking ? 1 : .62;
+    const roofColor = state.roof.roofColor;
+    const sections = roofSections();
+    sections.forEach((section) => {
+      box({
+        x: section.x1,
+        y: section.height - .9,
+        z: section.z1,
+        w: section.x2 - section.x1,
+        h: .9,
+        d: section.z2 - section.z1,
+        color: roofColor,
+      }, panelAlpha);
+      const span = section.z2 - section.z1;
+      const spacing = Math.max(10, state.roof.trussSpacing);
+      const trussCount = Math.max(2, Math.min(32, Math.ceil(span / spacing) + 1));
+      for (let index = 0; index < trussCount; index += 1) {
+        const z = section.z1 + span * index / Math.max(1, trussCount - 1);
+        drawRoofTruss(section, z, trussAlpha);
+      }
+      const centerX = (section.x1 + section.x2) / 2;
+      [section.x1, centerX, section.x2].forEach((x) => {
+        drawTrussMember([x, section.height - 2.2, section.z1], [x, section.height - 2.2, section.z2], .65, state.roof.trussColor, trussAlpha);
+      });
+    });
+    if (sections.length === 2 && Math.abs(sections[0].height - sections[1].height) > .5) {
+      const lower = Math.min(sections[0].height, sections[1].height);
+      const upper = Math.max(sections[0].height, sections[1].height);
+      const splitX = sections[0].x2;
+      box({
+        x: splitX - .25,
+        y: lower,
+        z: sections[0].z1,
+        w: .5,
+        h: upper - lower,
+        d: sections[0].z2 - sections[0].z1,
+        color: roofColor,
+      }, panelAlpha);
+      const span = sections[0].z2 - sections[0].z1;
+      const braceCount = Math.max(2, Math.min(32, Math.ceil(span / state.roof.trussSpacing) + 1));
+      for (let index = 0; index < braceCount; index += 1) {
+        const z = sections[0].z1 + span * index / Math.max(1, braceCount - 1);
+        box({ x: splitX - .32, y: lower, z: z - .32, w: .64, h: upper - lower, d: .64, color: state.roof.trussColor }, trussAlpha);
+      }
+    }
+  }
+
+  function paintProgress(stageId, fallbackIndex) {
+    const requestedIndex = stages.findIndex((stage) => stage.id === stageId);
+    const targetIndex = requestedIndex >= 0 ? requestedIndex : clamp(fallbackIndex, 0, stages.length - 1);
+    return clamp(state.stageFloat - Math.max(0, targetIndex - 1));
   }
 
   function drawColumn(index) {
@@ -5314,9 +6112,9 @@
       : structuralColumns().find((item) => item.source === "cad" && item.baseIndex === index);
     if (!column || isColumnHidden(column)) return;
     const { x, z } = column;
-    const painted = clamp(state.stageFloat - 2.35);
+    const painted = paintProgress(state.paint.columnStageId, 3);
     const size = 2.1 + (2.32 - 2.1) * painted;
-    const color = blendHexColors(colors.steel, colors.yellow, painted);
+    const color = blendHexColors(state.paint.columnBefore, state.paint.columnAfter, painted);
 
     const base = project(x, 0, z);
     const top = project(x, 22, z);
@@ -7572,14 +8370,25 @@
       renderPerformance.maxShadowParts(),
       shadowBudget,
     ].join(":");
-    if (staticEntries.length) {
-      const revision = `${settingsRevision}|${staticEntries.map(({ machine, rendered, alpha, grow }) => (
+    // Keep the established plant in one retained shadow batch, and isolate the
+    // few objects currently fading/growing into the scene. Previously one new
+    // machine invalidated and rebuilt every existing machine shadow on each
+    // transition frame, with the worst spike at Today's Production.
+    const settledStaticEntries = staticEntries.filter(({ alpha, grow }) => alpha >= .9999 && grow >= .9999);
+    const transitioningStaticEntries = staticEntries.filter(({ alpha, grow }) => alpha < .9999 || grow < .9999);
+    if (settledStaticEntries.length) {
+      const revision = `${settingsRevision}|${settledStaticEntries.map(({ machine, rendered, alpha, grow }) => (
         `${renderedMachineRevision(machine, rendered, alpha, grow)}:${objectRenderIdentity(rendered.designId ? designLibrary[rendered.designId] : null)}:${machineLodLevel(rendered)}:${state.selectedMachineIds.has(machine.instanceId)}`
       )).join("|")}`;
       drawRetainedObject("plant:shadows:static", revision, () => {
-        staticEntries.forEach(({ machine, rendered, alpha, grow }) => drawMachineShadowCasters(machine, rendered, alpha, grow, time));
+        settledStaticEntries.forEach(({ machine, rendered, alpha, grow }) => drawMachineShadowCasters(machine, rendered, alpha, grow, time));
       });
     }
+    transitioningStaticEntries.forEach(({ machine, rendered, alpha, grow }) => {
+      const revision = `${settingsRevision}:${renderedMachineRevision(machine, rendered, alpha, grow)}:${machineLodLevel(rendered)}`;
+      drawRetainedObject(`plant:shadows:transition:${machine.instanceId}`, revision,
+        () => drawMachineShadowCasters(machine, rendered, alpha, grow, time));
+    });
     if (animatedEntries.length) {
       animatedEntries.forEach(({ machine, rendered, alpha, grow }) => {
         const sampleTime = machineAnimationSampleTime(rendered, time);
@@ -7733,6 +8542,25 @@
     )));
   }
 
+  // Matrix construction applies every machine/component rotation and scale and
+  // is one of the hottest CPU paths in a detailed animated overview. Reuse the
+  // most recent matrix for each part while its sampled animation frame is
+  // unchanged. The bounded map prevents a long editing session from retaining
+  // deleted machines forever.
+  const productionInstanceMatrixCache = new Map();
+  function cachedProductionInstanceMatrix(machine, design, component, partKey, revision) {
+    const key = `${machine.instanceId}:${partKey}`;
+    const cached = productionInstanceMatrixCache.get(key);
+    if (cached?.revision === revision) return cached.matrix;
+    const matrix = designInstanceMatrix(machine, design, component);
+    productionInstanceMatrixCache.delete(key);
+    productionInstanceMatrixCache.set(key, { revision, matrix });
+    if (productionInstanceMatrixCache.size > 4096) {
+      productionInstanceMatrixCache.delete(productionInstanceMatrixCache.keys().next().value);
+    }
+    return matrix;
+  }
+
   function recordGeometryTemplate(key, revision, callback) {
     if (depthRenderer.beginTemplate(key, revision) === false) return;
     const previous = recordingReusableGeometry;
@@ -7773,7 +8601,15 @@
             rotation:0, rotationX:0, rotationY:0, rotationZ:0, scaleEditMode:"individual", designScaleMode:"stretch" };
           drawCustomDesign(canonical, 1, 1, time, 3, partition.stationary, segments);
         });
-        queue(`${templateKey}:batch`, templateKey, { matrix: designInstanceMatrix(rendered, design) }, placementRevision);
+        queue(`${templateKey}:batch`, templateKey, {
+          matrix: cachedProductionInstanceMatrix(
+            rendered,
+            design,
+            null,
+            "stationary-body",
+            `${placementRevision}:${designRevision}`,
+          ),
+        }, placementRevision);
       }
       const fallback = [];
       const moving = sampledMovingComponents(design, sampleTime);
@@ -7799,8 +8635,16 @@
           else if (part.type === "wedge") drawDesignWedge(unit, part, unitDesign, 1, 1);
           else drawDesignCylinder(unit, part, unitDesign, 1, 1, part.type === "cone" ? 0 : 1);
         });
-        queue(`${templateKey}:batch`, templateKey, { matrix: designInstanceMatrix(rendered, design, component) },
-          `${placementRevision}:${designRevision}:${sampleTime}:${component.id || index}`);
+        // Copied nested groups can retain the same child IDs. The Designer
+        // renders those children directly, but the production matrix cache
+        // previously treated every repeated ID as the same part and stacked
+        // beams/cups at the first child's transform. Include the deterministic
+        // flattened render position so every visible child owns one cache slot.
+        const componentKey = `${index}:${component.id || "component"}`;
+        const componentRevision = `${placementRevision}:${designRevision}:${sampleTime}:${componentKey}`;
+        queue(`${templateKey}:batch`, templateKey, {
+          matrix: cachedProductionInstanceMatrix(rendered, design, component, componentKey, componentRevision),
+        }, componentRevision);
       });
       if (fallback.length) {
         drawRetainedObject(`plant:production-moving:${machine.instanceId}`,
@@ -7843,9 +8687,9 @@
     const columnEntries = visibleColumnEntries();
     const useInstancedColumns = typeof depthRenderer.addBoxInstances === "function";
     if (useInstancedColumns) {
-      const painted = clamp(state.stageFloat - 2.35);
+      const painted = paintProgress(state.paint.columnStageId, 3);
       const size = 2.1 + (2.32 - 2.1) * painted;
-      const color = blendHexColors(colors.steel, colors.yellow, painted);
+      const color = blendHexColors(state.paint.columnBefore, state.paint.columnAfter, painted);
       const columnBoxes = columnEntries.map(({ column }) => ({
         x: column.x - size / 2,
         y: 0,
@@ -7920,45 +8764,73 @@
 
     // Label candidates are ranked before drawing so production equipment claims
     // the clearest locations first. Smart mode reduces both label density and
-    // label detail as the camera zooms out, while selected/current objects always
-    // remain identifiable.
+    // label detail as the camera zooms out. Selected objects always remain
+    // identifiable; current-stage objects rank first but still respect the
+    // density budget so a busy production stage cannot flood the viewport.
     const labelBudget = smartLabelBudget();
     let ordinaryLabelsDrawn = 0;
+    const repeatedLabelsDrawn = new Map();
+    const activeLabelKeys = new Set();
     const labelCandidates = machineEntries
       .filter(({ machine, alpha }) => alpha > .15 && machine.showLabel !== false)
       .map((entry) => {
+        const labelKey = String(entry.machine.instanceId);
+        activeLabelKeys.add(labelKey);
         const selected = state.selectedMachineIds.has(entry.machine.instanceId);
         const current = Math.round(state.stageFloat) === entry.machine.reveal;
         const profile = machineLabelProfile(entry.machine);
-        return { ...entry, selected, current, profile };
+        const text = displayMachineLabel(entry.machine, profile);
+        const repeatKey = `${entry.machine.type || "generic"}|${text.toLocaleLowerCase()}`;
+        const priorVisual = labelVisualStates.get(labelKey);
+        const wasVisible = Boolean(priorVisual?.targetVisible || priorVisual?.alpha > .5);
+        const eligible = shouldShowSmartLabel(profile, selected, current, wasVisible);
+        return { ...entry, selected, current, profile, text, repeatKey, labelKey, eligible };
       })
-      .filter(({ selected, current, profile }) => shouldShowSmartLabel(profile, selected, current))
       .sort((first, second) => (
         Number(second.selected) - Number(first.selected) ||
         Number(second.current) - Number(first.current) ||
+        Number(second.eligible) - Number(first.eligible) ||
         second.profile.rank - first.profile.rank ||
         second.rendered.w * second.rendered.d - first.rendered.w * first.rendered.d
       ));
 
-    labelCandidates.forEach(({ machine, rendered, selected, current, profile }) => {
-      const priority = selected || current;
-      if (!priority && ordinaryLabelsDrawn >= labelBudget) return;
-      const drawn = label(
-        compactMachineLabel(machine, profile),
-        rendered.x + rendered.w/2,
-        rendered.h + 4 + (Number(rendered.renderY) || 0),
-        rendered.z + rendered.d/2,
+    labelCandidates.forEach(({ machine, rendered, selected, current, profile, text, repeatKey, labelKey, eligible }) => {
+      const priority = selected;
+      const repeatedCount = repeatedLabelsDrawn.get(repeatKey) || 0;
+      const withinBudget = priority || ordinaryLabelsDrawn < labelBudget;
+      const withinRepeatLimit = priority || repeatedCount < smartLabelRepeatLimit(profile);
+      const visibleTarget = eligible && withinBudget && withinRepeatLimit;
+      const pointerAnchor = localPoint(
+        rendered,
+        rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), 0, 100) / 100,
+        rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), 0, 100) / 100,
+        rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), 0, 100) / 100,
+      );
+      const result = label(
+        text,
+        pointerAnchor[0], pointerAnchor[1], pointerAnchor[2],
         current ? colors.orange : colors.teal,
         {
+          labelKey,
+          time,
+          visibleTarget,
+          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 60),
+          forceVisible: state.cameraMode !== "walk" && state.labelTextMode === "full" && state.zoom >= .72,
           priority,
+          selected,
+          current,
           cssSize: profile.cssSize,
           textColor: machine.labelTextColor,
           backgroundColor: machine.labelBackgroundColor,
           fontWeight: machine.labelFontWeight,
         }
       );
-      if (drawn && !priority) ordinaryLabelsDrawn += 1;
+      if (result.targetVisible) {
+        repeatedLabelsDrawn.set(repeatKey, repeatedCount + 1);
+        if (!priority) ordinaryLabelsDrawn += 1;
+      }
     });
+    trimLabelVisualStates(activeLabelKeys, time);
 
     machineEntries.forEach(({ rendered, alpha, grow }) => {
       const design = rendered.designId ? designLibrary[rendered.designId] : null;
@@ -8064,6 +8936,23 @@
   }
 
   let canvasSizeDirty = true;
+  let lastSkyPosition = "";
+
+  function updateSkyBackground() {
+    if (!modelFrame) return;
+    // Keep the overview sky visually anchored while the plant is orbited or
+    // panned. During a walkthrough, looking around reveals the wider cloud
+    // field like a surrounding environment instead of a screen-fixed image.
+    const horizontal = state.cameraMode === "walk" ? Math.round(-state.yaw * 245) : 0;
+    const vertical = state.cameraMode === "walk"
+      ? Math.round(clamp(state.pitch * 115 + state.walkVerticalOffset * 3, -120, 170))
+      : 0;
+    const position = `${horizontal}:${vertical}`;
+    if (position === lastSkyPosition) return;
+    lastSkyPosition = position;
+    modelFrame.style.setProperty("--sky-x", `${horizontal}px`);
+    modelFrame.style.setProperty("--sky-y", `${vertical}px`);
+  }
 
   function updateCanvasSize(force = false) {
     if (!force && !canvasSizeDirty) return;
@@ -8105,7 +8994,7 @@
     animationFrameId = requestAnimationFrame(draw);
     const firstPersonMoving = firstPersonController?.update(time) || false;
     const stageMoving = Math.abs(state.stage - state.stageFloat) > .001;
-    const animating = state.playing || stageMoving || state.visibleAnimationsActive || firstPersonMoving;
+    const animating = state.playing || stageMoving || state.visibleAnimationsActive || firstPersonMoving || labelTransitionsActive;
     if (!renderPerformance.shouldRender(time, {
       interacting: state.dragging || firstPersonController?.isMoving(),
       animating,
@@ -8115,19 +9004,28 @@
     detailedMachineDecisionCache = new WeakMap();
     machineLodDecisionCache = new WeakMap();
     visibleColumnEntriesCache = null;
+    labelTransitionsActive = false;
     const frameStartedAt = performance.now();
     renderPerformance.beginProfile?.();
     state.lastFrameTime = time;
     const elapsed = state.lastRenderedAt ? Math.min(80, Math.max(0, time - state.lastRenderedAt)) : 16.667;
     state.lastRenderedAt = time;
     updateCanvasSize();
+    updateSkyBackground();
     const blend = 1 - Math.pow(.93, elapsed / 16.667);
     state.stageFloat += (state.stage - state.stageFloat) * blend;
     if (Math.abs(state.stage - state.stageFloat) < .0005) state.stageFloat = state.stage;
     if (state.playing && time > state.playAt) {
-      setStage(state.stage >= stages.length - 1 ? 0 : state.stage + 1);
-      const baseDelay = state.stage === 0 ? 1600 : 3400;
-      state.playAt = time + baseDelay / state.playbackSpeed;
+      if (state.stage >= stages.length - 1) {
+        state.playing = false;
+        const play = document.getElementById("play-timeline");
+        if (play) { play.classList.remove("active"); play.textContent = "Play progress"; }
+        showWalkthroughInvitation();
+        showToast("Timeline complete — stopped at Today’s Production.");
+      } else {
+        setStage(state.stage + 1);
+        state.playAt = time + state.stageDurationSeconds * 1000;
+      }
     }
     ctx.clearRect(0,0,canvas.width,canvas.height);
     depthRenderer.beginFrame(canvas.width, canvas.height, project, rendererViewState());
@@ -8137,8 +9035,13 @@
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(
       "plant:shell",
-      `${bounds.join("|")}|${clamp(state.stageFloat - 2.35).toFixed(3)}|${JSON.stringify(state.walls)}`,
+      `${bounds.join("|")}|${paintProgress(state.paint.wallStageId, 3).toFixed(3)}|${state.paint.wallBefore}|${state.paint.wallAfter}|${JSON.stringify(state.walls)}|${state.cameraMode}|${JSON.stringify(state.roof)}`,
       drawShell,
+    );
+    drawRetainedObject(
+      "plant:roof",
+      `${bounds.join("|")}|${state.cameraMode}|${JSON.stringify(state.roof)}`,
+      drawRoof,
     );
     renderPerformance.beginPhase?.("machines");
     drawSceneObjects(time);
@@ -8182,6 +9085,7 @@
   }
 
   function setStage(index) {
+    const previousStage = state.stage;
     state.stage = clamp(Math.round(index), 0, stages.length - 1);
     invalidateWalkSpatialIndex();
     const stage = stages[state.stage];
@@ -8225,6 +9129,13 @@
     });
     const scrubber = document.getElementById("timeline-scrubber");
     if (scrubber) scrubber.value = String(state.stage);
+    const stagePanel = document.querySelector(".stage-panel");
+    if (stagePanel && previousStage !== state.stage) {
+      stagePanel.classList.remove("stage-transitioning");
+      void stagePanel.offsetWidth;
+      stagePanel.classList.add("stage-transitioning");
+      window.setTimeout(() => stagePanel.classList.remove("stage-transitioning"), 520);
+    }
     if (state.editing && state.editorTool === "timeline") updateEditorPanel();
   }
 
@@ -8379,12 +9290,12 @@
     state.zoom = clamp(state.zoom * (event.deltaY > 0 ? .9 : 1.1), .2, 10);
   }, { passive: false });
 
-  window.addEventListener("focus", refreshExternalProjectChanges);
-  window.addEventListener("pageshow", refreshExternalProjectChanges);
-  document.addEventListener("visibilitychange", () => {
+  addLifecycleListener(window, "focus", refreshExternalProjectChanges);
+  addLifecycleListener(window, "pageshow", refreshExternalProjectChanges);
+  addLifecycleListener(document, "visibilitychange", () => {
     if (!document.hidden) refreshExternalProjectChanges();
   });
-  window.addEventListener("storage", (event) => {
+  addLifecycleListener(window, "storage", (event) => {
     if (event.key === DESIGN_STORAGE_KEY) refreshDesignLibrary();
     if (event.key === STORAGE_KEY) refreshMachineDesignAssignments();
   });
@@ -8395,7 +9306,7 @@
 
   document.getElementById("next-stage")?.addEventListener("click", () => setStage(state.stage + 1));
   document.getElementById("previous-stage")?.addEventListener("click", () => setStage(state.stage - 1));
-  window.addEventListener("keydown", (event) => {
+  addLifecycleListener(window, "keydown", (event) => {
     const typing = ["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName);
     if (!typing && event.code === "Space") {
       state.spacePressed = true;
@@ -8404,7 +9315,7 @@
     if (!typing && state.cameraMode === "walk") {
       if (event.key === "Escape") {
         event.preventDefault();
-        canvas.closest(".model-frame")?.querySelector("[data-toggle='walk']")?.click();
+        openFirstPersonOptions(true);
         return;
       }
       if (["w", "a", "s", "d", " "].includes(event.key.toLowerCase())) return;
@@ -8458,10 +9369,10 @@
     if (event.key === "ArrowRight") setStage(state.stage + 1);
     if (event.key === "ArrowLeft") setStage(state.stage - 1);
   });
-  window.addEventListener("keyup", (event) => {
+  addLifecycleListener(window, "keyup", (event) => {
     if (event.code === "Space") state.spacePressed = false;
   });
-  window.addEventListener("blur", () => {
+  addLifecycleListener(window, "blur", () => {
     state.spacePressed = false;
     finishPointer();
   });
@@ -8473,8 +9384,8 @@
       })
     : null;
   canvasResizeObserver?.observe(canvas);
-  window.addEventListener("resize", () => updateCanvasSize(true));
-  window.addEventListener("renderperformancechange", (event) => {
+  addLifecycleListener(window, "resize", () => updateCanvasSize(true));
+  addLifecycleListener(window, "renderperformancechange", (event) => {
     canvasSizeDirty = true;
     if (!event.detail?.adaptive) updateCanvasSize(true);
     renderPerformance.invalidate();
@@ -8487,15 +9398,22 @@
     if (geometryPreparedFrame) window.cancelAnimationFrame(geometryPreparedFrame);
     canvasResizeObserver?.disconnect();
     firstPersonController?.destroy?.();
+    renderPerformance.dispose?.();
     depthRenderer.dispose?.();
     sceneCanvas?.remove();
     syncChannel?.close();
-    window.removeEventListener("plant-renderer-fallback", handleRendererFallback);
-    window.removeEventListener("plantgeometryprepared", handleGeometryPrepared);
-    window.removeEventListener("plantlegacyteardown", teardownPlantApplication);
+    removeLifecycleListeners();
+    if (window[VIEWPORT_RUNTIME_KEY]?.token === viewportRuntimeToken) {
+      delete window[VIEWPORT_RUNTIME_KEY];
+    }
   }
-  window.addEventListener("plantlegacyteardown", teardownPlantApplication);
-  window.addEventListener("pagehide", (event) => {
+  window[VIEWPORT_RUNTIME_KEY] = {
+    token: viewportRuntimeToken,
+    source: "/plant-app.js",
+    dispose: teardownPlantApplication,
+  };
+  addLifecycleListener(window, "plantlegacyteardown", teardownPlantApplication);
+  addLifecycleListener(window, "pagehide", (event) => {
     if (!event.persisted) teardownPlantApplication();
   });
 

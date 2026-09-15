@@ -166,14 +166,22 @@ assert.equal(clipped,1);
 // Exercise the actual production partition/batch orchestration with hundreds
 // of static parts, repeated machines, a moving box and a roller fallback.
 const productionRenderer=context.window.createDepthSceneRenderer(canvas);
-let staticDraws=0,unitDraws=0,animatedEvaluations=0;
+let staticDraws=0,unitDraws=0,animatedEvaluations=0,matrixBuilds=0;
 let activeLod=3;
+let activeProductionFrame=0;
+const firstFrameDuplicateTransforms=[];
 const productionDesign={
   base:{x:0,y:0,z:0,w:20,h:10,d:30},
   components:[
     ...Array.from({length:500},(_,id)=>({id:`body-${id}`,type:"box",x:id/100,y:0,z:0,w:1,h:1,d:1})),
     {id:"moving",type:"box",x:2,y:2,z:3,w:2,h:2,d:2,animationType:"oscillate",animationEnabled:true},
     {id:"rollers",type:"rollerBed",x:2,y:2,z:3,w:2,h:2,d:2,count:8,animationType:"oscillate",animationEnabled:true},
+    {id:"nested-carrier",type:"group",animationType:"oscillate",animationEnabled:true,children:[
+      {id:"copied-cup",type:"box",x:6,y:2,z:3,w:1,h:1,d:1},
+      {id:"nested-copy",type:"group",children:[
+        {id:"copied-cup",type:"box",x:12,y:2,z:3,w:1,h:1,d:1},
+      ]},
+    ]},
   ],
 };
 const savedDesign=JSON.stringify(productionDesign);
@@ -187,7 +195,16 @@ const runtime={
   recordingReusableGeometry:false,suppressGeometryOutlines:false,
   designRenderPartitionCache:new WeakMap(),animatedVisibleDesignComponentsCache:new WeakMap(),
   objectRenderIdentity:()=>1,designBaseDimensions:()=>productionDesign.base,
-  designHasAnimation:()=>true,designInstanceMatrix:math.designInstanceMatrix,
+  designHasAnimation:()=>true,
+  designInstanceMatrix(...args) {
+    matrixBuilds++;
+    const [placed, , component] = args;
+    if (activeProductionFrame === 0 && component?.id === "copied-cup") {
+      firstFrameDuplicateTransforms.push(`${placed.instanceId}:${component.x}`);
+    }
+    return math.designInstanceMatrix(...args);
+  },
+  productionInstanceMatrixCache:new Map(),
   animateDesignComponent(component,time) { animatedEvaluations++;return {...component,x:component.x+time/1000}; },
   drawCustomDesign(machine,alpha,grow,time,lod,parts) {
     if(parts.length===500) staticDraws++;
@@ -199,21 +216,28 @@ vm.createContext(runtime);
 vm.runInContext([
   "designContainsAnimation","designRenderPartition","sampledMovingComponents","rectangularSplitDesignComponents",
   "machineHasLayoutMotion","machineHasGeometryAnimation","machineAnimationSampleTime","renderedMachineRevision",
-  "drawRetainedObject","recordGeometryTemplate","drawProductionDesignInstances",
+  "drawRetainedObject","recordGeometryTemplate","cachedProductionInstanceMatrix","drawProductionDesignInstances",
 ].map(extract).join("\n"),runtime);
 const entries=[0,1].map((id)=>{
   const placed={...machine,instanceId:`copy-${id}`,designId:"test",color:"#ffffff",x:100*id};
   return {machine:placed,rendered:placed,alpha:1,grow:1};
 });
 for(let i=0;i<120;i++) {
+  activeProductionFrame=i;
   activeLod = i % 2 ? 2 : 3;
   productionRenderer.beginFrame(1000,700,()=>{},{});
   assert.equal(runtime.drawProductionDesignInstances(entries,i*16.667).size,2);
   productionRenderer.render();
 }
+assert.deepEqual(
+  [...new Set(firstFrameDuplicateTransforms)].sort(),
+  ["copy-0:12","copy-0:6","copy-1:12","copy-1:6"],
+  "repeated child IDs inside nested merged items must keep independent Plant Layout transforms",
+);
 assert.equal(staticDraws,1,"500 stationary parts in two animated machines should be recorded only once");
 assert.equal(unitDraws,1,"repeated animated boxes must share a single unit mesh");
-assert.ok(animatedEvaluations<=122,"distant copies must share 30 Hz samples and never clone the static body");
+assert.ok(animatedEvaluations<=183,"distant copies must share 30 Hz samples and never clone the static body");
+assert.ok(matrixBuilds<=365,"unchanged sampled animation frames must reuse production instance matrices");
 assert.equal(JSON.stringify(productionDesign),savedDesign,"render optimization must never mutate saved designs");
 assert.ok(productionRenderer.getStats().geometryBuilds<=4,"static, unit primitive and two roller fallbacks should retain their buffers");
 productionRenderer.dispose();

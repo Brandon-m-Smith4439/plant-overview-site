@@ -3,9 +3,32 @@
 
   const canvas = document.getElementById("machine-design-canvas");
   if (!canvas) return;
+  if (!window.monroeEditorAccess?.hasAccess?.()) {
+    window.monroeEditorAccess?.requestAccess?.().then((granted) => {
+      if (granted) window.location.reload();
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- this file also powers the standalone preview.
+      else window.location.assign("preview.html");
+    });
+    return;
+  }
+  const VIEWPORT_RUNTIME_KEY = "__MONROE_ACTIVE_VIEWPORT_RUNTIME__";
+  const previousViewportRuntime = window[VIEWPORT_RUNTIME_KEY];
+  if (previousViewportRuntime?.dispose) {
+    try { previousViewportRuntime.dispose(); }
+    catch (error) { console.warn("The previous design viewport could not be fully released.", error); }
+  }
+  const viewportRuntimeToken = {};
   let applicationActive = true;
   let animationFrameId = 0;
   let geometryPreparedFrame = 0;
+  const lifecycleListeners = [];
+  function addLifecycleListener(target, type, listener, options) {
+    target?.addEventListener?.(type, listener, options);
+    lifecycleListeners.push(() => target?.removeEventListener?.(type, listener, options));
+  }
+  function removeLifecycleListeners() {
+    lifecycleListeners.splice(0).forEach((remove) => remove());
+  }
 
   const ctx = canvas.getContext("2d");
   const sceneCanvas = window.createDepthCanvas?.(canvas, "depth-scene-canvas machine-depth-canvas") || null;
@@ -29,8 +52,8 @@
       renderPerformance.invalidate?.("geometry-prepared");
     });
   };
-  window.addEventListener("plant-renderer-fallback", handleRendererFallback);
-  window.addEventListener("plantgeometryprepared", handleGeometryPrepared);
+  addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
+  addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
   const APP_VERSION = "0.13.0";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
@@ -561,8 +584,6 @@
         })),
       }, stableId);
     }
-    machine.designId = stableId;
-    machine.designScaleMode = normalizedDesignScaleMode(machine.designScaleMode);
     return stableId;
   }
 
@@ -768,13 +789,6 @@
       changed = syncPlantObjectDimensions(machine, design) || changed;
     });
     if (changed) saveLayout();
-  }
-
-  if (queryMachine && state.designId) {
-    queryMachine.designId = state.designId;
-    syncPlantObjectDimensions(queryMachine, currentDesign());
-    saveLibrary();
-    saveLayout();
   }
 
   function snapshot() {
@@ -5232,7 +5246,7 @@
     renderPerformance.invalidate?.("timeline-drag");
   }
 
-  window.addEventListener("pointermove", (event) => {
+  addLifecycleListener(window, "pointermove", (event) => {
     const drag = state.timelineDrag;
     if (!drag) return;
     const timeline = ensureTimeline(timelineTargetComponent());
@@ -5314,8 +5328,8 @@
           : `${clip.name} duration changed to ${clip.duration.toFixed(2)} seconds.`);
     } else updateAnimationTimelineUI();
   }
-  window.addEventListener("pointerup", finishTimelineDrag);
-  window.addEventListener("pointercancel", finishTimelineDrag);
+  addLifecycleListener(window, "pointerup", finishTimelineDrag);
+  addLifecycleListener(window, "pointercancel", finishTimelineDrag);
 
   document.getElementById("timeline-clip-editor")?.addEventListener("change", (event) => {
     const fieldInput = event.target.closest("[data-timeline-clip-field]");
@@ -6157,7 +6171,7 @@
     commit(components.length > 1 ? `${components.length} parts nudged together.` : undefined);
   }
 
-  window.addEventListener("keydown", (event) => {
+  addLifecycleListener(window, "keydown", (event) => {
     const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName);
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "s") {
@@ -6224,7 +6238,7 @@
       viewportSettings.appendChild(performanceGroup);
     }
   }
-  window.addEventListener("renderperformancechange", () => {
+  addLifecycleListener(window, "renderperformancechange", () => {
     updateCanvasSize();
     renderPerformance.invalidate();
   });
@@ -6243,14 +6257,14 @@
     plantLayout = latest;
     updateAssignmentPanel();
   }
-  window.addEventListener("storage", (event) => {
+  addLifecycleListener(window, "storage", (event) => {
     if (event.key === LAYOUT_KEY || event.key === LEGACY_LAYOUT_KEY) reloadPlantLayout();
   });
   syncChannel?.addEventListener("message", (event) => {
     if (event.data?.source !== "machine-design-studio" && event.data?.type === "layout-updated") reloadPlantLayout();
   });
-  window.addEventListener("focus", reloadPlantLayout);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) reloadPlantLayout(); });
+  addLifecycleListener(window, "focus", reloadPlantLayout);
+  addLifecycleListener(document, "visibilitychange", () => { if (!document.hidden) reloadPlantLayout(); });
   function teardownMachineDesigner(event) {
     if (event?.detail?.source && event.detail.source !== "/machine-design-studio.js") return;
     if (!applicationActive) return;
@@ -6260,15 +6274,33 @@
     if (deferredDesignSwitchRefresh) window.cancelAnimationFrame(deferredDesignSwitchRefresh);
     if (deferredDesignSwitchTimer) window.clearTimeout(deferredDesignSwitchTimer);
     if (deferredLibrarySave) writeLibraryNow();
+    renderPerformance.dispose?.();
     depthRenderer.dispose?.();
     sceneCanvas?.remove();
     syncChannel?.close();
-    window.removeEventListener("plant-renderer-fallback", handleRendererFallback);
-    window.removeEventListener("plantgeometryprepared", handleGeometryPrepared);
-    window.removeEventListener("plantlegacyteardown", teardownMachineDesigner);
+    removeLifecycleListeners();
+    if (window[VIEWPORT_RUNTIME_KEY]?.token === viewportRuntimeToken) {
+      delete window[VIEWPORT_RUNTIME_KEY];
+    }
   }
-  window.addEventListener("plantlegacyteardown", teardownMachineDesigner);
-  window.addEventListener("pagehide", (event) => {
+  window[VIEWPORT_RUNTIME_KEY] = {
+    token: viewportRuntimeToken,
+    source: "/machine-design-studio.js",
+    dispose: teardownMachineDesigner,
+  };
+  document.querySelectorAll(".studio-layout-link, .studio-back-link").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      // Release the Designer's frame loop and WebGL context before the plant
+      // starts allocating its much larger retained scene.
+      event.preventDefault();
+      const target = link.href;
+      teardownMachineDesigner();
+      window.setTimeout(() => window.location.assign(target), 120);
+    });
+  });
+  addLifecycleListener(window, "plantlegacyteardown", teardownMachineDesigner);
+  addLifecycleListener(window, "pagehide", (event) => {
     if (!event.persisted) teardownMachineDesigner();
   });
   setTool("select");

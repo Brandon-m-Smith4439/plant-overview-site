@@ -496,10 +496,19 @@ Start Plant Overview.bat
 ```
 
 The launcher finds the per-user Node.js installation, installs dependencies on
-the first run when needed, opens `http://127.0.0.1:4173`, and starts the live
-development server. Keep the command window open while working and press
-`Ctrl+C` when finished. The server listens only on this computer, so it does
-not require a Windows Firewall exception.
+the first run when needed, rebuilds the current source, opens
+`http://127.0.0.1:4173`, and starts the optimized local server. Keep the command
+window open while working and press `Ctrl+C` when finished. Restart the launcher
+after changing source files so the optimized site is rebuilt. The server listens
+only on this computer, so it does not require a Windows Firewall exception.
+
+There is intentionally one Windows launcher. The development/HMR server was
+removed from the normal workflow because its retained debugging runtime and
+route reloads distort graphics performance after moving between Machine Design
+Studio and the full production layout. The optimized launcher also applies a
+Windows compatibility fix for vinext's generated asset cache before each build;
+without it, the HTML can load while every generated CSS and JavaScript file
+returns 404 and the page appears as unstyled text.
 
 The local address is intentionally fixed at port `4173`, matching the standalone
 `preview.html` workflow below. Because browser storage belongs to the origin
@@ -523,11 +532,12 @@ including current and legacy layouts, automatic layout backups, custom machine
 designs, and rendering preferences. The normal layout-only export remains
 available for sharing just the plant layout.
 
-Manual startup:
+Manual optimized startup:
 
 ```powershell
 npm ci
-npm run dev -- --hostname 127.0.0.1 --port 4173
+npm run build
+npm run start -- --hostname 127.0.0.1 --port 4173
 ```
 
 Standalone preview:

@@ -8,13 +8,20 @@ const css = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf
 
 assert.ok(plant.includes("MAX_FLOOR_DIMENSION = 5000"), "Floor dimensions must be bounded.");
 assert.ok(plant.includes("MAX_FLOOR_GRID_LINES = 120"), "Large floors need a bounded adaptive grid.");
+assert.ok(plant.includes("defaultRoofSettings") && plant.includes("leftHeight: 50") && plant.includes("rightHeight: 75"), "The editable roof must default to 50 ft on the left and 75 ft on the right.");
+assert.ok(plant.includes("function drawRoofTruss") && plant.includes("function drawRoof"), "The plant needs a roof and black truss rendering system.");
+assert.ok(plant.includes("const roofColor = state.roof.roofColor") && plant.includes("function drawTrussMember"), "First person must honor the selected roof color while retaining solid thick truss members.");
+assert.ok(plant.includes("function displayedWallSections") && plant.includes("state.roof.leftHeight") && plant.includes("state.roof.rightHeight"), "Visible roof sections must extend their matching walls to the configured height.");
+assert.ok(plant.includes("function updateSkyBackground") && plant.includes('state.cameraMode === "walk"') && css.includes("--sky-x") && css.includes("background-position"), "The overview sky must stay anchored while first-person look direction can reveal the wider cloud field.");
+assert.ok(plant.includes('data-roof-field="splitPercent"') && plant.includes('data-roof-field="trussSpacing"'), "Structure editing must expose the roof split and truss spacing.");
+assert.ok(plant.includes("roof: clone(state.roof)") && plant.includes("roof: state.roof"), "Roof configuration must survive history, export, and browser persistence.");
 assert.ok(plant.includes("niceGridStep"), "Floor grid spacing must adapt to the structure size.");
 const updateStart = plant.indexOf("function updateEditorPanel");
 const createStart = plant.indexOf("function createEditorPanel");
 const updateBody = plant.slice(updateStart, createStart);
 assert.ok(!updateBody.includes('[data-floor-field]").forEach((input) => {\n      input.addEventListener'), "Floor listeners must not accumulate during panel refreshes.");
 assert.ok(plant.includes('data-toggle="walk"'), "Plant needs a walkthrough camera control.");
-assert.ok(plant.includes('data-view="low"'), "Plant needs a low-angle camera preset.");
+assert.ok(!plant.includes('data-view="low"'), "The retired Plant Layout low-angle button must stay out of the simplified public controls.");
 assert.ok(plant.includes("state.cameraMode === \"walk\""), "Walkthrough movement logic is missing.");
 assert.ok(studio.includes('view === "low"'), "Designer needs a low-angle camera preset.");
 assert.ok(studio.includes("0.1, 10"), "Designer must allow closer zoom.");

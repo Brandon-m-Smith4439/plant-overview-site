@@ -251,7 +251,7 @@
       onLockChange(pointerLocked);
       // Browsers reserve Escape for releasing pointer lock, so a normal keydown
       // event is not guaranteed. Treat loss of a previously acquired lock as an
-      // explicit request to leave first-person mode in one step.
+      // explicit request to show the first-person options menu.
       if (!pointerLocked && wasLocked && enabled && !stopping) {
         onExitRequest("pointer-lock-released");
       }

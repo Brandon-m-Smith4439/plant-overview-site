@@ -42,15 +42,21 @@ rmdir /s /q "%VITE_CACHE%"
 if exist "%VITE_CACHE%" goto cache_failed
 
 :cache_ready
+echo Building the optimized local website...
+call npm.cmd run build
+if errorlevel 1 goto build_failed
+
 echo Opening %PLANT_URL%
-echo Keep this window open while revising or viewing the website.
+echo Keep this window open while viewing or editing the website.
+echo This optimized mode avoids development-server graphics slowdowns.
+echo Restart this file after changing source code so it rebuilds the site.
 echo The fixed address keeps browser-saved layout revisions on one local origin.
 echo Press Ctrl+C when you are finished.
 echo.
 
 if not defined PLANT_NO_BROWSER start "" powershell.exe -NoProfile -WindowStyle Hidden -Command "$url='%PLANT_URL%'; for($attempt=0; $attempt -lt 120; $attempt++){ try { $response=Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2; if($response.StatusCode -eq 200){ Start-Process $url; exit 0 } } catch {} Start-Sleep -Milliseconds 500 }"
 
-call "%~dp0node_modules\.bin\vinext.cmd" dev --hostname %PLANT_HOST% --port %PLANT_PORT%
+call "%~dp0node_modules\.bin\vinext.cmd" start --hostname %PLANT_HOST% --port %PLANT_PORT%
 set "EXIT_CODE=%ERRORLEVEL%"
 if "%EXIT_CODE%"=="0" exit /b 0
 
@@ -74,6 +80,13 @@ exit /b 1
 echo.
 echo The website dependencies could not be installed.
 echo Check the npm error above, then double-click this file again.
+pause
+exit /b 1
+
+:build_failed
+echo.
+echo The optimized website build failed.
+echo Review the error above, then double-click this file again.
 pause
 exit /b 1
 

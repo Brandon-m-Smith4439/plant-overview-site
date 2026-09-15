@@ -1,8 +1,10 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import LegacyScriptLoader from "../legacy-script-loader";
+import { EditorAccessGate } from "../editor-access-gate";
 
 export default function MachineStudio() {
   return (
+<EditorAccessGate>
 <main className="machine-studio-shell">
 <header className="studio-topbar">
 <div className="studio-brand">
@@ -351,6 +353,7 @@ export default function MachineStudio() {
 </form>
 </dialog>
 <LegacyScriptLoader sources={[
+"/editor-access.js",
 "/depth-scene-renderer.js",
 "/three-depth-scene-renderer.js",
 "/render-performance.js",
@@ -362,5 +365,6 @@ export default function MachineStudio() {
 "/machine-design-studio.js",
 ]} />
 </main>
+</EditorAccessGate>
   );
 }

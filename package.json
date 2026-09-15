@@ -7,12 +7,12 @@
   },
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build",
+    "build": "node scripts/patch-vinext-windows-static-cache.mjs && vinext build",
     "generate:types": "wrangler types worker-configuration.d.ts --config dist/server/wrangler.json",
     "typecheck": "npm run build && npm run generate:types && tsc --noEmit --incremental false",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern worker-configuration.d.ts",
-    "validate:js": "node --check public/depth-scene-renderer.js && node --check public/three-depth-scene-renderer.js && node --check public/spatial-index.js && node --check public/geometry-prep-client.js && node --check public/geometry-prep-worker.js && node --check public/render-performance.js && node --check public/workspace-transfer.js && node --check public/first-person-controller.js && node --check public/animation-timeline.js && node --check public/animation-timeline-workspace.js && node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
+    "validate:js": "node --check public/depth-scene-renderer.js && node --check public/three-depth-scene-renderer.js && node --check public/spatial-index.js && node --check public/geometry-prep-client.js && node --check public/geometry-prep-worker.js && node --check public/render-performance.js && node --check public/editor-access.js && node --check public/workspace-transfer.js && node --check public/first-person-controller.js && node --check public/animation-timeline.js && node --check public/animation-timeline-workspace.js && node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
     "export:machines": "python cad/export_machine_registry.py",
     "db:generate": "drizzle-kit generate",
     "validate:rendering": "node tests/validate-layout-rendering.mjs",
@@ -31,7 +31,7 @@
     "validate:design-scale-preservation": "node tests/validate-design-scale-preservation.mjs",
     "validate:transform-sync": "node tests/validate-transform-sync.mjs",
     "validate:structure-camera": "node tests/validate-structure-camera.mjs",
-    "validate:performance": "node tests/validate-performance.mjs && node tests/validate-render-performance-runtime.mjs",
+    "validate:performance": "node tests/validate-performance.mjs && node tests/validate-render-performance-runtime.mjs && node tests/validate-viewport-route-lifecycle.mjs",
     "validate:overlap-performance": "node tests/validate-overlap-performance.mjs",
     "validate:renderer": "node tests/validate-renderer-runtime.mjs",
     "validate:retained-renderer": "node tests/validate-retained-three-performance.mjs",
@@ -53,6 +53,7 @@
     "validate:editor-tabs": "node tests/validate-tabbed-editors.mjs",
     "validate:timeline-workspace": "node tests/validate-timeline-workspace.mjs",
     "validate:timeline-repair": "node tests/validate-timeline-repair.mjs",
+    "validate:public-viewer": "node tests/validate-public-viewer-controls.mjs",
     "validate:cad": "py -B cad/validate_site.py"
   },
   "dependencies": {

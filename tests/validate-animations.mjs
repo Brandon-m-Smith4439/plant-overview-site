@@ -57,7 +57,7 @@ assert.ok(plantApp.includes("animationPauseSeconds"), "Scene animation pause tim
 assert.ok(plantApp.includes("pauseSeconds * 2"), "Back-and-forth animations do not pause at both endpoints.");
 assert.ok(studio.includes("componentAnimationWave"), "Design Studio pause-aware animation timing is missing.");
 assert.ok(studio.includes("animationPausedAt") && studio.includes("animationTimeOffset"), "Designer pause/resume clock is missing.");
-assert.ok(plantApp.includes("data-toggle=\"animations\"") && plantApp.includes("effectiveAnimationTime"), "Plant pause/resume control is missing.");
+assert.ok(plantApp.includes('motionToggle.dataset.toggle = "animations"') && plantApp.includes("effectiveAnimationTime"), "Plant pause/resume control is missing.");
 assert.ok(plantApp.includes('axis === "all") transform.rotation[0]') && plantApp.includes('axis === "all") transform.rotation[2]'), "Scene spin animation does not rotate all axes.");
 assert.ok(studio.includes('axis === "all") animated.rotationX') && studio.includes('axis === "all") animated.rotationZ'), "Machine-part spin animation does not rotate all axes.");
 assert.ok(plantApp.includes('select-production-glass'), "Moving-glass quick selection is missing from the layout editor.");

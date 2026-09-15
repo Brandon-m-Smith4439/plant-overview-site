@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import LegacyScriptLoader from "./legacy-script-loader";
+import { ProtectedEditorLink } from "./editor-access-gate";
 
 export default function Home() {
   return (
@@ -14,11 +15,10 @@ export default function Home() {
         <div className="masthead-actions">
           <nav className="site-nav" aria-label="Model tools">
             <a className="active" href="/">Plant layout</a>
-            <a href="/machine-studio">Machine Design Studio</a>
+            <ProtectedEditorLink href="/machine-studio">Machine Design Studio</ProtectedEditorLink>
           </nav>
           <p className="source-note">
-            Model Studio <strong>v0.13.0</strong> · Grounded in{" "}
-            <strong>Monroe Archs w Updates 1-23-25 (002).dwg</strong>
+            Model Studio <strong>v0.13.0</strong>
           </p>
         </div>
       </header>
@@ -33,7 +33,6 @@ export default function Home() {
             id="plant-canvas"
             aria-label="Interactive 3D model of the Monroe glass plant"
           />
-          <div className="model-badge">Editable · DXF-grounded footprint</div>
           <div className="view-help">
             Right-drag orbit · Middle-drag pan · Wheel zoom
           </div>
@@ -74,6 +73,7 @@ export default function Home() {
 
       <LegacyScriptLoader
         sources={[
+          "/editor-access.js",
           "/depth-scene-renderer.js",
           "/three-depth-scene-renderer.js",
           "/render-performance.js",

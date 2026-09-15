@@ -8,13 +8,23 @@ const studio = fs.readFileSync("public/machine-design-studio.js", "utf8");
 const plant = fs.readFileSync("public/plant-app.js", "utf8");
 const geometryPrep = fs.readFileSync("public/geometry-prep-client.js", "utf8");
 const firstPerson = fs.readFileSync("public/first-person-controller.js", "utf8");
+const renderPerformance = fs.readFileSync("public/render-performance.js", "utf8");
+const retainedRenderer = fs.readFileSync("public/three-depth-scene-renderer.js", "utf8");
 
 assert.match(loader, /plantlegacyteardown/, "Route cleanup must notify the outgoing legacy editor.");
 assert.match(loader, /scriptLoads\.delete\(entrySource\)/, "The route bootstrap must be reloadable when returning to a page.");
+assert.match(loader, /if \(event\.persisted\) teardownEntry\(\)/, "Back-forward cached routes must release their outgoing WebGL viewport.");
+assert.match(loader, /if \(event\.persisted\) window\.location\.reload\(\)/, "A released cached route must restart cleanly when revisited.");
 assert.match(plant, /cancelAnimationFrame\(animationFrameId\)/, "Plant teardown must stop its animation loop.");
 assert.match(plant, /depthRenderer\.dispose\?\.\(\)/, "Plant teardown must release retained GPU resources.");
+assert.match(plant, /renderPerformance\.dispose\?\.\(\)/, "Plant teardown must release its shared performance controller.");
+assert.match(plant, /removeLifecycleListeners\(\)/, "Plant teardown must remove route-scoped global listeners.");
 assert.match(studio, /cancelAnimationFrame\(animationFrameId\)/, "Designer teardown must stop its animation loop.");
 assert.match(studio, /depthRenderer\.dispose\?\.\(\)/, "Designer teardown must release retained GPU resources.");
+assert.match(studio, /renderPerformance\.dispose\?\.\(\)/, "Designer teardown must release its shared performance controller.");
+assert.match(studio, /removeLifecycleListeners\(\)/, "Designer teardown must remove route-scoped global listeners.");
+assert.match(renderPerformance, /function dispose\(\)/, "Shared performance controllers must provide route cleanup.");
+assert.match(retainedRenderer, /forceContextLoss\?\.\(\)/, "Retired route renderers must return their WebGL context immediately.");
 assert.match(plant, /function prepareLayoutDesignLibrary[\s\S]*machine\.designId && designLibrary\[machine\.designId\]/, "Layout startup must prepare only designs used by placed machines.");
 assert.match(geometryPrep, /Promise\.allSettled\(designs\.map\(\(design\) => prepareDesign\(design, \{ notify: false \}\)\)\)/, "Library geometry preparation must suppress per-design redraw storms.");
 assert.match(geometryPrep, /detail: \{ batch: true, count: designs\.length \}/, "Prepared libraries must emit one batched completion event.");
@@ -33,7 +43,8 @@ assert.match(plant, /walkHitboxesForMachine\(first\)/, "Layout overlap checks mu
 
 assert.match(plant, /function machineLabelZoomScale/, "Machine labels must use continuous zoom-responsive sizing.");
 assert.match(plant, /Math\.sqrt\(Math\.max\(\.02, state\.zoom\) \/ 1\.2\)/, "Orbit labels must become smaller and larger with zoom.");
-assert.match(plant, /ctx\.strokeStyle = "rgba\(235,246,242,\.32\)"/, "Machine labels must use the revised bordered tag appearance.");
+assert.match(plant, /ctx\.textAlign = "left"/, "Machine labels must use the revised professional tag appearance.");
+assert.match(plant, /ctx\.shadowColor = "rgba\(3,10,13,\.28\)"/, "Machine labels must retain readable separation from detailed equipment.");
 
 assert.match(plant, /const rotationY = Number\.isFinite\(Number\(parent\.rotationY\)\)/, "Built-in child geometry must use the canonical layout rotation.");
 assert.match(plant, /const walkLodHistory = new Map\(\)/, "First-person detail changes must retain hysteresis history.");

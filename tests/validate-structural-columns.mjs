@@ -25,6 +25,7 @@ assert.ok(plant.includes('data-column-grid-check="autoExtend"'), "Structure cont
 assert.ok(plant.includes('data-column-grid-field="spacingX"'), "Structure controls need X bay spacing.");
 assert.ok(plant.includes('data-column-grid-field="spacingZ"'), "Structure controls need Z bay spacing.");
 assert.ok(plant.includes("for (const column of structuralColumns())"), "First-person collision must include generated columns.");
+assert.ok(plant.includes("displayedColumnHeight(column, columnRoofProfile)"), "Structural columns must follow the active left/right roof height in overview, shadows, and export.");
 assert.ok(css.includes(".column-grid-controls"), "Automatic-column controls need dedicated styling.");
 assert.ok(css.includes(".column-position-controls"), "Movable-pillar controls need dedicated styling.");
 

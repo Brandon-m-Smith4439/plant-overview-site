@@ -77,18 +77,40 @@ const compoundMachine = {
   h: 8,
   rotationY: 0,
 };
+const mixedEnvelopeMachine = {
+  ...rotatedMachine,
+  id: "mixed-envelope-machine",
+  name: "Tempering line custom",
+  type: "animatedBox",
+  designId: "mixed-envelope-design",
+  x: 150,
+  z: 140,
+  w: 10,
+  d: 10,
+  h: 8,
+  rotationY: 0,
+};
 const context = {
-  machines: [...productionMachines, rotatedMachine, overheadCrane, compoundMachine],
+  machines: [...productionMachines, rotatedMachine, overheadCrane, compoundMachine, mixedEnvelopeMachine],
   cuttingTable,
-  state: { walkRadius: 1.2, walkEyeHeight: 5.5 },
+  state: { walkRadius: 1.2, walkEyeHeight: 5.5, walls: { west:true, east:true, south:true, "north-west":true, "north-east":true } },
   designLibrary: {
     "compound-design": {
       base: { x: 0, y: 0, z: 0, w: 10, h: 8, d: 10 },
       collisionEnvelopes: [
-        { id: "main-box", x: 0, y: 0, z: 0, w: 4, h: 8, d: 10 },
+        { id: "main-box", x: 0, y: 30, z: 0, w: 4, h: 8, d: 10 },
         { id: "added-box", x: 4, y: 0, z: 6, w: 6, h: 8, d: 4 },
       ],
       components: [],
+    },
+    "mixed-envelope-design": {
+      base: { x: 0, y: 0, z: 0, w: 10, h: 8, d: 10 },
+      collisionEnvelopes: [{ id: "added-machine-box", x: 0, y: 0, z: 0, w: 2, h: 8, d: 2 }],
+      components: [{
+        id: "main-line",
+        type: "group",
+        children: [{ id: "main-line-body", type: "box", visible: true, collisionEnvelope: { x: 4, y: 30, z: 2, w: 6, h: 8, d: 6 } }],
+      }],
     },
   },
   designPlacement: () => ({ scaleX: 1, scaleY: 1, scaleZ: 1 }),
@@ -100,6 +122,7 @@ const context = {
   clamp: (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value)),
   floorBounds: () => [-300, -300, 300, 300],
   structuralColumns: () => [],
+  displayedWallSections: () => [{ id: "interior-test", x: 50, y: 0, z: -10, w: 3, h: 24, d: 20 }],
   isColumnHidden: () => false,
   stageAlpha: () => 1,
   isFloorFeatureType: (type) => ["safetyLine", "trench", "floorDrain"].includes(type),
@@ -118,12 +141,16 @@ vm.runInNewContext([
   "results = {",
   "  cuttingCenter: walkCanOccupy(cuttingTable.x + cuttingTable.w / 2, cuttingTable.z + cuttingTable.d / 2, 1.2),",
   "  cuttingOutside: walkCanOccupy(cuttingTable.x - 5, cuttingTable.z + cuttingTable.d / 2, 1.2),",
-  "  productionCenters: machines.filter((machine) => machine.category === 'equipment' && !['rotated-machine', 'overhead-crane', 'compound-machine'].includes(machine.id)).map((machine) => ({ id: machine.id, canOccupy: walkCanOccupy(machine.x + machine.w / 2, machine.z + machine.d / 2, 1.2) })),",
+  "  productionCenters: machines.filter((machine) => machine.category === 'equipment' && !['rotated-machine', 'overhead-crane', 'compound-machine', 'mixed-envelope-machine'].includes(machine.id)).map((machine) => ({ id: machine.id, canOccupy: walkCanOccupy(machine.x + machine.w / 2, machine.z + machine.d / 2, 1.2) })),",
   "  rotatedLongEnd: walkCanOccupy(120, 118, 1.2),",
   "  craneCenter: walkCanOccupy(220, 202, 1.2),",
   "  compoundMain: walkCanOccupy(102, 145, 0.4),",
   "  compoundAdded: walkCanOccupy(108, 148, 0.4),",
   "  compoundInsideCorner: walkCanOccupy(108, 142, 0.4),",
+  "  mixedMachineBox: walkCanOccupy(151, 141, 0.4),",
+  "  mixedPartBox: walkCanOccupy(157, 145, 0.4),",
+  "  mixedTemperingBaseOnly: walkCanOccupy(153, 149, 0.4),",
+  "  wallVolume: walkCanOccupy(51.5, 0, 0.4),",
   "  candidateIds: walkCollisionCandidates().map((machine) => machine.id),",
   "};",
 ].join("\n"), context);
@@ -137,7 +164,11 @@ assert.equal(context.results.craneCenter, true, "An overhead crane envelope must
 assert.equal(context.results.compoundMain, false, "The main box of a compound envelope must continue blocking first-person walking.");
 assert.equal(context.results.compoundAdded, false, "Every added compound-envelope box must block first-person walking.");
 assert.equal(context.results.compoundInsideCorner, true, "The open inside corner of an L-shaped envelope must remain walkable.");
-assert.deepEqual(Array.from(context.results.candidateIds), [...productionMachines.map((machine) => machine.id), "rotated-machine", "compound-machine"]);
+assert.equal(context.results.mixedMachineBox, false, "A custom machine-level envelope must remain active.");
+assert.equal(context.results.mixedPartBox, false, "A vertically offset blue part-level envelope on an animated custom machine must remain an active floor-plan hitbox.");
+assert.equal(context.results.mixedTemperingBaseOnly, false, "The tempering line's primary base envelope must remain solid outside its detailed boxes.");
+assert.equal(context.results.wallVolume, false, "A visible exterior wall volume must block first-person walking.");
+assert.deepEqual(Array.from(context.results.candidateIds), [...productionMachines.map((machine) => machine.id), "rotated-machine", "compound-machine", "mixed-envelope-machine"]);
 
 const refreshDesignLibrarySource = functionSource(plant, "refreshDesignLibrary");
 assert.match(refreshDesignLibrarySource, /invalidateWalkSpatialIndex\(\)/, "Reloading edited envelopes must invalidate the cached first-person collision index.");

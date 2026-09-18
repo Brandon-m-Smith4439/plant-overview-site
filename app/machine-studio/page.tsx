@@ -50,6 +50,10 @@ export default function MachineStudio() {
 <button id="export-design" type="button">Export JSON</button><button id="import-design" type="button">Import JSON</button>
 <input id="import-design-file" type="file" accept="application/json,.json" hidden />
 </div>
+<div className="studio-button-grid compact studio-3mf-actions">
+<select id="design-3mf-scale" aria-label="3MF print scale" defaultValue="12"><option value="12">3MF 1:12</option><option value="24">3MF 1:24</option><option value="50">3MF 1:50</option><option value="100">3MF 1:100</option></select>
+<button id="export-design-3mf" type="button">Export color 3MF</button>
+</div>
 </details>
 </section>
 <section data-browser-panel="parts" className="studio-browser-section" hidden>
@@ -362,6 +366,7 @@ export default function MachineStudio() {
 "/machine-designs.js",
 "/animation-timeline.js",
 "/animation-timeline-workspace.js",
+"/three-mf-exporter.js",
 "/machine-design-studio.js",
 ]} />
 </main>

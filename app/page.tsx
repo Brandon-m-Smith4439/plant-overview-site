@@ -85,6 +85,7 @@ export default function Home() {
           "/workspace-transfer.js",
           "/animation-timeline.js",
           "/first-person-controller.js",
+          "/three-mf-exporter.js",
           "/plant-app.js",
         ]}
       />

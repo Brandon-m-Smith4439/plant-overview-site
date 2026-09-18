@@ -175,6 +175,7 @@
       const cp = Math.cos(pitch);
       const sp = Math.sin(pitch);
       const centerX = Number(view.centerX) || 0;
+      const centerY = Number(view.centerY) || 0;
       const centerZ = Number(view.centerZ) || 0;
       if (view.mode === "walk") {
         const cameraY = Number(view.cameraY) || 0;
@@ -211,8 +212,8 @@
       const depthScale = 1 / Math.max(100, Number(view.depthRange) || 1600);
       return new THREE.Matrix4().set(
         cy * xScale, 0, -sy * xScale, (-cy * centerX + sy * centerZ) * xScale,
-        -sy * sp * yScale, cp * yScale, -cy * sp * yScale, (sy * sp * centerX + cy * sp * centerZ) * yScale + baseline,
-        -sy * cp * depthScale, -sp * depthScale, -cy * cp * depthScale, (sy * cp * centerX + cy * cp * centerZ) * depthScale,
+        -sy * sp * yScale, cp * yScale, -cy * sp * yScale, (sy * sp * centerX - cp * centerY + cy * sp * centerZ) * yScale + baseline,
+        -sy * cp * depthScale, -sp * depthScale, -cy * cp * depthScale, (sy * cp * centerX + sp * centerY + cy * cp * centerZ) * depthScale,
         0, 0, 0, 1,
       );
     }

@@ -2722,6 +2722,7 @@
     return {
       mode: "orbit",
       centerX: (Number(design?.base.x) || 0) + (design?.base.w || 20) / 2 + state.panX,
+      centerY: state.panY,
       centerZ: (Number(design?.base.z) || 0) + (design?.base.d || 10) / 2 + state.panZ,
       yaw: state.yaw,
       pitch: state.pitch,
@@ -5561,7 +5562,6 @@
       }
       else design[field] = event.target.value.trim() || (field === "name" ? design.name : "");
       commit("", { syncName: field === "name" });
-      if (kind === "base") fitView();
     });
   });
 
@@ -6004,7 +6004,6 @@
     design.base.w = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxX - bounds.minX + clearance * 2);
     design.base.h = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxY - bounds.minY + clearance * 2);
     design.base.d = Math.max(MIN_DESIGN_ENVELOPE, bounds.maxZ - bounds.minZ + clearance * 2);
-    fitView();
     commit(`Design envelope fitted tightly to ${visibleOnly ? "visible" : "all"} parts${clearanceInches ? ` with ${clearanceInches.toFixed(3)} in clearance` : ""}.`);
   });
 
@@ -6141,6 +6140,20 @@
     link.remove();
     URL.revokeObjectURL(url);
     showToast("Machine design exported.");
+  });
+  document.getElementById("export-design-3mf")?.addEventListener("click", () => {
+    const design = currentDesign();
+    if (!design) return;
+    if (!window.PlantThreeMf) { showToast("3MF export is unavailable. Reload the page and try again."); return; }
+    try {
+      const scaleDenominator = Number(document.getElementById("design-3mf-scale")?.value) || 12;
+      const blob = window.PlantThreeMf.createDesign({ design, scaleDenominator, name: design.name });
+      window.PlantThreeMf.download(blob, `${window.PlantThreeMf.safeName(design.name, "machine-design")}-1-to-${scaleDenominator}.3mf`);
+      showToast(`${design.name} exported as a color 3MF at 1:${scaleDenominator}.`);
+    } catch (error) {
+      console.error(error);
+      showToast(error instanceof Error ? error.message : "The 3MF could not be created.");
+    }
   });
 
   const importFile = document.getElementById("import-design-file");

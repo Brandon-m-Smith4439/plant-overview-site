@@ -242,6 +242,11 @@
     roofColor: "#79878b",
     trussColor: "#11181c",
   });
+  const defaultWallGeometry = Object.freeze({
+    height: 24,
+    thickness: 3,
+    extendToRoof: true,
+  });
   const defaultDesignLibrary = window.PLANT_MACHINE_DESIGNS || {};
 
   function normalizePaintSettings(value) {
@@ -270,12 +275,24 @@
     };
   }
 
+  function normalizeWallGeometry(value) {
+    return {
+      height: clamp(Number(value?.height) || defaultWallGeometry.height, 8, 150),
+      thickness: clamp(Number(value?.thickness) || defaultWallGeometry.thickness, .25, 20),
+      extendToRoof: value?.extendToRoof !== false,
+    };
+  }
+
   function loadViewerPreferences() {
     try {
       const saved = JSON.parse(localStorage.getItem(VIEWER_PREFERENCES_KEY) || "null");
-      return { labelTextMode: saved?.labelTextMode === "abbreviated" ? "abbreviated" : saved?.labelTextMode === "off" ? "off" : "full" };
+      const mode = saved?.labelTextMode;
+      // v1 only offered Full / Abbreviated / Off. Move the legacy Full default
+      // to Adaptive once, while preserving explicit v2 choices thereafter.
+      if (saved?.version !== 2 && mode === "full") return { labelTextMode: "auto" };
+      return { labelTextMode: ["auto", "full", "abbreviated", "off"].includes(mode) ? mode : "auto" };
     } catch {
-      return { labelTextMode: "full" };
+      return { labelTextMode: "auto" };
     }
   }
 
@@ -411,14 +428,16 @@
 
   function wallSections() {
     const bounds = floorBounds();
+    const thickness = state?.wallGeometry?.thickness || defaultWallGeometry.thickness;
+    const height = state?.wallGeometry?.height || defaultWallGeometry.height;
     const openingStart = Math.min(bounds[2] - 20, bounds[0] + Math.max(70, floor.width * 0.22));
     const openingEnd = Math.min(bounds[2], openingStart + Math.max(36, floor.width * 0.14));
     return [
-      { id: "west", x: bounds[0], z: bounds[1], w: 3, d: floor.length, h: 24 },
-      { id: "east", x: bounds[2] - 3, z: bounds[1], w: 3, d: floor.length, h: 24 },
-      { id: "south", x: bounds[0], z: bounds[1], w: floor.width, d: 3, h: 24 },
-      { id: "north-west", x: bounds[0], z: bounds[3] - 3, w: Math.max(3, openingStart - bounds[0]), d: 3, h: 24 },
-      { id: "north-east", x: openingEnd, z: bounds[3] - 3, w: Math.max(3, bounds[2] - openingEnd), d: 3, h: 24 },
+      { id: "west", x: bounds[0], z: bounds[1], w: thickness, d: floor.length, h: height },
+      { id: "east", x: bounds[2] - thickness, z: bounds[1], w: thickness, d: floor.length, h: height },
+      { id: "south", x: bounds[0], z: bounds[1], w: floor.width, d: thickness, h: height },
+      { id: "north-west", x: bounds[0], z: bounds[3] - thickness, w: Math.max(thickness, openingStart - bounds[0]), d: thickness, h: height },
+      { id: "north-east", x: openingEnd, z: bounds[3] - thickness, w: Math.max(thickness, bounds[2] - openingEnd), d: thickness, h: height },
     ];
   }
 
@@ -1032,6 +1051,7 @@
           hiddenColumnKeys: Array.isArray(current.hiddenColumnKeys) ? current.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(current.columnOverrides),
           walls: { ...defaultWalls, ...(current.walls || {}) },
+          wallGeometry: normalizeWallGeometry(current.wallGeometry),
           paint: normalizePaintSettings(current.paint),
           roof: normalizeRoofSettings(current.roof),
           playbackSpeed: Number(current.playbackSpeed) || 1,
@@ -1053,6 +1073,7 @@
           hiddenColumnKeys: Array.isArray(legacy.hiddenColumnKeys) ? legacy.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(legacy.columnOverrides),
           walls: { ...defaultWalls, ...(legacy.walls || {}) },
+          wallGeometry: normalizeWallGeometry(legacy.wallGeometry),
           paint: normalizePaintSettings(legacy.paint),
           roof: normalizeRoofSettings(legacy.roof),
           playbackSpeed: Number(legacy.playbackSpeed) || 1,
@@ -1070,6 +1091,7 @@
           hiddenColumnKeys: Array.isArray(older.hiddenColumnKeys) ? older.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(older.columnOverrides),
           walls: { ...defaultWalls, ...(older.walls || {}) },
+          wallGeometry: normalizeWallGeometry(older.wallGeometry),
           paint: normalizePaintSettings(older.paint),
           roof: normalizeRoofSettings(older.roof),
           playbackSpeed: Number(older.playbackSpeed) || 1,
@@ -1087,6 +1109,7 @@
           hiddenColumnKeys: Array.isArray(oldest.hiddenColumnKeys) ? oldest.hiddenColumnKeys : [],
           columnOverrides: normalizeColumnOverrides(oldest.columnOverrides),
           walls: { ...defaultWalls, ...(oldest.walls || {}) },
+          wallGeometry: normalizeWallGeometry(oldest.wallGeometry),
           paint: normalizePaintSettings(oldest.paint),
           roof: normalizeRoofSettings(oldest.roof),
           playbackSpeed: 1,
@@ -1105,6 +1128,7 @@
       hiddenColumnKeys: [],
       columnOverrides: {},
       walls: { ...defaultWalls },
+      wallGeometry: normalizeWallGeometry(defaultWallGeometry),
       paint: normalizePaintSettings(defaultPaintSettings),
       roof: normalizeRoofSettings(defaultRoofSettings),
       playbackSpeed: 1,
@@ -1198,6 +1222,7 @@
     hiddenColumns: new Set(savedLayout.hiddenColumns),
     hiddenColumnKeys: new Set(savedLayout.hiddenColumnKeys || []),
     walls: savedLayout.walls,
+    wallGeometry: normalizeWallGeometry(savedLayout.wallGeometry),
     paint: normalizePaintSettings(savedLayout.paint),
     roof: normalizeRoofSettings(savedLayout.roof),
     previewObjectAnimations: false,
@@ -1340,6 +1365,7 @@
       hiddenColumnKeys: [...state.hiddenColumnKeys],
       columnOverrides: clone(columnOverrides),
       walls: clone(state.walls),
+      wallGeometry: clone(state.wallGeometry),
       paint: clone(state.paint),
       roof: clone(state.roof),
       playbackSpeed: state.playbackSpeed,
@@ -1365,6 +1391,7 @@
     columnOverridesRevision += 1;
     invalidateStructuralColumns();
     state.walls = { ...defaultWalls, ...(snapshot.walls || {}) };
+    state.wallGeometry = normalizeWallGeometry(snapshot.wallGeometry);
     state.paint = normalizePaintSettings(snapshot.paint);
     state.roof = normalizeRoofSettings(snapshot.roof);
     state.playbackSpeed = Number(snapshot.playbackSpeed) || 1;
@@ -1419,6 +1446,7 @@
         hiddenColumnKeys: [...state.hiddenColumnKeys],
         columnOverrides,
         walls: state.walls,
+        wallGeometry: state.wallGeometry,
         paint: state.paint,
         roof: state.roof,
         playbackSpeed: state.playbackSpeed,
@@ -1637,7 +1665,12 @@
     // Physical plant objects keep their envelope as a first-person hitbox even
     // when those warnings are disabled. Open crane frames, people, animated
     // indicators, and floor markings intentionally remain walk-through.
-    if (isFloorFeatureType(machine.type) || isAnimationType(machine.type)) return false;
+    if (isFloorFeatureType(machine.type)) return false;
+    // Standalone animation markers stay walk-through. A custom Designer
+    // machine can legitimately use an animatedBox/animatedCart type while also
+    // owning explicit hitboxes; do not discard the whole machine before those
+    // envelopes are evaluated.
+    if (isAnimationType(machine.type) && !(machine.designId && designLibrary[machine.designId])) return false;
     if (["person", "bridgeCrane", "craneMachine"].includes(machine.type)) return false;
     return stageAlpha(machine.reveal, machine.retire) > 0.08;
   }
@@ -1650,8 +1683,12 @@
     const shapedEnvelopes = Array.isArray(design?.collisionEnvelopes)
       ? design.collisionEnvelopes.filter((envelope) => envelope && typeof envelope === "object")
       : [];
-    if (shapedEnvelopes.length) return shapedEnvelopes;
-    const envelopes = [];
+    // Machine-level boxes and blue part-level boxes are additive. Returning
+    // early here used to make every component envelope disappear from walking
+    // collision as soon as one custom machine envelope was added. The outlines
+    // still rendered in the Designer, which made the failure especially hard
+    // to diagnose on compound machines such as the tempering line.
+    const envelopes = [...shapedEnvelopes];
     const visit = (component) => {
       if (!component || component.visible === false) return;
       if (component.collisionEnvelope && typeof component.collisionEnvelope === "object") {
@@ -1668,7 +1705,7 @@
     const envelopes = designCollisionEnvelopes(design);
     if (!design || !envelopes.length) return [machine];
     const placement = designPlacement(machine, design);
-    return envelopes.map((envelope) => {
+    const hitboxes = envelopes.map((envelope) => {
       const width = Math.max(.01, (Number(envelope.w) || .01) * placement.scaleX);
       const height = Math.max(.01, (Number(envelope.h) || .01) * placement.scaleY);
       const depth = Math.max(.01, (Number(envelope.d) || .01) * placement.scaleZ);
@@ -1686,8 +1723,22 @@
         d: depth,
         rotationY: Number(machine.rotationY ?? machine.rotation) || 0,
         rotation: Number(machine.rotationY ?? machine.rotation) || 0,
+        // Every explicit Designer envelope is a walk-around footprint. Its Y
+        // dimension remains useful for editing and visualization, but walking
+        // collision is intentionally floor-plan based so a raised or offset
+        // blue part envelope cannot silently become pass-through.
+        floorBlocking: true,
       };
     });
+    const designIdentity = `${machine.type || ""} ${machine.name || ""} ${design.machineType || ""} ${design.name || ""}`;
+    if (/temper|furnace/i.test(designIdentity)) {
+      // The tempering line is a long compound/animated assembly. Its primary
+      // design envelope is the final safety net around the complete line, while
+      // detailed boxes refine individual sections. This also protects older
+      // saved designs whose nested envelope metadata is incomplete.
+      hitboxes.unshift({ ...machine, floorBlocking: true, walkHitboxSource: "tempering-base" });
+    }
+    return hitboxes;
   }
 
   let walkSpatialIndex = null;
@@ -1720,6 +1771,10 @@
     structuralColumns().forEach((column) => {
       if (isColumnHidden(column)) return;
       entries.push({ kind: "column", column, x: column.x - 1.18, z: column.z - 1.18, w: 2.36, d: 2.36 });
+    });
+    displayedWallSections().forEach((wall) => {
+      if (state.walls[wall.id] === false) return;
+      entries.push({ kind: "wall", wall, x: wall.x, z: wall.z, w: wall.w, d: wall.d });
     });
     walkCollisionCandidates().forEach((machine) => {
       walkHitboxesForMachine(machine).forEach((hitbox) => {
@@ -1767,6 +1822,7 @@
       ? index.queryPoint(worldX, worldZ, wallMargin + 2)
       : [
           ...structuralColumns().filter((column) => !isColumnHidden(column)).map((column) => ({ kind: "column", column })),
+          ...displayedWallSections().filter((wall) => state.walls[wall.id] !== false).map((wall) => ({ kind: "wall", wall })),
           ...walkCollisionCandidates().flatMap((machine) => walkHitboxesForMachine(machine).map((hitbox) => ({ kind: "machine", machine, hitbox }))),
         ];
     const columnRadius = wallMargin + 1.18;
@@ -1778,10 +1834,14 @@
         if (dx * dx + dz * dz < columnRadiusSquared) return false;
         continue;
       }
+      if (entry.kind === "wall") {
+        if (circleIntersectsMachine(worldX, worldZ, wallMargin, entry.wall)) return false;
+        continue;
+      }
       const hitbox = entry.hitbox;
         const baseY = Number(hitbox.y) || 0;
         const height = Number(hitbox.h) || 0;
-        if (baseY > state.walkEyeHeight + 1 || baseY + height < 0.35) continue;
+        if (!hitbox.floorBlocking && (baseY > state.walkEyeHeight + 1 || baseY + height < 0.35)) continue;
         const angle = angleRadians(hitbox);
         const halfWidth = Math.max(.05, Number(hitbox.w) / 2);
         const halfDepth = Math.max(.05, Number(hitbox.d) / 2);
@@ -2841,6 +2901,12 @@
     panel.querySelectorAll("[data-roof-check]").forEach((input) => {
       input.checked = Boolean(state.roof[input.dataset.roofCheck]);
     });
+    panel.querySelectorAll("[data-wall-geometry-field]").forEach((input) => {
+      input.value = String(state.wallGeometry[input.dataset.wallGeometryField]);
+    });
+    panel.querySelectorAll("[data-wall-geometry-check]").forEach((input) => {
+      input.checked = Boolean(state.wallGeometry[input.dataset.wallGeometryCheck]);
+    });
     const autoColumns = panel.querySelector("[data-column-grid-check='autoExtend']");
     if (autoColumns) autoColumns.checked = columnGrid.autoExtend !== false;
     structuralColumns();
@@ -3111,12 +3177,66 @@
       hiddenColumnKeys: [...state.hiddenColumnKeys],
       columnOverrides,
       walls: state.walls,
+      wallGeometry: state.wallGeometry,
       paint: state.paint,
+      roof: state.roof,
       playbackSpeed: state.playbackSpeed,
       stageDurationSeconds: state.stageDurationSeconds,
     };
     downloadJson(payload, `monroe-glass-plant-layout-v${APP_VERSION}.json`);
     showToast("Layout JSON exported.");
+  }
+
+  function createPlant3mf(machineList, scaleDenominator, includeStructure) {
+    if (!window.PlantThreeMf) throw new Error("3MF export is unavailable. Reload the page and try again.");
+    const entries = [];
+    const solids = [];
+    machineList.forEach((machine) => {
+      const design = machine.designId ? designLibrary[machine.designId] : null;
+      if (design?.components?.length) {
+        entries.push({
+          design,
+          transform: (point) => designLocalPointToWorld(machine, design, point, 1),
+        });
+      } else {
+        solids.push({
+          x: machine.x, y: machine.y, z: machine.z,
+          w: machine.w, h: machine.h, d: machine.d,
+          rotationX: machine.rotationX, rotationY: machine.rotationY ?? machine.rotation, rotationZ: machine.rotationZ,
+          color: machine.color,
+        });
+      }
+    });
+    if (includeStructure) {
+      const bounds = floorBounds();
+      solids.push({ x:bounds[0], y:-.3, z:bounds[1], w:floor.width, h:.3, d:floor.length, color:colors.floor });
+      displayedWallSections().forEach((wall) => {
+        if (state.walls[wall.id] !== false) solids.push({ ...wall, color:state.paint.wallAfter });
+      });
+      const columnRoofProfile = displayedRoofProfile();
+      structuralColumns().forEach((column) => {
+        if (!isColumnHidden(column)) solids.push({ x:column.x-1.16, y:0, z:column.z-1.16, w:2.32, h:displayedColumnHeight(column, columnRoofProfile), d:2.32, color:state.paint.columnAfter });
+      });
+    }
+    return window.PlantThreeMf.createLayout({ entries, solids, scaleDenominator, name: includeStructure ? "Monroe Glass Plant" : machineList[0]?.name || "Machine" });
+  }
+
+  function exportPlant3mf(selectedOnly = false) {
+    try {
+      const scaleDenominator = Number(document.querySelector("[data-3mf-scale]")?.value) || 100;
+      const finalStage = Math.max(0, stages.length - 1);
+      const source = selectedOnly
+        ? selectedMachines().slice(0, 1)
+        : machines.filter((machine) => machine.visible !== false && machine.reveal <= finalStage && machine.retire > finalStage && !isFloorFeatureType(machine.type));
+      if (!source.length) throw new Error(selectedOnly ? "Select a machine before exporting it." : "There are no printable machines in the final layout.");
+      const blob = createPlant3mf(source, scaleDenominator, !selectedOnly);
+      const baseName = selectedOnly ? source[0].name : "monroe-glass-plant-layout";
+      window.PlantThreeMf.download(blob, `${window.PlantThreeMf.safeName(baseName, "plant-model")}-1-to-${scaleDenominator}.3mf`);
+      showToast(`${selectedOnly ? source[0].name : "Complete plant layout"} exported as a color 3MF at 1:${scaleDenominator}.`);
+    } catch (error) {
+      console.error(error);
+      showToast(error instanceof Error ? error.message : "The 3MF could not be created.");
+    }
   }
 
   function exportWorkspace() {
@@ -3156,7 +3276,9 @@
       columnOverridesRevision += 1;
       invalidateStructuralColumns();
       state.walls = { ...defaultWalls, ...(payload.walls || {}) };
+      state.wallGeometry = normalizeWallGeometry(payload.wallGeometry);
       state.paint = normalizePaintSettings(payload.paint);
+      state.roof = normalizeRoofSettings(payload.roof);
       state.playbackSpeed = Number(payload.playbackSpeed) || 1;
       state.stageDurationSeconds = normalizeStageDuration(payload.stageDurationSeconds);
       state.stage = clamp(state.stage, 0, stages.length - 1);
@@ -3629,6 +3751,16 @@
           <legend>Exterior wall sections</legend>
           ${wallSections().map((wall) => `<label><input type="checkbox" data-wall-id="${wall.id}" checked>${wall.id.replace("-"," ")}</label>`).join("")}
         </fieldset>
+        <fieldset class="roof-controls wall-geometry-controls">
+          <legend>Wall dimensions and collision envelope</legend>
+          <p>These dimensions control both the visible structure and its first-person hitbox.</p>
+          <div class="roof-control-grid">
+            <label>Wall height (ft)<input type="number" min="8" max="150" step="1" data-wall-geometry-field="height"></label>
+            <label>Wall thickness (ft)<input type="number" min="0.25" max="20" step="0.25" data-wall-geometry-field="thickness"></label>
+          </div>
+          <div class="roof-checks"><label><input type="checkbox" data-wall-geometry-check="extendToRoof"> Extend visible walls to the roof when it is shown</label></div>
+          <button type="button" data-editor-action="wall-geometry-defaults">Restore wall defaults</button>
+        </fieldset>
         <button class="editor-wide-button" type="button" data-editor-action="restore-pillars">Restore every pillar and position</button>
       </div>
 
@@ -3660,6 +3792,9 @@
           <button type="button" data-editor-action="export">Export layout</button>
           <button type="button" data-editor-action="import">Import layout</button>
           <input type="file" data-layout-file accept="application/json,.json" hidden>
+          <label class="three-mf-scale">3MF print scale<select data-3mf-scale><option value="12">1:12</option><option value="24">1:24</option><option value="50">1:50</option><option value="100" selected>1:100</option><option value="200">1:200</option></select></label>
+          <button type="button" data-editor-action="export-3mf">Export complete color 3MF</button>
+          <button type="button" data-editor-action="export-selected-3mf">Export selected machine 3MF</button>
           <button type="button" data-editor-action="reset" class="danger-subtle">Reset project</button>
         </div>
       </div>
@@ -3670,7 +3805,10 @@
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {
         state.editorTool = button.dataset.editorTool;
-        if (state.editorTool !== "machines") clearMachineSelection();
+        // Keep a machine selection while visiting Project so the selected
+        // instance can be exported. Pillar editing remains mutually exclusive.
+        if (state.editorTool === "pillars") clearMachineSelection();
+        else state.selectedColumnKey = null;
         updateEditorPanel();
       });
     });
@@ -4197,6 +4335,34 @@
       updateEditorPanel();
       showToast("Roof restored to the 50 / 75 ft split configuration.");
     });
+    panel.querySelectorAll("[data-wall-geometry-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const field = input.dataset.wallGeometryField;
+        const value = Number(input.value);
+        if (!Number.isFinite(value)) return;
+        pushHistory();
+        state.wallGeometry[field] = field === "height" ? clamp(value, 8, 150) : clamp(value, .25, 20);
+        persistLayout();
+        updateEditorPanel();
+        showToast("Wall dimensions and first-person hitboxes updated.");
+      });
+    });
+    panel.querySelectorAll("[data-wall-geometry-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        pushHistory();
+        state.wallGeometry[input.dataset.wallGeometryCheck] = input.checked;
+        persistLayout();
+        updateEditorPanel();
+        showToast(input.checked ? "Walls now extend to the visible roof." : "Walls now use the custom wall height.");
+      });
+    });
+    panel.querySelector("[data-editor-action='wall-geometry-defaults']")?.addEventListener("click", () => {
+      pushHistory();
+      state.wallGeometry = normalizeWallGeometry(defaultWallGeometry);
+      persistLayout();
+      updateEditorPanel();
+      showToast("Wall height, thickness, and collision defaults restored.");
+    });
 
     panel.querySelectorAll("[data-stage-field]").forEach((input) => {
       input.addEventListener("change", () => {
@@ -4333,6 +4499,7 @@
       state.selectedColumnKey = null;
       invalidateStructuralColumns();
       state.walls = { ...defaultWalls };
+      state.wallGeometry = normalizeWallGeometry(defaultWallGeometry);
       state.roof = normalizeRoofSettings(defaultRoofSettings);
       clearMachineSelection();
       state.stage = 0;
@@ -4344,6 +4511,8 @@
       showToast("Project reset to the supplied baseline.");
     });
     panel.querySelector("[data-editor-action='export']").addEventListener("click",exportLayout);
+    panel.querySelector("[data-editor-action='export-3mf']")?.addEventListener("click", () => exportPlant3mf(false));
+    panel.querySelector("[data-editor-action='export-selected-3mf']")?.addEventListener("click", () => exportPlant3mf(true));
     const fileInput = panel.querySelector("[data-layout-file]");
     panel.querySelector("[data-editor-action='import']").addEventListener("click",() => fileInput.click());
     fileInput.addEventListener("change", async () => {
@@ -4505,6 +4674,7 @@
     labelOptions.innerHTML = `
       <div class="label-options-heading"><strong>View labels</strong><span>Choose the amount of label text shown.</span></div>
       <div class="label-mode-options" role="group" aria-label="Label display style">
+        <button type="button" data-label-display="auto">Adaptive</button>
         <button type="button" data-label-display="full">Full names</button>
         <button type="button" data-label-display="abbreviated">Abbreviated</button>
         <button type="button" data-label-display="off">Off</button>
@@ -4536,11 +4706,11 @@
       button.addEventListener("click", () => {
         state.labelTextMode = button.dataset.labelDisplay;
         state.showLabels = state.labelTextMode !== "off";
-        try { localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify({ labelTextMode: state.labelTextMode })); } catch {}
+        try { localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify({ version: 2, labelTextMode: state.labelTextMode })); } catch {}
         labelVisualStates.clear();
         updateLabelOptions();
         renderPerformance.invalidate?.("label-display-mode");
-        showToast(state.labelTextMode === "full" ? "Full machine labels shown." : state.labelTextMode === "abbreviated" ? "Abbreviated machine labels shown." : "Machine labels hidden.");
+        showToast(state.labelTextMode === "auto" ? "Labels now abbreviate at long range and expand nearby." : state.labelTextMode === "full" ? "Full machine labels shown." : state.labelTextMode === "abbreviated" ? "Abbreviated machine labels shown." : "Machine labels hidden.");
       });
     });
     labelOptions.querySelector("[data-roof-overview]")?.addEventListener("change", (event) => {
@@ -5039,13 +5209,27 @@
     ];
   }
 
+  function displayedRoofProfile() {
+    const roofIsVisible = state.roof.enabled && (state.cameraMode === "walk" || state.roof.overviewVisible);
+    if (!roofIsVisible) return null;
+    const bounds = floorBounds();
+    return {
+      splitX: bounds[0] + (bounds[2] - bounds[0]) * state.roof.splitPercent / 100,
+      leftHeight: state.roof.leftHeight,
+      rightHeight: state.roof.rightHeight,
+    };
+  }
+
+  function displayedColumnHeight(column, roofProfile = displayedRoofProfile()) {
+    if (!roofProfile) return 22;
+    return Number(column?.x) < roofProfile.splitX ? roofProfile.leftHeight : roofProfile.rightHeight;
+  }
+
   function displayedWallSections() {
     const sections = wallSections();
-    const roofIsVisible = state.roof.enabled && (state.cameraMode === "walk" || state.roof.overviewVisible);
-    if (!roofIsVisible) return sections;
-    const bounds = floorBounds();
-    const splitX = bounds[0] + (bounds[2] - bounds[0]) * state.roof.splitPercent / 100;
-    const heightAt = (x) => x < splitX ? state.roof.leftHeight : state.roof.rightHeight;
+    const roofProfile = displayedRoofProfile();
+    if (!roofProfile || !state.wallGeometry.extendToRoof) return sections;
+    const heightAt = (x) => x < roofProfile.splitX ? roofProfile.leftHeight : roofProfile.rightHeight;
     const result = [];
     sections.forEach((section) => {
       const horizontalWall = section.w > section.d;
@@ -5686,7 +5870,10 @@
   }
 
   function displayMachineLabel(machine, profile) {
-    if (state.labelTextMode === "abbreviated") {
+    const adaptiveMode = state.cameraMode === "walk" ? "full" : (state.zoom < .78 ? "abbreviated" : "full");
+    const effectiveMode = state.labelTextMode === "auto" ? adaptiveMode : state.labelTextMode;
+    const resolvedMode = state.cameraMode === "walk" && effectiveMode !== "off" ? "full" : effectiveMode;
+    if (resolvedMode === "abbreviated") {
       const customAbbreviation = String(machine?.labelAbbreviation || "").trim();
       if (customAbbreviation) return machine?.labelUppercase ? customAbbreviation.toUpperCase() : customAbbreviation;
       return compactMachineLabel(machine, profile);
@@ -5715,7 +5902,7 @@
   function smartLabelBudget() {
     if (state.cameraMode === "walk") return state.labelMode === "all" ? 16 : 10;
     if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
-    if (state.labelTextMode === "full" && state.zoom >= .72) return Number.POSITIVE_INFINITY;
+    if (["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78) return Number.POSITIVE_INFINITY;
     const rect = canvas.getBoundingClientRect();
     const viewportBudget = Math.floor((rect.width * rect.height) / 36000);
     const zoomFactor = clamp(state.zoom, .72, 1.45);
@@ -5724,7 +5911,7 @@
 
   function smartLabelRepeatLimit(profile) {
     if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
-    if (state.cameraMode !== "walk" && state.labelTextMode === "full" && state.zoom >= .72) return Number.POSITIVE_INFINITY;
+    if (state.cameraMode !== "walk" && ["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78) return Number.POSITIVE_INFINITY;
     if (state.cameraMode === "walk") return profile.rank >= 3 ? 2 : 1;
     if (state.zoom < .55) return profile.rank >= 3 ? 2 : 1;
     if (state.zoom < 1.05) return profile.rank >= 3 ? 2 : 1;
@@ -6115,18 +6302,19 @@
     const painted = paintProgress(state.paint.columnStageId, 3);
     const size = 2.1 + (2.32 - 2.1) * painted;
     const color = blendHexColors(state.paint.columnBefore, state.paint.columnAfter, painted);
+    const height = displayedColumnHeight(column);
 
     const base = project(x, 0, z);
-    const top = project(x, 22, z);
+    const top = project(x, height, z);
     if (!state.editing && state.cameraMode !== "walk" && Math.hypot(top[0] - base[0], top[1] - base[1]) < 18) {
-      line3d([x, 0, z], [x, 22, z], color, 2.1, 1);
+      line3d([x, 0, z], [x, height, z], color, 2.1, 1);
       return;
     }
 
     // Render one closed pillar volume. The previous implementation stacked a
     // yellow coat directly over a steel pillar with both top faces at y=22,
     // which caused depth-buffer flicker on the cap during the paint timeline.
-    box({ x:x-size/2,z:z-size/2,w:size,d:size,h:22,color });
+    box({ x:x-size/2,z:z-size/2,w:size,d:size,h:height,color });
   }
 
   function sceneDepth(x,z) {
@@ -8400,7 +8588,8 @@
     }
     if (!renderPerformance.pillarShadowsEnabled()) return;
     const columns = visibleColumnEntries();
-    const columnRevision = `${settingsRevision}|${columns.map(({ column }) => `${column.key}:${column.x}:${column.z}`).join("|")}`;
+    const columnRoofProfile = displayedRoofProfile();
+    const columnRevision = `${settingsRevision}|${columns.map(({ column }) => `${column.key}:${column.x}:${column.z}:${displayedColumnHeight(column, columnRoofProfile)}`).join("|")}`;
     drawRetainedObject("plant:shadows:columns", columnRevision, () => {
       columns.forEach(({ column }) => {
         const { x, z } = column;
@@ -8408,7 +8597,7 @@
         drawSoftGroundShadow([
           [x-size/2,0.035,z-size/2], [x+size/2,0.035,z-size/2],
           [x+size/2,0.035,z+size/2], [x-size/2,0.035,z+size/2],
-        ], 22, 0.55);
+        ], displayedColumnHeight(column, columnRoofProfile), 0.55);
       });
     });
   }
@@ -8690,16 +8879,17 @@
       const painted = paintProgress(state.paint.columnStageId, 3);
       const size = 2.1 + (2.32 - 2.1) * painted;
       const color = blendHexColors(state.paint.columnBefore, state.paint.columnAfter, painted);
+      const columnRoofProfile = displayedRoofProfile();
       const columnBoxes = columnEntries.map(({ column }) => ({
         x: column.x - size / 2,
         y: 0,
         z: column.z - size / 2,
         w: size,
-        h: 22,
+        h: displayedColumnHeight(column, columnRoofProfile),
         d: size,
         color,
       }));
-      const columnRevision = `${size.toFixed(3)}:${color}|${columnEntries.map(({ column }) => `${column.key}:${column.x}:${column.z}`).join("|")}`;
+      const columnRevision = `${size.toFixed(3)}:${color}|${columnEntries.map(({ column }) => `${column.key}:${column.x}:${column.z}:${displayedColumnHeight(column, columnRoofProfile)}`).join("|")}`;
       depthRenderer.addBoxInstances("plant:structural-columns", columnBoxes, columnRevision);
     }
     const instancedProxyEntries = typeof depthRenderer.addBoxInstances === "function"
@@ -8815,7 +9005,7 @@
           time,
           visibleTarget,
           labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 60),
-          forceVisible: state.cameraMode !== "walk" && state.labelTextMode === "full" && state.zoom >= .72,
+          forceVisible: state.cameraMode !== "walk" && ["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78,
           priority,
           selected,
           current,

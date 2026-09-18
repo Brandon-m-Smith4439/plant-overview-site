@@ -12,6 +12,8 @@ assert.ok(plant.includes("defaultRoofSettings") && plant.includes("leftHeight: 5
 assert.ok(plant.includes("function drawRoofTruss") && plant.includes("function drawRoof"), "The plant needs a roof and black truss rendering system.");
 assert.ok(plant.includes("const roofColor = state.roof.roofColor") && plant.includes("function drawTrussMember"), "First person must honor the selected roof color while retaining solid thick truss members.");
 assert.ok(plant.includes("function displayedWallSections") && plant.includes("state.roof.leftHeight") && plant.includes("state.roof.rightHeight"), "Visible roof sections must extend their matching walls to the configured height.");
+assert.ok(plant.includes("function displayedRoofProfile") && plant.includes("function displayedColumnHeight"), "Pillars need the same active roof-height profile as the walls and trusses.");
+assert.ok(plant.includes("h: displayedColumnHeight(column, columnRoofProfile)") && plant.includes("const height = displayedColumnHeight(column)"), "Both fast and fallback pillar renderers must extend pillars to the visible ceiling.");
 assert.ok(plant.includes("function updateSkyBackground") && plant.includes('state.cameraMode === "walk"') && css.includes("--sky-x") && css.includes("background-position"), "The overview sky must stay anchored while first-person look direction can reveal the wider cloud field.");
 assert.ok(plant.includes('data-roof-field="splitPercent"') && plant.includes('data-roof-field="trussSpacing"'), "Structure editing must expose the roof split and truss spacing.");
 assert.ok(plant.includes("roof: clone(state.roof)") && plant.includes("roof: state.roof"), "Roof configuration must survive history, export, and browser persistence.");
@@ -38,7 +40,15 @@ assert.ok(studio.includes("-1.53, 1.53"), "Designer vertical orbit must cross be
 assert.ok(studio.includes('const belowFloor = state.pitch < 0;'), "Designer must detect below-floor camera positions.");
 assert.ok(studio.includes('{ transparent: belowFloor }'), "Designer floor must become translucent below the model.");
 assert.ok(studio.includes("state.panY += screenVertical * cp") && studio.includes("const rz = screenVertical * sp"), "Designer panning must follow camera screen-up without slowing at horizontal pitch.");
+assert.ok(studio.includes("centerY: state.panY"), "The GPU view must receive the Designer's vertical pan so selection outlines stay attached to their parts.");
+assert.ok(fs.readFileSync(new URL("../public/three-depth-scene-renderer.js", import.meta.url), "utf8").includes("- cp * centerY"), "The retained renderer must apply vertical camera-center translation.");
 assert.ok(studio.includes("MAX_PAN_POINTER_DELTA = 160;") && studio.includes("function stabilizedPanDelta("), "Designer panning must preserve normal pointer movement while rejecting only cursor-warp spikes.");
+const baseFieldHandlerStart = studio.indexOf("const designFieldMap = {");
+const baseFieldHandlerEnd = studio.indexOf("function addComponentOfType", baseFieldHandlerStart);
+assert.ok(!studio.slice(baseFieldHandlerStart, baseFieldHandlerEnd).includes("fitView();"), "Editing Designer envelope dimensions must preserve the current camera.");
+const fitEnvelopeHandlerStart = studio.indexOf('document.getElementById("fit-envelope")');
+const fitEnvelopeHandlerEnd = studio.indexOf('document.getElementById("show-design-envelope")', fitEnvelopeHandlerStart);
+assert.ok(!studio.slice(fitEnvelopeHandlerStart, fitEnvelopeHandlerEnd).includes("fitView();"), "Fitting the Designer envelope to parts must preserve the current camera.");
 const pointerMoveStart = studio.indexOf('canvas.addEventListener("pointermove", (event) => {');
 const pointerMoveEnd = studio.indexOf('canvas.addEventListener("pointerup", finishPointer);', pointerMoveStart);
 const pointerMove = studio.slice(pointerMoveStart, pointerMoveEnd);

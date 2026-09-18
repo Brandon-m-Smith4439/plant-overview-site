@@ -21,13 +21,14 @@ assert.ok(plant.includes("function updateLabelVisualState") && plant.includes("l
 assert.ok(plant.includes("preferredSlot") && plant.includes("slotHoldUntil"), "Labels must remember and briefly hold their collision slot instead of snapping between positions.");
 assert.ok(plant.includes("positionBlend") && plant.includes("visual.drawX"), "Label position changes must be interpolated.");
 assert.ok(plant.includes("Math.exp(-elapsed / 24)") && plant.includes("sideOffset"), "Labels must settle quickly into pointer-connected side positions without excessive momentum.");
-assert.ok(plant.includes("displayMachineLabel") && plant.includes('labelTextMode === "abbreviated"'), "The viewer must support full and abbreviated label text.");
+assert.ok(plant.includes("displayMachineLabel") && plant.includes('resolvedMode === "abbreviated"'), "The viewer must support full and abbreviated label text.");
+assert.ok(plant.includes('data-label-display="auto"') && plant.includes('state.cameraMode === "walk" ? "full"'), "Adaptive labels must abbreviate at long range while first person keeps full names.");
 assert.ok(plant.includes('data-label-display="full"') && plant.includes('data-label-display="off"'), "The label icon must expose full, abbreviated, and off choices.");
 assert.ok(plant.includes("labelAnchorXPercent") && plant.includes("labelAnchorYPercent") && plant.includes("labelAnchorZPercent") && plant.includes("labelHeightOffset"), "Each machine label must expose an editable three-axis pointer anchor and label height.");
 assert.ok(plant.includes("labelAbbreviation") && plant.includes('data-label-field="labelAbbreviation"'), "Each machine must support an editable abbreviated label.");
 assert.ok(plant.includes('ctx.strokeStyle = "rgba(9,18,21,.78)"') && plant.includes("Math.max(3.6, 3.2 * pixelScale)"), "Pointers must use a high-contrast line and obvious target marker.");
 assert.ok(plant.includes("walkLabelDistance") && plant.includes("labelHorizon = 96"), "First-person labels must be larger and load only near their machines.");
-assert.ok(plant.includes("options.forceVisible") && plant.includes('state.labelTextMode === "full"'), "Full overview mode must keep every eligible machine label visible.");
+assert.ok(plant.includes("options.forceVisible") && plant.includes('["full", "auto"].includes(state.labelTextMode)'), "Full and nearby adaptive overview modes must keep every eligible machine label visible.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Professional machine tags must use easy-to-scan left-aligned text.");
 assert.ok(plant.includes('const accent = selected ? "#f5b353"'), "Selected and current equipment must receive distinct status accents.");
 assert.ok(!plant.includes('`${machine.name}${current ? ` · ${source}`'), "Long source metadata must not be appended to every current-stage label.");

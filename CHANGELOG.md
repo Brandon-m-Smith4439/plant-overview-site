@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased - 2026-09-21
+
+### Added
+
+- Added a generated, versioned public workspace snapshot containing the approved 42-machine design library and 98-object plant layout.
+- Added a repeatable workspace publishing command and regression validation for snapshot contents and browser-storage transfer.
+
+### Fixed
+
+- The hosted read-only viewer now loads the published workspace before initializing the plant, so local machine designs, placements, envelopes, animations, labels, structure settings, and timeline edits appear on the live domain.
+- Localhost remains the editable source of truth and is never overwritten by the published snapshot.
+
+### Validation
+
+- Re-ran JavaScript syntax, machine creation, layout insertion, public viewer, layout rendering, lint, and optimized production build checks.
+
 ## 0.13.0 - 2026-08-25
 
 ### Added

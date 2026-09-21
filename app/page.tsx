@@ -83,6 +83,7 @@ export default function Home() {
           "/machine-data.js",
           "/machine-designs.js",
           "/workspace-transfer.js",
+          "/published-workspace.js",
           "/animation-timeline.js",
           "/first-person-controller.js",
           "/three-mf-exporter.js",

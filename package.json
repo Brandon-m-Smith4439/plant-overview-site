@@ -11,6 +11,7 @@
     "generate:types": "wrangler types worker-configuration.d.ts --config dist/server/wrangler.json",
     "typecheck": "npm run build && npm run generate:types && tsc --noEmit --incremental false",
     "start": "vinext start",
+    "publish:workspace": "node scripts/generate-published-workspace.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern worker-configuration.d.ts",
     "validate:js": "node --check public/depth-scene-renderer.js && node --check public/three-depth-scene-renderer.js && node --check public/spatial-index.js && node --check public/geometry-prep-client.js && node --check public/geometry-prep-worker.js && node --check public/render-performance.js && node --check public/editor-access.js && node --check public/workspace-transfer.js && node --check public/first-person-controller.js && node --check public/animation-timeline.js && node --check public/animation-timeline-workspace.js && node --check public/three-mf-exporter.js && node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
     "export:machines": "python cad/export_machine_registry.py",
@@ -54,6 +55,7 @@
     "validate:timeline-workspace": "node tests/validate-timeline-workspace.mjs",
     "validate:timeline-repair": "node tests/validate-timeline-repair.mjs",
     "validate:public-viewer": "node tests/validate-public-viewer-controls.mjs",
+    "validate:published-workspace": "node tests/validate-published-workspace.mjs",
     "validate:cad": "py -B cad/validate_site.py"
   },
   "dependencies": {

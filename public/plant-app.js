@@ -210,6 +210,22 @@
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
   const APP_VERSION = "0.13.0";
+
+  function applyPublishedWorkspace() {
+    const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
+    // Localhost remains the editable source of truth. The hosted viewer uses
+    // the checked-in snapshot on every load so a stale browser cache cannot
+    // hide newly published machines or layout changes.
+    if (!publishedWorkspace || !workspaceTransfer) return;
+    if (window.monroeEditorAccess?.editingAllowed?.() !== false) return;
+    try {
+      workspaceTransfer.applyPayload(localStorage, publishedWorkspace);
+    } catch (error) {
+      console.error("The published plant workspace could not be loaded.", error);
+    }
+  }
+
+  applyPublishedWorkspace();
   const MIN_FLOOR_DIMENSION = 40;
   const MAX_FLOOR_DIMENSION = 5000;
   const MAX_FLOOR_GRID_LINES = 120;

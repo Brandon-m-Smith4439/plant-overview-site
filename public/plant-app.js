@@ -217,6 +217,7 @@
     // the checked-in snapshot on every load so a stale browser cache cannot
     // hide newly published machines or layout changes.
     if (!publishedWorkspace || !workspaceTransfer) return;
+    if (!window.location.hostname.endsWith(".chatgpt.site")) return;
     if (window.monroeEditorAccess?.editingAllowed?.() !== false) return;
     try {
       workspaceTransfer.applyPayload(localStorage, publishedWorkspace);

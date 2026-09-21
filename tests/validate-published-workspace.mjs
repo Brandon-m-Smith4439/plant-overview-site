@@ -11,9 +11,10 @@ const publishedSource = fs.readFileSync(new URL("../public/published-workspace.j
 assert.ok(page.indexOf('"/published-workspace.js"') > page.indexOf('"/workspace-transfer.js"'));
 assert.ok(preview.indexOf('src="published-workspace.js"') > preview.indexOf('src="workspace-transfer.js"'));
 assert.match(plant, /applyPublishedWorkspace\(\);/);
+assert.match(plant, /hostname\.endsWith\("\.chatgpt\.site"\)/);
 assert.match(plant, /editingAllowed\?\.\(\) !== false/);
 
-const sandbox = { window: {} };
+const sandbox = { window: { location: { hostname: "localhost" } } };
 vm.createContext(sandbox);
 vm.runInContext(transferSource, sandbox);
 vm.runInContext(publishedSource, sandbox);
@@ -44,5 +45,20 @@ const applied = sandbox.window.PLANT_WORKSPACE_TRANSFER.applyPayload(storage, sn
 assert.deepEqual([...applied.appliedKeys].sort(), Object.keys(snapshot.items).sort());
 assert.equal(JSON.parse(storage.getItem("monroe-glass-plant-layout-v6")).machines.length, 98);
 assert.equal(Object.keys(JSON.parse(storage.getItem("monroe-glass-machine-designs-v1")).designs).length, 42);
+
+const hostedValues = new Map();
+const hostedSandbox = {
+  window: {
+    location: { hostname: "monroe-glass-plant-evolution.example.chatgpt.site" },
+    localStorage: {
+      setItem(key, value) { hostedValues.set(key, String(value)); },
+    },
+  },
+  console,
+};
+vm.createContext(hostedSandbox);
+vm.runInContext(publishedSource, hostedSandbox);
+assert.equal(JSON.parse(hostedValues.get("monroe-glass-plant-layout-v6")).machines.length, 98);
+assert.equal(Object.keys(JSON.parse(hostedValues.get("monroe-glass-machine-designs-v1")).designs).length, 42);
 
 console.log("Published workspace validation passed.");

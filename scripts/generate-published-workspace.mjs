@@ -36,6 +36,17 @@ const output = `// Generated from the approved local Monroe Glass Plant workspac
     ...snapshot,
     items: Object.freeze(snapshot.items),
   });
+  // Seed only the deployed read-only viewer. Localhost and standalone file
+  // previews retain their own editable browser workspaces.
+  if (window.location.hostname.endsWith(".chatgpt.site")) {
+    try {
+      for (const [key, value] of Object.entries(snapshot.items)) {
+        window.localStorage.setItem(key, value);
+      }
+    } catch (error) {
+      console.error("The published plant workspace could not be seeded.", error);
+    }
+  }
 })();
 `;
 

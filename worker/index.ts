@@ -26,6 +26,18 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+function secureResponse(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 const worker = {
   async fetch(
     request: Request,
@@ -36,7 +48,7 @@ const worker = {
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(
+      const response = await handleImageOptimization(
         request,
         {
           fetchAsset: (path) =>
@@ -50,9 +62,10 @@ const worker = {
         },
         allowedWidths,
       );
+      return secureResponse(response);
     }
 
-    return handler.fetch(request, env, ctx);
+    return secureResponse(await handler.fetch(request, env, ctx));
   },
 };
 

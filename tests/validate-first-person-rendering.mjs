@@ -14,6 +14,7 @@ assert.match(
 assert.match(source, /function firstPersonDistanceToBox\(item\)/, "First-person distance-to-bounds culling is missing.");
 assert.match(source, /Math\.max\(margin, 260\)/, "Peripheral first-person objects need a generous screen margin.");
 assert.match(source, /renderPerformance\.walkDrawDistance\(\)/, "First-person draw distance must follow the selected quality mode.");
+assert.match(source, /const height = displayedColumnHeight\(column, columnRoofProfile\);[\s\S]*?const top = project\(x, height, z\);/, "Column visibility must project the complete roof-height pillar when looking upward.");
 assert.match(source, /base\[3\] < WALK_NEAR_CLIP && top\[3\] < WALK_NEAR_CLIP/, "Columns fully behind the first-person camera must be culled.");
 
 function projectPoint({ x, y, z, yaw = 0, pitch = 0, width = 1000, height = 600, fov = 72 }) {

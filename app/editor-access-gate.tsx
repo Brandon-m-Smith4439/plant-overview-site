@@ -1,8 +1,13 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { hasEditorAccess, verifyEditorPassword, EDITOR_ACCESS_SESSION_KEY } from "./editor-access";
+import { hasEditorAccess, isLocalEditorHost, verifyEditorPassword, EDITOR_ACCESS_SESSION_KEY } from "./editor-access";
+
+const subscribeToHost = () => () => {};
+function useLocalEditorHost() {
+  return useSyncExternalStore(subscribeToHost, isLocalEditorHost, () => false);
+}
 
 function grantAccess() { sessionStorage.setItem(EDITOR_ACCESS_SESSION_KEY, "granted"); }
 function openEditorAfterViewportRelease(href: string) {
@@ -16,6 +21,7 @@ function openEditorAfterViewportRelease(href: string) {
 }
 
 export function ProtectedEditorLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
+  const editingAvailable = useLocalEditorHost();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,6 +30,7 @@ export function ProtectedEditorLink({ href, children, className }: { href: strin
     if (!(await verifyEditorPassword(password))) { setError("That password is not correct."); return; }
     grantAccess(); openEditorAfterViewportRelease(href);
   };
+  if (!editingAvailable) return null;
   return <>
     <Link className={className} href={href} onClick={(event) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -42,6 +49,7 @@ export function ProtectedEditorLink({ href, children, className }: { href: strin
 }
 
 export function EditorAccessGate({ children }: { children: ReactNode }) {
+  const editingAvailable = useLocalEditorHost();
   const [granted, setGranted] = useState(() => typeof window !== "undefined" && hasEditorAccess());
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -50,6 +58,11 @@ export function EditorAccessGate({ children }: { children: ReactNode }) {
     if (!(await verifyEditorPassword(password))) { setError("That password is not correct."); return; }
     grantAccess(); setGranted(true);
   };
+  if (!editingAvailable) return <main className="editor-access-page"><div className="editor-access-overlay"><section className="editor-access-dialog">
+    <p className="editor-access-kicker">Public viewer</p><h2>Editing is locally protected</h2>
+    <p>The hosted plant is read-only. Open the project with the local start file on the authorized workstation to use Machine Design Studio.</p>
+    <div><Link href="/">Return to plant</Link></div>
+  </section></div></main>;
   if (granted) return <>{children}</>;
   return <main className="editor-access-page"><div className="editor-access-overlay"><form className="editor-access-dialog" onSubmit={submit}>
     <p className="editor-access-kicker">Restricted area</p><h2>Machine Design Studio</h2>

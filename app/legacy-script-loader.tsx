@@ -6,7 +6,7 @@ import type * as ThreeNamespace from "three";
 declare global {
   interface Window {
     THREE?: typeof ThreeNamespace;
-    monroeEditorAccess?: { hasAccess(): boolean; requestAccess(): Promise<boolean> };
+    monroeEditorAccess?: { editingAllowed(): boolean; hasAccess(): boolean; requestAccess(): Promise<boolean> };
   }
 }
 

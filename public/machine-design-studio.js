@@ -1,6 +1,7 @@
 (() => {
   "use strict";
 
+  if (window.monroeEditorAccess?.editingAllowed?.() === false) return;
   const canvas = document.getElementById("machine-design-canvas");
   if (!canvas) return;
   if (!window.monroeEditorAccess?.hasAccess?.()) {

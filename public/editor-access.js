@@ -4,14 +4,20 @@
   const SESSION_KEY = "monroe-glass-editor-access-v1";
   const SALT = "monroe-glass-editor-v1";
   const ITERATIONS = 150000;
-  const PASSWORD_HASH = "a89e5ec6ea8f00502e788ccba384e59d1f204f7ef1e5cfd66b7a976398803a7b";
+  const PASSWORD_HASH = "77ee5a1e94fda10c2b194da03e906715b81848d340e55acceca95e6cc6e83d4b";
 
   function hex(bytes) {
     return [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
   }
 
+  function editingAllowed() {
+    return ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
+  }
+
+  if (!editingAllowed()) document.documentElement.classList.add("public-read-only");
+
   async function verify(password) {
-    if (!window.crypto?.subtle || !String(password || "")) return false;
+    if (!editingAllowed() || !window.crypto?.subtle || !String(password || "")) return false;
     const encoder = new TextEncoder();
     const material = await window.crypto.subtle.importKey("raw", encoder.encode(String(password)), "PBKDF2", false, ["deriveBits"]);
     const bits = await window.crypto.subtle.deriveBits({
@@ -21,10 +27,12 @@
   }
 
   function hasAccess() {
+    if (!editingAllowed()) return false;
     try { return sessionStorage.getItem(SESSION_KEY) === "granted"; } catch { return false; }
   }
 
   function requestAccess() {
+    if (!editingAllowed()) return Promise.resolve(false);
     if (hasAccess()) return Promise.resolve(true);
     return new Promise((resolve) => {
       const overlay = document.createElement("div");
@@ -53,10 +61,14 @@
         try { sessionStorage.setItem(SESSION_KEY, "granted"); } catch {}
         close(true);
       });
-      document.body.appendChild(overlay);
+      // Browsers only paint the fullscreen element and its descendants. Mount
+      // the gate inside that top-layer subtree so the pencil control can ask
+      // for access without forcing the viewer to leave fullscreen first.
+      const overlayHost = document.fullscreenElement || document.body;
+      overlayHost.appendChild(overlay);
       input.focus();
     });
   }
 
-  window.monroeEditorAccess = { hasAccess, requestAccess, verify };
+  window.monroeEditorAccess = { editingAllowed, hasAccess, requestAccess, verify };
 })();

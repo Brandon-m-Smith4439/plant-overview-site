@@ -3315,6 +3315,10 @@
   }
 
   function setEditing(enabled) {
+    if (enabled && window.monroeEditorAccess?.editingAllowed?.() === false) {
+      showToast("Editing is available only from the authorized local project.");
+      return;
+    }
     if (enabled && !state.editing && !window.monroeEditorAccess?.hasAccess?.()) {
       window.monroeEditorAccess?.requestAccess?.().then((granted) => {
         if (granted) setEditing(true);
@@ -4650,7 +4654,7 @@
     editLayout.setAttribute("aria-label", "Edit layout");
     editLayout.dataset.tooltip = "Edit layout";
     editLayout.innerHTML = "&#9998;";
-    frame.appendChild(editLayout);
+    if (window.monroeEditorAccess?.editingAllowed?.() !== false) frame.appendChild(editLayout);
     const motionToggle = document.createElement("button");
     motionToggle.type = "button";
     motionToggle.className = "motion-toggle-button";
@@ -5234,9 +5238,9 @@
     sections.forEach((section) => {
       const horizontalWall = section.w > section.d;
       const sectionEnd = section.x + section.w;
-      if (horizontalWall && section.x < splitX && sectionEnd > splitX) {
-        result.push({ ...section, w: splitX - section.x, h: state.roof.leftHeight });
-        result.push({ ...section, x: splitX, w: sectionEnd - splitX, h: state.roof.rightHeight });
+      if (horizontalWall && section.x < roofProfile.splitX && sectionEnd > roofProfile.splitX) {
+        result.push({ ...section, w: roofProfile.splitX - section.x, h: roofProfile.leftHeight });
+        result.push({ ...section, x: roofProfile.splitX, w: sectionEnd - roofProfile.splitX, h: roofProfile.rightHeight });
       } else {
         result.push({ ...section, h: heightAt(section.x + section.w / 2) });
       }
@@ -8364,12 +8368,14 @@
   function visibleColumnEntries() {
     if (visibleColumnEntriesCache) return visibleColumnEntriesCache;
     const entries = [];
+    const columnRoofProfile = displayedRoofProfile();
     for (const column of structuralColumns()) {
       if (isColumnHidden(column)) continue;
       const { x, z } = column;
       if (state.cameraMode === "walk" && firstPersonDistanceToBox({ x: x - 1.16, z: z - 1.16, w: 2.32, d: 2.32 }) > renderPerformance.walkDrawDistance() + WALK_DRAW_HYSTERESIS) continue;
+      const height = displayedColumnHeight(column, columnRoofProfile);
       const base = project(x, 0, z);
-      const top = project(x, 22, z);
+      const top = project(x, height, z);
       if (state.cameraMode === "walk" && base[3] < WALK_NEAR_CLIP && top[3] < WALK_NEAR_CLIP) continue;
       const margin = 80;
       const left = Math.min(base[0], top[0]) - 10;
@@ -9130,13 +9136,12 @@
 
   function updateSkyBackground() {
     if (!modelFrame) return;
-    // Keep the overview sky visually anchored while the plant is orbited or
-    // panned. During a walkthrough, looking around reveals the wider cloud
-    // field like a surrounding environment instead of a screen-fixed image.
-    const horizontal = state.cameraMode === "walk" ? Math.round(-state.yaw * 245) : 0;
-    const vertical = state.cameraMode === "walk"
-      ? Math.round(clamp(state.pitch * 115 + state.walkVerticalOffset * 3, -120, 170))
-      : 0;
+    // Move a wide, repeating panorama opposite the camera rotation. The
+    // seamless horizontal wrap reads as a cloud sphere surrounding the plant
+    // without adding another WebGL scene or texture upload.
+    const horizontal = Math.round(-state.yaw * 245);
+    const verticalOffset = state.cameraMode === "walk" ? state.walkVerticalOffset * 3 : 0;
+    const vertical = Math.round(clamp(state.pitch * 115 + verticalOffset, -120, 170));
     const position = `${horizontal}:${vertical}`;
     if (position === lastSkyPosition) return;
     lastSkyPosition = position;

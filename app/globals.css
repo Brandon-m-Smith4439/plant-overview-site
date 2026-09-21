@@ -5821,6 +5821,15 @@ body.timeline-dragging[data-timeline-drag-mode="end"] {
 
 /* First person owns the complete fullscreen surface. Keep this after every
    general fullscreen rule so the stage card cannot shrink the walkthrough. */
+.site-shell:fullscreen .experience.editing-layout,
+.site-shell:-webkit-full-screen .experience.editing-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.site-shell:fullscreen .experience.editing-layout .stage-panel,
+.site-shell:-webkit-full-screen .experience.editing-layout .stage-panel {
+  display: none;
+}
+
 .site-shell.first-person-site:fullscreen .experience,
 .site-shell.first-person-site:-webkit-full-screen .experience {
   grid-template-columns: minmax(0, 1fr);
@@ -5849,6 +5858,9 @@ body.timeline-dragging[data-timeline-drag-mode="end"] {
     center;
   background-repeat: repeat, repeat, repeat, repeat, no-repeat;
 }
+
+.public-read-only .layout-edit-button,
+.public-read-only .site-nav a[href*="machine-studio"] { display: none !important; }
 
 .viewer-icon-button,
 .label-options-button {

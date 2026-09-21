@@ -14,7 +14,16 @@ assert.ok(plant.includes("const roofColor = state.roof.roofColor") && plant.incl
 assert.ok(plant.includes("function displayedWallSections") && plant.includes("state.roof.leftHeight") && plant.includes("state.roof.rightHeight"), "Visible roof sections must extend their matching walls to the configured height.");
 assert.ok(plant.includes("function displayedRoofProfile") && plant.includes("function displayedColumnHeight"), "Pillars need the same active roof-height profile as the walls and trusses.");
 assert.ok(plant.includes("h: displayedColumnHeight(column, columnRoofProfile)") && plant.includes("const height = displayedColumnHeight(column)"), "Both fast and fallback pillar renderers must extend pillars to the visible ceiling.");
-assert.ok(plant.includes("function updateSkyBackground") && plant.includes('state.cameraMode === "walk"') && css.includes("--sky-x") && css.includes("background-position"), "The overview sky must stay anchored while first-person look direction can reveal the wider cloud field.");
+const displayedWallsStart = plant.indexOf("function displayedWallSections()");
+const displayedWallsEnd = plant.indexOf("function rendererViewState()", displayedWallsStart);
+const displayedWallsBody = plant.slice(displayedWallsStart, displayedWallsEnd);
+assert.ok(displayedWallsBody.includes("section.x < roofProfile.splitX") && displayedWallsBody.includes("sectionEnd > roofProfile.splitX"), "Roof-height wall splitting must use the active roof profile without an undefined split coordinate.");
+const skyUpdateStart = plant.indexOf("function updateSkyBackground()");
+const skyUpdateEnd = plant.indexOf("function updateCanvasSize", skyUpdateStart);
+const skyUpdateBody = plant.slice(skyUpdateStart, skyUpdateEnd);
+assert.ok(skyUpdateBody.includes("-state.yaw * 245") && skyUpdateBody.includes("state.pitch * 115"), "The cloud panorama must follow horizontal and vertical camera rotation in every viewing mode.");
+assert.ok(!skyUpdateBody.includes('state.cameraMode === "walk" ? Math.round(-state.yaw'), "Overview and first person must share the surrounding sky-panorama movement.");
+assert.ok(css.includes("--sky-x") && css.includes("background-repeat: repeat, repeat, repeat, repeat, no-repeat"), "The plant sky must wrap as a seamless surrounding cloud panorama.");
 assert.ok(plant.includes('data-roof-field="splitPercent"') && plant.includes('data-roof-field="trussSpacing"'), "Structure editing must expose the roof split and truss spacing.");
 assert.ok(plant.includes("roof: clone(state.roof)") && plant.includes("roof: state.roof"), "Roof configuration must survive history, export, and browser persistence.");
 assert.ok(plant.includes("niceGridStep"), "Floor grid spacing must adapt to the structure size.");

@@ -1,6 +1,6 @@
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.10**
+Current project version: **0.13.11**
 
 ## Full-production rendering performance
 
@@ -25,6 +25,10 @@ animation batching, transform parity, eviction and context-recovery regressions.
 These tests use real Three.js geometry with a simulated driver, not browser FPS.
 Existing saved production work must be benchmarked in its original browser and
 origin; a clean default scene is not a substitute for the customized plant.
+
+## Version 0.13.11
+
+Version 0.13.11 is a dependency-security, hosting-optimization, mobile-polish, and workspace-publish release. Next.js and its matching ESLint config were updated to 16.3.6, the production `sharp` vulnerability was resolved, and `baseline-browser-mapping` is pinned to a safe 2.11.25 through npm overrides. `npm audit --omit=dev` reports zero production vulnerabilities. Railway production is moved from the West Coast to US East (Virginia). Mobile stage changes no longer scroll the page, phone layouts keep stage context in the compact dark stage dock instead of the desktop stage/timeline panels, Play Progress uses a formatted icon, and fullscreen/First Person now track portrait/landscape rotation. The checked-in public workspace is also refreshed from the current local Microsoft Edge editor workspace so the newest machines, labels, and layout edits publish with this version.
 
 ## Version 0.13.10
 

@@ -1,6 +1,6 @@
 {
   "name": "monroe-glass-plant-evolution",
-  "version": "0.13.10",
+  "version": "0.13.11",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -61,7 +61,7 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "next": "16.3.3",
+    "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "three": "0.160.1"
@@ -76,7 +76,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.3.3",
+    "eslint-config-next": "16.3.6",
     "react-server-dom-webpack": "19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
@@ -84,5 +84,8 @@
     "vite": "8.2.2",
     "wrangler": "4.126.0"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "baseline-browser-mapping": "2.11.25"
+  }
 }

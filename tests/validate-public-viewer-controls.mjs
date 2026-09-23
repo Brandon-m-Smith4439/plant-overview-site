@@ -28,7 +28,7 @@ assert.doesNotMatch(plant, /id="timeline-speed"/, "Legacy playback-speed control
 assert.doesNotMatch(plant, /Edit timeline/, "Legacy timeline-editor action must not remain in the public toolbar.");
 assert.match(plant, /Timeline complete/, "Playback must report completion at the final stage.");
 assert.match(plant, /state\.playing = false/, "Playback must stop rather than loop after the final stage.");
-assert.match(plant, /const fullScreenTarget = document\.querySelector\("\.site-shell"\) \|\| frame/, "Fullscreen must target the whole viewer shell.");
+assert.match(plant, /function fullscreenTarget\(frame\)[\s\S]*?document\.querySelector\("\.site-shell"\) \|\| frame/, "Fullscreen must target the whole viewer shell.");
 assert.match(plant, /className = "layout-edit-button"/, "Layout editing must be exposed as the compact pencil control.");
 assert.match(plant, /showControls: false, alwaysShowFps: true/, "The public view should retain only the FPS indicator from performance tooling.");
 assert.match(performance, /optionsOverride\.showControls === false/, "Performance controller must support a no-controls public viewer mount.");
@@ -43,7 +43,7 @@ assert.ok(!fs.existsSync(path.join(root, "Password.txt")) && gitignore.includes(
 assert.match(worker, /X-Content-Type-Options[\s\S]*?nosniff/, "Hosted responses must prevent MIME-type sniffing.");
 assert.match(worker, /Permissions-Policy[\s\S]*?camera=\(\), microphone=\(\), geolocation=\(\)/, "The public viewer must disable unnecessary browser capabilities.");
 assert.match(home, /ProtectedEditorLink/, "Machine Studio navigation must be gated.");
-assert.match(home, /SecretOwnerEntry version="0\.13\.10"/, "The public header must expose the discreet owner-entry gesture.");
+assert.match(home, /SecretOwnerEntry version="0\.13\.11"/, "The public header must expose the discreet owner-entry gesture.");
 assert.match(editorGate, /SECRET_OWNER_CLICK_COUNT = 5/, "The hidden owner entry must require five rapid clicks.");
 assert.match(editorGate, /SECRET_OWNER_CLICK_WINDOW_MS = 3500/, "The hidden owner entry must expire slow click sequences.");
 assert.match(editorGate, /window\.location\.assign\(OWNER_ACCESS_PATH\)/, "The hidden owner entry must open the protected owner path.");

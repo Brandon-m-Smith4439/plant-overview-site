@@ -209,7 +209,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.10";
+  const APP_VERSION = "0.13.11";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -4626,21 +4626,77 @@
     updateEditorPanel();
   }
 
+  function fullscreenTarget(frame) {
+    return document.querySelector(".site-shell") || frame;
+  }
+
+  function nativeFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function touchFullscreenViewport() {
+    return Boolean(window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches || window.innerWidth <= 900);
+  }
+
+  function setFullscreenFallback(frame, active) {
+    const target = fullscreenTarget(frame);
+    target?.classList.toggle("viewer-fullscreen-fallback", Boolean(active));
+    document.documentElement.classList.toggle("viewer-fullscreen-fallback-active", Boolean(active));
+    document.body?.classList.toggle("viewer-fullscreen-fallback-active", Boolean(active));
+    canvasSizeDirty = true;
+    renderPerformance.invalidate?.("fullscreen-fallback");
+  }
+
+  function viewerFullscreenActive(frame) {
+    const target = fullscreenTarget(frame);
+    return nativeFullscreenElement() === target || target?.classList.contains("viewer-fullscreen-fallback");
+  }
+
+  async function enterViewerFullscreen(frame) {
+    const target = fullscreenTarget(frame);
+    if (!target) return false;
+    if (viewerFullscreenActive(frame)) return true;
+    const request = target.requestFullscreen || target.webkitRequestFullscreen;
+    if (typeof request === "function") {
+      try {
+        await Promise.resolve(request.call(target));
+        if (nativeFullscreenElement() === target) {
+          setFullscreenFallback(frame, false);
+          return true;
+        }
+      } catch (error) {
+        if (!touchFullscreenViewport()) console.warn("Full-screen mode could not be opened.", error);
+      }
+    }
+    if (touchFullscreenViewport()) {
+      setFullscreenFallback(frame, true);
+      return true;
+    }
+    return false;
+  }
+
+  async function exitViewerFullscreen(frame) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (nativeFullscreenElement() && typeof exit === "function") {
+      try { await Promise.resolve(exit.call(document)); }
+      catch (error) { console.warn("Full-screen mode could not be closed cleanly.", error); }
+    }
+    setFullscreenFallback(frame, false);
+  }
+
   async function toggleModelFullscreen(frame) {
-    const fullScreenTarget = document.querySelector(".site-shell") || frame;
-    try {
-      if (document.fullscreenElement === fullScreenTarget) await document.exitFullscreen();
-      else await fullScreenTarget.requestFullscreen();
-    } catch (error) {
-      console.warn("Full-screen mode could not be opened.", error);
+    if (viewerFullscreenActive(frame)) {
+      await exitViewerFullscreen(frame);
+    } else if (!await enterViewerFullscreen(frame)) {
       showToast("Full-screen mode is unavailable in this browser.");
     }
+    updateFullscreenControl(frame);
   }
 
   function updateFullscreenControl(frame) {
     const button = frame.querySelector("[data-toggle='fullscreen']");
     if (!button) return;
-    const active = document.fullscreenElement === (document.querySelector(".site-shell") || frame);
+    const active = viewerFullscreenActive(frame);
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
     button.setAttribute("aria-label", active ? "Exit full screen" : "Full screen");
@@ -4648,6 +4704,10 @@
     button.innerHTML = active
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  }
+
+  function playProgressButtonMarkup(playing) {
+    return `<span class="timeline-progress-icon ${playing ? "pause" : "play"}" aria-hidden="true"></span>${playing ? "Pause progress" : "Play progress"}`;
   }
 
   function addControls() {
@@ -4754,7 +4814,7 @@
     play.type = "button";
     play.id = "play-timeline";
     play.className = "play-button";
-    play.innerHTML = `<span>▶</span> Play progress`;
+    play.innerHTML = playProgressButtonMarkup(false);
     frame.appendChild(play);
 
     const reticle = document.createElement("div");
@@ -4965,33 +5025,21 @@
         state.walkVerticalOffset = 0;
         state.walkBobOffset = 0;
         firstPersonController?.start({ capture: false });
-        const fullscreenTarget = siteShell || frame;
         const captureWalkthrough = () => {
           canvasSizeDirty = true;
           renderPerformance.invalidate?.("first-person-fullscreen");
           if (!touchWalk) firstPersonController?.capture();
         };
-        if (document.fullscreenElement) {
-          walkStartedFullscreen = true;
+        walkStartedFullscreen = false;
+        Promise.resolve(enterViewerFullscreen(frame)).then((active) => {
+          walkStartedFullscreen = Boolean(active);
+          updateFullscreenControl(frame);
           captureWalkthrough();
-        } else if (typeof fullscreenTarget?.requestFullscreen === "function") {
-          walkStartedFullscreen = false;
-          try {
-            const request = fullscreenTarget.requestFullscreen();
-            Promise.resolve(request).then(() => {
-              walkStartedFullscreen = Boolean(document.fullscreenElement);
-              updateFullscreenControl(frame);
-              captureWalkthrough();
-            }).catch((error) => {
-              console.warn("First-person fullscreen could not be opened; using the full-window fallback.", error);
-              captureWalkthrough();
-            });
-          } catch (error) {
-            console.warn("First-person fullscreen could not be opened; using the full-window fallback.", error);
-            captureWalkthrough();
-          }
-        } else captureWalkthrough();
-        showToast(touchWalk ? "First person started. Use the left pad to move and drag the right side to look." : "First person started full screen. Use WASD and the mouse; press Esc for options.");
+        }).catch((error) => {
+          console.warn("First-person fullscreen could not be opened; using the full-window fallback.", error);
+          captureWalkthrough();
+        });
+        showToast(touchWalk ? "First person started full screen. Rotate your phone anytime; use the left pad to move and drag the right side to look." : "First person started full screen. Use WASD and the mouse; press Esc for options.");
       } else {
         walkModeTransitioning = true;
         firstPersonController?.stop();
@@ -5008,8 +5056,8 @@
           if (!shouldCenterView) return;
           window.requestAnimationFrame(() => experience?.scrollIntoView?.({ behavior: "smooth", block: "center" }));
         };
-        if (shouldExitFullscreen && document.fullscreenElement) {
-          document.exitFullscreen?.().then(centerOverview).catch(centerOverview);
+        if (shouldExitFullscreen && viewerFullscreenActive(frame)) {
+          Promise.resolve(exitViewerFullscreen(frame)).then(centerOverview).catch(centerOverview);
         } else centerOverview();
         walkStartedFullscreen = false;
         walkModeTransitioning = false;
@@ -5119,15 +5167,7 @@
       firstPersonController?.capture();
     });
     firstPersonMenu.querySelector("[data-first-person-menu='overview']")?.addEventListener("click", async () => {
-      const siteShell = frame.closest(".site-shell");
-      let fullscreenReady = Boolean(document.fullscreenElement);
-      if (!document.fullscreenElement) {
-        try {
-          await (siteShell || frame).requestFullscreen?.();
-          fullscreenReady = Boolean(document.fullscreenElement);
-        }
-        catch (error) { console.warn("Full-screen overview could not be opened.", error); }
-      }
+      const fullscreenReady = await enterViewerFullscreen(frame);
       setWalkMode(false, { exitFullscreen: !fullscreenReady, centerView: !fullscreenReady });
     });
     firstPersonMenu.querySelector("[data-first-person-menu='exit']")?.addEventListener("click", () => {
@@ -5209,17 +5249,30 @@
         }
       });
     });
-    addLifecycleListener(document, "fullscreenchange", () => {
+    const handleFullscreenChange = () => {
       updateFullscreenControl(frame);
-      if (state.cameraMode === "walk" && walkStartedFullscreen && !document.fullscreenElement) setFirstPersonMenu(true);
-    });
+      canvasSizeDirty = true;
+      renderPerformance.invalidate?.("fullscreen-change");
+      if (state.cameraMode === "walk" && walkStartedFullscreen && !viewerFullscreenActive(frame)) setFirstPersonMenu(true);
+    };
+    addLifecycleListener(document, "fullscreenchange", handleFullscreenChange);
+    addLifecycleListener(document, "webkitfullscreenchange", handleFullscreenChange);
+    const handleViewportGeometryChange = () => {
+      canvasSizeDirty = true;
+      renderPerformance.invalidate?.("viewport-geometry-change");
+      updateFullscreenControl(frame);
+    };
+    addLifecycleListener(window, "resize", handleViewportGeometryChange);
+    addLifecycleListener(window, "orientationchange", () => window.setTimeout(handleViewportGeometryChange, 80));
+    addLifecycleListener(window.visualViewport, "resize", handleViewportGeometryChange);
+    addLifecycleListener(window.screen?.orientation, "change", handleViewportGeometryChange);
     updateFullscreenControl(frame);
     play.addEventListener("click", () => {
       if (!state.playing && state.stage >= stages.length - 1) setStage(0);
       state.playing = !state.playing;
       state.playAt = performance.now() + state.stageDurationSeconds * 1000;
       play.classList.toggle("active", state.playing);
-      play.innerHTML = state.playing ? `<span>Ⅱ</span> Pause progress` : `<span>▶</span> Play progress`;
+      play.innerHTML = playProgressButtonMarkup(state.playing);
     });
   }
 
@@ -9437,10 +9490,12 @@
     if (number) number.textContent = String(state.stage + 1).padStart(2,"0");
     const mobileCount = document.getElementById("mobile-stage-count");
     const mobileTitle = document.getElementById("mobile-stage-title");
+    const mobileDescription = document.getElementById("mobile-stage-description");
     const mobilePrevious = document.getElementById("mobile-previous-stage");
     const mobileNext = document.getElementById("mobile-next-stage");
     if (mobileCount) mobileCount.textContent = `Stage ${String(state.stage + 1).padStart(2,"0")} of ${String(stages.length).padStart(2,"0")}`;
     if (mobileTitle) mobileTitle.textContent = stage.title;
+    if (mobileDescription) mobileDescription.textContent = stage.description;
     if (mobilePrevious) mobilePrevious.disabled = state.stage === 0;
     if (mobileNext) mobileNext.disabled = state.stage === stages.length - 1;
     if (title) title.textContent = stage.title;
@@ -9474,9 +9529,6 @@
       const button = item.querySelector("button");
       if (button) button.setAttribute("aria-current", itemIndex === state.stage ? "step" : "false");
     });
-    if (previousStage !== state.stage && window.matchMedia?.("(max-width: 760px)").matches) {
-      document.querySelector("#timeline-stages li.active")?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-    }
     const scrubber = document.getElementById("timeline-scrubber");
     if (scrubber) scrubber.value = String(state.stage);
     const stagePanel = document.querySelector(".stage-panel");
@@ -9736,9 +9788,6 @@
   document.getElementById("previous-stage")?.addEventListener("click", () => setStage(state.stage - 1));
   document.getElementById("mobile-next-stage")?.addEventListener("click", () => setStage(state.stage + 1));
   document.getElementById("mobile-previous-stage")?.addEventListener("click", () => setStage(state.stage - 1));
-  document.getElementById("mobile-stage-summary")?.addEventListener("click", () => {
-    document.querySelector(".stage-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
   addLifecycleListener(window, "keydown", (event) => {
     const typing = ["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName);
     if (!typing && event.code === "Space") {

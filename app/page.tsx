@@ -17,7 +17,7 @@ export default function Home() {
             <a className="active" href="/">Plant layout</a>
             <ProtectedEditorLink href="/machine-studio">Machine Design Studio</ProtectedEditorLink>
           </nav>
-          <SecretOwnerEntry version="0.13.10" />
+          <SecretOwnerEntry version="0.13.11" />
         </div>
       </header>
 
@@ -39,10 +39,13 @@ export default function Home() {
             <button id="mobile-previous-stage" type="button" aria-label="Previous construction stage" disabled>
               <span aria-hidden="true">←</span>
             </button>
-            <button id="mobile-stage-summary" className="mobile-stage-summary" type="button" aria-label="View current stage details">
+            <div id="mobile-stage-summary" className="mobile-stage-summary" aria-live="polite">
               <span id="mobile-stage-count">Stage 01 of 18</span>
               <strong id="mobile-stage-title">Empty shell</strong>
-            </button>
+              <small id="mobile-stage-description">
+                Before equipment arrives, the glass-production footprint is a clear industrial shell.
+              </small>
+            </div>
             <button id="mobile-next-stage" type="button" aria-label="Next construction stage">
               <span aria-hidden="true">→</span>
             </button>

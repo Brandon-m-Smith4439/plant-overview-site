@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.11 - 2026-09-23
+
+- Updated `next` and `eslint-config-next` from 16.3.3 to 16.3.6.
+- Resolved the production `sharp` security advisory by moving Next's transitive Sharp dependency to 0.35.4.
+- Added an npm override for `baseline-browser-mapping` 2.11.25, clearing the remaining production audit advisory.
+- Verified `npm audit --omit=dev` reports zero production vulnerabilities.
+- Moved the Railway production replica from the West Coast region to US East (Virginia) for lower latency to primary users.
+- Removed mobile stage-change auto-scroll and hid the large desktop stage card/timeline on phone layouts.
+- Added the current stage description directly to the compact dark mobile stage dock so stage context stays inside the overview viewport.
+- Replaced the Play Progress text glyph with a CSS-drawn play/pause icon that remains aligned at mobile sizes.
+- Added a mobile fullscreen fallback plus viewport/orientation listeners so fullscreen and First Person fill the current portrait or landscape phone geometry and adapt when the phone rotates.
+- First Person now enters the shared fullscreen experience automatically on mobile.
+- Republished the approved public workspace from the current Microsoft Edge local editor state, including the latest machine, label, and plant-layout changes.
+
 ## 0.13.10 - 2026-09-23
 
 - Completed Railway/public-host compatibility for the approved published workspace.

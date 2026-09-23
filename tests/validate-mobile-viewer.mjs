@@ -20,12 +20,18 @@ assert(app.includes('event.pointerType === "touch" && !state.editing'), "Public 
 assert(app.includes("state.zoom * (distance / touchGestureDistance)"), "Pinch zoom handling is missing.");
 assert(app.includes("panCamera(center.x - touchGestureCenter.x, center.y - touchGestureCenter.y)"), "Two-finger pan handling is missing.");
 assert(app.includes('document.getElementById("mobile-next-stage")'), "Mobile stage controls are not wired.");
+assert(page.includes('id="mobile-stage-description"'), "Compact mobile stage description is missing.");
+assert(css.includes(".stage-panel,") && css.includes(".timeline {") && css.includes("display: none !important"), "Desktop stage panel/timeline must be hidden on mobile.");
+assert(!app.includes('document.querySelector("#timeline-stages li.active")?.scrollIntoView'), "Mobile stage changes must not scroll the page to the timeline.");
+assert(!app.includes('document.getElementById("mobile-stage-summary")?.addEventListener("click"'), "Compact mobile stage summary must not jump the page to the desktop stage card.");
+assert(app.includes("timeline-progress-icon"), "Formatted play-progress icon is missing.");
+assert(app.includes("enterViewerFullscreen") && app.includes("viewer-fullscreen-fallback"), "Mobile fullscreen fallback is missing.");
+assert(app.includes('addLifecycleListener(window, "orientationchange"'), "Mobile fullscreen must react to phone rotation.");
 assert(app.includes("first-person-touch-controls"), "Mobile first-person control surface is missing.");
 assert(app.includes("setTouchMove"), "Mobile first-person movement is not wired.");
 assert(app.includes("lookBy?.(dx, dy, 1.35)"), "Mobile drag-to-look is not wired.");
 assert(app.includes("compactLabelViewport"), "Mobile label-density adaptation is missing.");
 assert(app.includes("if (rect.width <= 430)") && app.includes("rect.width <= 820 || compactLabelViewport()"), "Phone, tablet, and short touch-landscape label budgets must use compact viewport rules.");
 assert(app.includes('(hover: none) and (pointer: coarse)') && app.includes("rect.height <= 500"), "Short coarse-touch landscape must use mobile label-density rules.");
-assert(app.includes('scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })'), "Active mobile timeline stage does not auto-center.");
 
 console.log("Mobile viewer validation passed.");

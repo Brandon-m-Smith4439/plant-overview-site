@@ -118,8 +118,8 @@ assert.ok(addControlsBody.includes('data-first-person-menu="overview"'), "The me
 assert.ok(addControlsBody.includes('data-first-person-menu="exit"'), "The menu must offer an exit-to-page action.");
 assert.ok(addControlsBody.includes("firstPersonMenu.querySelector"), "First-person menu handlers must be registered inside the viewer controls lifecycle.");
 assert.ok(addControlsBody.includes('siteShell?.classList.toggle("first-person-site", enabled)'), "First person must use the full-viewport shell so Escape can open its menu after browser fullscreen closes.");
-assert.ok(addControlsBody.includes("fullscreenTarget.requestFullscreen()"), "Entering first person must request actual browser fullscreen from the user click.");
-assert.ok(addControlsBody.includes("full-window fallback"), "First person must retain a full-window fallback when the browser denies fullscreen.");
+assert.ok(addControlsBody.includes("enterViewerFullscreen(frame)"), "Entering first person must use the shared fullscreen helper.");
+assert.ok(plant.includes("viewer-fullscreen-fallback"), "First person must retain a full-window fallback when the browser denies native fullscreen.");
 assert.match(css, /\.site-shell\.first-person-site[\s\S]*?position: fixed/, "First person must remain full-window without relying on native fullscreen.");
 assert.match(css, /\.site-shell\.first-person-site \.experience[\s\S]*?height: 100vh !important/, "The first-person plant surface must fill the viewport rather than retain the overview height clamp.");
 assert.ok(plant.includes('scrollIntoView?.({ behavior: "smooth", block: "center" })'), "Exit-to-page must center the plant viewer after leaving full screen.");

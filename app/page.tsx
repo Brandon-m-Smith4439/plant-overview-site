@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import LegacyScriptLoader from "./legacy-script-loader";
-import { ProtectedEditorLink } from "./editor-access-gate";
+import { ProtectedEditorLink, SecretOwnerEntry } from "./editor-access-gate";
 
 export default function Home() {
   return (
@@ -17,9 +17,7 @@ export default function Home() {
             <a className="active" href="/">Plant layout</a>
             <ProtectedEditorLink href="/machine-studio">Machine Design Studio</ProtectedEditorLink>
           </nav>
-          <p className="source-note">
-            Model Studio <strong>v0.13.0</strong>
-          </p>
+          <SecretOwnerEntry version="0.13.9" />
         </div>
       </header>
 
@@ -34,7 +32,20 @@ export default function Home() {
             aria-label="Interactive 3D model of the Monroe glass plant"
           />
           <div className="view-help">
-            Right-drag orbit · Middle-drag pan · Wheel zoom
+            <span className="desktop-view-help">Right-drag orbit · Middle-drag pan · Wheel zoom</span>
+            <span className="mobile-view-help">Drag to orbit · Pinch to zoom · Two-finger drag to pan</span>
+          </div>
+          <div className="mobile-stage-dock" aria-label="Mobile stage navigation">
+            <button id="mobile-previous-stage" type="button" aria-label="Previous construction stage" disabled>
+              <span aria-hidden="true">←</span>
+            </button>
+            <button id="mobile-stage-summary" className="mobile-stage-summary" type="button" aria-label="View current stage details">
+              <span id="mobile-stage-count">Stage 01 of 18</span>
+              <strong id="mobile-stage-title">Empty shell</strong>
+            </button>
+            <button id="mobile-next-stage" type="button" aria-label="Next construction stage">
+              <span aria-hidden="true">→</span>
+            </button>
           </div>
         </div>
 

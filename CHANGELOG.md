@@ -1,20 +1,109 @@
 # Changelog
 
-## Unreleased - 2026-09-21
+## 0.13.9 - 2026-09-23
+
+- Removed the ChatGPT-specific sign-in requirement from the private owner route.
+- Owner access now uses only the existing password gate and session-scoped editor unlock, allowing the same owner workflow to run on Railway or another standard Node host.
+- Preserved the hidden five-click owner entry, no-index owner/editor routes, public read-only viewer, and desktop-only Machine Design Studio behavior.
+
+## 0.13.8 - 2026-09-23
+
+- Bug-fix-only release after a full responsive QA sweep; no new viewer or editor features were added.
+- Fixed 844x390 coarse-touch landscape so the overview model, gesture/playback row, and mobile stage dock fit together without control clipping.
+- Extended compact label-density, abbreviation, repeat-limit, and collision-spacing behavior to short coarse-touch landscape viewports so Plant Today does not fall back to desktop-level label density.
+- Updated the CAD regression validator to assert the current `displayedColumnHeight(column)` rendering path instead of the retired hard-coded 22-unit column height.
+- Rechecked public viewer layouts from 360x800 through 2560x1440, portrait/landscape First Person, owner access/dashboard, and desktop-only Machine Design Studio.
+
+## 0.13.7 - 2026-09-22
+
+- Rotated the owner and Machine Design Studio editor password to the newly requested credential.
+- Updated both the React access gate and standalone editor-access runtime to the same PBKDF2-derived password hash without storing the plaintext password in source.
+- Bumped application/version markers and owner-entry regression expectations to v0.13.7.
+
+## 0.13.6 - 2026-09-22
+
+- Added touch-first First Person controls for phones and tablets: directional movement, drag-to-look, hold-to-run, jump, crouch, and exit.
+- Kept desktop First Person behavior unchanged with pointer lock, mouse look, WASD, sprint, jump, crouch, and Escape options.
+- Restored the First Person entry control on coarse-touch/mobile viewers instead of hiding it.
+- Added a full-screen mobile First Person control overlay that leaves the center of the model visible and keeps movement/actions near the lower corners.
+- Reduced mobile overview label crowding by using a phone-specific label budget, stricter repeated-label limits, and earlier abbreviation in Adaptive mode.
+- Prevented the desktop force-visible label behavior from bypassing collision/density rules on narrow mobile viewports.
+- Added regression checks for touch movement, drag-to-look, mobile First Person UI wiring, and mobile label-density logic.
+
+## 0.13.5 - 2026-09-22
+
+- Decluttered the mobile Plant Evolution viewport by placing the movement hint and Play progress control on one compact row and increasing the usable 3D model height.
+- Hid the Plant Layout / Machine Studio navigation for public read-only viewers while keeping owner/editor navigation available after owner access is unlocked.
+- Reduced the hidden Model Studio owner-entry badge to a tiny fixed corner version marker on every resolution while preserving the five-click owner shortcut.
+- Made Machine Design Studio desktop-only; phones, tablets, and coarse-touch devices now receive a focused desktop-required screen instead of loading the precision editor.
+- Revalidated the production build, public-viewer access rules, layout rendering, machine creation, Plant Layout insertion, and lint.
+- Verified the true 390 CSS-pixel phone layout has no horizontal overflow; the movement hint and Play control fit side-by-side inside the 3D viewport.
+
+## 0.13.4 - 2026-09-22
+
+### Fixed
+
+- Kept touch gesture guidance correct after runtime control refreshes; phones and touch-first tablets now continue to show drag, pinch, and two-finger pan instructions instead of reverting to mouse directions.
+- Made pointer-lock First Person controls consistently desktop-only at phone widths, including unusual hybrid browser/device combinations.
+- Extended the touch-first public layout through portrait-tablet widths when the device reports coarse touch input, while preserving the desktop/tablet layout for precise-pointer devices at the same width.
+- Updated the shaped-collision regression test to match the current additive machine-level plus part-level collision-envelope behavior.
+- Separated the mobile Play progress control from the gesture hint and stage dock, and raised the remaining mobile Machine Studio camera/library controls to touch-friendly hit targets.
+- Docked the mobile Plant Layout editor beneath the 3D viewport instead of letting the editor overlay the model, and enlarged owner/access links and password controls for touch use.
+
+### Validation
+
+- Re-ran the complete source regression suite, JavaScript syntax validation, responsive Chromium layout checks, stage-transition checks, and touch-first public-viewer screenshots across phone, tablet, laptop, desktop, and ultrawide viewports.
+
+## 0.13.3 - 2026-09-22
+
+- Rebuilt the public Plant Evolution experience for phones with a taller touch-first viewport, compact header, safe-area spacing, thumb-sized controls, and a mobile stage dock that keeps previous/next navigation in reach while viewing the model.
+- Added real touch camera controls to the Plant Layout: one-finger orbit, pinch-to-zoom, and two-finger pan.
+- Added mobile-specific gesture guidance and hid pointer-lock First Person prompts on coarse-touch devices where that desktop interaction is not appropriate.
+- Reworked the stage card and timeline for mobile with sticky stage actions, horizontally scrollable detail chips, larger controls, snap-friendly stage navigation, and automatic centering of the active timeline stage.
+- Improved the owner/layout editor on phones with larger form controls and a better viewport/editor split.
+- Reworked Machine Design Studio on smaller screens so the 3D viewport appears first, primary actions remain thumb-sized, command bars scroll cleanly, and dense editor panels follow below the model.
+- Added mobile viewport metadata including safe-area support for modern edge-to-edge phone displays.
+
+## 0.13.2 - 2026-09-22
 
 ### Added
 
+- Added a discreet owner-entry gesture to the normal Plant Evolution header: click the Model Studio version badge five times within 3.5 seconds to open the private owner workspace.
+- Kept the owner gesture visually identical to the ordinary version badge so the public portfolio view does not expose an obvious admin control.
+
+### Security
+
+- The hidden gesture only navigates to the owner route; ChatGPT sign-in and the editor password remain required before editing is enabled.
+- The private owner and Machine Studio routes remain non-indexed.
+
+### Validation
+
+- Extended the public-viewer regression suite to verify the five-click threshold, timeout window, and redirect to the protected owner route.
+
+## 0.13.1 - 2026-09-22
+
+### Added
+
+
+- Added a private, non-indexed owner workspace at the dedicated owner route, protected by ChatGPT sign-in plus the existing editor password gate.
+- Added owner shortcuts into the existing Plant Layout editor and Machine Design Studio instead of creating a second editing system.
 - Added a generated, versioned public workspace snapshot containing the approved 42-machine design library and 98-object plant layout.
 - Added a repeatable workspace publishing command and regression validation for snapshot contents and browser-storage transfer.
 
 ### Fixed
 
+
+- Kept Auto-mode render resolution stable during sustained stage-transition load; Auto now reduces geometry/detail and shadow work before sacrificing viewport sharpness.
+- Removed blur from the stage-card entrance animation so text and controls remain crisp throughout stage changes.
+- Hid editor navigation and the layout-edit control from the normal hosted public viewer until the private owner workspace unlocks the tab.
 - The hosted read-only viewer now loads the published workspace before initializing the plant, so local machine designs, placements, envelopes, animations, labels, structure settings, and timeline edits appear on the live domain.
 - Localhost remains the editable source of truth and is never overwritten by the published snapshot.
 
 ### Validation
 
-- Re-ran JavaScript syntax, machine creation, layout insertion, public viewer, layout rendering, lint, and optimized production build checks.
+
+- Added/updated regression checks for stable Auto render resolution, crisp stage-card transitions, private owner routing, owner-session gating, and reuse of the existing editors.
+- Re-ran JavaScript syntax, adaptive-rendering, public/owner gating, published-workspace, layout-rendering, machine-creation, and layout-insertion regression checks.
 
 ## 0.13.0 - 2026-08-25
 

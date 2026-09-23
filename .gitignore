@@ -44,3 +44,6 @@ __pycache__/
 *.pyc
 cad/machine-text-count.txt
 cad/plant-text.tsv
+
+# Local visual QA captures
+screenshots/

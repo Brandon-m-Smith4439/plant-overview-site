@@ -1,6 +1,6 @@
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.0**
+Current project version: **0.13.9**
 
 ## Full-production rendering performance
 
@@ -25,6 +25,48 @@ animation batching, transform parity, eviction and context-recovery regressions.
 These tests use real Three.js geometry with a simulated driver, not browser FPS.
 Existing saved production work must be benchmarked in its original browser and
 origin; a clean default scene is not a substitute for the customized plant.
+
+## Version 0.13.9
+
+Version 0.13.9 removes the ChatGPT-specific authentication dependency from the private owner route. Owner access is now controlled only by the existing editor password gate, so the same protected owner workflow can run on ChatGPT Sites, Railway, or another standard Node host without requiring ChatGPT authentication headers. The hidden five-click owner entry, session-scoped unlock, public read-only viewer, and desktop-only Machine Design Studio behavior are unchanged.
+
+## Version 0.13.8
+
+Version 0.13.8 is a bug-fix-only responsive QA release. It fixes the short phone-landscape overview so the model controls, playback row, and stage dock remain visible together; extends compact mobile label-density rules to coarse-touch landscape phones; and updates the CAD regression validator to match the current variable-height column renderer.
+
+## Version 0.13.7
+
+Version 0.13.7 rotates the owner/Machine Design Studio editor credential while keeping the same protected owner route, session behavior, and public read-only experience. The password itself is not stored in source; both access gates use the updated PBKDF2-derived hash.
+
+## Version 0.13.6
+
+Version 0.13.6 adds a real touch-first First Person mode for phones and tablets. Mobile viewers now get directional movement controls, drag-to-look, run, jump, crouch, and exit actions without relying on desktop pointer lock. The mobile overview label system was also tightened so Adaptive mode abbreviates sooner, limits how many labels can occupy a phone viewport, reduces repeated labels, and avoids force-showing dense label sets at normal mobile zoom.
+
+## Version 0.13.5
+
+Version 0.13.5 declutters the public viewer on phones and keeps editing intentionally desktop-focused. The mobile 3D viewport is taller, gesture guidance and Play progress share one compact row, public viewers no longer see editor navigation, and the hidden owner-entry version marker is reduced to a tiny corner badge. Machine Design Studio now presents a desktop-required screen on phone, tablet, and coarse-touch layouts while remaining fully available on desktop for authenticated owners.
+
+## Version 0.13.4
+
+Version 0.13.4 is the final responsive QA pass over the touch-first viewer. Runtime help now stays touch-correct after control refreshes, portrait touch tablets receive the same mobile-first stage/navigation treatment, and pointer-lock First Person controls stay out of phone layouts. The release also refreshes regression coverage for the current additive collision-envelope behavior.
+
+## Version 0.13.3
+
+Version 0.13.3 makes the public Plant Evolution viewer genuinely touch-first. Phone users can orbit the plant with one finger, pinch to zoom, pan with two fingers, and move through construction stages from a floating stage dock without leaving the 3D view. Mobile-specific gesture guidance replaces desktop mouse instructions, controls use larger touch targets, the current timeline stage automatically stays centered, and the stage details/action area is easier to read and operate on a narrow screen.
+
+The owner Plant Layout editor also gets a more usable phone split between the 3D viewport and editing controls. Machine Design Studio becomes model-first on small screens: the 3D viewport appears before the browser/inspector panels, top actions and camera tools are touch-sized, and dense command areas scroll horizontally instead of crushing the viewport. Edge-to-edge safe-area support is enabled for modern phones.
+
+## Version 0.13.2
+
+Version 0.13.2 adds a discreet owner entry from the normal Plant Evolution header. Rapidly click the **Model Studio v0.13.2** badge five times within 3.5 seconds to open the private owner workspace. Normal visitors receive no visible owner link or prompt.
+
+The hidden gesture is intentionally only a convenience route, not the security boundary: the owner workspace still requires ChatGPT sign-in and the editor password before the Plant Layout editor or Machine Design Studio can be opened. This keeps the public portfolio view clean while giving the owner a memorable way into the existing editing tools.
+
+## Version 0.13.1
+
+Version 0.13.1 keeps stage transitions visually sharp and adds a private hosted owner workflow. Auto rendering no longer lowers the viewport pixel ratio when a transition creates a heavy frame; it reduces distant geometry/detail and shadow work first. The stage information card also transitions without a blur filter.
+
+The normal hosted site remains a clean read-only portfolio/company viewer. A private, non-indexed owner route requires ChatGPT sign-in and the editor password, then unlocks the existing Plant Layout editor and Machine Design Studio for that browser tab. Machine edits continue to use the established reusable design library, nested-machine tools, materials, transforms, and shared animation timeline rather than a separate editor. Hosted saves remain browser-local until an approved workspace is exported and published as the public snapshot.
 
 ## Version 0.13.0
 

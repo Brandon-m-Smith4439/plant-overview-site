@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -111,7 +111,8 @@ def main() -> None:
         assert feature in script, feature
     assert "const painted = paintProgress(state.paint.columnStageId, 3);" in script
     assert "const color = blendHexColors(state.paint.columnBefore, state.paint.columnAfter, painted);" in script
-    assert "box({ x:x-size/2,z:z-size/2,w:size,d:size,h:22,color });" in script
+    assert "const height = displayedColumnHeight(column);" in script
+    assert "box({ x:x-size/2,z:z-size/2,w:size,d:size,h:height,color });" in script
 
     for asset in ("plant-data.js", "machine-data.js", "plant-app.js"):
         assert f'"/{asset}"' in page
@@ -132,3 +133,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

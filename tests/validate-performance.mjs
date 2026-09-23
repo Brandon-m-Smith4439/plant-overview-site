@@ -12,7 +12,7 @@ assert.ok(controller.includes("createRenderPerformanceController"), "Shared adap
 assert.ok(controller.includes("function dispose()"), "Shared performance controllers must clean up after route changes.");
 assert.ok(controller.includes("animationFps: 60"), "Active render modes should target 60 FPS.");
 assert.ok(controller.includes("interactionFps: 60"), "Interactive camera movement should target a smooth display rate.");
-assert.ok(controller.includes("pixelRatioCap: 1.2"), "Auto render-resolution cap is missing.");
+assert.ok(controller.includes("pixelRatioCap: 1.5"), "Sharper Auto render-resolution cap is missing.");
 assert.ok(controller.includes("shadowLayers"), "Shadow quality budgets are missing.");
 assert.ok(controller.includes("document.hidden"), "Hidden tabs must stop rendering work.");
 assert.ok(controller.includes("if (!forced && !continuouslyActive) return false"), "Static scenes must render only when invalidated instead of polling at an idle frame rate.");
@@ -49,8 +49,10 @@ assert.ok(studio.includes("depthRenderer.available ? 1"), "WebGL designer should
 assert.ok(studio.includes("span / 120"), "Designer grid density must be bounded for large models.");
 assert.ok(studio.includes("renderPerformance.shouldRender"), "Designer render loop is not frame-budgeted.");
 assert.ok(controller.includes("sampleCount < 12"), "Auto performance adaptation should respond promptly to sustained slow frames.");
-assert.ok(controller.includes("currentComplexityScale"), "Auto mode must adapt geometry complexity as well as pixel ratio.");
-assert.ok(controller.includes("adaptive: true") && plant.includes("if (!event.detail?.adaptive) updateCanvasSize(true)"), "Adaptive resolution changes must invalidate and resize the plant canvas.");
+assert.ok(controller.includes("currentComplexityScale"), "Auto mode must adapt geometry complexity under sustained load.");
+assert.ok(controller.includes("currentPixelRatioCap = MODES.auto.pixelRatioCap"), "Auto mode must hold render resolution stable instead of blurring during transitions.");
+assert.doesNotMatch(controller, /Auto targets 60 FPS and lowers render resolution/, "Auto-mode UI copy must not claim that transitions lower viewport resolution.");
+assert.ok(controller.includes("adaptive: true") && plant.includes("renderPerformance.invalidate()"), "Adaptive detail changes must invalidate the plant scene.");
 assert.ok(page.includes('/render-performance.js'), "Plant page does not load the performance controller.");
 assert.ok(studioPage.includes('/render-performance.js'), "Designer page does not load the performance controller.");
 console.log("Adaptive rendering, culling, bounded shadows, and WebGL reuse checks passed.");

@@ -25,6 +25,10 @@
     let bobTime = 0;
     let bobOffset = 0;
     let jumpRequested = false;
+    let touchForward = 0;
+    let touchStrafe = 0;
+    let touchCrouching = false;
+    let touchSprinting = false;
     let pointerLocked = false;
     let hadPointerLock = false;
     let stopping = false;
@@ -41,7 +45,8 @@
     }
 
     function requestPointerLock() {
-      if (!enabled || document.pointerLockElement === canvas) return;
+      const coarseTouch = window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
+      if (coarseTouch || !enabled || document.pointerLockElement === canvas) return;
       try {
         const result = canvas.requestPointerLock?.({ unadjustedMovement: true });
         if (result && typeof result.catch === "function") {
@@ -72,6 +77,10 @@
       bobTime = 0;
       bobOffset = 0;
       jumpRequested = false;
+      touchForward = 0;
+      touchStrafe = 0;
+      touchCrouching = false;
+      touchSprinting = false;
       lastUpdate = 0;
     }
 
@@ -141,12 +150,14 @@
 
       const camera = getCamera();
       const config = settings();
-      const forwardInput = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
-      const strafeInput = Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"));
+      const keyboardForward = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
+      const keyboardStrafe = Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"));
+      const forwardInput = clamp(keyboardForward + touchForward, -1, 1);
+      const strafeInput = clamp(keyboardStrafe + touchStrafe, -1, 1);
       const moving = forwardInput !== 0 || strafeInput !== 0;
       const inputLength = Math.hypot(forwardInput, strafeInput) || 1;
-      const sprinting = keys.has("ShiftLeft") || keys.has("ShiftRight");
-      const crouching = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
+      const sprinting = touchSprinting || keys.has("ShiftLeft") || keys.has("ShiftRight");
+      const crouching = touchCrouching || keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
       const moveSpeed = config.speed * (sprinting ? 2.05 : 1) * (crouching ? 0.46 : 1);
       const forwardX = Math.sin(camera.yaw);
       const forwardZ = Math.cos(camera.yaw);
@@ -244,6 +255,35 @@
       onMovement();
     }
 
+    function setTouchMove(forward = 0, strafe = 0) {
+      touchForward = clamp(Number(forward) || 0, -1, 1);
+      touchStrafe = clamp(Number(strafe) || 0, -1, 1);
+    }
+
+    function setTouchCrouch(active) {
+      touchCrouching = Boolean(active);
+    }
+
+    function setTouchSprint(active) {
+      touchSprinting = Boolean(active);
+    }
+
+    function requestJump() {
+      if (enabled) jumpRequested = true;
+    }
+
+    function lookBy(deltaX = 0, deltaY = 0, sensitivityScale = 1) {
+      if (!enabled) return;
+      const camera = getCamera();
+      const config = settings();
+      const sensitivity = config.sensitivity * clamp(Number(sensitivityScale) || 1, .2, 4);
+      setCamera({
+        yaw: camera.yaw - Number(deltaX || 0) * sensitivity,
+        pitch: clamp(camera.pitch - Number(deltaY || 0) * sensitivity, -1.35, 1.35),
+      });
+      onMovement();
+    }
+
     function handlePointerLockChange() {
       const wasLocked = pointerLocked || hadPointerLock;
       pointerLocked = document.pointerLockElement === canvas;
@@ -282,7 +322,12 @@
       release: releasePointerLock,
       isEnabled: () => enabled,
       isPointerLocked: () => pointerLocked,
-      isMoving: () => Math.abs(velocityX) + Math.abs(velocityZ) > 0.02 || keys.size > 0,
+      setTouchMove,
+      setTouchCrouch,
+      setTouchSprint,
+      requestJump,
+      lookBy,
+      isMoving: () => Math.abs(velocityX) + Math.abs(velocityZ) > 0.02 || keys.size > 0 || Math.abs(touchForward) + Math.abs(touchStrafe) > .02,
       destroy() {
         stop();
         document.removeEventListener("keydown", handleKeyDown, true);

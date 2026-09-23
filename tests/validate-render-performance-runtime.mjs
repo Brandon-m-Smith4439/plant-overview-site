@@ -55,12 +55,13 @@ for (let index = 0; index < 24; index += 1) {
 }
 assert.ok(controller.maxDetailedParts() < initialDetailBudget, "Auto mode must lower geometry complexity after sustained slow frames.");
 assert.ok(controller.maxDetailedMachines() < initialMachineBudget, "Auto mode must lower the number of fully detailed distant machines after sustained slow frames.");
-assert.equal(controller.pixelRatio(2),1.2,"CPU-bound frames should reduce work before lowering resolution");
+assert.equal(controller.pixelRatio(2),1.5,"CPU-bound frames should reduce detail while preserving sharp render resolution");
 
 const gpuController=context.window.createRenderPerformanceController();
 gpuController.setRendererStats({gpuMs:30,gpuTimingSupported:true});
 for(let i=0;i<24;i++) { now+=40; gpuController.recordFrame(4); }
-assert.ok(gpuController.pixelRatio(2)<1.2,"GPU pressure must reduce resolution even when CPU submission is fast");
+assert.equal(gpuController.pixelRatio(2),1.5,"GPU pressure must preserve image resolution and shed geometry/detail work first");
+assert.ok(gpuController.maxDetailedParts() < initialDetailBudget,"GPU pressure should still lower scene-detail work while keeping the image sharp");
 
 const benchmarkController=context.window.createRenderPerformanceController();
 benchmarkController.startBenchmark(1000);

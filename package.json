@@ -1,6 +1,6 @@
 {
   "name": "monroe-glass-plant-evolution",
-  "version": "0.13.0",
+  "version": "0.13.9",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -55,6 +55,7 @@
     "validate:timeline-workspace": "node tests/validate-timeline-workspace.mjs",
     "validate:timeline-repair": "node tests/validate-timeline-repair.mjs",
     "validate:public-viewer": "node tests/validate-public-viewer-controls.mjs",
+    "validate:mobile-viewer": "node tests/validate-mobile-viewer.mjs",
     "validate:published-workspace": "node tests/validate-published-workspace.mjs",
     "validate:cad": "py -B cad/validate_site.py"
   },

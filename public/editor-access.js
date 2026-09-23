@@ -2,19 +2,34 @@
   "use strict";
 
   const SESSION_KEY = "monroe-glass-editor-access-v1";
+  const OWNER_SESSION_KEY = "monroe-glass-owner-session-v1";
+  const OWNER_ACCESS_PATH = "/plant-owner-7f3a9c";
   const SALT = "monroe-glass-editor-v1";
   const ITERATIONS = 150000;
-  const PASSWORD_HASH = "77ee5a1e94fda10c2b194da03e906715b81848d340e55acceca95e6cc6e83d4b";
+  const PASSWORD_HASH = "245b6f4c1b43708b729adedfa33588b5feab997947d38cc9214ff68d1e3c5b4f";
 
   function hex(bytes) {
     return [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
   }
 
-  function editingAllowed() {
+  function localEditingAllowed() {
     return ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
   }
 
+  function ownerPathActive() {
+    return window.location.pathname === OWNER_ACCESS_PATH || window.location.pathname.startsWith(`${OWNER_ACCESS_PATH}/`);
+  }
+
+  function hasOwnerSession() {
+    try { return sessionStorage.getItem(OWNER_SESSION_KEY) === "granted"; } catch { return false; }
+  }
+
+  function editingAllowed() {
+    return localEditingAllowed() || ownerPathActive() || hasOwnerSession();
+  }
+
   if (!editingAllowed()) document.documentElement.classList.add("public-read-only");
+  else document.documentElement.classList.remove("public-read-only");
 
   async function verify(password) {
     if (!editingAllowed() || !window.crypto?.subtle || !String(password || "")) return false;
@@ -58,7 +73,11 @@
         const granted = await verify(input.value).catch(() => false);
         submit.disabled = false;
         if (!granted) { input.select(); error.hidden = false; return; }
-        try { sessionStorage.setItem(SESSION_KEY, "granted"); } catch {}
+        try {
+          sessionStorage.setItem(SESSION_KEY, "granted");
+          if (ownerPathActive() || hasOwnerSession()) sessionStorage.setItem(OWNER_SESSION_KEY, "granted");
+          document.documentElement.classList.remove("public-read-only");
+        } catch {}
         close(true);
       });
       // Browsers only paint the fullscreen element and its descendants. Mount

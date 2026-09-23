@@ -1,21 +1,31 @@
-/* eslint-disable @next/next/no-html-link-for-pages */
+﻿/* eslint-disable @next/next/no-html-link-for-pages */
 import LegacyScriptLoader from "../legacy-script-loader";
 import { EditorAccessGate } from "../editor-access-gate";
 
+export const metadata = {
+  title: "Machine Design Studio Â· Monroe Glass Plant Evolution",
+  robots: { index: false, follow: false, noarchive: true },
+};
+
 export default function MachineStudio() {
-  return (
+  return <>
+<section className="studio-desktop-only-notice" aria-label="Desktop required">
+<strong>Machine Design Studio is desktop-only.</strong>
+<p>Open this editor on a desktop or laptop for the full precision editing workspace.</p>
+<a href="/">Return to Plant Evolution</a>
+</section>
 <EditorAccessGate>
 <main className="machine-studio-shell">
 <header className="studio-topbar">
 <div className="studio-brand">
-<a className="studio-back-link" href="/" aria-label="Return to plant layout">←</a>
+<a className="studio-back-link" href="/" aria-label="Return to plant layout">â†</a>
 <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-<span className="studio-version-badge">v0.13.0</span>
+<span className="studio-version-badge">v0.13.9</span>
 </div>
 <div className="studio-top-actions" role="toolbar" aria-label="Design commands">
 <span id="save-state" className="studio-save-state">Auto-saved</span>
-<button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
-<button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+<button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">â†¶</button>
+<button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">â†·</button>
 <span className="studio-toolbar-divider"></span>
 <button id="save-design" type="button" title="Save machine (Ctrl+S)">Save</button>
 <button id="save-design-as" type="button" title="Save as a new reusable machine (Ctrl+Shift+S)">Save as...</button>
@@ -80,10 +90,10 @@ export default function MachineStudio() {
 <p className="studio-help">Choose a shape, add it to the current machine, then use the Transform tab on the right to place and size it.</p>
 <section className="component-add-panel expanded-add-panel">
 <div className="shape-quick-grid" aria-label="Common shapes">
-<button type="button" data-add-component="box"><span>▣</span>Box</button>
-<button type="button" data-add-component="cylinder"><span>●</span>Cylinder</button>
-<button type="button" data-add-component="beam"><span>╱</span>Beam</button>
-<button type="button" data-add-component="glassPanel"><span>◇</span>Glass</button>
+<button type="button" data-add-component="box"><span>â–£</span>Box</button>
+<button type="button" data-add-component="cylinder"><span>â—</span>Cylinder</button>
+<button type="button" data-add-component="beam"><span>â•±</span>Beam</button>
+<button type="button" data-add-component="glassPanel"><span>â—‡</span>Glass</button>
 <button type="button" data-add-component="text"><span>T</span>Text</button>
 </div>
 <div className="shape-picker-row vertical-shape-picker">
@@ -115,10 +125,10 @@ export default function MachineStudio() {
 </section>
 <section data-browser-panel="plant" className="studio-browser-section assignment-panel" hidden>
 <div className="studio-panel-heading"><p>Use in plant layout</p><span>Live-linked</span></div>
-<label className="studio-field">Plant object<select id="machine-assignment"><option value="">Choose a machine…</option></select></label>
+<label className="studio-field">Plant object<select id="machine-assignment"><option value="">Choose a machineâ€¦</option></select></label>
 <label className="studio-field">Design sizing<select id="assignment-scale-mode">
-<option value="preserve">Preserve proportions · recommended</option>
-<option value="match">Match dimensions · keep synced</option>
+<option value="preserve">Preserve proportions Â· recommended</option>
+<option value="match">Match dimensions Â· keep synced</option>
 <option value="stretch">Stretch to plant object</option>
 </select></label>
 <section className="create-plant-machine-panel" aria-labelledby="create-plant-machine-heading">
@@ -131,7 +141,7 @@ export default function MachineStudio() {
 </div>
 <button id="create-plant-machine" type="button" className="primary full-width-button">Save &amp; add machine to Plant Layout</button>
 <button id="open-created-plant-machine" type="button" className="full-width-button success-action" hidden>Open and position this machine</button>
-<p id="create-plant-machine-status" className="studio-help">The design envelope becomes the new machine’s starting dimensions.</p>
+<p id="create-plant-machine-status" className="studio-help">The design envelope becomes the new machineâ€™s starting dimensions.</p>
 </section>
 <button id="sync-machine-dimensions" type="button" className="full-width-button">Match plant dimensions to this design</button>
 <details className="plant-instance-transform">
@@ -185,19 +195,19 @@ export default function MachineStudio() {
 </div>
 </div>
 <div className="viewport-toolrail" role="toolbar" aria-label="Transform tools">
-<button type="button" data-design-mode="select" className="active" title="Select (V)"><span>↖</span><small>Select</small></button>
-<button type="button" data-design-mode="move" title="Move (M)"><span>✣</span><small>Move</small></button>
-<button type="button" data-design-mode="rotate" title="Rotate (R)"><span>⟳</span><small>Rotate</small></button>
-<button type="button" data-design-mode="scale" title="Scale (S)"><span>⤢</span><small>Scale</small></button>
-<button type="button" data-design-mode="pan" title="Pan view (H)"><span>✋</span><small>Pan</small></button>
-<button id="toggle-animation-timeline" type="button" className="animation-tool-button" title="Animation timeline (A)" aria-pressed="false"><span>◆</span><small>Animation</small></button>
+<button type="button" data-design-mode="select" className="active" title="Select (V)"><span>â†–</span><small>Select</small></button>
+<button type="button" data-design-mode="move" title="Move (M)"><span>âœ£</span><small>Move</small></button>
+<button type="button" data-design-mode="rotate" title="Rotate (R)"><span>âŸ³</span><small>Rotate</small></button>
+<button type="button" data-design-mode="scale" title="Scale (S)"><span>â¤¢</span><small>Scale</small></button>
+<button type="button" data-design-mode="pan" title="Pan view (H)"><span>âœ‹</span><small>Pan</small></button>
+<button id="toggle-animation-timeline" type="button" className="animation-tool-button" title="Animation timeline (A)" aria-pressed="false"><span>â—†</span><small>Animation</small></button>
 </div>
 <canvas id="machine-design-canvas" aria-label="Interactive 3D preview of the selected machine design"></canvas>
 <section id="animation-timeline-workspace" className="animation-timeline-workspace animation-timeline-card" hidden aria-label="Part animation timeline">
 <header className="timeline-workspace-header">
 <div className="timeline-workspace-title"><strong>Animation timeline</strong><span id="timeline-summary">0 clips</span></div>
 <label className="timeline-target-control">Target<select id="timeline-target-picker" aria-label="Animation target"></select></label>
-<div className="timeline-play-actions"><button id="timeline-restart" type="button" title="Restart from 0 seconds">↺ Restart</button><button id="timeline-play" type="button" className="primary" title="Play animation preview">▶ Play</button><button id="timeline-pause" type="button" title="Pause animation preview">Ⅱ Pause</button><button id="close-animation-timeline" type="button" title="Close timeline">×</button></div>
+<div className="timeline-play-actions"><button id="timeline-restart" type="button" title="Restart from 0 seconds">â†º Restart</button><button id="timeline-play" type="button" className="primary" title="Play animation preview">â–¶ Play</button><button id="timeline-pause" type="button" title="Pause animation preview">â…¡ Pause</button><button id="close-animation-timeline" type="button" title="Close timeline">Ã—</button></div>
 </header>
 <div className="timeline-workspace-body">
 <div className="timeline-workspace-main">
@@ -205,16 +215,16 @@ export default function MachineStudio() {
 <label className="studio-switch"><input id="timeline-enabled" type="checkbox" defaultChecked /><span>Enabled</span></label>
 <label className="studio-switch"><input id="timeline-loop" type="checkbox" defaultChecked /><span>Loop machine</span></label>
 <label className="studio-field">Machine speed<input id="timeline-playback-rate" type="number" min="0" max="20" step="0.05" defaultValue="1" /></label>
-<label className="studio-field">Timeline span<input id="timeline-duration" type="number" min="30" step="5" defaultValue="30" readOnly aria-readonly="true" /><small>Shared · expands to fit every part</small></label>
+<label className="studio-field">Timeline span<input id="timeline-duration" type="number" min="30" step="5" defaultValue="30" readOnly aria-readonly="true" /><small>Shared Â· expands to fit every part</small></label>
 <label className="studio-field">Snap<select id="timeline-snap-step" defaultValue="0.05"><option value="0.01">0.01s</option><option value="0.05">0.05s</option><option value="0.1">0.10s</option><option value="0.25">0.25s</option><option value="0.5">0.50s</option><option value="1">1.00s</option></select></label>
 </div>
-<div className="timeline-ruler-wrap timeline-dock-ruler"><div id="timeline-scroll-viewport" className="timeline-scroll-viewport"><div id="timeline-scroll-canvas" className="timeline-scroll-canvas"><div className="timeline-ruler-scale" id="timeline-ruler-scale"></div><div id="timeline-ruler-tracks" className="timeline-ruler-tracks" aria-label="Animation clips"></div></div></div><input id="timeline-playhead" className="timeline-playhead" type="range" min="0" max="30" step="0.01" defaultValue="0" aria-label="Animation playhead" /><div className="timeline-time-readout"><span id="timeline-time-label">0.00s / 30.00s</span><span>Start ← left · right → end · extending a right edge pushes later clips; dragging a clip can overlap it</span></div></div>
+<div className="timeline-ruler-wrap timeline-dock-ruler"><div id="timeline-scroll-viewport" className="timeline-scroll-viewport"><div id="timeline-scroll-canvas" className="timeline-scroll-canvas"><div className="timeline-ruler-scale" id="timeline-ruler-scale"></div><div id="timeline-ruler-tracks" className="timeline-ruler-tracks" aria-label="Animation clips"></div></div></div><input id="timeline-playhead" className="timeline-playhead" type="range" min="0" max="30" step="0.01" defaultValue="0" aria-label="Animation playhead" /><div className="timeline-time-readout"><span id="timeline-time-label">0.00s / 30.00s</span><span>Start â† left Â· right â†’ end Â· extending a right edge pushes later clips; dragging a clip can overlap it</span></div></div>
 </div>
 </div>
 <p id="timeline-target-help" className="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
 </section>
 
-<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> · Click a part to select it</span><span>Ctrl+left-drag box select · Right-drag orbit · Middle-drag pan · Wheel zoom · <span id="designer-camera-position">Above floor · full orbit enabled</span></span></div>
+<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> Â· Click a part to select it</span><span>Ctrl+left-drag box select Â· Right-drag orbit Â· Middle-drag pan Â· Wheel zoom Â· <span id="designer-camera-position">Above floor Â· full orbit enabled</span></span></div>
 <div id="design-toast" className="design-toast" role="status" aria-live="polite"></div>
 </section>
 <aside className="studio-inspector-panel">
@@ -244,7 +254,7 @@ export default function MachineStudio() {
 <details className="transform-section" open><summary>Position, rotation, and scale</summary>
 <div className="transform-subheading">Position</div><div className="axis-fields"><label className="axis-x-field">X<input data-component-field="x" type="number" step="0.1" /></label><label className="axis-y-field">Y<input data-component-field="y" type="number" step="0.1" /></label><label className="axis-z-field">Z<input data-component-field="z" type="number" step="0.1" /></label></div>
 <div className="transform-subheading">Rotation</div><div className="axis-fields rotation-axis-fields"><label className="axis-x-field">X<input data-component-field="rotationX" type="number" step="1" /></label><label className="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1" /></label><label className="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1" /></label></div>
-<div className="rotation-row rotation-actions"><label className="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis" defaultValue="y"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">−90°</button><button id="rotate-positive" type="button">+90°</button><button id="reset-rotation" type="button">Reset</button></div>
+<div className="rotation-row rotation-actions"><label className="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis" defaultValue="y"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">âˆ’90Â°</button><button id="rotate-positive" type="button">+90Â°</button><button id="reset-rotation" type="button">Reset</button></div>
 <div className="transform-subheading">Scale (%)</div><div className="axis-fields four"><label>All<input data-component-scale="uniform" type="number" min="1" max="10000" step="1" /></label><label className="axis-x-field">X<input data-component-scale="x" type="number" min="1" max="10000" step="1" /></label><label className="axis-y-field">Y<input data-component-scale="y" type="number" min="1" max="10000" step="1" /></label><label className="axis-z-field">Z<input data-component-scale="z" type="number" min="1" max="10000" step="1" /></label></div>
 <div className="transform-subheading">Mirror</div><div className="mirror-actions" role="group" aria-label="Mirror selected parts"><button type="button" data-mirror-component="x">Mirror X</button><button type="button" data-mirror-component="y">Mirror Y</button><button type="button" data-mirror-component="z">Mirror Z</button></div>
 <button id="center-component" type="button" className="full-width-button">Center on machine</button>
@@ -371,5 +381,7 @@ export default function MachineStudio() {
 ]} />
 </main>
 </EditorAccessGate>
-  );
+</>;
 }
+
+

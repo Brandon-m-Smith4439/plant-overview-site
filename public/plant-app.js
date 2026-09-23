@@ -209,7 +209,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.0";
+  const APP_VERSION = "0.13.9";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -2559,9 +2559,12 @@
     const help = document.querySelector(".view-help");
     if (!help) return;
     if (!state.editing) {
+      const touchFirstViewport = window.matchMedia?.("(max-width: 760px), (hover: none) and (pointer: coarse)")?.matches;
       help.textContent = state.cameraMode === "walk"
         ? "First person · WASD move · mouse look · Shift sprint · Space jump"
-        : "Right-drag orbit · Middle-drag pan · Wheel up/down zoom";
+        : touchFirstViewport
+          ? "Drag to orbit · Pinch to zoom · Two-finger drag to pan"
+          : "Right-drag orbit · Middle-drag pan · Wheel up/down zoom";
       return;
     }
     help.textContent = state.editorInteraction === "navigate"
@@ -3333,7 +3336,7 @@
 
   function setEditing(enabled) {
     if (enabled && window.monroeEditorAccess?.editingAllowed?.() === false) {
-      showToast("Editing is available only from the authorized local project.");
+      showToast("Editing is locked. Open the private owner workspace first.");
       return;
     }
     if (enabled && !state.editing && !window.monroeEditorAccess?.hasAccess?.()) {
@@ -4795,6 +4798,27 @@
     `;
     frame.appendChild(firstPersonHud);
 
+    const firstPersonTouchControls = document.createElement("section");
+    firstPersonTouchControls.className = "first-person-touch-controls";
+    firstPersonTouchControls.hidden = true;
+    firstPersonTouchControls.setAttribute("aria-label", "Mobile first-person controls");
+    firstPersonTouchControls.innerHTML = `
+      <div class="touch-walk-pad" aria-label="Movement controls">
+        <button type="button" data-touch-move="forward" aria-label="Move forward">↑</button>
+        <button type="button" data-touch-move="left" aria-label="Move left">←</button>
+        <button type="button" data-touch-move="back" aria-label="Move backward">↓</button>
+        <button type="button" data-touch-move="right" aria-label="Move right">→</button>
+      </div>
+      <div class="touch-look-pad" data-touch-look aria-label="Drag to look"><span>Drag to look</span></div>
+      <div class="touch-walk-actions">
+        <button type="button" data-touch-action="run" aria-pressed="false">Run</button>
+        <button type="button" data-touch-action="jump">Jump</button>
+        <button type="button" data-touch-action="crouch" aria-pressed="false">Crouch</button>
+        <button type="button" data-touch-action="exit" class="touch-exit">Exit</button>
+      </div>
+    `;
+    frame.appendChild(firstPersonTouchControls);
+
     const firstPersonMenu = document.createElement("section");
     firstPersonMenu.className = "first-person-menu";
     firstPersonMenu.hidden = true;
@@ -4838,10 +4862,16 @@
       frame.querySelector("[data-toggle='walk']")?.click();
     });
 
+    const isTouchWalkViewport = () => Boolean(
+      window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches || window.innerWidth <= 900
+    );
+
     const setFirstPersonMenu = (open) => {
       if (state.cameraMode !== "walk") open = false;
       firstPersonMenu.hidden = !open;
-      firstPersonHud.hidden = open || state.cameraMode !== "walk";
+      const touchWalk = isTouchWalkViewport();
+      firstPersonHud.hidden = open || state.cameraMode !== "walk" || touchWalk;
+      firstPersonTouchControls.hidden = open || state.cameraMode !== "walk" || !touchWalk;
       if (open) {
         firstPersonController?.release?.();
         window.requestAnimationFrame(() => firstPersonMenu.querySelector("button")?.focus());
@@ -4852,8 +4882,9 @@
     const updateFirstPersonHud = (locked) => {
       const lockText = firstPersonHud.querySelector("[data-first-person-lock]");
       const capture = firstPersonHud.querySelector("[data-first-person-action='capture']");
-      if (lockText) lockText.textContent = locked ? "Mouse captured · Esc opens options" : "Click the model to capture the mouse · Esc opens options";
-      if (capture) capture.hidden = locked;
+      const touchWalk = isTouchWalkViewport();
+      if (lockText) lockText.textContent = touchWalk ? "Use the left pad to move · drag the right side to look" : locked ? "Mouse captured · Esc opens options" : "Click the model to capture the mouse · Esc opens options";
+      if (capture) capture.hidden = locked || touchWalk;
       frame.classList.toggle("pointer-locked", locked);
     };
 
@@ -4895,7 +4926,7 @@
       const experience = frame.closest(".experience");
       const siteShell = frame.closest(".site-shell");
       if (enabled === (state.cameraMode === "walk")) {
-        if (enabled) firstPersonController?.capture();
+        if (enabled && !isTouchWalkViewport()) firstPersonController?.capture();
         return;
       }
       state.cameraMode = enabled ? "walk" : "orbit";
@@ -4903,9 +4934,11 @@
       frame.classList.toggle("walkthrough-mode", enabled);
       experience?.classList.toggle("first-person-active", enabled);
       siteShell?.classList.toggle("first-person-site", enabled);
+      const touchWalk = isTouchWalkViewport();
       reticle.hidden = !enabled;
       firstPersonMenu.hidden = true;
-      firstPersonHud.hidden = !enabled;
+      firstPersonHud.hidden = !enabled || touchWalk;
+      firstPersonTouchControls.hidden = !enabled || !touchWalk;
       const walkButton = frame.querySelector("[data-toggle='walk']");
       if (walkButton) {
         walkButton.classList.toggle("active", enabled);
@@ -4936,7 +4969,7 @@
         const captureWalkthrough = () => {
           canvasSizeDirty = true;
           renderPerformance.invalidate?.("first-person-fullscreen");
-          firstPersonController?.capture();
+          if (!touchWalk) firstPersonController?.capture();
         };
         if (document.fullscreenElement) {
           walkStartedFullscreen = true;
@@ -4958,10 +4991,13 @@
             captureWalkthrough();
           }
         } else captureWalkthrough();
-        showToast("First person started full screen. Use WASD and the mouse; press Esc for options.");
+        showToast(touchWalk ? "First person started. Use the left pad to move and drag the right side to look." : "First person started full screen. Use WASD and the mouse; press Esc for options.");
       } else {
         walkModeTransitioning = true;
         firstPersonController?.stop();
+        Object.keys(touchMoveState).forEach((key) => { touchMoveState[key] = false; });
+        firstPersonTouchControls.querySelectorAll(".active").forEach((control) => control.classList.remove("active"));
+        firstPersonTouchControls.querySelectorAll("[aria-pressed='true']").forEach((control) => control.setAttribute("aria-pressed", "false"));
         state.walkVerticalOffset = 0;
         state.walkBobOffset = 0;
         if (walkReturnView) Object.assign(state, walkReturnView);
@@ -4982,6 +5018,77 @@
       updateFirstPersonHud(false);
       updateEditorHelp();
     };
+
+    const touchMoveState = { forward: false, back: false, left: false, right: false };
+    const syncTouchMove = () => {
+      firstPersonController?.setTouchMove?.(
+        Number(touchMoveState.forward) - Number(touchMoveState.back),
+        Number(touchMoveState.right) - Number(touchMoveState.left),
+      );
+    };
+    firstPersonTouchControls.querySelectorAll("[data-touch-move]").forEach((button) => {
+      const direction = button.dataset.touchMove;
+      const setPressed = (pressed, event) => {
+        event?.preventDefault?.();
+        if (pressed) event?.currentTarget?.setPointerCapture?.(event.pointerId);
+        touchMoveState[direction] = pressed;
+        button.classList.toggle("active", pressed);
+        syncTouchMove();
+      };
+      button.addEventListener("pointerdown", (event) => setPressed(true, event));
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => button.addEventListener(type, (event) => setPressed(false, event)));
+    });
+    const runButton = firstPersonTouchControls.querySelector("[data-touch-action='run']");
+    const setRun = (active, event) => {
+      event?.preventDefault?.();
+      runButton?.classList.toggle("active", active);
+      runButton?.setAttribute("aria-pressed", String(active));
+      firstPersonController?.setTouchSprint?.(active);
+    };
+    runButton?.addEventListener("pointerdown", (event) => {
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
+      setRun(true, event);
+    });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => runButton?.addEventListener(type, (event) => setRun(false, event)));
+    firstPersonTouchControls.querySelector("[data-touch-action='jump']")?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      firstPersonController?.requestJump?.();
+    });
+    const crouchButton = firstPersonTouchControls.querySelector("[data-touch-action='crouch']");
+    crouchButton?.addEventListener("click", () => {
+      const active = crouchButton.getAttribute("aria-pressed") !== "true";
+      crouchButton.setAttribute("aria-pressed", String(active));
+      crouchButton.classList.toggle("active", active);
+      firstPersonController?.setTouchCrouch?.(active);
+    });
+    firstPersonTouchControls.querySelector("[data-touch-action='exit']")?.addEventListener("click", () => setWalkMode(false));
+    const touchLookPad = firstPersonTouchControls.querySelector("[data-touch-look]");
+    let touchLookPointer = null;
+    let touchLookX = 0;
+    let touchLookY = 0;
+    touchLookPad?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      touchLookPointer = event.pointerId;
+      touchLookX = event.clientX;
+      touchLookY = event.clientY;
+      touchLookPad.setPointerCapture?.(event.pointerId);
+      touchLookPad.classList.add("active");
+    });
+    touchLookPad?.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== touchLookPointer) return;
+      event.preventDefault();
+      const dx = event.clientX - touchLookX;
+      const dy = event.clientY - touchLookY;
+      touchLookX = event.clientX;
+      touchLookY = event.clientY;
+      firstPersonController?.lookBy?.(dx, dy, 1.35);
+    });
+    const endTouchLook = (event) => {
+      if (event.pointerId !== touchLookPointer) return;
+      touchLookPointer = null;
+      touchLookPad?.classList.remove("active");
+    };
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => touchLookPad?.addEventListener(type, endTouchLook));
 
     firstPersonHud.querySelector("[data-first-person-action='capture']")?.addEventListener("click", () => firstPersonController?.capture());
     firstPersonHud.querySelector("[data-first-person-action='exit']")?.addEventListener("click", () => setWalkMode(false));
@@ -5831,6 +5938,13 @@
     };
   }
 
+  function compactLabelViewport() {
+    if (state.cameraMode === "walk") return false;
+    const rect = canvas.getBoundingClientRect();
+    const coarseTouch = window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
+    return rect.width <= 820 || Boolean(coarseTouch && rect.width <= 900 && rect.height <= 500);
+  }
+
   function machineLabelProfile(machine) {
     const type = machine?.type || "generic";
     const area = Math.max(0, Number(machine?.w) || 0) * Math.max(0, Number(machine?.d) || 0);
@@ -5846,13 +5960,14 @@
               ? { rank: 3, cssSize: 11, maxChars: 17 }
               : { rank: 2, cssSize: 10, maxChars: 15 };
     const sizeScale = clamp(Number(machine?.labelSizePercent) || 100, 50, 250) / 100;
+    const compactViewport = compactLabelViewport();
     const zoomCharacterScale = state.cameraMode === "walk"
       ? 1
       : clamp(.62 + state.zoom * .34, .68, 1.35);
     return {
       ...profile,
-      cssSize: profile.cssSize * sizeScale,
-      maxChars: Math.max(8, Math.round(profile.maxChars * Math.min(sizeScale, 1.45) * zoomCharacterScale)),
+      cssSize: profile.cssSize * sizeScale * (compactViewport ? 1.02 : 1),
+      maxChars: Math.max(7, Math.round(profile.maxChars * Math.min(sizeScale, 1.45) * zoomCharacterScale * (compactViewport ? .74 : 1))),
     };
   }
 
@@ -5891,7 +6006,8 @@
   }
 
   function displayMachineLabel(machine, profile) {
-    const adaptiveMode = state.cameraMode === "walk" ? "full" : (state.zoom < .78 ? "abbreviated" : "full");
+    const compactViewport = compactLabelViewport();
+    const adaptiveMode = state.cameraMode === "walk" ? "full" : (state.zoom < (compactViewport ? 1.2 : .78) ? "abbreviated" : "full");
     const effectiveMode = state.labelTextMode === "auto" ? adaptiveMode : state.labelTextMode;
     const resolvedMode = state.cameraMode === "walk" && effectiveMode !== "off" ? "full" : effectiveMode;
     if (resolvedMode === "abbreviated") {
@@ -5923,8 +6039,18 @@
   function smartLabelBudget() {
     if (state.cameraMode === "walk") return state.labelMode === "all" ? 16 : 10;
     if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
-    if (["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78) return Number.POSITIVE_INFINITY;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 430) {
+      if (state.zoom < .55) return 4;
+      if (state.zoom < 1.05) return 4;
+      return 5;
+    }
+    if (rect.width <= 820 || compactLabelViewport()) {
+      if (state.zoom < .55) return 6;
+      if (state.zoom < 1.05) return 7;
+      return 8;
+    }
+    if (["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78) return Number.POSITIVE_INFINITY;
     const viewportBudget = Math.floor((rect.width * rect.height) / 36000);
     const zoomFactor = clamp(state.zoom, .72, 1.45);
     return Math.round(clamp(viewportBudget * zoomFactor, 12, 48));
@@ -5932,6 +6058,7 @@
 
   function smartLabelRepeatLimit(profile) {
     if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
+    if (compactLabelViewport()) return profile.rank >= 3 && state.zoom >= 1.05 ? 2 : 1;
     if (state.cameraMode !== "walk" && ["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78) return Number.POSITIVE_INFINITY;
     if (state.cameraMode === "walk") return profile.rank >= 3 ? 2 : 1;
     if (state.zoom < .55) return profile.rank >= 3 ? 2 : 1;
@@ -6009,7 +6136,7 @@
     const indicatorSpace = clamp(8 * zoomScale, 5.5, 10) * pixelScale;
     const height = Math.max(13 * pixelScale, (cssFontSize + 7.5 * zoomScale) * pixelScale);
     const topGap = Math.max(4, 6 * zoomScale) * pixelScale;
-    const collisionGap = clamp(3.5 * zoomScale, 2.5, 5.5) * pixelScale;
+    const collisionGap = clamp(3.5 * zoomScale, 2.5, 5.5) * pixelScale * (compactLabelViewport() ? 1.35 : 1);
     ctx.save();
     const fontWeight = options.fontWeight === "bold" ? 750 : options.fontWeight === "regular" ? 450 : 600;
     ctx.font = `${fontWeight} ${fontSize}px "Segoe UI", sans-serif`;
@@ -9028,7 +9155,7 @@
           time,
           visibleTarget,
           labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 60),
-          forceVisible: state.cameraMode !== "walk" && ["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78,
+          forceVisible: state.cameraMode !== "walk" && !compactLabelViewport() && ["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78,
           priority,
           selected,
           current,
@@ -9308,6 +9435,14 @@
     const next = document.getElementById("next-stage");
     const fill = document.getElementById("timeline-fill");
     if (number) number.textContent = String(state.stage + 1).padStart(2,"0");
+    const mobileCount = document.getElementById("mobile-stage-count");
+    const mobileTitle = document.getElementById("mobile-stage-title");
+    const mobilePrevious = document.getElementById("mobile-previous-stage");
+    const mobileNext = document.getElementById("mobile-next-stage");
+    if (mobileCount) mobileCount.textContent = `Stage ${String(state.stage + 1).padStart(2,"0")} of ${String(stages.length).padStart(2,"0")}`;
+    if (mobileTitle) mobileTitle.textContent = stage.title;
+    if (mobilePrevious) mobilePrevious.disabled = state.stage === 0;
+    if (mobileNext) mobileNext.disabled = state.stage === stages.length - 1;
     if (title) title.textContent = stage.title;
     if (description) {
       description.textContent = stage.description;
@@ -9339,6 +9474,9 @@
       const button = item.querySelector("button");
       if (button) button.setAttribute("aria-current", itemIndex === state.stage ? "step" : "false");
     });
+    if (previousStage !== state.stage && window.matchMedia?.("(max-width: 760px)").matches) {
+      document.querySelector("#timeline-stages li.active")?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
     const scrubber = document.getElementById("timeline-scrubber");
     if (scrubber) scrubber.value = String(state.stage);
     const stagePanel = document.querySelector(".stage-panel");
@@ -9363,10 +9501,43 @@
     if (event.button === 1) event.preventDefault();
   });
 
+  const activeTouchPointers = new Map();
+  let touchGestureDistance = 0;
+  let touchGestureCenter = null;
+  const touchPoints = () => Array.from(activeTouchPointers.values());
+  const touchDistance = (points) => {
+    if (points.length < 2) return 0;
+    return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+  };
+  const touchCenter = (points) => {
+    if (!points.length) return null;
+    const total = points.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
+    return { x: total.x / points.length, y: total.y / points.length };
+  };
+  const resetTouchGesture = () => {
+    const points = touchPoints();
+    touchGestureDistance = touchDistance(points);
+    touchGestureCenter = touchCenter(points);
+    if (points.length === 1) {
+      state.pointerX = points[0].x;
+      state.pointerY = points[0].y;
+    }
+  };
+
   canvas.addEventListener("pointerdown", (event) => {
     if (event.button === 1) event.preventDefault();
     if (state.cameraMode === "walk") return;
     if (event.button > 2) return;
+    if (event.pointerType === "touch" && !state.editing) {
+      event.preventDefault();
+      activeTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      state.dragging = true;
+      state.dragAction = activeTouchPointers.size > 1 ? "touch-gesture" : "orbit";
+      resetTouchGesture();
+      renderPerformance.noteInteraction(300);
+      canvas.setPointerCapture(event.pointerId);
+      return;
+    }
     const wantsOrbit = event.altKey || event.button === 2;
     const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
     const selectableHit = state.editing && state.editorTool === "machines" && state.editorInteraction !== "navigate"
@@ -9435,6 +9606,35 @@
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener("pointermove", (event) => {
+    if (event.pointerType === "touch" && !state.editing && activeTouchPointers.has(event.pointerId)) {
+      event.preventDefault();
+      activeTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const points = touchPoints();
+      renderPerformance.noteInteraction(180);
+      if (points.length >= 2) {
+        const center = touchCenter(points);
+        const distance = touchDistance(points);
+        if (touchGestureCenter && center) panCamera(center.x - touchGestureCenter.x, center.y - touchGestureCenter.y);
+        if (touchGestureDistance > 0 && distance > 0) {
+          state.zoom = clamp(state.zoom * (distance / touchGestureDistance), .2, 10);
+        }
+        touchGestureCenter = center;
+        touchGestureDistance = distance;
+        state.dragAction = "touch-gesture";
+      } else if (points.length === 1) {
+        const point = points[0];
+        const deltaX = point.x - state.pointerX;
+        const deltaY = point.y - state.pointerY;
+        state.yaw -= deltaX * .006;
+        state.pitch = clamp(state.pitch + deltaY * .004, .02, 1.48);
+        state.pointerX = point.x;
+        state.pointerY = point.y;
+        touchGestureCenter = point;
+        touchGestureDistance = 0;
+        state.dragAction = "orbit";
+      }
+      return;
+    }
     if (!state.dragging) return;
     renderPerformance.noteInteraction(140);
     const deltaX = event.clientX-state.pointerX;
@@ -9479,7 +9679,23 @@
     state.pointerX = event.clientX;
     state.pointerY = event.clientY;
   });
-  function finishPointer() {
+  function finishPointer(event) {
+    if (!event && activeTouchPointers.size) {
+      activeTouchPointers.clear();
+      touchGestureCenter = null;
+      touchGestureDistance = 0;
+    }
+    if (event?.pointerType === "touch" && !state.editing) {
+      activeTouchPointers.delete(event.pointerId);
+      if (activeTouchPointers.size) {
+        resetTouchGesture();
+        state.dragging = true;
+        state.dragAction = activeTouchPointers.size > 1 ? "touch-gesture" : "orbit";
+        return;
+      }
+      touchGestureCenter = null;
+      touchGestureDistance = 0;
+    }
     if ((state.draggedMachineId || state.draggedColumnKey) && state.dragMoved && state.dragSnapshot) {
       pushHistory(state.dragSnapshot);
       persistLayout();
@@ -9518,6 +9734,11 @@
 
   document.getElementById("next-stage")?.addEventListener("click", () => setStage(state.stage + 1));
   document.getElementById("previous-stage")?.addEventListener("click", () => setStage(state.stage - 1));
+  document.getElementById("mobile-next-stage")?.addEventListener("click", () => setStage(state.stage + 1));
+  document.getElementById("mobile-previous-stage")?.addEventListener("click", () => setStage(state.stage - 1));
+  document.getElementById("mobile-stage-summary")?.addEventListener("click", () => {
+    document.querySelector(".stage-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   addLifecycleListener(window, "keydown", (event) => {
     const typing = ["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName);
     if (!typing && event.code === "Space") {
@@ -9639,6 +9860,11 @@
     else setStage(clamp(initialMachine.reveal, 0, stages.length - 1));
     focusSelectedMachine();
     showToast(`${initialMachine.name} is ready to position.`);
-  } else setStage(0);
+  } else {
+    setStage(0);
+    if (initialParams.get("owner") === "layout" && window.monroeEditorAccess?.hasAccess?.()) {
+      requestAnimationFrame(() => setEditing(true));
+    }
+  }
   animationFrameId = requestAnimationFrame(draw);
 })();

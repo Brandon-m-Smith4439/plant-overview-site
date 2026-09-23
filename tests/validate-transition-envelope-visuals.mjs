@@ -38,7 +38,8 @@ for (const markup of [studioPage, staticStudio]) {
 assert.match(studio, /collisionEnvelopes/, "Saved machine designs must preserve multi-piece collision envelopes.");
 assert.match(studio, /function baseEnvelopePiece/, "Designer must create editable machine-level envelope boxes.");
 assert.match(studio, /designEnvelopePieces\(design\)\.forEach/, "Every shaped envelope box must be visible in the Designer.");
-assert.match(plant, /if \(shapedEnvelopes\.length\) return shapedEnvelopes/, "Machine-level shaped envelopes must take precedence in collision checks.");
+assert.match(plant, /const envelopes = \[\.\.\.shapedEnvelopes\]/, "Machine-level shaped envelopes must participate in collision checks.");
+assert.match(plant, /envelopes\.push\(component\.collisionEnvelope\)/, "Part-level collision envelopes must remain additive with machine-level shaped envelopes.");
 assert.match(plant, /walkHitboxesForMachine\(first\)/, "Layout overlap checks must use the shaped envelope pieces.");
 
 assert.match(plant, /function machineLabelZoomScale/, "Machine labels must use continuous zoom-responsive sizing.");

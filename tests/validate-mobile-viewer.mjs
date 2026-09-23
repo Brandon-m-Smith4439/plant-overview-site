@@ -1,0 +1,31 @@
+import fs from "node:fs";
+
+const page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+const layout = fs.readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+const css = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const app = fs.readFileSync(new URL("../public/plant-app.js", import.meta.url), "utf8");
+
+const assert = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+
+assert(page.includes('className="mobile-stage-dock"'), "Mobile stage dock is missing.");
+assert(page.includes("Drag to orbit · Pinch to zoom · Two-finger drag to pan"), "Mobile gesture guidance is missing.");
+assert(layout.includes('viewportFit: "cover"'), "Edge-to-edge mobile viewport support is missing.");
+assert(css.includes("@media (hover: none) and (pointer: coarse)"), "Coarse-touch rules are missing.");
+assert(css.includes(".mobile-stage-dock"), "Mobile stage dock styling is missing.");
+assert(css.includes("min-height: 44px"), "Touch-sized controls are missing.");
+assert(css.includes(".studio-desktop-only-notice"), "Machine Design Studio desktop-only mobile notice is missing.");
+assert(app.includes('event.pointerType === "touch" && !state.editing'), "Public touch camera handling is missing.");
+assert(app.includes("state.zoom * (distance / touchGestureDistance)"), "Pinch zoom handling is missing.");
+assert(app.includes("panCamera(center.x - touchGestureCenter.x, center.y - touchGestureCenter.y)"), "Two-finger pan handling is missing.");
+assert(app.includes('document.getElementById("mobile-next-stage")'), "Mobile stage controls are not wired.");
+assert(app.includes("first-person-touch-controls"), "Mobile first-person control surface is missing.");
+assert(app.includes("setTouchMove"), "Mobile first-person movement is not wired.");
+assert(app.includes("lookBy?.(dx, dy, 1.35)"), "Mobile drag-to-look is not wired.");
+assert(app.includes("compactLabelViewport"), "Mobile label-density adaptation is missing.");
+assert(app.includes("if (rect.width <= 430)") && app.includes("rect.width <= 820 || compactLabelViewport()"), "Phone, tablet, and short touch-landscape label budgets must use compact viewport rules.");
+assert(app.includes('(hover: none) and (pointer: coarse)') && app.includes("rect.height <= 500"), "Short coarse-touch landscape must use mobile label-density rules.");
+assert(app.includes('scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })'), "Active mobile timeline stage does not auto-center.");
+
+console.log("Mobile viewer validation passed.");

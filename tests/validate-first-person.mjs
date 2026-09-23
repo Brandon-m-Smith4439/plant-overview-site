@@ -21,6 +21,9 @@ assert.ok(plant.includes("clipPolygonToWalkNearPlane"), "Geometry behind the fir
 assert.ok(plant.includes("walkCanOccupy"), "Plant collision checking is missing.");
 assert.ok(plant.includes("findWalkSpawn"), "Safe first-person spawn search is missing.");
 assert.ok(plant.includes("first-person-hud"), "First-person HUD markup is missing.");
+assert.ok(plant.includes("first-person-touch-controls"), "Mobile first-person touch controls are missing.");
+assert.ok(controllerSource.includes("setTouchMove"), "First-person controller is missing mobile movement input.");
+assert.ok(controllerSource.includes("lookBy"), "First-person controller is missing mobile drag-to-look input.");
 assert.ok(css.includes(".first-person-hud"), "First-person HUD styling is missing.");
 assert.ok(css.includes(".site-shell.first-person-site"), "Full-window first-person layout styling is missing.");
 assert.match(css, /\.site-shell\.first-person-site:fullscreen \.stage-panel[\s\S]*?display: none/, "First person must not share fullscreen with the public stage panel.");
@@ -37,6 +40,7 @@ const documentMock = {
 const windowMock = {
   addEventListener(type, callback) { listeners.set(`window:${type}`, callback); },
   removeEventListener() {},
+  matchMedia() { return { matches: false }; },
 };
 const canvasMock = {
   addEventListener(type, callback) { listeners.set(`canvas:${type}`, callback); },
@@ -60,8 +64,6 @@ const controller = windowMock.createPlantFirstPersonController({
   onExitRequest: () => { exitRequests += 1; },
 });
 controller.start({ capture: false });
-// Clicking the First person button leaves a button focused in normal browsers.
-// Movement must still work even when keyboard events target that button.
 listeners.get("document:keydown")?.({
   key: "w",
   code: "KeyW",
@@ -73,6 +75,12 @@ controller.update(1000);
 controller.update(1100);
 assert.ok(camera.z > 0, "Holding W must move continuously along the camera forward direction.");
 listeners.get("document:keyup")?.({ code: "KeyW" });
+const touchMoveStart = camera.z;
+controller.setTouchMove(1, 0);
+controller.update(1150);
+controller.update(1200);
+assert.ok(camera.z > touchMoveStart, "Mobile forward input must move through the same first-person controller.");
+controller.setTouchMove(0, 0);
 controller.update(1200);
 controller.update(1300);
 camera = { ...camera, yaw: Math.PI };
@@ -88,6 +96,9 @@ controller.update(1400);
 controller.update(1500);
 assert.ok(camera.x > beforeStrafe, "D must move toward the same screen-right side shown in the Overview.");
 listeners.get("document:keyup")?.({ code: "KeyD" });
+const beforeTouchLook = camera.yaw;
+controller.lookBy(18, 0, 1.2);
+assert.ok(camera.yaw < beforeTouchLook, "Mobile drag-to-look must rotate the first-person camera.");
 const beforeLook = camera.yaw;
 documentMock.pointerLockElement = canvasMock;
 listeners.get("document:pointerlockchange")?.();

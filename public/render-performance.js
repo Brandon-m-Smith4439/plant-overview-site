@@ -5,7 +5,7 @@
   const MODES = {
     auto: {
       label: "Auto",
-      pixelRatioCap: 1.2,
+      pixelRatioCap: 1.5,
       idleFps: 6,
       animationFps: 60,
       interactionFps: 60,
@@ -431,9 +431,11 @@
       if (slowWindows >= 2 && adaptiveElapsed >= 1200) {
         const severe = pressure > 34;
         const sceneHeavy = average > 18.5 && average >= gpuAverage;
-        const resolutionStep = sceneHeavy ? 0 : (severe ? .16 : .09);
-        const complexityStep = sceneHeavy ? (severe ? .25 : .14) : (severe ? .14 : .08);
-        currentPixelRatioCap = clamp(currentPixelRatioCap - resolutionStep, 0.75, MODES.auto.pixelRatioCap);
+        // Keep the image buffer stable during stage changes. Lowering pixel ratio
+        // mid-transition made the whole plant visibly soft, so Auto now sheds
+        // geometry/detail work first while preserving the selected resolution.
+        const complexityStep = sceneHeavy ? (severe ? .28 : .16) : (severe ? .20 : .11);
+        currentPixelRatioCap = MODES.auto.pixelRatioCap;
         currentComplexityScale = clamp(currentComplexityScale - complexityStep, .35, 1);
         slowWindows = 0;
         lastAdaptiveChangeAt = now;
@@ -446,7 +448,7 @@
         if (typeof queueMicrotask === "function") queueMicrotask(notify);
         else notify();
       } else if (fastWindows >= 12 && adaptiveElapsed >= 3000) {
-        currentPixelRatioCap = clamp(currentPixelRatioCap + 0.05, 0.75, MODES.auto.pixelRatioCap);
+        currentPixelRatioCap = MODES.auto.pixelRatioCap;
         currentComplexityScale = clamp(currentComplexityScale + 0.06, .35, 1);
         fastWindows = 0;
         lastAdaptiveChangeAt = now;
@@ -547,7 +549,7 @@
           <button type="button" data-performance-export disabled>Export result</button>
         </div>
         <p class="render-performance-benchmark-status" data-performance-benchmark-status>No benchmark recorded yet.</p>
-        <p class="render-performance-note">Auto targets 60 FPS and lowers render resolution, shadow work, and distant geometry detail when a slowdown is detected. Selected objects remain detailed.</p>
+        <p class="render-performance-note">Auto targets 60 FPS while keeping the viewport resolution stable. When a slowdown is detected it reduces shadow work and distant geometry detail first, so stage transitions stay sharp. Selected objects remain detailed.</p>
       `;
       frame.appendChild(panel);
       fpsBadge = document.createElement("div");

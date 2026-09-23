@@ -1,15 +1,43 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useState, useSyncExternalStore } from "react";
+import { type FormEvent, type ReactNode, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { hasEditorAccess, isLocalEditorHost, verifyEditorPassword, EDITOR_ACCESS_SESSION_KEY } from "./editor-access";
+import { OWNER_ACCESS_PATH, grantEditorAccess, hasEditorAccess, isEditorEnvironment, verifyEditorPassword } from "./editor-access";
 
-const subscribeToHost = () => () => {};
-function useLocalEditorHost() {
-  return useSyncExternalStore(subscribeToHost, isLocalEditorHost, () => false);
+
+const SECRET_OWNER_CLICK_COUNT = 5;
+const SECRET_OWNER_CLICK_WINDOW_MS = 3500;
+
+export function SecretOwnerEntry({ version }: { version: string }) {
+  const clicks = useRef<number[]>([]);
+
+  const handleSecretClick = () => {
+    const now = Date.now();
+    const recent = clicks.current.filter((clickedAt) => now - clickedAt <= SECRET_OWNER_CLICK_WINDOW_MS);
+    recent.push(now);
+    clicks.current = recent;
+    if (recent.length < SECRET_OWNER_CLICK_COUNT) return;
+
+    clicks.current = [];
+    window.location.assign(OWNER_ACCESS_PATH);
+  };
+
+  return (
+    <button
+      type="button"
+      className="source-note secret-owner-entry"
+      aria-label={`Model Studio version ${version}`}
+      onClick={handleSecretClick}
+    >
+      v{version}
+    </button>
+  );
 }
 
-function grantAccess() { sessionStorage.setItem(EDITOR_ACCESS_SESSION_KEY, "granted"); }
+const subscribeToEditorEnvironment = () => () => {};
+function useEditorEnvironment() {
+  return useSyncExternalStore(subscribeToEditorEnvironment, isEditorEnvironment, () => false);
+}
 function openEditorAfterViewportRelease(href: string) {
   const runtime = (window as typeof window & {
     __MONROE_ACTIVE_VIEWPORT_RUNTIME__?: { dispose?: () => void };
@@ -21,14 +49,14 @@ function openEditorAfterViewportRelease(href: string) {
 }
 
 export function ProtectedEditorLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
-  const editingAvailable = useLocalEditorHost();
+  const editingAvailable = useEditorEnvironment();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!(await verifyEditorPassword(password))) { setError("That password is not correct."); return; }
-    grantAccess(); openEditorAfterViewportRelease(href);
+    grantEditorAccess(); openEditorAfterViewportRelease(href);
   };
   if (!editingAvailable) return null;
   return <>
@@ -49,18 +77,18 @@ export function ProtectedEditorLink({ href, children, className }: { href: strin
 }
 
 export function EditorAccessGate({ children }: { children: ReactNode }) {
-  const editingAvailable = useLocalEditorHost();
+  const editingAvailable = useEditorEnvironment();
   const [granted, setGranted] = useState(() => typeof window !== "undefined" && hasEditorAccess());
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!(await verifyEditorPassword(password))) { setError("That password is not correct."); return; }
-    grantAccess(); setGranted(true);
+    grantEditorAccess(); setGranted(true);
   };
   if (!editingAvailable) return <main className="editor-access-page"><div className="editor-access-overlay"><section className="editor-access-dialog">
-    <p className="editor-access-kicker">Public viewer</p><h2>Editing is locally protected</h2>
-    <p>The hosted plant is read-only. Open the project with the local start file on the authorized workstation to use Machine Design Studio.</p>
+    <p className="editor-access-kicker">Public viewer</p><h2>Editing is protected</h2>
+    <p>The public plant is read-only. Open the private owner path first, or use the local project, to unlock editing for this browser tab.</p>
     <div><Link href="/">Return to plant</Link></div>
   </section></div></main>;
   if (granted) return <>{children}</>;

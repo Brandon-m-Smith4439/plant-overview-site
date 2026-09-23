@@ -43,7 +43,7 @@ assert.ok(!fs.existsSync(path.join(root, "Password.txt")) && gitignore.includes(
 assert.match(worker, /X-Content-Type-Options[\s\S]*?nosniff/, "Hosted responses must prevent MIME-type sniffing.");
 assert.match(worker, /Permissions-Policy[\s\S]*?camera=\(\), microphone=\(\), geolocation=\(\)/, "The public viewer must disable unnecessary browser capabilities.");
 assert.match(home, /ProtectedEditorLink/, "Machine Studio navigation must be gated.");
-assert.match(home, /SecretOwnerEntry version="0\.13\.9"/, "The public header must expose the discreet owner-entry gesture.");
+assert.match(home, /SecretOwnerEntry version="0\.13\.10"/, "The public header must expose the discreet owner-entry gesture.");
 assert.match(editorGate, /SECRET_OWNER_CLICK_COUNT = 5/, "The hidden owner entry must require five rapid clicks.");
 assert.match(editorGate, /SECRET_OWNER_CLICK_WINDOW_MS = 3500/, "The hidden owner entry must expire slow click sequences.");
 assert.match(editorGate, /window\.location\.assign\(OWNER_ACCESS_PATH\)/, "The hidden owner entry must open the protected owner path.");

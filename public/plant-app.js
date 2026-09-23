@@ -209,15 +209,15 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.9";
+  const APP_VERSION = "0.13.10";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
-    // Localhost remains the editable source of truth. The hosted viewer uses
-    // the checked-in snapshot on every load so a stale browser cache cannot
-    // hide newly published machines or layout changes.
+    // Localhost and owner/editor sessions remain the editable source of truth.
+    // Any hosted read-only viewer (ChatGPT Sites, Railway, or another host)
+    // uses the checked-in snapshot on every load so stale browser storage
+    // cannot hide newly published machines or layout changes.
     if (!publishedWorkspace || !workspaceTransfer) return;
-    if (!window.location.hostname.endsWith(".chatgpt.site")) return;
     if (window.monroeEditorAccess?.editingAllowed?.() !== false) return;
     try {
       workspaceTransfer.applyPayload(localStorage, publishedWorkspace);

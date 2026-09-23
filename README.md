@@ -1,6 +1,6 @@
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.9**
+Current project version: **0.13.10**
 
 ## Full-production rendering performance
 
@@ -25,6 +25,10 @@ animation batching, transform parity, eviction and context-recovery regressions.
 These tests use real Three.js geometry with a simulated driver, not browser FPS.
 Existing saved production work must be benchmarked in its original browser and
 origin; a clean default scene is not a substitute for the customized plant.
+
+## Version 0.13.10
+
+Version 0.13.10 completes Railway hosting compatibility. The private owner route remains password-only, and the checked-in published plant workspace now loads on any non-local read-only deployment instead of being limited to `*.chatgpt.site`. This keeps ChatGPT Sites and Railway on the same approved public plant/layout snapshot while preserving separate editable owner/browser workspaces.
 
 ## Version 0.13.9
 

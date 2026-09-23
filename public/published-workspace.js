@@ -6,9 +6,11 @@
     ...snapshot,
     items: Object.freeze(snapshot.items),
   });
-  // Seed only the deployed read-only viewer. Localhost and standalone file
-  // previews retain their own editable browser workspaces.
-  if (window.location.hostname.endsWith(".chatgpt.site")) {
+  // Seed any deployed read-only viewer. Localhost and owner/editor sessions
+  // retain their own editable browser workspaces.
+  const hostedReadOnly = !["127.0.0.1", "localhost", "::1"].includes(window.location.hostname)
+    && window.monroeEditorAccess?.editingAllowed?.() === false;
+  if (hostedReadOnly) {
     try {
       for (const [key, value] of Object.entries(snapshot.items)) {
         window.localStorage.setItem(key, value);

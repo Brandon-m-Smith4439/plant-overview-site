@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.10 - 2026-09-23
+
+- Completed Railway/public-host compatibility for the approved published workspace.
+- Removed the `*.chatgpt.site`-only bootstrap restriction so any non-local read-only deployment receives the same checked-in plant layout and machine-design snapshot.
+- Kept localhost and password-unlocked owner/editor sessions isolated from public snapshot seeding so edits remain browser-local until explicitly published.
+
 ## 0.13.9 - 2026-09-23
 
 - Removed the ChatGPT-specific sign-in requirement from the private owner route.

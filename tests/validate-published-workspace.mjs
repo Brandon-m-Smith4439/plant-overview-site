@@ -11,8 +11,10 @@ const publishedSource = fs.readFileSync(new URL("../public/published-workspace.j
 assert.ok(page.indexOf('"/published-workspace.js"') > page.indexOf('"/workspace-transfer.js"'));
 assert.ok(preview.indexOf('src="published-workspace.js"') > preview.indexOf('src="workspace-transfer.js"'));
 assert.match(plant, /applyPublishedWorkspace\(\);/);
-assert.match(plant, /hostname\.endsWith\("\.chatgpt\.site"\)/);
+assert.doesNotMatch(plant, /hostname\.endsWith\("\.chatgpt\.site"\)/);
 assert.match(plant, /editingAllowed\?\.\(\) !== false/);
+assert.match(publishedSource, /const hostedReadOnly = !\["127\.0\.0\.1", "localhost", "::1"\]\.includes\(window\.location\.hostname\)/);
+assert.match(publishedSource, /monroeEditorAccess\?\.editingAllowed\?\.\(\) === false/);
 
 const sandbox = { window: { location: { hostname: "localhost" } } };
 vm.createContext(sandbox);
@@ -49,7 +51,8 @@ assert.equal(Object.keys(JSON.parse(storage.getItem("monroe-glass-machine-design
 const hostedValues = new Map();
 const hostedSandbox = {
   window: {
-    location: { hostname: "monroe-glass-plant-evolution.example.chatgpt.site" },
+    location: { hostname: "monroe-glass-plant-evolution-production.up.railway.app" },
+    monroeEditorAccess: { editingAllowed: () => false },
     localStorage: {
       setItem(key, value) { hostedValues.set(key, String(value)); },
     },

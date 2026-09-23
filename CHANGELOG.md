@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.12 - 2026-09-23
+
+- Reworked construction-stage labels so only equipment introduced in the active stage receives a full-name label; those labels fade out after the stage advances.
+- Added Today overview label modes: Necessary, Abbreviated, and Full. Necessary is the default and is limited to one compact label for each glass-flow process: Cutting, Polisher, Denver CNC, Waterjet, Washer, Tempering Line, Wrap, Glass Truck, and Rack.
+- Reduced Necessary label size/weight and retained collision-aware placement so flow labels stay unobtrusive and avoid covering equipment where possible.
+- Updated the mobile stage dock so complete stage descriptions can wrap without line-clamp truncation.
+- Increased two-finger touch-pan movement by 2.15x while preserving pinch-to-zoom behavior.
+
 ## 0.13.11 - 2026-09-23
 
 - Updated `next` and `eslint-config-next` from 16.3.3 to 16.3.6.

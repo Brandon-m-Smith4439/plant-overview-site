@@ -1,4 +1,4 @@
-﻿/* eslint-disable @next/next/no-html-link-for-pages */
+/* eslint-disable @next/next/no-html-link-for-pages */
 import LegacyScriptLoader from "../legacy-script-loader";
 import { EditorAccessGate } from "../editor-access-gate";
 
@@ -20,7 +20,7 @@ export default function MachineStudio() {
 <div className="studio-brand">
 <a className="studio-back-link" href="/" aria-label="Return to plant layout">â†</a>
 <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-<span className="studio-version-badge">v0.13.11</span>
+<span className="studio-version-badge">v0.13.12</span>
 </div>
 <div className="studio-top-actions" role="toolbar" aria-label="Design commands">
 <span id="save-state" className="studio-save-state">Auto-saved</span>
@@ -383,5 +383,3 @@ export default function MachineStudio() {
 </EditorAccessGate>
 </>;
 }
-
-

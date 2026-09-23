@@ -1,6 +1,6 @@
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.11**
+Current project version: **0.13.12**
 
 ## Full-production rendering performance
 
@@ -25,6 +25,10 @@ animation batching, transform parity, eviction and context-recovery regressions.
 These tests use real Three.js geometry with a simulated driver, not browser FPS.
 Existing saved production work must be benchmarked in its original browser and
 origin; a clean default scene is not a substitute for the customized plant.
+
+## Version 0.13.12
+
+Version 0.13.12 tightens the public labeling and mobile navigation experience. Construction stages now show full labels only for the equipment introduced in that stage, and those labels fade away when the stage advances. The final Today overview defaults to a compact Necessary mode that shows one clean process label for Cutting, Polisher, Denver CNC, Waterjet, Washer, Tempering Line, Wrap, Glass Truck, and Rack; Today can also be switched to Abbreviated or Full labels from the label popover. Mobile stage descriptions are allowed to wrap completely inside the dark stage dock instead of clipping, and two-finger panning is accelerated for easier touch navigation.
 
 ## Version 0.13.11
 

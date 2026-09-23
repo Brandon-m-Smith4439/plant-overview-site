@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   "use strict";
 
   if (window.monroeEditorAccess?.editingAllowed?.() === false) return;
@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.11";
+  const APP_VERSION = "0.13.12";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -6322,5 +6322,3 @@
   window.plantGeometryPrep?.prepareDesign(currentDesign());
   animationFrameId = requestAnimationFrame(draw);
 })();
-
-

@@ -209,7 +209,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.11";
+  const APP_VERSION = "0.13.12";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -303,13 +303,20 @@
   function loadViewerPreferences() {
     try {
       const saved = JSON.parse(localStorage.getItem(VIEWER_PREFERENCES_KEY) || "null");
-      const mode = saved?.labelTextMode;
-      // v1 only offered Full / Abbreviated / Off. Move the legacy Full default
-      // to Adaptive once, while preserving explicit v2 choices thereafter.
-      if (saved?.version !== 2 && mode === "full") return { labelTextMode: "auto" };
-      return { labelTextMode: ["auto", "full", "abbreviated", "off"].includes(mode) ? mode : "auto" };
+      const savedTodayMode = saved?.todayLabelMode;
+      if (["necessary", "abbreviated", "full"].includes(savedTodayMode)) {
+        return { todayLabelMode: savedTodayMode };
+      }
+      const legacyMode = saved?.labelTextMode;
+      return {
+        todayLabelMode: legacyMode === "full"
+          ? "full"
+          : legacyMode === "abbreviated"
+            ? "abbreviated"
+            : "necessary",
+      };
     } catch {
-      return { labelTextMode: "auto" };
+      return { todayLabelMode: "necessary" };
     }
   }
 
@@ -1215,9 +1222,10 @@
     pointerX: 0,
     pointerY: 0,
     showCad: false,
-    showLabels: viewerPreferences.labelTextMode !== "off",
+    showLabels: true,
     labelMode: "smart",
-    labelTextMode: viewerPreferences.labelTextMode,
+    labelTextMode: viewerPreferences.todayLabelMode === "necessary" ? "abbreviated" : viewerPreferences.todayLabelMode,
+    todayLabelMode: viewerPreferences.todayLabelMode,
     playing: false,
     playAt: 0,
     editing: false,
@@ -4756,26 +4764,26 @@
     labelOptions.className = "label-options-popover";
     labelOptions.hidden = true;
     labelOptions.innerHTML = `
-      <div class="label-options-heading"><strong>View labels</strong><span>Choose the amount of label text shown.</span></div>
-      <div class="label-mode-options" role="group" aria-label="Label display style">
-        <button type="button" data-label-display="auto">Adaptive</button>
-        <button type="button" data-label-display="full">Full names</button>
+      <div class="label-options-heading"><strong>Today labels</strong><span>Construction stages always show full labels for the equipment introduced in that stage.</span></div>
+      <div class="label-mode-options today-label-mode-options" role="group" aria-label="Today overview label style">
+        <button type="button" data-label-display="necessary">Necessary</button>
         <button type="button" data-label-display="abbreviated">Abbreviated</button>
-        <button type="button" data-label-display="off">Off</button>
+        <button type="button" data-label-display="full">Full names</button>
       </div>
+      <span class="label-options-note">Necessary shows only the glass-flow path: Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.</span>
       <label class="roof-overview-toggle"><input type="checkbox" data-roof-overview> Show roof in overview</label>
       <span class="label-options-note">Roof remains available in first person when enabled in the editor.</span>
     `;
     frame.appendChild(labelOptions);
     const updateLabelOptions = () => {
       labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
-        const active = button.dataset.labelDisplay === state.labelTextMode;
+        const active = button.dataset.labelDisplay === state.todayLabelMode;
         button.classList.toggle("active", active);
         button.setAttribute("aria-pressed", String(active));
       });
       const roofToggle = labelOptions.querySelector("[data-roof-overview]");
       if (roofToggle) roofToggle.checked = Boolean(state.roof.overviewVisible);
-      labelOptionsToggle.classList.toggle("active", state.labelTextMode !== "off");
+      labelOptionsToggle.classList.toggle("active", state.showLabels);
     };
     const closeLabelOptions = () => {
       labelOptions.hidden = true;
@@ -4788,13 +4796,27 @@
     });
     labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
       button.addEventListener("click", () => {
-        state.labelTextMode = button.dataset.labelDisplay;
-        state.showLabels = state.labelTextMode !== "off";
-        try { localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify({ version: 2, labelTextMode: state.labelTextMode })); } catch {}
+        const mode = button.dataset.labelDisplay;
+        if (!["necessary", "abbreviated", "full"].includes(mode)) return;
+        state.todayLabelMode = mode;
+        state.labelTextMode = mode === "necessary" ? "abbreviated" : mode;
+        state.showLabels = true;
+        try {
+          localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify({
+            version: 3,
+            todayLabelMode: state.todayLabelMode,
+          }));
+        } catch {}
         labelVisualStates.clear();
         updateLabelOptions();
         renderPerformance.invalidate?.("label-display-mode");
-        showToast(state.labelTextMode === "auto" ? "Labels now abbreviate at long range and expand nearby." : state.labelTextMode === "full" ? "Full machine labels shown." : state.labelTextMode === "abbreviated" ? "Abbreviated machine labels shown." : "Machine labels hidden.");
+        showToast(
+          mode === "necessary"
+            ? "Today shows only the glass-flow labels."
+            : mode === "abbreviated"
+              ? "Today shows abbreviated machine labels."
+              : "Today shows full machine labels."
+        );
       });
     });
     labelOptions.querySelector("[data-roof-overview]")?.addEventListener("change", (event) => {
@@ -5973,6 +5995,41 @@
     floorDrain: "Floor drain",
   };
 
+  function isTodayStage() {
+    return Math.round(state.stageFloat) >= Math.max(0, stages.length - 1);
+  }
+
+  function isTodayOverview() {
+    return state.cameraMode !== "walk" && isTodayStage();
+  }
+
+  function isStageEquipmentLabelCandidate(machine) {
+    if (!machine || isFloorFeatureType(machine.type)) return false;
+    if (["person", "animatedPerson", "safetyLine", "room"].includes(machine.type)) return false;
+    const name = String(machine.labelText || machine.name || machine.short || "").toLowerCase();
+    if (/^(cage|computer machine|cutting table computer|bay door)$/.test(name.trim())) return false;
+    return true;
+  }
+
+  function necessaryFlowLabel(machine) {
+    if (!machine || !isStageEquipmentLabelCandidate(machine)) return null;
+    const type = String(machine.type || "").toLowerCase();
+    const source = [machine.name, machine.short, machine.labelText, machine.labelAbbreviation]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (type === "cutting" || /cutting table/.test(source)) return { key: "cutting", text: "Cutting", order: 0 };
+    if (type === "kodiak" && !/skiati/.test(source)) return { key: "polisher", text: "Polisher", order: 1 };
+    if (type === "denver" || /denver/.test(source)) return { key: "denver-cnc", text: "Denver CNC", order: 2 };
+    if (type === "waterjet" || /waterjet/.test(source)) return { key: "waterjet", text: "Waterjet", order: 3 };
+    if (type === "washer" || /washer/.test(source)) return { key: "washer", text: "Washer", order: 4 };
+    if (type === "furnace" || /tempering line/.test(source)) return { key: "tempering", text: "Tempering Line", order: 5 };
+    if (type === "wrapping" || /wrapp/.test(source)) return { key: "wrap", text: "Wrap", order: 6 };
+    if (type === "aframetruck" || /glass truck/.test(source)) return { key: "glass-truck", text: "Glass Truck", order: 7 };
+    if (type === "glassrack" && Number(machine.reveal) >= 11) return { key: "rack", text: "Rack", order: 8 };
+    return null;
+  }
+
   function rectanglesIntersect(first, second) {
     return !(
       first.right <= second.left ||
@@ -6059,10 +6116,15 @@
   }
 
   function displayMachineLabel(machine, profile) {
-    const compactViewport = compactLabelViewport();
-    const adaptiveMode = state.cameraMode === "walk" ? "full" : (state.zoom < (compactViewport ? 1.2 : .78) ? "abbreviated" : "full");
-    const effectiveMode = state.labelTextMode === "auto" ? adaptiveMode : state.labelTextMode;
-    const resolvedMode = state.cameraMode === "walk" && effectiveMode !== "off" ? "full" : effectiveMode;
+    if (state.cameraMode !== "walk" && !isTodayStage()) {
+      const value = machineLabelText(machine);
+      const maximum = Math.max(24, Math.round(profile.maxChars * 2.2));
+      return value.length <= maximum ? value : `${value.slice(0, maximum - 1).trim()}\u2026`;
+    }
+    if (isTodayOverview() && state.todayLabelMode === "necessary") {
+      return necessaryFlowLabel(machine)?.text || "";
+    }
+    const resolvedMode = state.cameraMode === "walk" ? "full" : state.todayLabelMode;
     if (resolvedMode === "abbreviated") {
       const customAbbreviation = String(machine?.labelAbbreviation || "").trim();
       if (customAbbreviation) return machine?.labelUppercase ? customAbbreviation.toUpperCase() : customAbbreviation;
@@ -6091,28 +6153,32 @@
 
   function smartLabelBudget() {
     if (state.cameraMode === "walk") return state.labelMode === "all" ? 16 : 10;
+    if (!isTodayStage()) return Number.POSITIVE_INFINITY;
+    if (isTodayOverview()) return Number.POSITIVE_INFINITY;
     if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 430) {
       if (state.zoom < .55) return 4;
-      if (state.zoom < 1.05) return 4;
-      return 5;
+      if (state.zoom < 1.05) return 5;
+      return 6;
     }
     if (rect.width <= 820 || compactLabelViewport()) {
       if (state.zoom < .55) return 6;
-      if (state.zoom < 1.05) return 7;
-      return 8;
+      if (state.zoom < 1.05) return 8;
+      return 10;
     }
-    if (["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78) return Number.POSITIVE_INFINITY;
+    if (state.todayLabelMode === "full" && state.zoom >= .78) return Number.POSITIVE_INFINITY;
     const viewportBudget = Math.floor((rect.width * rect.height) / 36000);
     const zoomFactor = clamp(state.zoom, .72, 1.45);
     return Math.round(clamp(viewportBudget * zoomFactor, 12, 48));
   }
 
   function smartLabelRepeatLimit(profile) {
+    if (!isTodayStage()) return Number.POSITIVE_INFINITY;
+    if (isTodayOverview()) return state.todayLabelMode === "necessary" ? 1 : Number.POSITIVE_INFINITY;
     if (state.labelMode === "all") return Number.POSITIVE_INFINITY;
     if (compactLabelViewport()) return profile.rank >= 3 && state.zoom >= 1.05 ? 2 : 1;
-    if (state.cameraMode !== "walk" && ["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78) return Number.POSITIVE_INFINITY;
+    if (state.cameraMode !== "walk" && state.todayLabelMode === "full" && state.zoom >= .78) return Number.POSITIVE_INFINITY;
     if (state.cameraMode === "walk") return profile.rank >= 3 ? 2 : 1;
     if (state.zoom < .55) return profile.rank >= 3 ? 2 : 1;
     if (state.zoom < 1.05) return profile.rank >= 3 ? 2 : 1;
@@ -9155,44 +9221,81 @@
       drawSelection(rendered);
     });
 
-    // Label candidates are ranked before drawing so production equipment claims
-    // the clearest locations first. Smart mode reduces both label density and
-    // label detail as the camera zooms out. Selected objects always remain
-    // identifiable; current-stage objects rank first but still respect the
-    // density budget so a busy production stage cannot flood the viewport.
+    // Construction stages show only the equipment introduced in that stage,
+    // using full names. Once the stage advances those labels fade away. The
+    // final Today overview switches to the user's Full / Abbreviated /
+    // Necessary mode; Necessary is a compact one-label-per-process glass-flow
+    // view so the overview stays readable.
     const labelBudget = smartLabelBudget();
     let ordinaryLabelsDrawn = 0;
     const repeatedLabelsDrawn = new Map();
     const activeLabelKeys = new Set();
+    const stageSpecificLabels = state.cameraMode !== "walk" && !isTodayStage();
+    const necessaryTodayLabels = isTodayOverview() && state.todayLabelMode === "necessary";
     const labelCandidates = machineEntries
-      .filter(({ machine, alpha }) => alpha > .15 && machine.showLabel !== false)
+      .filter(({ machine, alpha }) => (
+        alpha > .15 &&
+        (machine.showLabel !== false || stageSpecificLabels || necessaryTodayLabels)
+      ))
       .map((entry) => {
         const labelKey = String(entry.machine.instanceId);
         activeLabelKeys.add(labelKey);
         const selected = state.selectedMachineIds.has(entry.machine.instanceId);
         const current = Math.round(state.stageFloat) === entry.machine.reveal;
-        const profile = machineLabelProfile(entry.machine);
-        const text = displayMachineLabel(entry.machine, profile);
-        const repeatKey = `${entry.machine.type || "generic"}|${text.toLocaleLowerCase()}`;
+        const flow = necessaryTodayLabels ? necessaryFlowLabel(entry.machine) : null;
+        const baseProfile = machineLabelProfile(entry.machine);
+        const profile = flow
+          ? {
+              ...baseProfile,
+              rank: 5,
+              cssSize: compactLabelViewport() ? 7.2 : 8.4,
+              maxChars: 18,
+            }
+          : baseProfile;
+        const text = flow?.text || displayMachineLabel(entry.machine, profile);
+        const repeatKey = flow?.key || (stageSpecificLabels
+          ? labelKey
+          : `${entry.machine.type || "generic"}|${text.toLocaleLowerCase()}`);
         const priorVisual = labelVisualStates.get(labelKey);
         const wasVisible = Boolean(priorVisual?.targetVisible || priorVisual?.alpha > .5);
-        const eligible = shouldShowSmartLabel(profile, selected, current, wasVisible);
-        return { ...entry, selected, current, profile, text, repeatKey, labelKey, eligible };
+        let eligible;
+        if (stageSpecificLabels) {
+          eligible = selected || (current && isStageEquipmentLabelCandidate(entry.machine));
+        } else if (necessaryTodayLabels) {
+          eligible = selected || Boolean(flow);
+        } else if (isTodayOverview()) {
+          eligible = selected || isStageEquipmentLabelCandidate(entry.machine);
+        } else {
+          eligible = shouldShowSmartLabel(profile, selected, current, wasVisible);
+        }
+        return {
+          ...entry,
+          selected,
+          current,
+          flow,
+          flowOrder: flow?.order ?? 99,
+          profile,
+          text,
+          repeatKey,
+          labelKey,
+          eligible,
+        };
       })
       .sort((first, second) => (
         Number(second.selected) - Number(first.selected) ||
-        Number(second.current) - Number(first.current) ||
         Number(second.eligible) - Number(first.eligible) ||
+        first.flowOrder - second.flowOrder ||
+        Number(second.current) - Number(first.current) ||
         second.profile.rank - first.profile.rank ||
         second.rendered.w * second.rendered.d - first.rendered.w * first.rendered.d
       ));
 
-    labelCandidates.forEach(({ machine, rendered, selected, current, profile, text, repeatKey, labelKey, eligible }) => {
-      const priority = selected;
+    labelCandidates.forEach(({ machine, rendered, selected, current, flow, profile, text, repeatKey, labelKey, eligible }) => {
+      const priority = selected || (stageSpecificLabels && current);
       const repeatedCount = repeatedLabelsDrawn.get(repeatKey) || 0;
       const withinBudget = priority || ordinaryLabelsDrawn < labelBudget;
       const withinRepeatLimit = priority || repeatedCount < smartLabelRepeatLimit(profile);
-      const visibleTarget = eligible && withinBudget && withinRepeatLimit;
+      const visibleTarget = Boolean(text) && eligible && withinBudget && withinRepeatLimit;
       const pointerAnchor = localPoint(
         rendered,
         rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), 0, 100) / 100,
@@ -9207,15 +9310,18 @@
           labelKey,
           time,
           visibleTarget,
-          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 60),
-          forceVisible: state.cameraMode !== "walk" && !compactLabelViewport() && ["full", "auto"].includes(state.labelTextMode) && state.zoom >= .78,
+          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? (flow ? 2.5 : 4)), 0, 60),
+          forceVisible: stageSpecificLabels || necessaryTodayLabels || (
+            isTodayOverview() &&
+            ["full", "abbreviated"].includes(state.todayLabelMode)
+          ),
           priority,
           selected,
           current,
           cssSize: profile.cssSize,
           textColor: machine.labelTextColor,
           backgroundColor: machine.labelBackgroundColor,
-          fontWeight: machine.labelFontWeight,
+          fontWeight: flow ? "regular" : machine.labelFontWeight,
         }
       );
       if (result.targetVisible) {
@@ -9554,6 +9660,7 @@
   });
 
   const activeTouchPointers = new Map();
+  const TOUCH_PAN_MULTIPLIER = 2.15;
   let touchGestureDistance = 0;
   let touchGestureCenter = null;
   const touchPoints = () => Array.from(activeTouchPointers.values());
@@ -9666,7 +9773,12 @@
       if (points.length >= 2) {
         const center = touchCenter(points);
         const distance = touchDistance(points);
-        if (touchGestureCenter && center) panCamera(center.x - touchGestureCenter.x, center.y - touchGestureCenter.y);
+        if (touchGestureCenter && center) {
+          panCamera(
+            (center.x - touchGestureCenter.x) * TOUCH_PAN_MULTIPLIER,
+            (center.y - touchGestureCenter.y) * TOUCH_PAN_MULTIPLIER,
+          );
+        }
         if (touchGestureDistance > 0 && distance > 0) {
           state.zoom = clamp(state.zoom * (distance / touchGestureDistance), .2, 10);
         }

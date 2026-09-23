@@ -2,9 +2,9 @@
 
 ## 0.13.12 - 2026-09-23
 
-- Reworked construction-stage labels so only equipment introduced in the active stage receives a full-name label; those labels fade out after the stage advances.
-- Added Today overview label modes: Necessary, Abbreviated, and Full. Necessary is the default and is limited to one compact label for each glass-flow process: Cutting, Polisher, Denver CNC, Waterjet, Washer, Tempering Line, Wrap, Glass Truck, and Rack.
-- Reduced Necessary label size/weight and retained collision-aware placement so flow labels stay unobtrusive and avoid covering equipment where possible.
+- Reworked construction-stage labels so only equipment introduced in the active stage receives a full-name label; those labels fade out after the stage advances. The Plant Offices stage now explicitly labels Plant office and Maintenance.
+- Replaced normal Today machine labels with an automatic production-flow overlay. Compact process tags now point to representative machines and directional connectors show Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.
+- Kept production-flow tags small/light and collision-aware so they stay unobtrusive and avoid covering equipment where possible.
 - Updated the mobile stage dock so complete stage descriptions can wrap without line-clamp truncation.
 - Increased two-finger touch-pan movement by 2.15x while preserving pinch-to-zoom behavior.
 

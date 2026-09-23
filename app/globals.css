@@ -7095,15 +7095,6 @@ body.viewer-fullscreen-fallback-active {
     bottom: 116px;
   }
 
-  .today-label-mode-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
-  .today-label-mode-options button {
-    min-width: 0;
-    padding-inline: 6px;
-    font-size: 8px;
-  }
 }
 
 @media (max-width: 430px) and (hover: none) and (pointer: coarse) {

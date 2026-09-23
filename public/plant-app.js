@@ -201,7 +201,6 @@
   const OLDER_STORAGE_KEY = "monroe-glass-plant-layout-v4";
   const OLDEST_STORAGE_KEY = "monroe-glass-plant-layout-v3";
   const BACKUP_STORAGE_KEY = "monroe-glass-plant-layout-v6-backup";
-  const VIEWER_PREFERENCES_KEY = "monroe-glass-plant-viewer-preferences-v1";
   const MIGRATION_BACKUP_KEY = "monroe-glass-plant-layout-v5-before-v0.4";
   const DESIGN_STORAGE_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
   const SYNC_CHANNEL_NAME = "monroe-glass-plant-sync-v1";
@@ -298,26 +297,6 @@
       thickness: clamp(Number(value?.thickness) || defaultWallGeometry.thickness, .25, 20),
       extendToRoof: value?.extendToRoof !== false,
     };
-  }
-
-  function loadViewerPreferences() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(VIEWER_PREFERENCES_KEY) || "null");
-      const savedTodayMode = saved?.todayLabelMode;
-      if (["necessary", "abbreviated", "full"].includes(savedTodayMode)) {
-        return { todayLabelMode: savedTodayMode };
-      }
-      const legacyMode = saved?.labelTextMode;
-      return {
-        todayLabelMode: legacyMode === "full"
-          ? "full"
-          : legacyMode === "abbreviated"
-            ? "abbreviated"
-            : "necessary",
-      };
-    } catch {
-      return { todayLabelMode: "necessary" };
-    }
   }
 
   function normalizeFloor(value) {
@@ -1194,7 +1173,6 @@
     panZ: 0,
   });
 
-  const viewerPreferences = loadViewerPreferences();
   const state = {
     yaw: OVERVIEW_CAMERA.yaw,
     pitch: OVERVIEW_CAMERA.pitch,
@@ -1224,8 +1202,8 @@
     showCad: false,
     showLabels: true,
     labelMode: "smart",
-    labelTextMode: viewerPreferences.todayLabelMode === "necessary" ? "abbreviated" : viewerPreferences.todayLabelMode,
-    todayLabelMode: viewerPreferences.todayLabelMode,
+    labelTextMode: "abbreviated",
+    todayLabelMode: "necessary",
     playing: false,
     playAt: 0,
     editing: false,
@@ -4755,35 +4733,25 @@
     const labelOptionsToggle = document.createElement("button");
     labelOptionsToggle.type = "button";
     labelOptionsToggle.className = "label-options-button viewer-icon-button";
-    labelOptionsToggle.setAttribute("aria-label", "Label and roof options");
+    labelOptionsToggle.setAttribute("aria-label", "Production flow and roof options");
     labelOptionsToggle.setAttribute("aria-expanded", "false");
-    labelOptionsToggle.dataset.tooltip = "Labels and roof";
+    labelOptionsToggle.dataset.tooltip = "Production flow and roof";
     labelOptionsToggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12l4 6-4 6H4z"/><circle cx="8" cy="12" r="1.5"/></svg>';
     frame.appendChild(labelOptionsToggle);
     const labelOptions = document.createElement("section");
     labelOptions.className = "label-options-popover";
     labelOptions.hidden = true;
     labelOptions.innerHTML = `
-      <div class="label-options-heading"><strong>Today labels</strong><span>Construction stages always show full labels for the equipment introduced in that stage.</span></div>
-      <div class="label-mode-options today-label-mode-options" role="group" aria-label="Today overview label style">
-        <button type="button" data-label-display="necessary">Necessary</button>
-        <button type="button" data-label-display="abbreviated">Abbreviated</button>
-        <button type="button" data-label-display="full">Full names</button>
-      </div>
-      <span class="label-options-note">Necessary shows only the glass-flow path: Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.</span>
+      <div class="label-options-heading"><strong>Production flow</strong><span>Construction stages show only the equipment introduced in that stage. Today automatically switches to the glass-production flow overlay.</span></div>
+      <span class="label-options-note">Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.</span>
       <label class="roof-overview-toggle"><input type="checkbox" data-roof-overview> Show roof in overview</label>
       <span class="label-options-note">Roof remains available in first person when enabled in the editor.</span>
     `;
     frame.appendChild(labelOptions);
     const updateLabelOptions = () => {
-      labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
-        const active = button.dataset.labelDisplay === state.todayLabelMode;
-        button.classList.toggle("active", active);
-        button.setAttribute("aria-pressed", String(active));
-      });
       const roofToggle = labelOptions.querySelector("[data-roof-overview]");
       if (roofToggle) roofToggle.checked = Boolean(state.roof.overviewVisible);
-      labelOptionsToggle.classList.toggle("active", state.showLabels);
+      labelOptionsToggle.classList.toggle("active", isTodayOverview());
     };
     const closeLabelOptions = () => {
       labelOptions.hidden = true;
@@ -4793,31 +4761,6 @@
       labelOptions.hidden = !labelOptions.hidden;
       labelOptionsToggle.setAttribute("aria-expanded", String(!labelOptions.hidden));
       if (!labelOptions.hidden) updateLabelOptions();
-    });
-    labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const mode = button.dataset.labelDisplay;
-        if (!["necessary", "abbreviated", "full"].includes(mode)) return;
-        state.todayLabelMode = mode;
-        state.labelTextMode = mode === "necessary" ? "abbreviated" : mode;
-        state.showLabels = true;
-        try {
-          localStorage.setItem(VIEWER_PREFERENCES_KEY, JSON.stringify({
-            version: 3,
-            todayLabelMode: state.todayLabelMode,
-          }));
-        } catch {}
-        labelVisualStates.clear();
-        updateLabelOptions();
-        renderPerformance.invalidate?.("label-display-mode");
-        showToast(
-          mode === "necessary"
-            ? "Today shows only the glass-flow labels."
-            : mode === "abbreviated"
-              ? "Today shows abbreviated machine labels."
-              : "Today shows full machine labels."
-        );
-      });
     });
     labelOptions.querySelector("[data-roof-overview]")?.addEventListener("change", (event) => {
       pushHistory();
@@ -6005,8 +5948,9 @@
 
   function isStageEquipmentLabelCandidate(machine) {
     if (!machine || isFloorFeatureType(machine.type)) return false;
-    if (["person", "animatedPerson", "safetyLine", "room"].includes(machine.type)) return false;
     const name = String(machine.labelText || machine.name || machine.short || "").toLowerCase();
+    if (machine.type === "room") return /office|maintenance/.test(name);
+    if (["person", "animatedPerson", "safetyLine"].includes(machine.type)) return false;
     if (/^(cage|computer machine|cutting table computer|bay door)$/.test(name.trim())) return false;
     return true;
   }
@@ -6028,6 +5972,185 @@
     if (type === "aframetruck" || /glass truck/.test(source)) return { key: "glass-truck", text: "Glass Truck", order: 7 };
     if (type === "glassrack" && Number(machine.reveal) >= 11) return { key: "rack", text: "Rack", order: 8 };
     return null;
+  }
+
+  const TODAY_FLOW_LINKS = [
+    ["cutting", "polisher"],
+    ["polisher", "denver-cnc"],
+    ["polisher", "waterjet"],
+    ["denver-cnc", "washer"],
+    ["waterjet", "washer"],
+    ["washer", "tempering"],
+    ["tempering", "wrap"],
+    ["wrap", "glass-truck"],
+    ["wrap", "rack"],
+  ];
+
+  function flowEntryWorldAnchor(entry) {
+    const rendered = entry?.rendered;
+    if (!rendered) return null;
+    return localPoint(
+      rendered,
+      rendered.w / 2,
+      Math.max(1, Number(rendered.h) || 0) + 1.15,
+      rendered.d / 2,
+    );
+  }
+
+  function flowEntryPlanPoint(entry) {
+    const rendered = entry?.rendered;
+    return rendered
+      ? [rendered.x + rendered.w / 2, rendered.z + rendered.d / 2]
+      : [0, 0];
+  }
+
+  function planDistanceSquared(first, second) {
+    const dx = first[0] - second[0];
+    const dz = first[1] - second[1];
+    return dx * dx + dz * dz;
+  }
+
+  function nearestFlowEntry(entries, targetPoint) {
+    if (!entries?.length) return null;
+    return entries.reduce((best, entry) => (
+      !best || planDistanceSquared(flowEntryPlanPoint(entry), targetPoint) <
+        planDistanceSquared(flowEntryPlanPoint(best), targetPoint)
+        ? entry
+        : best
+    ), null);
+  }
+
+  function midpointPlanPoint(...entries) {
+    const points = entries.filter(Boolean).map(flowEntryPlanPoint);
+    if (!points.length) return [0, 0];
+    return [
+      points.reduce((sum, point) => sum + point[0], 0) / points.length,
+      points.reduce((sum, point) => sum + point[1], 0) / points.length,
+    ];
+  }
+
+  function buildTodayFlowNodes(machineEntries) {
+    const groups = new Map();
+    machineEntries.forEach((entry) => {
+      if (entry.alpha <= .15) return;
+      const flow = necessaryFlowLabel(entry.machine);
+      if (!flow) return;
+      if (!groups.has(flow.key)) groups.set(flow.key, []);
+      groups.get(flow.key).push({ ...entry, flow });
+    });
+    const nodes = new Map();
+    const largest = (entries = []) => entries.reduce((best, entry) => (
+      !best || entry.rendered.w * entry.rendered.d > best.rendered.w * best.rendered.d ? entry : best
+    ), null);
+    const cutting = largest(groups.get("cutting"));
+    if (cutting) nodes.set("cutting", cutting);
+    const polisher = nearestFlowEntry(groups.get("polisher"), flowEntryPlanPoint(cutting));
+    if (polisher) nodes.set("polisher", polisher);
+    const denver = nearestFlowEntry(groups.get("denver-cnc"), flowEntryPlanPoint(polisher || cutting));
+    if (denver) nodes.set("denver-cnc", denver);
+    const waterjet = nearestFlowEntry(groups.get("waterjet"), flowEntryPlanPoint(polisher || cutting));
+    if (waterjet) nodes.set("waterjet", waterjet);
+    const washer = nearestFlowEntry(groups.get("washer"), midpointPlanPoint(denver, waterjet, polisher));
+    if (washer) nodes.set("washer", washer);
+    const tempering = nearestFlowEntry(groups.get("tempering"), flowEntryPlanPoint(washer));
+    if (tempering) nodes.set("tempering", tempering);
+    const wrap = nearestFlowEntry(groups.get("wrap"), flowEntryPlanPoint(tempering || washer));
+    if (wrap) nodes.set("wrap", wrap);
+    const truck = nearestFlowEntry(groups.get("glass-truck"), flowEntryPlanPoint(wrap));
+    if (truck) nodes.set("glass-truck", truck);
+    const rack = nearestFlowEntry(groups.get("rack"), flowEntryPlanPoint(wrap));
+    if (rack) nodes.set("rack", rack);
+    return nodes;
+  }
+
+  function drawTodayFlowArrow(fromEntry, toEntry) {
+    const startWorld = flowEntryWorldAnchor(fromEntry);
+    const endWorld = flowEntryWorldAnchor(toEntry);
+    if (!startWorld || !endWorld) return;
+    const start = project(...startWorld);
+    const end = project(...endWorld);
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const length = Math.hypot(dx, dy);
+    if (!Number.isFinite(length) || length < 8) return;
+    const rect = canvas.getBoundingClientRect();
+    const pixelScale = canvas.width / Math.max(1, rect.width);
+    const ux = dx / length;
+    const uy = dy / length;
+    const startInset = Math.min(length * .12, 10 * pixelScale);
+    const endInset = Math.min(length * .18, 16 * pixelScale);
+    const sx = start[0] + ux * startInset;
+    const sy = start[1] + uy * startInset;
+    const ex = end[0] - ux * endInset;
+    const ey = end[1] - uy * endInset;
+    const arrowSize = Math.max(6, 7.5 * pixelScale);
+    const normalX = -uy;
+    const normalY = ux;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.globalAlpha = .92;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = "rgba(7,18,18,.82)";
+    ctx.lineWidth = Math.max(4, 4.6 * pixelScale);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = "#67c9bc";
+    ctx.lineWidth = Math.max(1.5, 2.1 * pixelScale);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
+    ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
+    ctx.closePath();
+    ctx.fillStyle = "#67c9bc";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(7,18,18,.9)";
+    ctx.lineWidth = Math.max(1, 1.2 * pixelScale);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTodayProductionFlow(machineEntries, time) {
+    const nodes = buildTodayFlowNodes(machineEntries);
+    TODAY_FLOW_LINKS.forEach(([fromKey, toKey]) => {
+      const fromEntry = nodes.get(fromKey);
+      const toEntry = nodes.get(toKey);
+      if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry);
+    });
+    const activeKeys = new Set();
+    [...nodes.entries()]
+      .sort((first, second) => first[1].flow.order - second[1].flow.order)
+      .forEach(([key, entry]) => {
+        const anchor = flowEntryWorldAnchor(entry);
+        if (!anchor) return;
+        const labelKey = `today-flow:${key}`;
+        activeKeys.add(labelKey);
+        label(
+          entry.flow.text,
+          anchor[0], anchor[1], anchor[2],
+          "#67c9bc",
+          {
+            labelKey,
+            time,
+            visibleTarget: true,
+            labelLiftFeet: compactLabelViewport() ? 1.8 : 2.5,
+            forceVisible: true,
+            priority: true,
+            selected: false,
+            current: false,
+            cssSize: compactLabelViewport() ? 7.1 : 8.5,
+            textColor: "#f0f8f6",
+            backgroundColor: "#0b1c1a",
+            fontWeight: "regular",
+          }
+        );
+      });
+    return activeKeys;
   }
 
   function rectanglesIntersect(first, second) {
@@ -6117,7 +6240,8 @@
 
   function displayMachineLabel(machine, profile) {
     if (state.cameraMode !== "walk" && !isTodayStage()) {
-      const value = machineLabelText(machine);
+      const roomName = machine?.type === "room" ? String(machine?.name || "").trim() : "";
+      const value = roomName || machineLabelText(machine);
       const maximum = Math.max(24, Math.round(profile.maxChars * 2.2));
       return value.length <= maximum ? value : `${value.slice(0, maximum - 1).trim()}\u2026`;
     }
@@ -9221,12 +9345,13 @@
       drawSelection(rendered);
     });
 
-    // Construction stages show only the equipment introduced in that stage,
-    // using full names. Once the stage advances those labels fade away. The
-    // final Today overview switches to the user's Full / Abbreviated /
-    // Necessary mode; Necessary is a compact one-label-per-process glass-flow
-    // view so the overview stays readable.
-    const labelBudget = smartLabelBudget();
+    if (isTodayOverview()) {
+      const activeFlowLabelKeys = drawTodayProductionFlow(machineEntries, time);
+      trimLabelVisualStates(activeFlowLabelKeys, time);
+    } else if (!isTodayStage()) {
+      // Construction stages show only the equipment introduced in that stage
+      // using their full labels. Those labels fade away when the stage advances.
+      const labelBudget = smartLabelBudget();
     let ordinaryLabelsDrawn = 0;
     const repeatedLabelsDrawn = new Map();
     const activeLabelKeys = new Set();
@@ -9329,7 +9454,12 @@
         if (!priority) ordinaryLabelsDrawn += 1;
       }
     });
-    trimLabelVisualStates(activeLabelKeys, time);
+      trimLabelVisualStates(activeLabelKeys, time);
+    } else {
+      // Today in first-person keeps the view clean; the production-flow overlay
+      // is an overview aid rather than a wall of floating labels.
+      trimLabelVisualStates(new Set(), time);
+    }
 
     machineEntries.forEach(({ rendered, alpha, grow }) => {
       const design = rendered.designId ? designLibrary[rendered.designId] : null;
@@ -9585,6 +9715,11 @@
   function setStage(index) {
     const previousStage = state.stage;
     state.stage = clamp(Math.round(index), 0, stages.length - 1);
+    if (state.stage === stages.length - 1) {
+      state.todayLabelMode = "necessary";
+      state.labelTextMode = "abbreviated";
+      state.showLabels = true;
+    }
     invalidateWalkSpatialIndex();
     const stage = stages[state.stage];
     const number = document.getElementById("stage-number");

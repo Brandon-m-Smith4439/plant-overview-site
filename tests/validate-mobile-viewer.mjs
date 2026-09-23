@@ -22,7 +22,7 @@ assert(app.includes("TOUCH_PAN_MULTIPLIER = 2.15") && app.includes("* TOUCH_PAN_
 assert(app.includes('document.getElementById("mobile-next-stage")'), "Mobile stage controls are not wired.");
 assert(page.includes('id="mobile-stage-description"'), "Compact mobile stage description is missing.");
 assert(css.includes("-webkit-line-clamp: unset") && css.includes("font-size: 6.8px"), "Mobile stage descriptions must be allowed to fit completely at phone sizes.");
-assert(css.includes(".today-label-mode-options"), "Mobile Today label selector styling is missing.");
+assert(app.includes("drawTodayProductionFlow") && app.includes("TODAY_FLOW_LINKS"), "Mobile Today must use the same production-flow overlay as desktop.");
 assert(css.includes(".stage-panel,") && css.includes(".timeline {") && css.includes("display: none !important"), "Desktop stage panel/timeline must be hidden on mobile.");
 assert(!app.includes('document.querySelector("#timeline-stages li.active")?.scrollIntoView'), "Mobile stage changes must not scroll the page to the timeline.");
 assert(!app.includes('document.getElementById("mobile-stage-summary")?.addEventListener("click"'), "Compact mobile stage summary must not jump the page to the desktop stage card.");

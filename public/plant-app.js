@@ -6273,9 +6273,7 @@
   function displayMachineLabel(machine, profile) {
     if (state.cameraMode !== "walk" && !isTodayStage()) {
       const roomName = machine?.type === "room" ? String(machine?.name || "").trim() : "";
-      const value = roomName || machineLabelText(machine);
-      const maximum = Math.max(24, Math.round(profile.maxChars * 2.2));
-      return value.length <= maximum ? value : `${value.slice(0, maximum - 1).trim()}\u2026`;
+      return roomName || machineLabelText(machine);
     }
     if (isTodayOverview() && state.todayLabelMode === "necessary") {
       return necessaryFlowLabel(machine)?.text || "";
@@ -6286,10 +6284,7 @@
       if (customAbbreviation) return machine?.labelUppercase ? customAbbreviation.toUpperCase() : customAbbreviation;
       return compactMachineLabel(machine, profile);
     }
-    const value = machineLabelText(machine);
-    const maximum = Math.max(20, Math.round(profile.maxChars * 1.8));
-    if (value.length <= maximum) return value;
-    return `${value.slice(0, maximum - 1).trim()}\u2026`;
+    return machineLabelText(machine);
   }
 
   function smartLabelMinimumRank(wasVisible = false) {

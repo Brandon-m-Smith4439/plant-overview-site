@@ -37,7 +37,8 @@ assert.ok(plant.includes('backgroundColor: "#0b1c1a"') && plant.includes('fontWe
 assert.ok(plant.includes('if (machine.type === "room") return /office|maintenance/.test(name);'), "Office and Maintenance rooms must be eligible for their construction-stage labels.");
 assert.ok(plant.includes('const roomName = machine?.type === "room"'), "Room-stage labels must use full room names.");
 assert.ok(plant.includes("stageSpecificLabels") && plant.includes("current && isStageEquipmentLabelCandidate"), "Construction stages must label only equipment introduced in that stage.");
-assert.ok(plant.includes('const maximum = Math.max(24, Math.round(profile.maxChars * 2.2))'), "Construction-stage labels must retain full-name text capacity.");
+assert.ok(plant.includes('return roomName || machineLabelText(machine);'), "Construction-stage labels must use complete machine/room names without truncation.");
+assert.ok(plant.includes('return machineLabelText(machine);'), "Today Full mode must use complete machine names without truncation.");
 assert.ok(plant.includes("function updateLabelVisualState") && plant.includes("labelTransitionsActive"), "Stage labels must still fade smoothly.");
 assert.ok(plant.includes("preferredSlot") && plant.includes("slotHoldUntil"), "Label collision placement must stay stable.");
 assert.ok(plant.includes("positionBlend") && plant.includes("visual.drawX"), "Label movement must remain interpolated.");

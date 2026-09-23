@@ -4742,16 +4742,28 @@
     labelOptions.className = "label-options-popover";
     labelOptions.hidden = true;
     labelOptions.innerHTML = `
-      <div class="label-options-heading"><strong>Production flow</strong><span>Construction stages show only the equipment introduced in that stage. Today automatically switches to the glass-production flow overlay.</span></div>
-      <span class="label-options-note">Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.</span>
+      <div class="label-options-heading"><strong>Today labels</strong><span>Construction stages keep their stage-specific full labels. Choose how the final Today overview is labeled.</span></div>
+      <div class="label-mode-options today-label-mode-options" role="group" aria-label="Today overview label style">
+        <button type="button" data-label-display="necessary">Necessary</button>
+        <button type="button" data-label-display="abbreviated">Abbreviated</button>
+        <button type="button" data-label-display="full">Full names</button>
+      </div>
+      <span class="label-options-note">Necessary follows the glass flow: Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.</span>
       <label class="roof-overview-toggle"><input type="checkbox" data-roof-overview> Show roof in overview</label>
       <span class="label-options-note">Roof remains available in first person when enabled in the editor.</span>
     `;
     frame.appendChild(labelOptions);
     const updateLabelOptions = () => {
+      const today = isTodayOverview();
+      labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
+        const active = button.dataset.labelDisplay === state.todayLabelMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+        button.disabled = !today;
+      });
       const roofToggle = labelOptions.querySelector("[data-roof-overview]");
       if (roofToggle) roofToggle.checked = Boolean(state.roof.overviewVisible);
-      labelOptionsToggle.classList.toggle("active", isTodayOverview());
+      labelOptionsToggle.classList.toggle("active", today);
     };
     const closeLabelOptions = () => {
       labelOptions.hidden = true;
@@ -4761,6 +4773,26 @@
       labelOptions.hidden = !labelOptions.hidden;
       labelOptionsToggle.setAttribute("aria-expanded", String(!labelOptions.hidden));
       if (!labelOptions.hidden) updateLabelOptions();
+    });
+    labelOptions.querySelectorAll("[data-label-display]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!isTodayOverview()) return;
+        const mode = button.dataset.labelDisplay;
+        if (!["necessary", "abbreviated", "full"].includes(mode)) return;
+        state.todayLabelMode = mode;
+        state.labelTextMode = mode === "necessary" ? "abbreviated" : mode;
+        state.showLabels = true;
+        labelVisualStates.clear();
+        updateLabelOptions();
+        renderPerformance.invalidate?.("today-label-mode");
+        showToast(
+          mode === "necessary"
+            ? "Today shows only the glass-flow labels."
+            : mode === "abbreviated"
+              ? "Today shows abbreviated machine labels."
+              : "Today shows full machine labels."
+        );
+      });
     });
     labelOptions.querySelector("[data-roof-overview]")?.addEventListener("change", (event) => {
       pushHistory();
@@ -9345,10 +9377,10 @@
       drawSelection(rendered);
     });
 
-    if (isTodayOverview()) {
+    if (isTodayOverview() && state.todayLabelMode === "necessary") {
       const activeFlowLabelKeys = drawTodayProductionFlow(machineEntries, time);
       trimLabelVisualStates(activeFlowLabelKeys, time);
-    } else if (!isTodayStage()) {
+    } else if (!isTodayStage() || isTodayOverview()) {
       // Construction stages show only the equipment introduced in that stage
       // using their full labels. Those labels fade away when the stage advances.
       const labelBudget = smartLabelBudget();
@@ -9715,11 +9747,6 @@
   function setStage(index) {
     const previousStage = state.stage;
     state.stage = clamp(Math.round(index), 0, stages.length - 1);
-    if (state.stage === stages.length - 1) {
-      state.todayLabelMode = "necessary";
-      state.labelTextMode = "abbreviated";
-      state.showLabels = true;
-    }
     invalidateWalkSpatialIndex();
     const stage = stages[state.stage];
     const number = document.getElementById("stage-number");
@@ -9739,6 +9766,14 @@
     if (mobileDescription) mobileDescription.textContent = stage.description;
     if (mobilePrevious) mobilePrevious.disabled = state.stage === 0;
     if (mobileNext) mobileNext.disabled = state.stage === stages.length - 1;
+    const todayOverviewStage = state.stage === stages.length - 1;
+    document.querySelectorAll("[data-label-display]").forEach((button) => {
+      const active = button.dataset.labelDisplay === state.todayLabelMode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+      button.disabled = !todayOverviewStage;
+    });
+    document.querySelector(".label-options-button")?.classList.toggle("active", todayOverviewStage);
     if (title) title.textContent = stage.title;
     if (description) {
       description.textContent = stage.description;

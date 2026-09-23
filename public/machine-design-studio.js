@@ -83,7 +83,7 @@
   };
   const COMPONENT_TYPES = [
     "box", "cylinder", "sphere", "cone", "wedge",
-    "glassPanel", "beam", "rollerBed", "wheel", "text", "group",
+    "glassPanel", "beam", "arrow", "rollerBed", "wheel", "text", "group",
   ];
 
   function clone(value) {
@@ -201,13 +201,17 @@
         normalized.text = String(component?.text || component?.name || "LABEL").slice(0, 120);
         normalized.textColor = validColor(component?.textColor, "#ffffff");
       }
-    } else if (type === "beam") {
+    } else if (["beam", "arrow"].includes(type)) {
       normalized.x2 = Number.isFinite(Number(component?.x2)) ? Number(component.x2) : normalized.x + 5;
       normalized.y2 = Number.isFinite(Number(component?.y2)) ? Number(component.y2) : normalized.y;
       normalized.z2 = Number.isFinite(Number(component?.z2)) ? Number(component.z2) : normalized.z;
-      normalized.thickness = Math.max(0.2, Number(component?.thickness) || 2);
-      normalized.thicknessY = Math.max(0.2, Number(component?.thicknessY) || normalized.thickness);
-      normalized.thicknessZ = Math.max(0.2, Number(component?.thicknessZ) || normalized.thickness);
+      normalized.thickness = Math.max(0.05, Number(component?.thickness) || (type === "arrow" ? 0.45 : 2));
+      normalized.thicknessY = Math.max(0.05, Number(component?.thicknessY) || normalized.thickness);
+      normalized.thicknessZ = Math.max(0.05, Number(component?.thicknessZ) || normalized.thickness);
+      if (type === "arrow") {
+        normalized.headLength = Math.max(0.1, Number(component?.headLength) || 1.5);
+        normalized.headWidth = Math.max(0.1, Number(component?.headWidth) || 1.35);
+      }
     } else if (type === "rollerBed") {
       normalized.w = Math.max(0.1, Number(component?.w) || 8);
       normalized.d = Math.max(0.1, Number(component?.d) || 5);
@@ -927,6 +931,7 @@
         wedge: "New wedge",
         glassPanel: "New glass panel",
         beam: "New frame beam",
+        arrow: "New direction arrow",
         rollerBed: "New roller bed",
         wheel: "New wheel",
         text: "New text label",
@@ -963,15 +968,16 @@
       });
       if (["cylinder", "sphere", "cone"].includes(type)) common.segments = 20;
       if (type === "text") Object.assign(common, { text: "MACHINE LABEL", textColor: "#ffffff", color: "#176f69" });
-    } else if (type === "beam") {
+    } else if (["beam", "arrow"].includes(type)) {
       Object.assign(common, {
         x2: (Number(base.x) || 0) + base.w * 0.75,
         y2: Number(base.y) || 0,
         z2: (Number(base.z) || 0) + base.d * 0.25,
-        thickness: 2,
-        thicknessY: 2,
-        thicknessZ: 2,
+        thickness: type === "arrow" ? 0.45 : 2,
+        thicknessY: type === "arrow" ? 0.45 : 2,
+        thicknessZ: type === "arrow" ? 0.45 : 2,
       });
+      if (type === "arrow") Object.assign(common, { headLength: 1.5, headWidth: 1.35, color: "#e38a2c" });
     } else if (type === "rollerBed") {
       Object.assign(common, { w: base.w * 0.5, d: base.d * 0.5, count: 8, thickness: 1.5 });
     } else if (type === "wheel") {
@@ -2694,7 +2700,7 @@
     if (["box", "glassPanel", "cylinder", "sphere", "cone", "wedge", "text"].includes(component.type)) {
       return [component.x + component.w / 2, component.y + component.h / 2, component.z + component.d / 2];
     }
-    if (component.type === "beam") {
+    if (["beam", "arrow"].includes(component.type)) {
       return [(component.x + component.x2) / 2, (component.y + component.y2) / 2, (component.z + component.z2) / 2];
     }
     if (component.type === "rollerBed") return [component.x + component.w / 2, component.y, component.z + component.d / 2];
@@ -3152,6 +3158,42 @@
 
   function buildBeamPrimitives(component, order) {
     return buildPrismPrimitives(component, beamVertices(component), order);
+  }
+
+  function arrowGeometryPoints(component) {
+    const frame = beamSourceFrame(component);
+    const center = componentCenter(component);
+    const rotation = componentRotation(component);
+    const totalLength = pointDistance(frame.start, frame.end);
+    const headLength = Math.min(totalLength * 0.45, Math.max(0.1, Number(component.headLength) || 1.5));
+    const headWidth = Math.max(0.1, Number(component.headWidth) || 1.35);
+    const base = [
+      frame.end[0] - frame.forward[0] * headLength,
+      frame.end[1] - frame.forward[1] * headLength,
+      frame.end[2] - frame.forward[2] * headLength,
+    ];
+    const wing = (sideSign, upSign) => [
+      base[0] + frame.side[0] * headWidth * 0.5 * sideSign + frame.up[0] * headWidth * 0.5 * upSign,
+      base[1] + frame.side[1] * headWidth * 0.5 * sideSign + frame.up[1] * headWidth * 0.5 * upSign,
+      base[2] + frame.side[2] * headWidth * 0.5 * sideSign + frame.up[2] * headWidth * 0.5 * upSign,
+    ];
+    return {
+      start: rotatePoint3(frame.start, center, ...rotation),
+      end: rotatePoint3(frame.end, center, ...rotation),
+      wings: [[1,0],[-1,0],[0,1],[0,-1]].map(([sideSign, upSign]) => rotatePoint3(wing(sideSign, upSign), center, ...rotation)),
+    };
+  }
+
+  function buildArrowPrimitives(component, order) {
+    const geometry = arrowGeometryPoints(component);
+    const width = clamp((Number(component.thickness) || 0.45) * 5, 2, 14);
+    const primitives = [
+      linePrimitive(component, geometry.start, geometry.end, component.color, width, component.opacity, order, 0),
+    ];
+    geometry.wings.forEach((wing, index) => {
+      primitives.push(linePrimitive(component, geometry.end, wing, component.color, Math.max(2, width * .86), component.opacity, order, index + 1));
+    });
+    return primitives;
   }
 
   function cylinderVertices(component, localCenter, radiusX, radiusY, halfLength, segments = 16) {
@@ -3810,6 +3852,7 @@
     else if (component.type === "cone") primitives = buildConePrimitives(component, order);
     else if (component.type === "wedge") primitives = buildWedgePrimitives(component, order);
     else if (component.type === "beam") primitives = buildBeamPrimitives(component, order);
+    else if (component.type === "arrow") primitives = buildArrowPrimitives(component, order);
     else if (component.type === "rollerBed") primitives = buildRollerPrimitives(component, order);
     else if (component.type === "wheel") primitives = buildWheelPrimitives(component, order);
     return primitives.map((primitive) => ({
@@ -4115,6 +4158,7 @@
     if (component.type === "cone") return verticalCylinderVertices(component, component.segments || 20, 0);
     if (component.type === "wedge") return wedgeVertices(component);
     if (component.type === "beam") return beamVertices(component);
+    if (component.type === "arrow") { const geometry = arrowGeometryPoints(component); return [geometry.start, geometry.end, ...geometry.wings]; }
     if (component.type === "rollerBed") {
       const radius = Math.max(0.05, Number(component.thickness) / 2);
       const corners = [
@@ -4196,7 +4240,7 @@
   }
 
   function componentLocalAxes(component) {
-    if (component?.type === "beam") {
+    if (["beam", "arrow"].includes(component?.type)) {
       const rotation = componentRotation(component);
       const frame = beamSourceFrame(component);
       return {
@@ -4536,7 +4580,7 @@
     component.x += dx;
     component.y += dy;
     component.z += dz;
-    if (component.type === "beam") {
+    if (["beam", "arrow"].includes(component.type)) {
       component.x2 += dx;
       component.y2 += dy;
       component.z2 += dz;
@@ -4597,7 +4641,7 @@
       component.x = center[0] - component.w / 2;
       component.z = center[2] - component.d / 2;
       if (uniform || axis === "y") component.thickness = Math.max(0.2, original.thickness * factor);
-    } else if (component.type === "beam") {
+    } else if (["beam", "arrow"].includes(component.type)) {
       const center = componentCenter(original);
       const start = [Number(original.x), Number(original.y), Number(original.z)];
       const end = [Number(original.x2), Number(original.y2), Number(original.z2)];
@@ -4697,7 +4741,7 @@
       children.forEach((child, index) => {
         if (originalChildren[index]) mirrorComponentTree(child, originalChildren[index], pivot, axis);
       });
-    } else if (component.type === "beam") {
+    } else if (["beam", "arrow"].includes(component.type)) {
       const start = mirrorPointAcrossAxis([original.x, original.y, original.z], pivot, axis);
       const end = mirrorPointAcrossAxis([original.x2, original.y2, original.z2], pivot, axis);
       [component.x, component.y, component.z] = start;

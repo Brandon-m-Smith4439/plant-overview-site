@@ -21,6 +21,7 @@ assert(app.includes("state.zoom * (distance / touchGestureDistance)"), "Pinch zo
 assert(app.includes("TOUCH_PAN_MULTIPLIER = 2.15") && app.includes("* TOUCH_PAN_MULTIPLIER"), "Two-finger pan must use the stronger mobile pan multiplier.");
 assert(app.includes('document.getElementById("mobile-next-stage")'), "Mobile stage controls are not wired.");
 assert(page.includes('id="mobile-stage-description"'), "Compact mobile stage description is missing.");
+assert(css.includes(".today-label-mode-options") && css.includes("repeat(3, minmax(0, 1fr))"), "Mobile Today label selector must fit Necessary, Abbreviated, and Full on one row.");
 assert(css.includes("-webkit-line-clamp: unset") && css.includes("font-size: 6.8px"), "Mobile stage descriptions must be allowed to fit completely at phone sizes.");
 assert(app.includes("drawTodayProductionFlow") && app.includes("TODAY_FLOW_LINKS"), "Mobile Today must use the same production-flow overlay as desktop.");
 assert(css.includes(".stage-panel,") && css.includes(".timeline {") && css.includes("display: none !important"), "Desktop stage panel/timeline must be hidden on mobile.");

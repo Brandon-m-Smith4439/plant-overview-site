@@ -4,8 +4,15 @@ import { readFile } from "node:fs/promises";
 const plant = await readFile(new URL("../public/plant-app.js", import.meta.url), "utf8");
 
 assert.ok(plant.includes('todayLabelMode: "necessary"'), "Today must default to the production-flow overlay.");
-assert.ok(!plant.includes('data-label-display="full"') && !plant.includes('data-label-display="abbreviated"'), "Today must not expose normal machine-label modes.");
-assert.ok(plant.includes('state.todayLabelMode = "necessary"') && plant.includes('state.stage === stages.length - 1'), "Entering Today must automatically restore the flow overlay.");
+assert.ok(
+  plant.includes('data-label-display="necessary"') &&
+  plant.includes('data-label-display="abbreviated"') &&
+  plant.includes('data-label-display="full"'),
+  "Today must expose Necessary, Abbreviated, and Full label modes."
+);
+assert.ok(!plant.includes('state.todayLabelMode = "necessary";\n      state.labelTextMode'), "Returning to Today must not erase the viewer's selected Today label mode.");
+assert.ok(plant.includes('if (isTodayOverview() && state.todayLabelMode === "necessary")'), "Necessary mode must use the dedicated production-flow overlay.");
+assert.ok(plant.includes('else if (!isTodayStage() || isTodayOverview())'), "Full and Abbreviated Today modes must use normal machine-label rendering.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
 for (const label of ["Cutting", "Polisher", "Denver CNC", "Waterjet", "Washer", "Tempering Line", "Wrap", "Glass Truck", "Rack"]) {
   assert.ok(plant.includes(`text: "${label}"`), `Production-flow label missing: ${label}`);

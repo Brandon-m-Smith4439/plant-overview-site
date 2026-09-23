@@ -7128,3 +7128,24 @@ body.viewer-fullscreen-fallback-active {
     bottom: 82px;
   }
 }
+
+
+.today-label-mode-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.today-label-mode-options button:disabled {
+  opacity: .42;
+  cursor: default;
+}
+
+@media (max-width: 760px), (max-width: 900px) and (hover: none) and (pointer: coarse) {
+  .today-label-mode-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .today-label-mode-options button {
+    min-height: 40px;
+    padding: 5px 4px;
+    font-size: 8px;
+  }
+}

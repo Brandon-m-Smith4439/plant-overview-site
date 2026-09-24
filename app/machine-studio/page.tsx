@@ -2,6 +2,34 @@
 import LegacyScriptLoader from "../legacy-script-loader";
 import { EditorAccessGate } from "../editor-access-gate";
 
+
+type StudioIconName = "back" | "undo" | "redo" | "box" | "cylinder" | "beam" | "glass" | "text" | "select" | "move" | "rotate" | "scale" | "pan" | "animation" | "restart" | "play" | "pause" | "close";
+
+function StudioIcon({ name }: { name: StudioIconName }) {
+  const common = { className: "studio-vector-icon", viewBox: "0 0 24 24", "aria-hidden": true as const, focusable: false as const };
+  switch (name) {
+    case "back": return <svg {...common}><path d="M14.5 5 7.5 12l7 7"/><path d="M8 12h10"/></svg>;
+    case "undo": return <svg {...common}><path d="M9 7H5v-4"/><path d="M5.5 7.2A8 8 0 1 1 6 17"/></svg>;
+    case "redo": return <svg {...common}><path d="M15 7h4v-4"/><path d="M18.5 7.2A8 8 0 1 0 18 17"/></svg>;
+    case "box": return <svg {...common}><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg>;
+    case "cylinder": return <svg {...common}><ellipse cx="12" cy="5.5" rx="7" ry="3"/><path d="M5 5.5v13c0 1.7 3.1 3 7 3s7-1.3 7-3v-13"/><path d="M5 18.5c0-1.7 3.1-3 7-3s7 1.3 7 3"/></svg>;
+    case "beam": return <svg {...common}><path d="M5 18 17.5 5.5 20 8 7.5 20.5 5 18Z"/><path d="m8.5 14 2 2m2.5-6.5 2 2"/></svg>;
+    case "glass": return <svg {...common}><path d="M5 4h14v16H5z"/><path d="m8 16 8-8M8 10l2-2m4 8 2-2"/></svg>;
+    case "text": return <svg {...common}><path d="M5 5h14M12 5v14M8.5 19h7"/></svg>;
+    case "select": return <svg {...common}><path d="M5 3 18 12l-6 1.5L9.5 20 5 3Z"/><path d="m12 13 4 5"/></svg>;
+    case "move": return <svg {...common}><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3m-6 12 3 3 3-3m3-9 3 3-3 3M6 9l-3 3 3 3"/></svg>;
+    case "rotate": return <svg {...common}><path d="M19 8V4l-3 2.2A8 8 0 1 0 20 13"/><path d="M19 4h-4"/></svg>;
+    case "scale": return <svg {...common}><path d="M9 4H4v5M15 4h5v5M9 20H4v-5m11 5h5v-5"/><path d="M8 8 4 4m12 4 4-4M8 16l-4 4m12-4 4 4"/></svg>;
+    case "pan": return <svg {...common}><path d="M8 11V7.5a1.5 1.5 0 0 1 3 0V11M11 10V6.5a1.5 1.5 0 0 1 3 0V11m0-2.5a1.5 1.5 0 0 1 3 0V12m0-1.5a1.5 1.5 0 0 1 3 0v3.2c0 4.7-2.6 7.3-7 7.3h-.7c-2.4 0-4.2-1.1-5.5-3L4 14.4a1.6 1.6 0 0 1 2.4-2.1L8 14"/></svg>;
+    case "animation": return <svg {...common}><path d="m12 3 5 5-5 5-5-5 5-5Z"/><path d="M7 17h10M9 21h6"/></svg>;
+    case "restart": return <svg {...common}><path d="M7 7H3V3"/><path d="M4 7a9 9 0 1 1-1 8"/></svg>;
+    case "play": return <svg {...common}><path d="m8 5 11 7-11 7V5Z"/></svg>;
+    case "pause": return <svg {...common}><path d="M8 5v14M16 5v14"/></svg>;
+    case "close": return <svg {...common}><path d="m6 6 12 12M18 6 6 18"/></svg>;
+  }
+}
+
+
 export const metadata = {
   title: "Machine Design Studio Â· Monroe Glass Plant Evolution",
   robots: { index: false, follow: false, noarchive: true },
@@ -18,14 +46,14 @@ export default function MachineStudio() {
 <main className="machine-studio-shell">
 <header className="studio-topbar">
 <div className="studio-brand">
-<a className="studio-back-link" href="/" aria-label="Return to plant layout">â†</a>
+<a className="studio-back-link" href="/" aria-label="Return to plant layout"><StudioIcon name="back" /></a>
 <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-<span className="studio-version-badge">v0.13.12</span>
+<span className="studio-version-badge">v0.13.13</span>
 </div>
 <div className="studio-top-actions" role="toolbar" aria-label="Design commands">
 <span id="save-state" className="studio-save-state">Auto-saved</span>
-<button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">â†¶</button>
-<button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">â†·</button>
+<button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo"><StudioIcon name="undo" /></button>
+<button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo"><StudioIcon name="redo" /></button>
 <span className="studio-toolbar-divider"></span>
 <button id="save-design" type="button" title="Save machine (Ctrl+S)">Save</button>
 <button id="save-design-as" type="button" title="Save as a new reusable machine (Ctrl+Shift+S)">Save as...</button>
@@ -90,11 +118,11 @@ export default function MachineStudio() {
 <p className="studio-help">Choose a shape, add it to the current machine, then use the Transform tab on the right to place and size it.</p>
 <section className="component-add-panel expanded-add-panel">
 <div className="shape-quick-grid" aria-label="Common shapes">
-<button type="button" data-add-component="box"><span>â–£</span>Box</button>
-<button type="button" data-add-component="cylinder"><span>â—</span>Cylinder</button>
-<button type="button" data-add-component="beam"><span>â•±</span>Beam</button>
-<button type="button" data-add-component="glassPanel"><span>â—‡</span>Glass</button>
-<button type="button" data-add-component="text"><span>T</span>Text</button>
+<button type="button" data-add-component="box"><span><StudioIcon name="box" /></span>Box</button>
+<button type="button" data-add-component="cylinder"><span><StudioIcon name="cylinder" /></span>Cylinder</button>
+<button type="button" data-add-component="beam"><span><StudioIcon name="beam" /></span>Beam</button>
+<button type="button" data-add-component="glassPanel"><span><StudioIcon name="glass" /></span>Glass</button>
+<button type="button" data-add-component="text"><span><StudioIcon name="text" /></span>Text</button>
 </div>
 <div className="shape-picker-row vertical-shape-picker">
 <label className="studio-field">Additional shape
@@ -195,19 +223,19 @@ export default function MachineStudio() {
 </div>
 </div>
 <div className="viewport-toolrail" role="toolbar" aria-label="Transform tools">
-<button type="button" data-design-mode="select" className="active" title="Select (V)"><span>â†–</span><small>Select</small></button>
-<button type="button" data-design-mode="move" title="Move (M)"><span>âœ£</span><small>Move</small></button>
-<button type="button" data-design-mode="rotate" title="Rotate (R)"><span>âŸ³</span><small>Rotate</small></button>
-<button type="button" data-design-mode="scale" title="Scale (S)"><span>â¤¢</span><small>Scale</small></button>
-<button type="button" data-design-mode="pan" title="Pan view (H)"><span>âœ‹</span><small>Pan</small></button>
-<button id="toggle-animation-timeline" type="button" className="animation-tool-button" title="Animation timeline (A)" aria-pressed="false"><span>â—†</span><small>Animation</small></button>
+<button type="button" data-design-mode="select" className="active" title="Select (V)"><span><StudioIcon name="select" /></span><small>Select</small></button>
+<button type="button" data-design-mode="move" title="Move (M)"><span><StudioIcon name="move" /></span><small>Move</small></button>
+<button type="button" data-design-mode="rotate" title="Rotate (R)"><span><StudioIcon name="rotate" /></span><small>Rotate</small></button>
+<button type="button" data-design-mode="scale" title="Scale (S)"><span><StudioIcon name="scale" /></span><small>Scale</small></button>
+<button type="button" data-design-mode="pan" title="Pan view (H)"><span><StudioIcon name="pan" /></span><small>Pan</small></button>
+<button id="toggle-animation-timeline" type="button" className="animation-tool-button" title="Animation timeline (A)" aria-pressed="false"><span><StudioIcon name="animation" /></span><small>Animation</small></button>
 </div>
 <canvas id="machine-design-canvas" aria-label="Interactive 3D preview of the selected machine design"></canvas>
 <section id="animation-timeline-workspace" className="animation-timeline-workspace animation-timeline-card" hidden aria-label="Part animation timeline">
 <header className="timeline-workspace-header">
 <div className="timeline-workspace-title"><strong>Animation timeline</strong><span id="timeline-summary">0 clips</span></div>
 <label className="timeline-target-control">Target<select id="timeline-target-picker" aria-label="Animation target"></select></label>
-<div className="timeline-play-actions"><button id="timeline-restart" type="button" title="Restart from 0 seconds">â†º Restart</button><button id="timeline-play" type="button" className="primary" title="Play animation preview">â–¶ Play</button><button id="timeline-pause" type="button" title="Pause animation preview">â…¡ Pause</button><button id="close-animation-timeline" type="button" title="Close timeline">Ã—</button></div>
+<div className="timeline-play-actions"><button id="timeline-restart" type="button" title="Restart from 0 seconds"><StudioIcon name="restart" />Restart</button><button id="timeline-play" type="button" className="primary" title="Play animation preview"><StudioIcon name="play" />Play</button><button id="timeline-pause" type="button" title="Pause animation preview"><StudioIcon name="pause" />Pause</button><button id="close-animation-timeline" type="button" title="Close timeline" aria-label="Close animation timeline"><StudioIcon name="close" /></button></div>
 </header>
 <div className="timeline-workspace-body">
 <div className="timeline-workspace-main">

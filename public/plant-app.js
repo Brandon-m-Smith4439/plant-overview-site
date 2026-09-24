@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.14";
+  const APP_VERSION = "0.13.15";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -263,6 +263,40 @@
     thickness: 3,
     extendToRoof: true,
   });
+  const FLOW_POINTER_DEFINITIONS = Object.freeze([
+    { key: "cutting>polisher", from: "cutting", to: "polisher", label: "Cutting → Polisher" },
+    { key: "polisher>denver-cnc", from: "polisher", to: "denver-cnc", label: "Polisher → Denver CNC" },
+    { key: "polisher>waterjet", from: "polisher", to: "waterjet", label: "Polisher → Waterjet" },
+    { key: "denver-cnc>washer", from: "denver-cnc", to: "washer", label: "Denver CNC → Washer" },
+    { key: "waterjet>washer", from: "waterjet", to: "washer", label: "Waterjet → Washer" },
+    { key: "washer>tempering", from: "washer", to: "tempering", label: "Washer → Tempering Line" },
+    { key: "tempering>wrap", from: "tempering", to: "wrap", label: "Tempering Line → Wrap" },
+    { key: "wrap>glass-truck", from: "wrap", to: "glass-truck", label: "Wrap → Glass Truck" },
+    { key: "wrap>rack", from: "wrap", to: "rack", label: "Wrap → Rack" },
+  ]);
+  const defaultFlowPointerSettings = Object.freeze({
+    visible: true,
+    offsetX: 0,
+    offsetY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+    endOffsetX: 0,
+    endOffsetY: 0,
+    bendOffsetX: 0,
+    bendOffsetY: 0,
+    startInset: 10,
+    endInset: 16,
+    lineColor: "#67c9bc",
+    outlineColor: "#071212",
+    lineWidth: 2.1,
+    outlineWidth: 2.4,
+    opacity: 92,
+    lineStyle: "solid",
+    lineShape: "straight",
+    elbowDirection: "horizontalFirst",
+    headStyle: "arrow",
+    headSize: 7.5,
+  });
   const defaultDesignLibrary = window.PLANT_MACHINE_DESIGNS || {};
 
   function normalizePaintSettings(value) {
@@ -297,6 +331,45 @@
       thickness: clamp(Number(value?.thickness) || defaultWallGeometry.thickness, .25, 20),
       extendToRoof: value?.extendToRoof !== false,
     };
+  }
+
+  function normalizeFlowPointer(value = {}) {
+    const color = (candidate, fallback) => /^#[0-9a-f]{6}$/i.test(String(candidate || "")) ? String(candidate) : fallback;
+    const number = (field, fallback, minimum, maximum) => clamp(
+      Number.isFinite(Number(value?.[field])) ? Number(value[field]) : fallback,
+      minimum,
+      maximum,
+    );
+    return {
+      visible: value?.visible !== false,
+      offsetX: number("offsetX", defaultFlowPointerSettings.offsetX, -1200, 1200),
+      offsetY: number("offsetY", defaultFlowPointerSettings.offsetY, -1200, 1200),
+      startOffsetX: number("startOffsetX", defaultFlowPointerSettings.startOffsetX, -1200, 1200),
+      startOffsetY: number("startOffsetY", defaultFlowPointerSettings.startOffsetY, -1200, 1200),
+      endOffsetX: number("endOffsetX", defaultFlowPointerSettings.endOffsetX, -1200, 1200),
+      endOffsetY: number("endOffsetY", defaultFlowPointerSettings.endOffsetY, -1200, 1200),
+      bendOffsetX: number("bendOffsetX", defaultFlowPointerSettings.bendOffsetX, -1200, 1200),
+      bendOffsetY: number("bendOffsetY", defaultFlowPointerSettings.bendOffsetY, -1200, 1200),
+      startInset: number("startInset", defaultFlowPointerSettings.startInset, 0, 100),
+      endInset: number("endInset", defaultFlowPointerSettings.endInset, 0, 100),
+      lineColor: color(value?.lineColor, defaultFlowPointerSettings.lineColor),
+      outlineColor: color(value?.outlineColor, defaultFlowPointerSettings.outlineColor),
+      lineWidth: number("lineWidth", defaultFlowPointerSettings.lineWidth, .5, 12),
+      outlineWidth: number("outlineWidth", defaultFlowPointerSettings.outlineWidth, 0, 12),
+      opacity: number("opacity", defaultFlowPointerSettings.opacity, 10, 100),
+      lineStyle: ["solid", "dashed", "dotted"].includes(value?.lineStyle) ? value.lineStyle : defaultFlowPointerSettings.lineStyle,
+      lineShape: ["straight", "elbow", "curve"].includes(value?.lineShape) ? value.lineShape : defaultFlowPointerSettings.lineShape,
+      elbowDirection: ["horizontalFirst", "verticalFirst"].includes(value?.elbowDirection) ? value.elbowDirection : defaultFlowPointerSettings.elbowDirection,
+      headStyle: ["arrow", "dot", "ring", "none"].includes(value?.headStyle) ? value.headStyle : defaultFlowPointerSettings.headStyle,
+      headSize: number("headSize", defaultFlowPointerSettings.headSize, 2, 24),
+    };
+  }
+
+  function normalizeFlowPointers(value) {
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    return Object.fromEntries(FLOW_POINTER_DEFINITIONS.map((definition) => (
+      [definition.key, normalizeFlowPointer(source[definition.key])]
+    )));
   }
 
   function normalizeFloor(value) {
@@ -1067,6 +1140,7 @@
           wallGeometry: normalizeWallGeometry(current.wallGeometry),
           paint: normalizePaintSettings(current.paint),
           roof: normalizeRoofSettings(current.roof),
+          flowPointers: normalizeFlowPointers(current.flowPointers),
           playbackSpeed: Number(current.playbackSpeed) || 1,
           stageDurationSeconds: normalizeStageDuration(current.stageDurationSeconds),
         };
@@ -1089,6 +1163,7 @@
           wallGeometry: normalizeWallGeometry(legacy.wallGeometry),
           paint: normalizePaintSettings(legacy.paint),
           roof: normalizeRoofSettings(legacy.roof),
+          flowPointers: normalizeFlowPointers(legacy.flowPointers),
           playbackSpeed: Number(legacy.playbackSpeed) || 1,
           stageDurationSeconds: normalizeStageDuration(legacy.stageDurationSeconds),
         };
@@ -1107,6 +1182,7 @@
           wallGeometry: normalizeWallGeometry(older.wallGeometry),
           paint: normalizePaintSettings(older.paint),
           roof: normalizeRoofSettings(older.roof),
+          flowPointers: normalizeFlowPointers(older.flowPointers),
           playbackSpeed: Number(older.playbackSpeed) || 1,
           stageDurationSeconds: normalizeStageDuration(older.stageDurationSeconds),
         };
@@ -1125,6 +1201,7 @@
           wallGeometry: normalizeWallGeometry(oldest.wallGeometry),
           paint: normalizePaintSettings(oldest.paint),
           roof: normalizeRoofSettings(oldest.roof),
+          flowPointers: normalizeFlowPointers(oldest.flowPointers),
           playbackSpeed: 1,
           stageDurationSeconds: 5,
         };
@@ -1144,6 +1221,7 @@
       wallGeometry: normalizeWallGeometry(defaultWallGeometry),
       paint: normalizePaintSettings(defaultPaintSettings),
       roof: normalizeRoofSettings(defaultRoofSettings),
+      flowPointers: normalizeFlowPointers(),
       playbackSpeed: 1,
       stageDurationSeconds: 5,
     };
@@ -1214,6 +1292,7 @@
     labelMode: "smart",
     labelTextMode: "abbreviated",
     todayLabelMode: "necessary",
+    selectedFlowPointerKey: FLOW_POINTER_DEFINITIONS[0]?.key || "",
     playing: false,
     playAt: 0,
     editing: false,
@@ -1238,6 +1317,7 @@
     wallGeometry: normalizeWallGeometry(savedLayout.wallGeometry),
     paint: normalizePaintSettings(savedLayout.paint),
     roof: normalizeRoofSettings(savedLayout.roof),
+    flowPointers: normalizeFlowPointers(savedLayout.flowPointers),
     previewObjectAnimations: false,
     animationsPaused: false,
     animationPausedAt: 0,
@@ -1382,6 +1462,7 @@
       wallGeometry: clone(state.wallGeometry),
       paint: clone(state.paint),
       roof: clone(state.roof),
+      flowPointers: clone(state.flowPointers),
       playbackSpeed: state.playbackSpeed,
       stageDurationSeconds: state.stageDurationSeconds,
     };
@@ -1408,6 +1489,7 @@
     state.wallGeometry = normalizeWallGeometry(snapshot.wallGeometry);
     state.paint = normalizePaintSettings(snapshot.paint);
     state.roof = normalizeRoofSettings(snapshot.roof);
+    state.flowPointers = normalizeFlowPointers(snapshot.flowPointers);
     state.playbackSpeed = Number(snapshot.playbackSpeed) || 1;
     state.stageDurationSeconds = normalizeStageDuration(snapshot.stageDurationSeconds);
     state.stage = clamp(state.stage, 0, stages.length - 1);
@@ -1463,6 +1545,7 @@
         wallGeometry: state.wallGeometry,
         paint: state.paint,
         roof: state.roof,
+        flowPointers: state.flowPointers,
         playbackSpeed: state.playbackSpeed,
         stageDurationSeconds: state.stageDurationSeconds,
       }));

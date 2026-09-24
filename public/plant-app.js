@@ -3216,6 +3216,7 @@
     });
     updateEditorHelp();
     updateHistoryButtons();
+    scheduleLayoutEditorViewportSync();
   }
 
   // Dragging can deliver hundreds of pointer events per second. Updating the
@@ -3537,9 +3538,10 @@
     const safeBottom = viewportTop + viewportHeight - 10;
     const visibleTop = Math.max(frameRect.top, safeTop);
     const visibleBottom = Math.min(frameRect.bottom, safeBottom);
-    const available = Math.max(240, visibleBottom - visibleTop);
-    const topInsideFrame = clamp(visibleTop - frameRect.top, 0, Math.max(0, frameRect.height - 240));
-    const height = Math.max(240, Math.min(available, frameRect.height - topInsideFrame));
+    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+    const minimumHeight = Math.min(220, Math.max(120, visibleHeight));
+    const topInsideFrame = clamp(visibleTop - frameRect.top, 0, Math.max(0, frameRect.height - minimumHeight));
+    const height = Math.max(minimumHeight, Math.min(visibleHeight || minimumHeight, frameRect.height - topInsideFrame));
     panel.style.top = `${topInsideFrame}px`;
     panel.style.bottom = "auto";
     panel.style.height = `${height}px`;
@@ -4112,6 +4114,7 @@
         else state.selectedColumnKey = null;
         if (state.editorTool === "flow") {
           state.selectedColumnKey = null;
+          state.editorInteraction = "select";
           state.todayLabelMode = "necessary";
           state.labelMode = state.labelMode === "off" ? "smart" : state.labelMode;
           state.showLabels = true;
@@ -6565,11 +6568,11 @@
       tangentY = ey - by;
     } else if (settings.lineShape === "elbow") {
       if (settings.elbowDirection === "verticalFirst") {
-        tangentX = ex - sx;
-        tangentY = 0;
-      } else {
         tangentX = 0;
-        tangentY = ey - sy;
+        tangentY = ey - by;
+      } else {
+        tangentX = ex - bx;
+        tangentY = 0;
       }
     }
     const tangentLength = Math.max(.001, Math.hypot(tangentX, tangentY));

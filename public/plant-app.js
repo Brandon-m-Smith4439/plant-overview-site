@@ -3514,6 +3514,43 @@
     }
   }
 
+  let layoutEditorViewportFrame = 0;
+
+  function syncLayoutEditorViewport() {
+    layoutEditorViewportFrame = 0;
+    const frame = canvas.closest(".model-frame");
+    const panel = frame?.querySelector(".layout-editor");
+    if (!frame || !panel) return;
+    const compactDock = window.matchMedia?.("(max-width: 760px)")?.matches;
+    if (!state.editing || viewerFullscreenActive(frame) || compactDock) {
+      panel.style.removeProperty("top");
+      panel.style.removeProperty("bottom");
+      panel.style.removeProperty("height");
+      panel.style.removeProperty("max-height");
+      return;
+    }
+    const frameRect = frame.getBoundingClientRect();
+    const visualViewport = window.visualViewport;
+    const viewportTop = Number(visualViewport?.offsetTop) || 0;
+    const viewportHeight = Number(visualViewport?.height) || window.innerHeight || document.documentElement.clientHeight;
+    const safeTop = viewportTop + 10;
+    const safeBottom = viewportTop + viewportHeight - 10;
+    const visibleTop = Math.max(frameRect.top, safeTop);
+    const visibleBottom = Math.min(frameRect.bottom, safeBottom);
+    const available = Math.max(240, visibleBottom - visibleTop);
+    const topInsideFrame = clamp(visibleTop - frameRect.top, 0, Math.max(0, frameRect.height - 240));
+    const height = Math.max(240, Math.min(available, frameRect.height - topInsideFrame));
+    panel.style.top = `${topInsideFrame}px`;
+    panel.style.bottom = "auto";
+    panel.style.height = `${height}px`;
+    panel.style.maxHeight = `${height}px`;
+  }
+
+  function scheduleLayoutEditorViewportSync() {
+    if (layoutEditorViewportFrame) return;
+    layoutEditorViewportFrame = requestAnimationFrame(syncLayoutEditorViewport);
+  }
+
   function setEditing(enabled) {
     if (enabled && window.monroeEditorAccess?.editingAllowed?.() === false) {
       showToast("Editing is locked. Open the private owner workspace first.");
@@ -3548,7 +3585,10 @@
       setStage(stages.length - 1);
       state.stageFloat = stages.length - 1;
     }
-    requestAnimationFrame(() => updateCanvasSize(true));
+    requestAnimationFrame(() => {
+      updateCanvasSize(true);
+      syncLayoutEditorViewport();
+    });
     updateEditorHelp();
     updateEditorPanel();
   }
@@ -5555,6 +5595,7 @@
     const handleFullscreenChange = () => {
       updateFullscreenControl(frame);
       canvasSizeDirty = true;
+      scheduleLayoutEditorViewportSync();
       renderPerformance.invalidate?.("fullscreen-change");
       if (state.cameraMode === "walk" && walkStartedFullscreen && !viewerFullscreenActive(frame)) setFirstPersonMenu(true);
     };
@@ -5562,12 +5603,15 @@
     addLifecycleListener(document, "webkitfullscreenchange", handleFullscreenChange);
     const handleViewportGeometryChange = () => {
       canvasSizeDirty = true;
+      scheduleLayoutEditorViewportSync();
       renderPerformance.invalidate?.("viewport-geometry-change");
       updateFullscreenControl(frame);
     };
     addLifecycleListener(window, "resize", handleViewportGeometryChange);
     addLifecycleListener(window, "orientationchange", () => window.setTimeout(handleViewportGeometryChange, 80));
     addLifecycleListener(window.visualViewport, "resize", handleViewportGeometryChange);
+    addLifecycleListener(window.visualViewport, "scroll", scheduleLayoutEditorViewportSync);
+    addLifecycleListener(window, "scroll", scheduleLayoutEditorViewportSync);
     addLifecycleListener(window.screen?.orientation, "change", handleViewportGeometryChange);
     updateFullscreenControl(frame);
     play.addEventListener("click", () => {
@@ -10432,6 +10476,26 @@
 
     if (state.editing) {
       if (state.editorTool === "timeline") return;
+      if (state.editorTool === "flow") {
+        const navigating = state.editorInteraction === "navigate" || wantsPan || wantsOrbit;
+        if (!navigating) {
+          const handle = flowPointerHandleAt(event);
+          if (handle) {
+            state.dragAction = `flow-pointer-${handle}`;
+            state.dragSnapshot = snapshotLayout();
+            state.dragMoved = false;
+            state.dragging = true;
+            renderPerformance.noteInteraction(260);
+            canvas.setPointerCapture(event.pointerId);
+            return;
+          }
+        }
+        state.dragAction = navigating ? (wantsPan ? "pan" : "orbit") : "pan";
+        state.dragging = true;
+        renderPerformance.noteInteraction(260);
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
       if (selectableHit && additiveSelection) {
         toggleMachineSelection(selectableHit.instanceId);
         updateEditorPanel();
@@ -10527,7 +10591,33 @@
     renderPerformance.noteInteraction(140);
     const deltaX = event.clientX-state.pointerX;
     const deltaY = event.clientY-state.pointerY;
-    if (state.dragAction === "column") {
+    if (state.dragAction.startsWith("flow-pointer-")) {
+      const settings = activeFlowPointerSettings();
+      if (settings) {
+        const handle = state.dragAction.slice("flow-pointer-".length);
+        const next = { ...settings };
+        if (handle === "body") {
+          next.offsetX = clamp(settings.offsetX + deltaX, -1200, 1200);
+          next.offsetY = clamp(settings.offsetY + deltaY, -1200, 1200);
+        } else if (handle === "start") {
+          next.startOffsetX = clamp(settings.startOffsetX + deltaX, -1200, 1200);
+          next.startOffsetY = clamp(settings.startOffsetY + deltaY, -1200, 1200);
+        } else if (handle === "end") {
+          next.endOffsetX = clamp(settings.endOffsetX + deltaX, -1200, 1200);
+          next.endOffsetY = clamp(settings.endOffsetY + deltaY, -1200, 1200);
+        } else if (handle === "bend") {
+          next.bendOffsetX = clamp(settings.bendOffsetX + deltaX, -1200, 1200);
+          next.bendOffsetY = clamp(settings.bendOffsetY + deltaY, -1200, 1200);
+        }
+        const definition = activeFlowPointerDefinition();
+        if (definition) {
+          state.flowPointers[definition.key] = normalizeFlowPointer(next);
+          state.dragMoved = state.dragMoved || deltaX !== 0 || deltaY !== 0;
+          updateFlowPointerEditorFields();
+          renderPerformance.invalidate?.("flow-pointer-drag");
+        }
+      }
+    } else if (state.dragAction === "column") {
       const column = structuralColumns().find((item) => item.key === state.draggedColumnKey);
       if (column) {
         const [worldX, worldZ] = worldFromScreen(event);
@@ -10584,7 +10674,8 @@
       touchGestureCenter = null;
       touchGestureDistance = 0;
     }
-    if ((state.draggedMachineId || state.draggedColumnKey) && state.dragMoved && state.dragSnapshot) {
+    const flowPointerDrag = String(state.dragAction || "").startsWith("flow-pointer-");
+    if ((state.draggedMachineId || state.draggedColumnKey || flowPointerDrag) && state.dragMoved && state.dragSnapshot) {
       pushHistory(state.dragSnapshot);
       persistLayout();
       updateEditorPanel();
@@ -10702,7 +10793,10 @@
       })
     : null;
   canvasResizeObserver?.observe(canvas);
-  addLifecycleListener(window, "resize", () => updateCanvasSize(true));
+  addLifecycleListener(window, "resize", () => {
+    updateCanvasSize(true);
+    scheduleLayoutEditorViewportSync();
+  });
   addLifecycleListener(window, "renderperformancechange", (event) => {
     canvasSizeDirty = true;
     if (!event.detail?.adaptive) updateCanvasSize(true);

@@ -1417,6 +1417,11 @@
           changed = syncMachineDimensionsToDesign(machine, designLibrary[nextDesignId]) || changed;
         } else refreshMachineScaleMetadata(machine);
       });
+      const externalFlowPointers = normalizeFlowPointers(external.flowPointers);
+      if (JSON.stringify(externalFlowPointers) !== JSON.stringify(state.flowPointers)) {
+        state.flowPointers = externalFlowPointers;
+        changed = true;
+      }
       if (changed) {
         invalidateWalkSpatialIndex();
         updateEditorPanel();
@@ -6165,17 +6170,18 @@
     return null;
   }
 
-  const TODAY_FLOW_LINKS = [
-    ["cutting", "polisher"],
-    ["polisher", "denver-cnc"],
-    ["polisher", "waterjet"],
-    ["denver-cnc", "washer"],
-    ["waterjet", "washer"],
-    ["washer", "tempering"],
-    ["tempering", "wrap"],
-    ["wrap", "glass-truck"],
-    ["wrap", "rack"],
-  ];
+  const TODAY_FLOW_LINKS = FLOW_POINTER_DEFINITIONS.map(({ from, to }) => [from, to]);
+  const flowPointerHandleCache = new Map();
+
+  function flowPointerKey(fromKey, toKey) {
+    return `${fromKey}>${toKey}`;
+  }
+
+  function flowPointerSettings(fromKey, toKey) {
+    const key = flowPointerKey(fromKey, toKey);
+    if (!state.flowPointers[key]) state.flowPointers[key] = normalizeFlowPointer();
+    return state.flowPointers[key];
+  }
 
   function flowEntryWorldAnchor(entry) {
     const rendered = entry?.rendered;
@@ -6254,64 +6260,204 @@
     return nodes;
   }
 
-  function drawTodayFlowArrow(fromEntry, toEntry) {
+  function flowPointerDash(style, width, pixelScale) {
+    const scale = Math.max(1, width * pixelScale);
+    if (style === "dashed") return [Math.max(5, scale * 3.5), Math.max(4, scale * 2.2)];
+    if (style === "dotted") return [Math.max(1, scale * .75), Math.max(4, scale * 2)];
+    return [];
+  }
+
+  function traceFlowPointerPath(sx, sy, ex, ey, bx, by, settings) {
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    if (settings.lineShape === "curve") {
+      ctx.quadraticCurveTo(bx, by, ex, ey);
+    } else if (settings.lineShape === "elbow") {
+      if (settings.elbowDirection === "verticalFirst") {
+        ctx.lineTo(sx, by);
+        ctx.lineTo(ex, by);
+      } else {
+        ctx.lineTo(bx, sy);
+        ctx.lineTo(bx, ey);
+      }
+      ctx.lineTo(ex, ey);
+    } else {
+      ctx.lineTo(ex, ey);
+    }
+  }
+
+  function drawFlowPointerHandle(point, labelText, color, pixelScale) {
+    const radius = Math.max(5, 5.5 * pixelScale);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(point[0], point[1], radius + 2 * pixelScale, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(8,24,23,.84)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(point[0], point[1], radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(1, 1.3 * pixelScale);
+    ctx.stroke();
+    ctx.font = `${Math.max(8, 8 * pixelScale)}px "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(labelText, point[0], point[1] + .25 * pixelScale);
+    ctx.restore();
+  }
+
+  function drawTodayFlowArrow(fromEntry, toEntry, fromKey, toKey) {
+    const settings = flowPointerSettings(fromKey, toKey);
+    const pointerKey = flowPointerKey(fromKey, toKey);
+    if (!settings.visible) {
+      flowPointerHandleCache.delete(pointerKey);
+      return;
+    }
     const startWorld = flowEntryWorldAnchor(fromEntry);
     const endWorld = flowEntryWorldAnchor(toEntry);
     if (!startWorld || !endWorld) return;
-    const start = project(...startWorld);
-    const end = project(...endWorld);
+    const baseStart = project(...startWorld);
+    const baseEnd = project(...endWorld);
+    const rect = canvas.getBoundingClientRect();
+    const pixelScale = canvas.width / Math.max(1, rect.width);
+    const cssScale = pixelScale;
+    const start = [
+      baseStart[0] + (settings.offsetX + settings.startOffsetX) * cssScale,
+      baseStart[1] + (settings.offsetY + settings.startOffsetY) * cssScale,
+    ];
+    const end = [
+      baseEnd[0] + (settings.offsetX + settings.endOffsetX) * cssScale,
+      baseEnd[1] + (settings.offsetY + settings.endOffsetY) * cssScale,
+    ];
     const dx = end[0] - start[0];
     const dy = end[1] - start[1];
     const length = Math.hypot(dx, dy);
     if (!Number.isFinite(length) || length < 8) return;
-    const rect = canvas.getBoundingClientRect();
-    const pixelScale = canvas.width / Math.max(1, rect.width);
     const ux = dx / length;
     const uy = dy / length;
-    const startInset = Math.min(length * .12, 10 * pixelScale);
-    const endInset = Math.min(length * .18, 16 * pixelScale);
+    const startInset = Math.min(length * .42, Math.max(0, settings.startInset) * pixelScale);
+    const endInset = Math.min(length * .42, Math.max(0, settings.endInset) * pixelScale);
     const sx = start[0] + ux * startInset;
     const sy = start[1] + uy * startInset;
     const ex = end[0] - ux * endInset;
     const ey = end[1] - uy * endInset;
-    const arrowSize = Math.max(6, 7.5 * pixelScale);
-    const normalX = -uy;
-    const normalY = ux;
+    const bx = (sx + ex) / 2 + settings.bendOffsetX * cssScale;
+    const by = (sy + ey) / 2 + settings.bendOffsetY * cssScale;
+
+    const lineWidth = Math.max(.5, settings.lineWidth) * pixelScale;
+    const outlineWidth = Math.max(0, settings.outlineWidth) * pixelScale;
+    const opacity = clamp(settings.opacity, 10, 100) / 100;
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.globalAlpha = .92;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "rgba(7,18,18,.82)";
-    ctx.lineWidth = Math.max(4, 4.6 * pixelScale);
+    ctx.globalAlpha = opacity;
+    ctx.setLineDash(flowPointerDash(settings.lineStyle, settings.lineWidth, pixelScale));
+    if (outlineWidth > 0) {
+      traceFlowPointerPath(sx, sy, ex, ey, bx, by, settings);
+      ctx.strokeStyle = settings.outlineColor;
+      ctx.lineWidth = lineWidth + outlineWidth * 2;
+      ctx.stroke();
+    }
+    traceFlowPointerPath(sx, sy, ex, ey, bx, by, settings);
+    ctx.strokeStyle = settings.lineColor;
+    ctx.lineWidth = lineWidth;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "#67c9bc";
-    ctx.lineWidth = Math.max(1.5, 2.1 * pixelScale);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
-    ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
-    ctx.closePath();
-    ctx.fillStyle = "#67c9bc";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(7,18,18,.9)";
-    ctx.lineWidth = Math.max(1, 1.2 * pixelScale);
-    ctx.stroke();
+    ctx.setLineDash([]);
+
+    let tangentX = ex - sx;
+    let tangentY = ey - sy;
+    if (settings.lineShape === "curve") {
+      tangentX = ex - bx;
+      tangentY = ey - by;
+    } else if (settings.lineShape === "elbow") {
+      if (settings.elbowDirection === "verticalFirst") {
+        tangentX = ex - sx;
+        tangentY = 0;
+      } else {
+        tangentX = 0;
+        tangentY = ey - sy;
+      }
+    }
+    const tangentLength = Math.max(.001, Math.hypot(tangentX, tangentY));
+    const headUx = tangentX / tangentLength;
+    const headUy = tangentY / tangentLength;
+    const normalX = -headUy;
+    const normalY = headUx;
+    const headSize = Math.max(2, settings.headSize) * pixelScale;
+
+    if (settings.headStyle === "arrow") {
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - headUx * headSize + normalX * headSize * .5, ey - headUy * headSize + normalY * headSize * .5);
+      ctx.lineTo(ex - headUx * headSize - normalX * headSize * .5, ey - headUy * headSize - normalY * headSize * .5);
+      ctx.closePath();
+      ctx.fillStyle = settings.lineColor;
+      ctx.fill();
+      if (outlineWidth > 0) {
+        ctx.strokeStyle = settings.outlineColor;
+        ctx.lineWidth = Math.max(1, outlineWidth * .65);
+        ctx.stroke();
+      }
+    } else if (settings.headStyle === "dot") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, headSize * .58, 0, Math.PI * 2);
+      ctx.fillStyle = settings.lineColor;
+      ctx.fill();
+    } else if (settings.headStyle === "ring") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, headSize * .62, 0, Math.PI * 2);
+      ctx.strokeStyle = settings.lineColor;
+      ctx.lineWidth = Math.max(1.5 * pixelScale, lineWidth);
+      ctx.stroke();
+    }
     ctx.restore();
+
+    if (state.editing && state.editorTool === "flow" && state.selectedFlowPointerKey === pointerKey) {
+      const midpoint = [(sx + ex) / 2, (sy + ey) / 2];
+      const bendPoint = [bx, by];
+      flowPointerHandleCache.set(pointerKey, {
+        pixelScale,
+        start: [sx, sy],
+        end: [ex, ey],
+        body: midpoint,
+        bend: bendPoint,
+        showBend: settings.lineShape !== "straight",
+      });
+      drawFlowPointerHandle([sx, sy], "S", "#2b7bb9", pixelScale);
+      drawFlowPointerHandle([ex, ey], "E", "#b85f2c", pixelScale);
+      drawFlowPointerHandle(midpoint, "M", "#277d78", pixelScale);
+      if (settings.lineShape !== "straight") drawFlowPointerHandle(bendPoint, "B", "#8b67b1", pixelScale);
+    } else {
+      flowPointerHandleCache.delete(pointerKey);
+    }
+  }
+
+  function flowPointerHandleAt(event) {
+    const cache = flowPointerHandleCache.get(state.selectedFlowPointerKey);
+    if (!cache) return null;
+    const [x, y] = canvasPoint(event);
+    const threshold = Math.max(12, 13 * cache.pixelScale);
+    const handles = [
+      ["start", cache.start],
+      ["end", cache.end],
+      ["body", cache.body],
+      ...(cache.showBend ? [["bend", cache.bend]] : []),
+    ];
+    return handles
+      .map(([name, point]) => ({ name, distance: Math.hypot(x - point[0], y - point[1]) }))
+      .filter((item) => item.distance <= threshold)
+      .sort((first, second) => first.distance - second.distance)[0]?.name || null;
   }
 
   function drawTodayProductionFlow(machineEntries, time) {
     const nodes = buildTodayFlowNodes(machineEntries);
+    flowPointerHandleCache.clear();
     TODAY_FLOW_LINKS.forEach(([fromKey, toKey]) => {
       const fromEntry = nodes.get(fromKey);
       const toEntry = nodes.get(toKey);
-      if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry);
+      if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry, fromKey, toKey);
     });
     const activeKeys = new Set();
     [...nodes.entries()]

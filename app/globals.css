@@ -131,9 +131,13 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
   z-index: 4;
   top: 18px;
   right: 18px;
+  box-sizing: border-box;
   width: min(340px, calc(100% - 36px));
-  max-height: calc(100% - 36px);
+  max-height: min(calc(100% - 36px), var(--editor-viewport-max-height, calc(100dvh - 36px)));
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 16px;
   border: 1px solid rgba(255,255,255,.55);
   border-radius: 5px;
@@ -4506,7 +4510,7 @@ summary:focus-visible {
 
 .object-editor-tabs {
   top: -18px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin: 0 -4px 13px;
   padding: 7px 4px;
 }
@@ -7230,4 +7234,121 @@ body.viewer-fullscreen-fallback-active {
 }
 @media (max-width: 900px) {
   .label-line-grid { grid-template-columns: 1fr 1fr; }
+}
+
+
+/* v0.13.15 — independent production-process pointer editor */
+.process-pointer-panel {
+  gap: 11px;
+}
+
+.process-pointer-intro,
+.process-pointer-note {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid #c8d6d0;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #eef7f3, #fafcfb);
+}
+
+.process-pointer-intro > div,
+.process-pointer-note {
+  color: #54645e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.process-pointer-intro strong,
+.process-pointer-note strong {
+  display: block;
+  color: #245e56;
+  font-size: 11px;
+}
+
+.process-pointer-intro span,
+.process-pointer-note span {
+  display: block;
+  margin-top: 2px;
+}
+
+.process-pointer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #405951;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.process-pointer-toggle input {
+  width: auto;
+  min-height: auto;
+  accent-color: var(--teal);
+}
+
+.process-pointer-controls {
+  min-width: 0;
+  margin: 0;
+  padding: 11px;
+  border: 1px solid #d0dad5;
+  border-radius: 9px;
+  background: rgba(255,255,255,.78);
+}
+
+.process-pointer-controls legend {
+  padding: 0 5px;
+  color: #3e625a;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.process-pointer-controls > p {
+  margin: 0 0 9px;
+  color: #6a7872;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.process-pointer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.process-pointer-grid label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #5e6d67;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.process-pointer-grid input,
+.process-pointer-grid select {
+  width: 100%;
+  min-width: 0;
+}
+
+.process-pointer-actions {
+  display: grid;
+  margin-top: 9px;
+}
+
+.process-pointer-actions button {
+  width: 100%;
+}
+
+@media (max-width: 560px) {
+  .object-editor-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .process-pointer-grid {
+    grid-template-columns: 1fr;
+  }
 }

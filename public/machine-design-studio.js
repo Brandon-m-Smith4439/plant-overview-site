@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.12";
+  const APP_VERSION = "0.13.13";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -1710,10 +1710,22 @@
   }
 
   function animationTypeIcon(type) {
-    return ({
-      move: "â†—", oscillate: "â†”", loop: "â‡¢", fourStep: "â–£", rotate: "âŸ³",
-      bob: "â†•", pulse: "â—‰", splitRectangles: "â–¦", fadeIn: "â—’", fadeOut: "â—“", blink: "â—", visibility: "â—«", wait: "â…¡",
-    })[type] || "â—†";
+    const paths = {
+      move: '<path d="M5 18 18 5M11 5h7v7"/>',
+      oscillate: '<path d="M4 12h16M7 9l-3 3 3 3m10-6 3 3-3 3"/>',
+      loop: '<path d="M6 8h9a4 4 0 0 1 0 8H9"/><path d="m11 13-3 3 3 3"/>',
+      fourStep: '<path d="M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z"/>',
+      rotate: '<path d="M19 8V4l-3 2.2A8 8 0 1 0 20 13"/><path d="M19 4h-4"/>',
+      bob: '<path d="M12 4v16m-3-13 3-3 3 3m-6 10 3 3 3-3"/>',
+      pulse: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/>',
+      splitRectangles: '<path d="M4 5h7v14H4zM13 5h7v6h-7zM13 13h7v6h-7z"/>',
+      fadeIn: '<path d="M12 4a8 8 0 1 1 0 16Z"/><path d="M12 4v16"/>',
+      fadeOut: '<path d="M12 4a8 8 0 1 0 0 16Z"/><path d="M12 4v16"/>',
+      blink: '<circle cx="12" cy="12" r="7"/><path d="M12 5v14"/>',
+      visibility: '<path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.5"/>',
+      wait: '<path d="M8 5v14M16 5v14"/>',
+    };
+    return `<svg class="studio-vector-icon timeline-vector-icon" viewBox="0 0 24 24" aria-hidden="true">${paths[type] || '<path d="m12 3 5 5-5 5-5-5 5-5Z"/>'}</svg>`;
   }
 
   function orderedTimelineClips(timeline) {
@@ -2115,7 +2127,7 @@
     componentListStructureSignature = structureSignature;
     list.innerHTML = components.map((component, index) => `
       <div class="component-tree-row ${state.selectAllParts || state.selectedComponentIds.has(component.id) ? "active" : ""}" data-component-row="${escapeHtml(component.id)}">
-        <button type="button" class="component-visibility" data-toggle-component="${escapeHtml(component.id)}" title="${component.visible === false ? "Show" : "Hide"} component" aria-label="${component.visible === false ? "Show" : "Hide"} ${escapeHtml(component.name)}">${component.visible === false ? "â—‹" : "â—"}</button>
+        <button type="button" class="component-visibility" data-toggle-component="${escapeHtml(component.id)}" title="${component.visible === false ? "Show" : "Hide"} component" aria-label="${component.visible === false ? "Show" : "Hide"} ${escapeHtml(component.name)}"><span class="component-visibility-dot${component.visible === false ? " is-hidden" : ""}" aria-hidden="true"></span></button>
         <button type="button" class="component-select" data-component-id="${escapeHtml(component.id)}">
           <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} Â· ${escapeHtml(component.embeddedMachine ? "machine" : component.type)}${component.embeddedMachine ? " Â· embedded" : ""}${componentHasAnimation(component) ? ` Â· animated` : ""}</small></span>
         </button>

@@ -1,6 +1,10 @@
+## Version 0.13.13
+
+Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improvements while hardening the deployed Machine Design Studio with SVG controls. Today production labels now support per-machine custom text, pointer placement, screen offset, line styling, connection geometry, and endpoint styling. Full-height walls and pillars also remain visible when the overview roof panel is hidden.
+
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.12**
+Current project version: **0.13.13**
 
 ## Full-production rendering performance
 

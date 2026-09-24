@@ -1,3 +1,7 @@
+## Version 0.13.15
+
+Version 0.13.15 separates facility production-process arrows from ordinary machine labels. The new **Flow** section lets each Today-overview process pointer be selected, dragged directly with start/end/move/bend handles, and independently styled or routed. Process pointer settings persist with the plant layout and participate in import/export and undo/redo. The docked layout editor also follows the visible browser viewport outside fullscreen so long edit panels remain fully scrollable and the bottom controls stay reachable.
+
 ## Version 0.13.14
 
 Version 0.13.14 removes the remaining text-encoding artifacts from the Machine Design Studio and standalone viewer surfaces. Dynamic Studio punctuation now uses encoding-safe Unicode escapes, static markup uses HTML entities, and a recursive app/public regression test blocks the mojibake patterns that produced visible `Â`/garbled punctuation. The release also completed a focused rendering and Designer performance review: designer switching, adaptive rendering, overlap detection, retained rendering, production animation caching, deep-performance checks, overview stability, production build, TypeScript, and the production dependency audit all passed.
@@ -8,7 +12,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.14**
+Current project version: **0.13.15**
 
 ## Full-production rendering performance
 

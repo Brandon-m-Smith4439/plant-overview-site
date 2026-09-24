@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.14";
+  const APP_VERSION = "0.13.15";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -263,6 +263,40 @@
     thickness: 3,
     extendToRoof: true,
   });
+  const FLOW_POINTER_DEFINITIONS = Object.freeze([
+    { key: "cutting>polisher", from: "cutting", to: "polisher", label: "Cutting → Polisher" },
+    { key: "polisher>denver-cnc", from: "polisher", to: "denver-cnc", label: "Polisher → Denver CNC" },
+    { key: "polisher>waterjet", from: "polisher", to: "waterjet", label: "Polisher → Waterjet" },
+    { key: "denver-cnc>washer", from: "denver-cnc", to: "washer", label: "Denver CNC → Washer" },
+    { key: "waterjet>washer", from: "waterjet", to: "washer", label: "Waterjet → Washer" },
+    { key: "washer>tempering", from: "washer", to: "tempering", label: "Washer → Tempering Line" },
+    { key: "tempering>wrap", from: "tempering", to: "wrap", label: "Tempering Line → Wrap" },
+    { key: "wrap>glass-truck", from: "wrap", to: "glass-truck", label: "Wrap → Glass Truck" },
+    { key: "wrap>rack", from: "wrap", to: "rack", label: "Wrap → Rack" },
+  ]);
+  const defaultFlowPointerSettings = Object.freeze({
+    visible: true,
+    offsetX: 0,
+    offsetY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+    endOffsetX: 0,
+    endOffsetY: 0,
+    bendOffsetX: 0,
+    bendOffsetY: 0,
+    startInset: 10,
+    endInset: 16,
+    lineColor: "#67c9bc",
+    outlineColor: "#071212",
+    lineWidth: 2.1,
+    outlineWidth: 2.4,
+    opacity: 92,
+    lineStyle: "solid",
+    lineShape: "straight",
+    elbowDirection: "horizontalFirst",
+    headStyle: "arrow",
+    headSize: 7.5,
+  });
   const defaultDesignLibrary = window.PLANT_MACHINE_DESIGNS || {};
 
   function normalizePaintSettings(value) {
@@ -297,6 +331,45 @@
       thickness: clamp(Number(value?.thickness) || defaultWallGeometry.thickness, .25, 20),
       extendToRoof: value?.extendToRoof !== false,
     };
+  }
+
+  function normalizeFlowPointer(value = {}) {
+    const color = (candidate, fallback) => /^#[0-9a-f]{6}$/i.test(String(candidate || "")) ? String(candidate) : fallback;
+    const number = (field, fallback, minimum, maximum) => clamp(
+      Number.isFinite(Number(value?.[field])) ? Number(value[field]) : fallback,
+      minimum,
+      maximum,
+    );
+    return {
+      visible: value?.visible !== false,
+      offsetX: number("offsetX", defaultFlowPointerSettings.offsetX, -1200, 1200),
+      offsetY: number("offsetY", defaultFlowPointerSettings.offsetY, -1200, 1200),
+      startOffsetX: number("startOffsetX", defaultFlowPointerSettings.startOffsetX, -1200, 1200),
+      startOffsetY: number("startOffsetY", defaultFlowPointerSettings.startOffsetY, -1200, 1200),
+      endOffsetX: number("endOffsetX", defaultFlowPointerSettings.endOffsetX, -1200, 1200),
+      endOffsetY: number("endOffsetY", defaultFlowPointerSettings.endOffsetY, -1200, 1200),
+      bendOffsetX: number("bendOffsetX", defaultFlowPointerSettings.bendOffsetX, -1200, 1200),
+      bendOffsetY: number("bendOffsetY", defaultFlowPointerSettings.bendOffsetY, -1200, 1200),
+      startInset: number("startInset", defaultFlowPointerSettings.startInset, 0, 100),
+      endInset: number("endInset", defaultFlowPointerSettings.endInset, 0, 100),
+      lineColor: color(value?.lineColor, defaultFlowPointerSettings.lineColor),
+      outlineColor: color(value?.outlineColor, defaultFlowPointerSettings.outlineColor),
+      lineWidth: number("lineWidth", defaultFlowPointerSettings.lineWidth, .5, 12),
+      outlineWidth: number("outlineWidth", defaultFlowPointerSettings.outlineWidth, 0, 12),
+      opacity: number("opacity", defaultFlowPointerSettings.opacity, 10, 100),
+      lineStyle: ["solid", "dashed", "dotted"].includes(value?.lineStyle) ? value.lineStyle : defaultFlowPointerSettings.lineStyle,
+      lineShape: ["straight", "elbow", "curve"].includes(value?.lineShape) ? value.lineShape : defaultFlowPointerSettings.lineShape,
+      elbowDirection: ["horizontalFirst", "verticalFirst"].includes(value?.elbowDirection) ? value.elbowDirection : defaultFlowPointerSettings.elbowDirection,
+      headStyle: ["arrow", "dot", "ring", "none"].includes(value?.headStyle) ? value.headStyle : defaultFlowPointerSettings.headStyle,
+      headSize: number("headSize", defaultFlowPointerSettings.headSize, 2, 24),
+    };
+  }
+
+  function normalizeFlowPointers(value) {
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    return Object.fromEntries(FLOW_POINTER_DEFINITIONS.map((definition) => (
+      [definition.key, normalizeFlowPointer(source[definition.key])]
+    )));
   }
 
   function normalizeFloor(value) {
@@ -1067,6 +1140,7 @@
           wallGeometry: normalizeWallGeometry(current.wallGeometry),
           paint: normalizePaintSettings(current.paint),
           roof: normalizeRoofSettings(current.roof),
+          flowPointers: normalizeFlowPointers(current.flowPointers),
           playbackSpeed: Number(current.playbackSpeed) || 1,
           stageDurationSeconds: normalizeStageDuration(current.stageDurationSeconds),
         };
@@ -1089,6 +1163,7 @@
           wallGeometry: normalizeWallGeometry(legacy.wallGeometry),
           paint: normalizePaintSettings(legacy.paint),
           roof: normalizeRoofSettings(legacy.roof),
+          flowPointers: normalizeFlowPointers(legacy.flowPointers),
           playbackSpeed: Number(legacy.playbackSpeed) || 1,
           stageDurationSeconds: normalizeStageDuration(legacy.stageDurationSeconds),
         };
@@ -1107,6 +1182,7 @@
           wallGeometry: normalizeWallGeometry(older.wallGeometry),
           paint: normalizePaintSettings(older.paint),
           roof: normalizeRoofSettings(older.roof),
+          flowPointers: normalizeFlowPointers(older.flowPointers),
           playbackSpeed: Number(older.playbackSpeed) || 1,
           stageDurationSeconds: normalizeStageDuration(older.stageDurationSeconds),
         };
@@ -1125,6 +1201,7 @@
           wallGeometry: normalizeWallGeometry(oldest.wallGeometry),
           paint: normalizePaintSettings(oldest.paint),
           roof: normalizeRoofSettings(oldest.roof),
+          flowPointers: normalizeFlowPointers(oldest.flowPointers),
           playbackSpeed: 1,
           stageDurationSeconds: 5,
         };
@@ -1144,6 +1221,7 @@
       wallGeometry: normalizeWallGeometry(defaultWallGeometry),
       paint: normalizePaintSettings(defaultPaintSettings),
       roof: normalizeRoofSettings(defaultRoofSettings),
+      flowPointers: normalizeFlowPointers(),
       playbackSpeed: 1,
       stageDurationSeconds: 5,
     };
@@ -1214,6 +1292,7 @@
     labelMode: "smart",
     labelTextMode: "abbreviated",
     todayLabelMode: "necessary",
+    selectedFlowPointerKey: FLOW_POINTER_DEFINITIONS[0]?.key || "",
     playing: false,
     playAt: 0,
     editing: false,
@@ -1238,6 +1317,7 @@
     wallGeometry: normalizeWallGeometry(savedLayout.wallGeometry),
     paint: normalizePaintSettings(savedLayout.paint),
     roof: normalizeRoofSettings(savedLayout.roof),
+    flowPointers: normalizeFlowPointers(savedLayout.flowPointers),
     previewObjectAnimations: false,
     animationsPaused: false,
     animationPausedAt: 0,
@@ -1337,6 +1417,11 @@
           changed = syncMachineDimensionsToDesign(machine, designLibrary[nextDesignId]) || changed;
         } else refreshMachineScaleMetadata(machine);
       });
+      const externalFlowPointers = normalizeFlowPointers(external.flowPointers);
+      if (JSON.stringify(externalFlowPointers) !== JSON.stringify(state.flowPointers)) {
+        state.flowPointers = externalFlowPointers;
+        changed = true;
+      }
       if (changed) {
         invalidateWalkSpatialIndex();
         updateEditorPanel();
@@ -1382,6 +1467,7 @@
       wallGeometry: clone(state.wallGeometry),
       paint: clone(state.paint),
       roof: clone(state.roof),
+      flowPointers: clone(state.flowPointers),
       playbackSpeed: state.playbackSpeed,
       stageDurationSeconds: state.stageDurationSeconds,
     };
@@ -1408,6 +1494,7 @@
     state.wallGeometry = normalizeWallGeometry(snapshot.wallGeometry);
     state.paint = normalizePaintSettings(snapshot.paint);
     state.roof = normalizeRoofSettings(snapshot.roof);
+    state.flowPointers = normalizeFlowPointers(snapshot.flowPointers);
     state.playbackSpeed = Number(snapshot.playbackSpeed) || 1;
     state.stageDurationSeconds = normalizeStageDuration(snapshot.stageDurationSeconds);
     state.stage = clamp(state.stage, 0, stages.length - 1);
@@ -1463,6 +1550,7 @@
         wallGeometry: state.wallGeometry,
         paint: state.paint,
         roof: state.roof,
+        flowPointers: state.flowPointers,
         playbackSpeed: state.playbackSpeed,
         stageDurationSeconds: state.stageDurationSeconds,
       }));
@@ -2564,6 +2652,10 @@
           : "Right-drag orbit · Middle-drag pan · Wheel up/down zoom";
       return;
     }
+    if (state.editorTool === "flow") {
+      help.textContent = "Flow: drag S/E/M/B handles · middle-drag pan · right/Alt-drag orbit";
+      return;
+    }
     help.textContent = state.editorInteraction === "navigate"
       ? "Navigate: right-drag orbit · middle/Shift/Space-drag pan · wheel zoom"
       : "Edit: drag an object · middle-drag pan · right/Alt-drag orbit";
@@ -2582,6 +2674,42 @@
       value: first ?? "",
       mixed: items.some((item) => String(item?.[field] ?? "") !== String(first ?? "")),
     };
+  }
+
+  function activeFlowPointerDefinition() {
+    const selected = FLOW_POINTER_DEFINITIONS.find((definition) => definition.key === state.selectedFlowPointerKey);
+    return selected || FLOW_POINTER_DEFINITIONS[0] || null;
+  }
+
+  function activeFlowPointerSettings() {
+    const definition = activeFlowPointerDefinition();
+    if (!definition) return null;
+    if (!state.flowPointers[definition.key]) state.flowPointers[definition.key] = normalizeFlowPointer();
+    return state.flowPointers[definition.key];
+  }
+
+  function updateFlowPointerEditorFields(panel = document.querySelector(".layout-editor")) {
+    if (!panel) return;
+    const definition = activeFlowPointerDefinition();
+    const settings = activeFlowPointerSettings();
+    const picker = panel.querySelector("[data-flow-pointer-picker]");
+    if (picker && definition) picker.value = definition.key;
+    panel.querySelectorAll("[data-flow-pointer-field]").forEach((input) => {
+      const field = input.dataset.flowPointerField;
+      if (!settings || document.activeElement === input) return;
+      input.value = String(settings[field] ?? "");
+      if (field === "elbowDirection") input.disabled = settings.lineShape !== "elbow";
+    });
+    panel.querySelectorAll("[data-flow-pointer-check]").forEach((input) => {
+      if (!settings) return;
+      input.checked = Boolean(settings[input.dataset.flowPointerCheck]);
+    });
+    const summary = panel.querySelector("[data-flow-pointer-summary]");
+    if (summary) {
+      summary.textContent = definition
+        ? `${definition.label} · ${settings.visible ? "visible" : "hidden"} · ${settings.lineShape} ${settings.headStyle}`
+        : "No process pointer is available.";
+    }
   }
 
   function updateEditorPanel() {
@@ -2606,6 +2734,7 @@
     const selection = panel.querySelector("[data-editor-selection]");
     if (selection) {
       if (state.editorTool === "timeline") selection.textContent = currentStage()?.title || "Timeline";
+      else if (state.editorTool === "flow") selection.textContent = activeFlowPointerDefinition()?.label || "Process pointers";
       else if (state.editorTool === "pillars") {
         const column = structuralColumns().find((item) => item.key === state.selectedColumnKey);
         selection.textContent = column ? `Pillar ${column.key}` : "Structure controls";
@@ -2617,6 +2746,7 @@
     panel.querySelectorAll("[data-needs-selection]").forEach((control) => {
       control.disabled = selectionCount === 0;
     });
+    updateFlowPointerEditorFields(panel);
 
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       const field = input.dataset.machineField;
@@ -3011,6 +3141,57 @@
       input.value = state.paint[input.dataset.paintColor];
     });
 
+    panel.querySelector("[data-flow-pointer-picker]")?.addEventListener("change", (event) => {
+      if (!state.flowPointers[event.target.value]) return;
+      state.selectedFlowPointerKey = event.target.value;
+      renderPerformance.invalidate?.("flow-pointer-selection");
+      updateEditorPanel();
+    });
+    panel.querySelectorAll("[data-flow-pointer-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const definition = activeFlowPointerDefinition();
+        const settings = activeFlowPointerSettings();
+        if (!definition || !settings) return;
+        pushHistory();
+        const field = input.dataset.flowPointerField;
+        const stringFields = new Set(["lineColor", "outlineColor", "lineStyle", "lineShape", "elbowDirection", "headStyle"]);
+        const nextValue = stringFields.has(field) ? input.value : Number(input.value);
+        state.flowPointers[definition.key] = normalizeFlowPointer({ ...settings, [field]: nextValue });
+        persistLayout();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelectorAll("[data-flow-pointer-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const definition = activeFlowPointerDefinition();
+        const settings = activeFlowPointerSettings();
+        if (!definition || !settings) return;
+        pushHistory();
+        state.flowPointers[definition.key] = normalizeFlowPointer({
+          ...settings,
+          [input.dataset.flowPointerCheck]: input.checked,
+        });
+        persistLayout();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelector("[data-editor-action='reset-flow-pointer']")?.addEventListener("click", () => {
+      const definition = activeFlowPointerDefinition();
+      if (!definition) return;
+      pushHistory();
+      state.flowPointers[definition.key] = normalizeFlowPointer();
+      persistLayout();
+      updateEditorPanel();
+      showToast(`${definition.label} pointer reset.`);
+    });
+    panel.querySelector("[data-editor-action='reset-all-flow-pointers']")?.addEventListener("click", () => {
+      pushHistory();
+      state.flowPointers = normalizeFlowPointers();
+      persistLayout();
+      updateEditorPanel();
+      showToast("All production process pointers reset.");
+    });
+
     const objectSearch = panel.querySelector("[data-object-search]");
     const objectPicker = panel.querySelector("[data-object-picker]");
     if (objectPicker) {
@@ -3035,6 +3216,7 @@
     });
     updateEditorHelp();
     updateHistoryButtons();
+    scheduleLayoutEditorViewportSync();
   }
 
   // Dragging can deliver hundreds of pointer events per second. Updating the
@@ -3197,6 +3379,7 @@
       wallGeometry: state.wallGeometry,
       paint: state.paint,
       roof: state.roof,
+      flowPointers: state.flowPointers,
       playbackSpeed: state.playbackSpeed,
       stageDurationSeconds: state.stageDurationSeconds,
     };
@@ -3296,6 +3479,7 @@
       state.wallGeometry = normalizeWallGeometry(payload.wallGeometry);
       state.paint = normalizePaintSettings(payload.paint);
       state.roof = normalizeRoofSettings(payload.roof);
+      state.flowPointers = normalizeFlowPointers(payload.flowPointers);
       state.playbackSpeed = Number(payload.playbackSpeed) || 1;
       state.stageDurationSeconds = normalizeStageDuration(payload.stageDurationSeconds);
       state.stage = clamp(state.stage, 0, stages.length - 1);
@@ -3329,6 +3513,44 @@
       console.error(error);
       window.alert(error instanceof Error ? error.message : "The workspace file could not be imported.");
     }
+  }
+
+  let layoutEditorViewportFrame = 0;
+
+  function syncLayoutEditorViewport() {
+    layoutEditorViewportFrame = 0;
+    const frame = canvas.closest(".model-frame");
+    const panel = frame?.querySelector(".layout-editor");
+    if (!frame || !panel) return;
+    const compactDock = window.matchMedia?.("(max-width: 760px)")?.matches;
+    if (!state.editing || viewerFullscreenActive(frame) || compactDock) {
+      panel.style.removeProperty("top");
+      panel.style.removeProperty("bottom");
+      panel.style.removeProperty("height");
+      panel.style.removeProperty("max-height");
+      return;
+    }
+    const frameRect = frame.getBoundingClientRect();
+    const visualViewport = window.visualViewport;
+    const viewportTop = Number(visualViewport?.offsetTop) || 0;
+    const viewportHeight = Number(visualViewport?.height) || window.innerHeight || document.documentElement.clientHeight;
+    const safeTop = viewportTop + 10;
+    const safeBottom = viewportTop + viewportHeight - 10;
+    const visibleTop = Math.max(frameRect.top, safeTop);
+    const visibleBottom = Math.min(frameRect.bottom, safeBottom);
+    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+    const minimumHeight = Math.min(220, Math.max(120, visibleHeight));
+    const topInsideFrame = clamp(visibleTop - frameRect.top, 0, Math.max(0, frameRect.height - minimumHeight));
+    const height = Math.max(minimumHeight, Math.min(visibleHeight || minimumHeight, frameRect.height - topInsideFrame));
+    panel.style.top = `${topInsideFrame}px`;
+    panel.style.bottom = "auto";
+    panel.style.height = `${height}px`;
+    panel.style.maxHeight = `${height}px`;
+  }
+
+  function scheduleLayoutEditorViewportSync() {
+    if (layoutEditorViewportFrame) return;
+    layoutEditorViewportFrame = requestAnimationFrame(syncLayoutEditorViewport);
   }
 
   function setEditing(enabled) {
@@ -3365,7 +3587,10 @@
       setStage(stages.length - 1);
       state.stageFloat = stages.length - 1;
     }
-    requestAnimationFrame(() => updateCanvasSize(true));
+    requestAnimationFrame(() => {
+      updateCanvasSize(true);
+      syncLayoutEditorViewport();
+    });
     updateEditorHelp();
     updateEditorPanel();
   }
@@ -3422,6 +3647,7 @@
       </div>
       <div class="editor-tools" role="group" aria-label="Editor selection mode">
         <button type="button" data-editor-tool="machines" class="active">Objects</button>
+        <button type="button" data-editor-tool="flow">Flow</button>
         <button type="button" data-editor-tool="pillars">Structure</button>
         <button type="button" data-editor-tool="timeline">Stages</button>
         <button type="button" data-editor-tool="project">Project</button>
@@ -3568,32 +3794,32 @@
             <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
           </div>
           <div class="label-pointer-grid">
-            <label>Pointer X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-            <label>Pointer Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
-            <label>Pointer Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+            <label>Label target X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+            <label>Label target Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
+            <label>Label target Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
             <label>Label offset (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
             <label>Tag X shift (px)<input type="number" data-label-field="labelScreenOffsetX" data-needs-selection min="-400" max="400" step="2" value="0"></label>
             <label>Tag Y shift (px)<input type="number" data-label-field="labelScreenOffsetY" data-needs-selection min="-400" max="400" step="2" value="0"></label>
           </div>
           <div class="label-line-grid">
-            <label>Line color<input type="color" data-label-field="labelLineColor" data-needs-selection value="#52b7aa"></label>
-            <label>Line width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25" value="1.65"></label>
-            <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5" value="100"></label>
-            <label>Line style<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
-            <label>Line form<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+            <label>Leader color<input type="color" data-label-field="labelLineColor" data-needs-selection value="#52b7aa"></label>
+            <label>Leader width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25" value="1.65"></label>
+            <label>Leader opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5" value="100"></label>
+            <label>Leader style<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+            <label>Leader form<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
             <label>Label connection<select data-label-field="labelLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
-            <label>Pointer end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
-            <label>Pointer size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5" value="3.2"></label>
+            <label>Leader end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
+            <label>Leader size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5" value="3.2"></label>
           </div>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
-            <button type="button" data-editor-action="center-label-pointer" data-needs-selection>Center pointer</button>
-            <button type="button" data-editor-action="reset-label-line" data-needs-selection>Reset pointer &amp; line</button>
+            <button type="button" data-editor-action="center-label-pointer" data-needs-selection>Center label leader</button>
+            <button type="button" data-editor-action="reset-label-line" data-needs-selection>Reset label leader</button>
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">Today Necessary labels use this custom label text when provided. Pointer anchor, tag position, line color, width, opacity, style, form, connection edge, and endpoint are saved independently for every machine.</p>
+          <p class="label-help">These controls edit only the leader from a machine label to its machine. The production-process arrows are separate and are edited under <strong>Flow</strong>.</p>
         </fieldset>
         <fieldset class="crane-controls">
           <legend>Attached overhead crane</legend>
@@ -3711,6 +3937,49 @@
           </details>
         </details>
         </section>
+      </div>
+
+      <div class="flow-pointer-editor" data-editor-section="flow" hidden>
+        <div class="editor-callout flow-pointer-callout"><strong>Production process pointers</strong><p>These arrows show how glass moves through the facility. They are completely separate from machine labels and label leaders.</p></div>
+        <label class="flow-pointer-picker">Process pointer<select data-flow-pointer-picker><option value="cutting>polisher">Cutting → Polisher</option><option value="polisher>denver-cnc">Polisher → Denver CNC</option><option value="polisher>waterjet">Polisher → Waterjet</option><option value="denver-cnc>washer">Denver CNC → Washer</option><option value="waterjet>washer">Waterjet → Washer</option><option value="washer>tempering">Washer → Tempering Line</option><option value="tempering>wrap">Tempering Line → Wrap</option><option value="wrap>glass-truck">Wrap → Glass Truck</option><option value="wrap>rack">Wrap → Rack</option></select></label>
+        <div class="flow-pointer-drag-help"><strong>Drag directly in the overview</strong><span><b>S</b> start · <b>E</b> end · <b>M</b> move the whole pointer · <b>B</b> bend/control point</span></div>
+        <fieldset class="flow-pointer-controls">
+          <legend>Pointer appearance</legend>
+          <label class="flow-pointer-toggle"><input type="checkbox" data-flow-pointer-check="visible"> Show this process pointer</label>
+          <div class="flow-pointer-grid">
+            <label>Line color<input type="color" data-flow-pointer-field="lineColor" value="#67c9bc"></label>
+            <label>Outline color<input type="color" data-flow-pointer-field="outlineColor" value="#071212"></label>
+            <label>Line width<input type="number" data-flow-pointer-field="lineWidth" min="0.5" max="12" step="0.25"></label>
+            <label>Outline width<input type="number" data-flow-pointer-field="outlineWidth" min="0" max="12" step="0.25"></label>
+            <label>Opacity (%)<input type="number" data-flow-pointer-field="opacity" min="10" max="100" step="5"></label>
+            <label>Line style<select data-flow-pointer-field="lineStyle"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+            <label>Path form<select data-flow-pointer-field="lineShape"><option value="straight">Straight</option><option value="elbow">Elbow</option><option value="curve">Curve</option></select></label>
+            <label>Elbow direction<select data-flow-pointer-field="elbowDirection"><option value="horizontalFirst">Horizontal first</option><option value="verticalFirst">Vertical first</option></select></label>
+            <label>End style<select data-flow-pointer-field="headStyle"><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
+            <label>End size<input type="number" data-flow-pointer-field="headSize" min="2" max="24" step="0.5"></label>
+          </div>
+        </fieldset>
+        <fieldset class="flow-pointer-controls">
+          <legend>Pointer position</legend>
+          <p>Offsets are in screen pixels so each process arrow can be routed cleanly around machines from the Today overview.</p>
+          <div class="flow-pointer-grid">
+            <label>Whole X<input type="number" data-flow-pointer-field="offsetX" min="-1200" max="1200" step="2"></label>
+            <label>Whole Y<input type="number" data-flow-pointer-field="offsetY" min="-1200" max="1200" step="2"></label>
+            <label>Start X<input type="number" data-flow-pointer-field="startOffsetX" min="-1200" max="1200" step="2"></label>
+            <label>Start Y<input type="number" data-flow-pointer-field="startOffsetY" min="-1200" max="1200" step="2"></label>
+            <label>End X<input type="number" data-flow-pointer-field="endOffsetX" min="-1200" max="1200" step="2"></label>
+            <label>End Y<input type="number" data-flow-pointer-field="endOffsetY" min="-1200" max="1200" step="2"></label>
+            <label>Bend X<input type="number" data-flow-pointer-field="bendOffsetX" min="-1200" max="1200" step="2"></label>
+            <label>Bend Y<input type="number" data-flow-pointer-field="bendOffsetY" min="-1200" max="1200" step="2"></label>
+            <label>Start inset<input type="number" data-flow-pointer-field="startInset" min="0" max="100" step="1"></label>
+            <label>End inset<input type="number" data-flow-pointer-field="endInset" min="0" max="100" step="1"></label>
+          </div>
+          <div class="flow-pointer-actions">
+            <button type="button" data-editor-action="reset-flow-pointer">Reset selected pointer</button>
+            <button type="button" data-editor-action="reset-all-flow-pointers">Reset all process pointers</button>
+          </div>
+        </fieldset>
+        <p class="flow-pointer-summary" data-flow-pointer-summary>Select a process pointer above, then drag its handles in the plant view or enter exact values here.</p>
       </div>
 
       <div data-editor-section="pillars" hidden>
@@ -3839,10 +4108,20 @@
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {
         state.editorTool = button.dataset.editorTool;
-        // Keep a machine selection while visiting Project so the selected
-        // instance can be exported. Pillar editing remains mutually exclusive.
-        if (state.editorTool === "pillars") clearMachineSelection();
+        // Flow and Structure are independent editing modes. Flow always opens
+        // the Today overview because those process pointers only exist there.
+        if (state.editorTool === "pillars" || state.editorTool === "flow") clearMachineSelection();
         else state.selectedColumnKey = null;
+        if (state.editorTool === "flow") {
+          state.selectedColumnKey = null;
+          state.editorInteraction = "select";
+          state.todayLabelMode = "necessary";
+          state.labelMode = state.labelMode === "off" ? "smart" : state.labelMode;
+          state.showLabels = true;
+          setStage(stages.length - 1);
+          state.stageFloat = stages.length - 1;
+          renderPerformance.invalidate?.("flow-editor-open");
+        }
         updateEditorPanel();
       });
     });
@@ -5319,6 +5598,7 @@
     const handleFullscreenChange = () => {
       updateFullscreenControl(frame);
       canvasSizeDirty = true;
+      scheduleLayoutEditorViewportSync();
       renderPerformance.invalidate?.("fullscreen-change");
       if (state.cameraMode === "walk" && walkStartedFullscreen && !viewerFullscreenActive(frame)) setFirstPersonMenu(true);
     };
@@ -5326,12 +5606,15 @@
     addLifecycleListener(document, "webkitfullscreenchange", handleFullscreenChange);
     const handleViewportGeometryChange = () => {
       canvasSizeDirty = true;
+      scheduleLayoutEditorViewportSync();
       renderPerformance.invalidate?.("viewport-geometry-change");
       updateFullscreenControl(frame);
     };
     addLifecycleListener(window, "resize", handleViewportGeometryChange);
     addLifecycleListener(window, "orientationchange", () => window.setTimeout(handleViewportGeometryChange, 80));
     addLifecycleListener(window.visualViewport, "resize", handleViewportGeometryChange);
+    addLifecycleListener(window.visualViewport, "scroll", scheduleLayoutEditorViewportSync);
+    addLifecycleListener(window, "scroll", scheduleLayoutEditorViewportSync);
     addLifecycleListener(window.screen?.orientation, "change", handleViewportGeometryChange);
     updateFullscreenControl(frame);
     play.addEventListener("click", () => {
@@ -6082,17 +6365,18 @@
     return null;
   }
 
-  const TODAY_FLOW_LINKS = [
-    ["cutting", "polisher"],
-    ["polisher", "denver-cnc"],
-    ["polisher", "waterjet"],
-    ["denver-cnc", "washer"],
-    ["waterjet", "washer"],
-    ["washer", "tempering"],
-    ["tempering", "wrap"],
-    ["wrap", "glass-truck"],
-    ["wrap", "rack"],
-  ];
+  const TODAY_FLOW_LINKS = FLOW_POINTER_DEFINITIONS.map(({ from, to }) => [from, to]);
+  const flowPointerHandleCache = new Map();
+
+  function flowPointerKey(fromKey, toKey) {
+    return `${fromKey}>${toKey}`;
+  }
+
+  function flowPointerSettings(fromKey, toKey) {
+    const key = flowPointerKey(fromKey, toKey);
+    if (!state.flowPointers[key]) state.flowPointers[key] = normalizeFlowPointer();
+    return state.flowPointers[key];
+  }
 
   function flowEntryWorldAnchor(entry) {
     const rendered = entry?.rendered;
@@ -6171,64 +6455,204 @@
     return nodes;
   }
 
-  function drawTodayFlowArrow(fromEntry, toEntry) {
+  function flowPointerDash(style, width, pixelScale) {
+    const scale = Math.max(1, width * pixelScale);
+    if (style === "dashed") return [Math.max(5, scale * 3.5), Math.max(4, scale * 2.2)];
+    if (style === "dotted") return [Math.max(1, scale * .75), Math.max(4, scale * 2)];
+    return [];
+  }
+
+  function traceFlowPointerPath(sx, sy, ex, ey, bx, by, settings) {
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    if (settings.lineShape === "curve") {
+      ctx.quadraticCurveTo(bx, by, ex, ey);
+    } else if (settings.lineShape === "elbow") {
+      if (settings.elbowDirection === "verticalFirst") {
+        ctx.lineTo(sx, by);
+        ctx.lineTo(ex, by);
+      } else {
+        ctx.lineTo(bx, sy);
+        ctx.lineTo(bx, ey);
+      }
+      ctx.lineTo(ex, ey);
+    } else {
+      ctx.lineTo(ex, ey);
+    }
+  }
+
+  function drawFlowPointerHandle(point, labelText, color, pixelScale) {
+    const radius = Math.max(5, 5.5 * pixelScale);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(point[0], point[1], radius + 2 * pixelScale, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(8,24,23,.84)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(point[0], point[1], radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(1, 1.3 * pixelScale);
+    ctx.stroke();
+    ctx.font = `${Math.max(8, 8 * pixelScale)}px "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(labelText, point[0], point[1] + .25 * pixelScale);
+    ctx.restore();
+  }
+
+  function drawTodayFlowArrow(fromEntry, toEntry, fromKey, toKey) {
+    const settings = flowPointerSettings(fromKey, toKey);
+    const pointerKey = flowPointerKey(fromKey, toKey);
+    if (!settings.visible) {
+      flowPointerHandleCache.delete(pointerKey);
+      return;
+    }
     const startWorld = flowEntryWorldAnchor(fromEntry);
     const endWorld = flowEntryWorldAnchor(toEntry);
     if (!startWorld || !endWorld) return;
-    const start = project(...startWorld);
-    const end = project(...endWorld);
+    const baseStart = project(...startWorld);
+    const baseEnd = project(...endWorld);
+    const rect = canvas.getBoundingClientRect();
+    const pixelScale = canvas.width / Math.max(1, rect.width);
+    const cssScale = pixelScale;
+    const start = [
+      baseStart[0] + (settings.offsetX + settings.startOffsetX) * cssScale,
+      baseStart[1] + (settings.offsetY + settings.startOffsetY) * cssScale,
+    ];
+    const end = [
+      baseEnd[0] + (settings.offsetX + settings.endOffsetX) * cssScale,
+      baseEnd[1] + (settings.offsetY + settings.endOffsetY) * cssScale,
+    ];
     const dx = end[0] - start[0];
     const dy = end[1] - start[1];
     const length = Math.hypot(dx, dy);
     if (!Number.isFinite(length) || length < 8) return;
-    const rect = canvas.getBoundingClientRect();
-    const pixelScale = canvas.width / Math.max(1, rect.width);
     const ux = dx / length;
     const uy = dy / length;
-    const startInset = Math.min(length * .12, 10 * pixelScale);
-    const endInset = Math.min(length * .18, 16 * pixelScale);
+    const startInset = Math.min(length * .42, Math.max(0, settings.startInset) * pixelScale);
+    const endInset = Math.min(length * .42, Math.max(0, settings.endInset) * pixelScale);
     const sx = start[0] + ux * startInset;
     const sy = start[1] + uy * startInset;
     const ex = end[0] - ux * endInset;
     const ey = end[1] - uy * endInset;
-    const arrowSize = Math.max(6, 7.5 * pixelScale);
-    const normalX = -uy;
-    const normalY = ux;
+    const bx = (sx + ex) / 2 + settings.bendOffsetX * cssScale;
+    const by = (sy + ey) / 2 + settings.bendOffsetY * cssScale;
+
+    const lineWidth = Math.max(.5, settings.lineWidth) * pixelScale;
+    const outlineWidth = Math.max(0, settings.outlineWidth) * pixelScale;
+    const opacity = clamp(settings.opacity, 10, 100) / 100;
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.globalAlpha = .92;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "rgba(7,18,18,.82)";
-    ctx.lineWidth = Math.max(4, 4.6 * pixelScale);
+    ctx.globalAlpha = opacity;
+    ctx.setLineDash(flowPointerDash(settings.lineStyle, settings.lineWidth, pixelScale));
+    if (outlineWidth > 0) {
+      traceFlowPointerPath(sx, sy, ex, ey, bx, by, settings);
+      ctx.strokeStyle = settings.outlineColor;
+      ctx.lineWidth = lineWidth + outlineWidth * 2;
+      ctx.stroke();
+    }
+    traceFlowPointerPath(sx, sy, ex, ey, bx, by, settings);
+    ctx.strokeStyle = settings.lineColor;
+    ctx.lineWidth = lineWidth;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "#67c9bc";
-    ctx.lineWidth = Math.max(1.5, 2.1 * pixelScale);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
-    ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
-    ctx.closePath();
-    ctx.fillStyle = "#67c9bc";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(7,18,18,.9)";
-    ctx.lineWidth = Math.max(1, 1.2 * pixelScale);
-    ctx.stroke();
+    ctx.setLineDash([]);
+
+    let tangentX = ex - sx;
+    let tangentY = ey - sy;
+    if (settings.lineShape === "curve") {
+      tangentX = ex - bx;
+      tangentY = ey - by;
+    } else if (settings.lineShape === "elbow") {
+      if (settings.elbowDirection === "verticalFirst") {
+        tangentX = 0;
+        tangentY = ey - by;
+      } else {
+        tangentX = ex - bx;
+        tangentY = 0;
+      }
+    }
+    const tangentLength = Math.max(.001, Math.hypot(tangentX, tangentY));
+    const headUx = tangentX / tangentLength;
+    const headUy = tangentY / tangentLength;
+    const normalX = -headUy;
+    const normalY = headUx;
+    const headSize = Math.max(2, settings.headSize) * pixelScale;
+
+    if (settings.headStyle === "arrow") {
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - headUx * headSize + normalX * headSize * .5, ey - headUy * headSize + normalY * headSize * .5);
+      ctx.lineTo(ex - headUx * headSize - normalX * headSize * .5, ey - headUy * headSize - normalY * headSize * .5);
+      ctx.closePath();
+      ctx.fillStyle = settings.lineColor;
+      ctx.fill();
+      if (outlineWidth > 0) {
+        ctx.strokeStyle = settings.outlineColor;
+        ctx.lineWidth = Math.max(1, outlineWidth * .65);
+        ctx.stroke();
+      }
+    } else if (settings.headStyle === "dot") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, headSize * .58, 0, Math.PI * 2);
+      ctx.fillStyle = settings.lineColor;
+      ctx.fill();
+    } else if (settings.headStyle === "ring") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, headSize * .62, 0, Math.PI * 2);
+      ctx.strokeStyle = settings.lineColor;
+      ctx.lineWidth = Math.max(1.5 * pixelScale, lineWidth);
+      ctx.stroke();
+    }
     ctx.restore();
+
+    if (state.editing && state.editorTool === "flow" && state.selectedFlowPointerKey === pointerKey) {
+      const midpoint = [(sx + ex) / 2, (sy + ey) / 2];
+      const bendPoint = [bx, by];
+      flowPointerHandleCache.set(pointerKey, {
+        pixelScale,
+        start: [sx, sy],
+        end: [ex, ey],
+        body: midpoint,
+        bend: bendPoint,
+        showBend: settings.lineShape !== "straight",
+      });
+      drawFlowPointerHandle([sx, sy], "S", "#2b7bb9", pixelScale);
+      drawFlowPointerHandle([ex, ey], "E", "#b85f2c", pixelScale);
+      drawFlowPointerHandle(midpoint, "M", "#277d78", pixelScale);
+      if (settings.lineShape !== "straight") drawFlowPointerHandle(bendPoint, "B", "#8b67b1", pixelScale);
+    } else {
+      flowPointerHandleCache.delete(pointerKey);
+    }
+  }
+
+  function flowPointerHandleAt(event) {
+    const cache = flowPointerHandleCache.get(state.selectedFlowPointerKey);
+    if (!cache) return null;
+    const [x, y] = canvasPoint(event);
+    const threshold = Math.max(12, 13 * cache.pixelScale);
+    const handles = [
+      ["start", cache.start],
+      ["end", cache.end],
+      ["body", cache.body],
+      ...(cache.showBend ? [["bend", cache.bend]] : []),
+    ];
+    return handles
+      .map(([name, point]) => ({ name, distance: Math.hypot(x - point[0], y - point[1]) }))
+      .filter((item) => item.distance <= threshold)
+      .sort((first, second) => first.distance - second.distance)[0]?.name || null;
   }
 
   function drawTodayProductionFlow(machineEntries, time) {
     const nodes = buildTodayFlowNodes(machineEntries);
+    flowPointerHandleCache.clear();
     TODAY_FLOW_LINKS.forEach(([fromKey, toKey]) => {
       const fromEntry = nodes.get(fromKey);
       const toEntry = nodes.get(toKey);
-      if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry);
+      if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry, fromKey, toKey);
     });
     const activeKeys = new Set();
     [...nodes.entries()]
@@ -10055,6 +10479,26 @@
 
     if (state.editing) {
       if (state.editorTool === "timeline") return;
+      if (state.editorTool === "flow") {
+        const navigating = state.editorInteraction === "navigate" || wantsPan || wantsOrbit;
+        if (!navigating) {
+          const handle = flowPointerHandleAt(event);
+          if (handle) {
+            state.dragAction = `flow-pointer-${handle}`;
+            state.dragSnapshot = snapshotLayout();
+            state.dragMoved = false;
+            state.dragging = true;
+            renderPerformance.noteInteraction(260);
+            canvas.setPointerCapture(event.pointerId);
+            return;
+          }
+        }
+        state.dragAction = navigating ? (wantsPan ? "pan" : "orbit") : "pan";
+        state.dragging = true;
+        renderPerformance.noteInteraction(260);
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
       if (selectableHit && additiveSelection) {
         toggleMachineSelection(selectableHit.instanceId);
         updateEditorPanel();
@@ -10150,7 +10594,33 @@
     renderPerformance.noteInteraction(140);
     const deltaX = event.clientX-state.pointerX;
     const deltaY = event.clientY-state.pointerY;
-    if (state.dragAction === "column") {
+    if (state.dragAction.startsWith("flow-pointer-")) {
+      const settings = activeFlowPointerSettings();
+      if (settings) {
+        const handle = state.dragAction.slice("flow-pointer-".length);
+        const next = { ...settings };
+        if (handle === "body") {
+          next.offsetX = clamp(settings.offsetX + deltaX, -1200, 1200);
+          next.offsetY = clamp(settings.offsetY + deltaY, -1200, 1200);
+        } else if (handle === "start") {
+          next.startOffsetX = clamp(settings.startOffsetX + deltaX, -1200, 1200);
+          next.startOffsetY = clamp(settings.startOffsetY + deltaY, -1200, 1200);
+        } else if (handle === "end") {
+          next.endOffsetX = clamp(settings.endOffsetX + deltaX, -1200, 1200);
+          next.endOffsetY = clamp(settings.endOffsetY + deltaY, -1200, 1200);
+        } else if (handle === "bend") {
+          next.bendOffsetX = clamp(settings.bendOffsetX + deltaX, -1200, 1200);
+          next.bendOffsetY = clamp(settings.bendOffsetY + deltaY, -1200, 1200);
+        }
+        const definition = activeFlowPointerDefinition();
+        if (definition) {
+          state.flowPointers[definition.key] = normalizeFlowPointer(next);
+          state.dragMoved = state.dragMoved || deltaX !== 0 || deltaY !== 0;
+          updateFlowPointerEditorFields();
+          renderPerformance.invalidate?.("flow-pointer-drag");
+        }
+      }
+    } else if (state.dragAction === "column") {
       const column = structuralColumns().find((item) => item.key === state.draggedColumnKey);
       if (column) {
         const [worldX, worldZ] = worldFromScreen(event);
@@ -10207,7 +10677,8 @@
       touchGestureCenter = null;
       touchGestureDistance = 0;
     }
-    if ((state.draggedMachineId || state.draggedColumnKey) && state.dragMoved && state.dragSnapshot) {
+    const flowPointerDrag = String(state.dragAction || "").startsWith("flow-pointer-");
+    if ((state.draggedMachineId || state.draggedColumnKey || flowPointerDrag) && state.dragMoved && state.dragSnapshot) {
       pushHistory(state.dragSnapshot);
       persistLayout();
       updateEditorPanel();
@@ -10325,7 +10796,10 @@
       })
     : null;
   canvasResizeObserver?.observe(canvas);
-  addLifecycleListener(window, "resize", () => updateCanvasSize(true));
+  addLifecycleListener(window, "resize", () => {
+    updateCanvasSize(true);
+    scheduleLayoutEditorViewportSync();
+  });
   addLifecycleListener(window, "renderperformancechange", (event) => {
     canvasSizeDirty = true;
     if (!event.detail?.adaptive) updateCanvasSize(true);

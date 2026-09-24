@@ -1,3 +1,13 @@
+## 0.13.15 - 2026-09-24
+
+- Made the docked Plant Layout editor viewport-aware outside fullscreen so its bottom controls and sticky Done Editing bar remain reachable as the page scrolls or the browser window changes height.
+- Added a dedicated Flow editor that is separate from machine-label editing and automatically opens the Today production overview.
+- Added independent saved settings for every production-process pointer: visibility, whole/start/end/bend offsets, start/end insets, line/outline colors, line/outline widths, opacity, solid/dashed/dotted style, straight/elbow/curve path form, elbow direction, arrow/dot/ring/no endpoint, and endpoint size.
+- Added direct canvas handles for each selected process pointer: S moves the start, E moves the end, M moves the entire pointer, and B edits an elbow/curve control point.
+- Included process-pointer settings in local persistence, layout import/export, workspace synchronization, and undo/redo snapshots.
+- Clarified machine Label controls so label leaders remain independent from facility process arrows.
+- Added regression coverage for pointer separation, editing, persistence, drag handles, and non-fullscreen editor viewport fitting.
+
 ## 0.13.14 - 2026-09-24
 
 - Removed the remaining Machine Design Studio mojibake from Build, Parts, timeline/status text, sizing readouts, standalone Studio markup, and standalone plant preview text.

@@ -1,0 +1,45 @@
+name: Package v0.13.15 handoff
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0309059732f3e65f46db8e269c346b6dc8ebb15f
+          fetch-depth: 0
+      - name: Build handoff archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p handoff changed
+          git archive --format=zip --prefix=monroe-glass-plant-evolution-v0.13.15/ 0309059732f3e65f46db8e269c346b6dc8ebb15f -o handoff/monroe-glass-plant-evolution-v0.13.15-full-project.zip
+          files=(
+            CHANGELOG.md
+            README.md
+            VERSION
+            app/globals.css
+            app/machine-studio/page.tsx
+            app/page.tsx
+            package-lock.json
+            package.json
+            public/machine-studio.html
+            public/plant-app.js
+            public/preview.html
+            tests/validate-process-pointers.mjs
+            tests/validate-public-viewer-controls.mjs
+          )
+          for file in "${files[@]}"; do
+            mkdir -p "changed/$(dirname "$file")"
+            cp "$file" "changed/$file"
+          done
+          (cd changed && zip -qr ../handoff/monroe-glass-plant-evolution-v0.13.15-changed-files.zip .)
+          unzip -t handoff/monroe-glass-plant-evolution-v0.13.15-full-project.zip
+          unzip -t handoff/monroe-glass-plant-evolution-v0.13.15-changed-files.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plant-overview-v0.13.15-handoff
+          path: handoff/*.zip
+          if-no-files-found: error

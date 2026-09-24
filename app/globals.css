@@ -7175,3 +7175,59 @@ body.viewer-fullscreen-fallback-active {
     min-height: 0 !important;
   }
 }
+
+
+/* v0.13.13 — deployment-safe Machine Studio icons and per-label leader controls */
+.studio-vector-icon {
+  width: 1.15em;
+  height: 1.15em;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.studio-top-actions .studio-vector-icon,
+.studio-back-link .studio-vector-icon { width: 18px; height: 18px; }
+.shape-quick-grid .studio-vector-icon { width: 19px; height: 19px; }
+.viewport-toolrail .studio-vector-icon { width: 20px; height: 20px; }
+.timeline-play-actions .studio-vector-icon { width: 14px; height: 14px; flex: 0 0 auto; }
+.timeline-play-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.viewport-toolrail button span,
+.studio-back-link,
+.studio-top-actions button { display: grid; place-items: center; }
+.component-visibility-dot {
+  width: 9px;
+  height: 9px;
+  display: block;
+  margin: auto;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: currentColor;
+}
+.component-visibility-dot.is-hidden { background: transparent; }
+.timeline-vector-icon { width: 14px; height: 14px; }
+.timeline-track-icon .timeline-vector-icon { width: 13px; height: 13px; }
+
+.label-line-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #dce3df;
+}
+.label-line-grid label {
+  display: grid;
+  gap: 4px;
+  color: #65716c;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+@media (max-width: 900px) {
+  .label-line-grid { grid-template-columns: 1fr 1fr; }
+}

@@ -15,7 +15,7 @@ assert.ok(plant.includes('if (isTodayOverview() && state.todayLabelMode === "nec
 assert.ok(plant.includes('else if (!isTodayStage() || isTodayOverview())'), "Full and Abbreviated Today modes must use normal machine-label rendering.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
 for (const label of ["Cutting", "Polisher", "Denver CNC", "Waterjet", "Washer", "Tempering Line", "Wrap", "Glass Truck", "Rack"]) {
-  assert.ok(plant.includes(`text: "${label}"`), `Production-flow label missing: ${label}`);
+  assert.ok(plant.includes(`text: flowText("${label}")`), `Production-flow label missing: ${label}`);
 }
 assert.ok(plant.includes("const TODAY_FLOW_LINKS"), "Today needs an explicit process-flow graph.");
 for (const edge of [

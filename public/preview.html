@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Editable 3D construction timeline for the Monroe glass plant.">
-  <title>Monroe Glass Plant Evolution Â· v0.13.13</title>
+  <title>Monroe Glass Plant Evolution &middot; v0.13.14</title>
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="plant-icon.png" type="image/png" sizes="512x512">
   <link rel="apple-touch-icon" href="plant-icon.png">
@@ -14,23 +14,23 @@
   <main class="site-shell">
     <header class="masthead">
       <div>
-        <p class="eyebrow"><span></span> Monroe, NC Â· Glass Plant</p>
+        <p class="eyebrow"><span></span> Monroe, NC &middot; Glass Plant</p>
         <h1>Plant evolution explorer</h1>
       </div>
       <div class="masthead-actions">
         <nav class="site-nav" aria-label="Model tools"><a class="active" href="preview.html">Plant layout</a><a href="machine-studio.html">Machine Design Studio</a></nav>
-        <p class="source-note" aria-label="Model Studio version">v0.13.13</p>
+        <p class="source-note" aria-label="Model Studio version">v0.13.14</p>
       </div>
     </header>
 
     <section id="plant-app" class="experience" aria-label="Interactive glass plant model">
       <div class="model-frame">
         <canvas id="plant-canvas" aria-label="Interactive 3D model of the Monroe glass plant"></canvas>
-        <div class="view-help"><span class="desktop-view-help">Right-drag orbit Â· Middle-drag pan Â· Wheel zoom</span><span class="mobile-view-help">Drag to orbit Â· Pinch to zoom Â· Two-finger drag to pan</span></div>
+        <div class="view-help"><span class="desktop-view-help">Right-drag orbit &middot; Middle-drag pan &middot; Wheel zoom</span><span class="mobile-view-help">Drag to orbit &middot; Pinch to zoom &middot; Two-finger drag to pan</span></div>
         <div class="mobile-stage-dock" aria-label="Mobile stage navigation">
-          <button id="mobile-previous-stage" type="button" aria-label="Previous construction stage" disabled><span aria-hidden="true">â†</span></button>
+          <button id="mobile-previous-stage" type="button" aria-label="Previous construction stage" disabled><span aria-hidden="true">&larr;</span></button>
           <div id="mobile-stage-summary" class="mobile-stage-summary" aria-live="polite"><span id="mobile-stage-count">Stage 01 of 18</span><strong id="mobile-stage-title">Empty shell</strong><small id="mobile-stage-description">Before equipment arrives, the glass-production footprint is a clear industrial shell.</small></div>
-          <button id="mobile-next-stage" type="button" aria-label="Next construction stage"><span aria-hidden="true">â†’</span></button>
+          <button id="mobile-next-stage" type="button" aria-label="Next construction stage"><span aria-hidden="true">&rarr;</span></button>
         </div>
       </div>
       <aside class="stage-panel" aria-live="polite">
@@ -40,7 +40,7 @@
         <p id="stage-description">The production floor begins as an open industrial shell, with the real glass-plant footprint and column grid taken from the facility drawing.</p>
         <div class="stage-actions">
           <button id="previous-stage" type="button" disabled>Previous</button>
-          <button id="next-stage" class="primary" type="button">Next stage <span>â†’</span></button>
+          <button id="next-stage" class="primary" type="button">Next stage <span>&rarr;</span></button>
         </div>
       </aside>
     </section>

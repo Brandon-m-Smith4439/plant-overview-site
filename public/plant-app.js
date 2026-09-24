@@ -9394,6 +9394,7 @@
         activeLabelKeys.add(labelKey);
         const selected = state.selectedMachineIds.has(entry.machine.instanceId);
         const current = Math.round(state.stageFloat) === entry.machine.reveal;
+        const stageCurrent = state.stage === entry.machine.reveal;
         const flow = necessaryTodayLabels ? necessaryFlowLabel(entry.machine) : null;
         const baseProfile = machineLabelProfile(entry.machine);
         const profile = flow
@@ -9412,7 +9413,7 @@
         const wasVisible = Boolean(priorVisual?.targetVisible || priorVisual?.alpha > .5);
         let eligible;
         if (stageSpecificLabels) {
-          eligible = selected || (current && isStageEquipmentLabelCandidate(entry.machine));
+          eligible = selected || (stageCurrent && isStageEquipmentLabelCandidate(entry.machine));
         } else if (necessaryTodayLabels) {
           eligible = selected || Boolean(flow);
         } else if (isTodayOverview()) {
@@ -9424,6 +9425,7 @@
           ...entry,
           selected,
           current,
+          stageCurrent,
           flow,
           flowOrder: flow?.order ?? 99,
           profile,
@@ -9442,8 +9444,8 @@
         second.rendered.w * second.rendered.d - first.rendered.w * first.rendered.d
       ));
 
-    labelCandidates.forEach(({ machine, rendered, selected, current, flow, profile, text, repeatKey, labelKey, eligible }) => {
-      const priority = selected || (stageSpecificLabels && current);
+    labelCandidates.forEach(({ machine, rendered, selected, current, stageCurrent, flow, profile, text, repeatKey, labelKey, eligible }) => {
+      const priority = selected || (stageSpecificLabels && stageCurrent);
       const repeatedCount = repeatedLabelsDrawn.get(repeatKey) || 0;
       const withinBudget = priority || ordinaryLabelsDrawn < labelBudget;
       const withinRepeatLimit = priority || repeatedCount < smartLabelRepeatLimit(profile);

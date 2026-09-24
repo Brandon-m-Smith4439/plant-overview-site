@@ -12,12 +12,14 @@ assert.ok(plant.includes("defaultRoofSettings") && plant.includes("leftHeight: 5
 assert.ok(plant.includes("function drawRoofTruss") && plant.includes("function drawRoof"), "The plant needs a roof and black truss rendering system.");
 assert.ok(plant.includes("const roofColor = state.roof.roofColor") && plant.includes("function drawTrussMember"), "First person must honor the selected roof color while retaining solid thick truss members.");
 assert.ok(plant.includes("function displayedWallSections") && plant.includes("state.roof.leftHeight") && plant.includes("state.roof.rightHeight"), "Visible roof sections must extend their matching walls to the configured height.");
-assert.ok(plant.includes("function displayedRoofProfile") && plant.includes("function displayedColumnHeight"), "Pillars need the same active roof-height profile as the walls and trusses.");
-assert.ok(plant.includes("h: displayedColumnHeight(column, columnRoofProfile)") && plant.includes("const height = displayedColumnHeight(column)"), "Both fast and fallback pillar renderers must extend pillars to the visible ceiling.");
+assert.ok(plant.includes("function structuralHeightProfile") && plant.includes("function displayedRoofProfile") && plant.includes("function displayedColumnHeight"), "Structural height must remain available independently of roof-panel visibility.");
+assert.ok(plant.includes("h: displayedColumnHeight(column, columnRoofProfile)") && plant.includes("const height = displayedColumnHeight(column)"), "Both fast and fallback pillar renderers must extend pillars to the full building height.");
 const displayedWallsStart = plant.indexOf("function displayedWallSections()");
 const displayedWallsEnd = plant.indexOf("function rendererViewState()", displayedWallsStart);
 const displayedWallsBody = plant.slice(displayedWallsStart, displayedWallsEnd);
-assert.ok(displayedWallsBody.includes("section.x < roofProfile.splitX") && displayedWallsBody.includes("sectionEnd > roofProfile.splitX"), "Roof-height wall splitting must use the active roof profile without an undefined split coordinate.");
+assert.ok(!displayedWallsBody.includes("displayedRoofProfile()"), "Full-height walls must not collapse when the overview roof panel is hidden.");
+assert.ok(displayedWallsBody.includes("const roofProfile = structuralHeightProfile()"), "Walls must use the structural height profile even with the roof hidden.");
+assert.ok(displayedWallsBody.includes("section.x < roofProfile.splitX") && displayedWallsBody.includes("sectionEnd > roofProfile.splitX"), "Full-height wall splitting must use the configured structural split.");
 const skyUpdateStart = plant.indexOf("function updateSkyBackground()");
 const skyUpdateEnd = plant.indexOf("function updateCanvasSize", skyUpdateStart);
 const skyUpdateBody = plant.slice(skyUpdateStart, skyUpdateEnd);

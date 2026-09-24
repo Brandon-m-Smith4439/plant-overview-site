@@ -11,6 +11,13 @@ const [studio, plant, html, css] = await Promise.all([
   readFile(path.join(root, "app", "globals.css"), "utf8"),
 ]);
 
+
+const tsx = await readFile(path.join(root, "app", "machine-studio", "page.tsx"), "utf8");
+assert.ok(tsx.includes("function StudioIcon") && tsx.includes("studio-vector-icon"), "The live Machine Design Studio must use self-contained SVG icons.");
+assert.ok(studio.includes("timeline-vector-icon") && studio.includes("function animationTypeIcon"), "Timeline animation controls must use SVG icons.");
+assert.ok(studio.includes("component-visibility-dot"), "Component visibility controls must not depend on font glyphs.");
+assert.ok(html.includes("studio-vector-icon"), "The standalone Machine Studio must mirror the SVG icon controls.");
+
 for (const shape of ["cylinder", "sphere", "cone", "wedge"]) {
   assert.ok(studio.includes(`\"${shape}\"`), `${shape} must be normalized by the designer.`);
   assert.ok(html.includes(`value=\"${shape}\"`), `${shape} must be available in the shape picker.`);

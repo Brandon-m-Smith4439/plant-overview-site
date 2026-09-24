@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.13";
+  const APP_VERSION = "0.13.14";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -738,7 +738,7 @@
     if (deferredLibrarySave) window.clearTimeout(deferredLibrarySave);
     deferredLibrarySave = 0;
     const saveState = document.getElementById("save-state");
-    if (saveState) saveState.textContent = "Savingâ€¦";
+    if (saveState) saveState.textContent = "Saving\u2026";
     Object.keys(library).forEach((id) => deletedDesignIds.delete(id));
     localStorage.setItem(DESIGN_KEY, JSON.stringify({
       version: 17,
@@ -1031,7 +1031,7 @@
     const options = embeddedMachineOptions();
     const custom = options.filter((design) => design.custom === true);
     const presets = options.filter((design) => design.custom !== true);
-    const optionMarkup = (design) => `<option value="${escapeHtml(design.id)}">${escapeHtml(design.name)} Â· ${escapeHtml(design.machineType || "generic")}</option>`;
+    const optionMarkup = (design) => `<option value="${escapeHtml(design.id)}">${escapeHtml(design.name)} \u00B7 ${escapeHtml(design.machineType || "generic")}</option>`;
     select.innerHTML = [
       custom.length ? `<optgroup label="My machines">${custom.map(optionMarkup).join("")}</optgroup>` : "",
       presets.length ? `<optgroup label="Preset machines">${presets.map(optionMarkup).join("")}</optgroup>` : "",
@@ -1044,7 +1044,7 @@
     const source = library[select.value];
     if (status) {
       status.textContent = source
-        ? `${source.name} Â· ${source.components.length} top-level part${source.components.length === 1 ? "" : "s"} Â· inserted as one editable machine.`
+        ? `${source.name} \u00B7 ${source.components.length} top-level part${source.components.length === 1 ? "" : "s"} \u00B7 inserted as one editable machine.`
         : "Create or save another machine design first, then return here to insert it.";
     }
   }
@@ -1475,7 +1475,7 @@
   function updateToolLabel() {
     const label = document.getElementById("active-tool-label");
     const [title, help] = TOOL_LABELS[state.tool] || TOOL_LABELS.select;
-    if (label) label.innerHTML = `<strong>${escapeHtml(title)}</strong> Â· ${escapeHtml(help)}`;
+    if (label) label.innerHTML = `<strong>${escapeHtml(title)}</strong> \u00B7 ${escapeHtml(help)}`;
   }
 
   function setBrowserTab(tab, { refresh = true } = {}) {
@@ -1642,7 +1642,7 @@
         id: item.id,
         key: JSON.stringify(pathIds),
         pathIds,
-        name: `${depth ? `${"â†³ ".repeat(depth)}` : ""}${item.name} Â· ${qualifier}`,
+        name: `${depth ? `${"\u21B3 ".repeat(depth)}` : ""}${item.name} \u00B7 ${qualifier}`,
         component: item,
       });
       (item.children || []).forEach((child) => visit(child, depth + 1, pathIds));
@@ -1809,7 +1809,7 @@
     const activeClip = selectedTimelineClip();
     const duration = sharedDesignTimelineDuration();
     const summary = document.getElementById("timeline-summary");
-    if (summary) summary.textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"} Â· 0â€“${duration.toFixed(0)} sec`;
+    if (summary) summary.textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"} \u00B7 0\u2013${duration.toFixed(0)} sec`;
 
     const masterValues = {
       "timeline-enabled": timeline.enabled,
@@ -1851,7 +1851,7 @@
           <i class="timeline-resize-handle start" data-timeline-resize="start" aria-label="Resize start of ${escapeHtml(clip.name)}"></i>
           <span class="timeline-track-body" data-timeline-drag-body>
             <span class="timeline-track-icon">${animationTypeIcon(clip.type)}</span>
-            <span class="timeline-track-copy"><strong>${escapeHtml(clip.name)}</strong><small>${clip.start.toFixed(2)}s â†’ ${(clip.start + clip.duration).toFixed(2)}s Â· ${clip.duration.toFixed(2)}s</small></span>
+            <span class="timeline-track-copy"><strong>${escapeHtml(clip.name)}</strong><small>${clip.start.toFixed(2)}s \u2192 ${(clip.start + clip.duration).toFixed(2)}s \u00B7 ${clip.duration.toFixed(2)}s</small></span>
           </span>
           <i class="timeline-resize-handle end" data-timeline-resize="end" aria-label="Resize end of ${escapeHtml(clip.name)}"></i>
         </button>`;
@@ -1904,7 +1904,7 @@
       if (rotationDirection) {
         const angle = Number(activeClip.amount) || 0;
         rotationDirection.textContent = Math.abs(angle) < 0.00001
-          ? "Current direction: none (angle is 0Â°)"
+          ? "Current direction: none (angle is 0\u00B0)"
           : `Current direction: ${angle < 0 ? "reverse (-)" : "forward (+)"}`;
       }
     }
@@ -1961,7 +1961,7 @@
       <div class="design-list-row ${design.id === state.designId ? "active" : ""}">
         <button type="button" data-design-id="${escapeHtml(design.id)}" class="design-list-select ${design.id === state.designId ? "active" : ""}">
           <span>${escapeHtml(design.name)}</span>
-          <small>${escapeHtml(design.machineType)} Â· ${design.components.length} parts${builtinIds.has(design.id) ? " Â· preset" : " Â· custom"}</small>
+          <small>${escapeHtml(design.machineType)} \u00B7 ${design.components.length} parts${builtinIds.has(design.id) ? " \u00B7 preset" : " \u00B7 custom"}</small>
         </button>
         <button type="button" class="design-list-delete" data-delete-design-id="${escapeHtml(design.id)}" title="Delete ${escapeHtml(design.name)}" aria-label="Delete ${escapeHtml(design.name)}">&times;</button>
       </div>
@@ -2027,7 +2027,7 @@
       || bounds.maxX > baseX + design.base.w + 0.0005
       || bounds.maxY > baseY + design.base.h + 0.0005
       || bounds.maxZ > baseZ + design.base.d + 0.0005;
-    status.textContent = `Envelope at ${baseX.toFixed(3)}, ${baseY.toFixed(3)}, ${baseZ.toFixed(3)} ft Â· Size ${design.base.w.toFixed(3)} Ã— ${design.base.d.toFixed(3)} Ã— ${design.base.h.toFixed(3)} ft Â· Tight part bounds ${geometry.w.toFixed(3)} Ã— ${geometry.d.toFixed(3)} Ã— ${geometry.h.toFixed(3)} ft${outside ? " Â· Some geometry extends outside the envelope." : ""}`;
+    status.textContent = `Envelope at ${baseX.toFixed(3)}, ${baseY.toFixed(3)}, ${baseZ.toFixed(3)} ft \u00B7 Size ${design.base.w.toFixed(3)} \u00D7 ${design.base.d.toFixed(3)} \u00D7 ${design.base.h.toFixed(3)} ft \u00B7 Tight part bounds ${geometry.w.toFixed(3)} \u00D7 ${geometry.d.toFixed(3)} \u00D7 ${geometry.h.toFixed(3)} ft${outside ? " \u00B7 Some geometry extends outside the envelope." : ""}`;
     status.classList.toggle("warning", outside);
   }
 
@@ -2129,7 +2129,7 @@
       <div class="component-tree-row ${state.selectAllParts || state.selectedComponentIds.has(component.id) ? "active" : ""}" data-component-row="${escapeHtml(component.id)}">
         <button type="button" class="component-visibility" data-toggle-component="${escapeHtml(component.id)}" title="${component.visible === false ? "Show" : "Hide"} component" aria-label="${component.visible === false ? "Show" : "Hide"} ${escapeHtml(component.name)}"><span class="component-visibility-dot${component.visible === false ? " is-hidden" : ""}" aria-hidden="true"></span></button>
         <button type="button" class="component-select" data-component-id="${escapeHtml(component.id)}">
-          <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} Â· ${escapeHtml(component.embeddedMachine ? "machine" : component.type)}${component.embeddedMachine ? " Â· embedded" : ""}${componentHasAnimation(component) ? ` Â· animated` : ""}</small></span>
+          <i style="background:${escapeHtml(component.color)}"></i><span><strong>${escapeHtml(component.name)}</strong><small>${index + 1} \u00B7 ${escapeHtml(component.embeddedMachine ? "machine" : component.type)}${component.embeddedMachine ? " \u00B7 embedded" : ""}${componentHasAnimation(component) ? ` \u00B7 animated` : ""}</small></span>
         </button>
       </div>
     `).join("") || `<p class="studio-empty">No parts match this search.</p>`;
@@ -2200,8 +2200,8 @@
       if (help) help.textContent = "Use Move, Rotate, or Scale after selecting a component. Transform controls always stay above the model.";
     }
     if (typeLabel) typeLabel.textContent = wholeDesign
-      ? `All ${currentDesign()?.components.length || 0} parts Â· shared settings`
-      : multiSelection ? `${selectedCount} selected parts Â· shared settings` : (component ? component.type : "Nothing selected");
+      ? `All ${currentDesign()?.components.length || 0} parts \u00B7 shared settings`
+      : multiSelection ? `${selectedCount} selected parts \u00B7 shared settings` : (component ? component.type : "Nothing selected");
 
     document.getElementById("select-all-components")?.classList.toggle("active", wholeDesign);
     document.getElementById("duplicate-component")?.toggleAttribute("disabled", selectedCount === 0);
@@ -2291,7 +2291,7 @@
     const children = !bulkSelection && primary.type === "group" ? (primary.children || []) : [];
     if (motionDriver) {
       motionDriver.innerHTML = children.map((child) => (
-        `<option value="${escapeHtml(child.id)}">${escapeHtml(child.name)}${componentHasAnimation(child) ? " Â· animated" : ""}</option>`
+        `<option value="${escapeHtml(child.id)}">${escapeHtml(child.name)}${componentHasAnimation(child) ? " \u00B7 animated" : ""}</option>`
       )).join("");
       motionDriver.value = children.some((child) => child.id === primary.motionDriverId)
         ? primary.motionDriverId
@@ -2396,7 +2396,7 @@
 
   function conciseMachineName(value) {
     const name = String(value || "New machine").trim() || "New machine";
-    return name.length <= 28 ? name : `${name.slice(0, 25).trimEnd()}â€¦`;
+    return name.length <= 28 ? name : `${name.slice(0, 25).trimEnd()}\u2026`;
   }
 
   function plantFloorBounds() {
@@ -2480,7 +2480,7 @@
     const currentValue = select.value || "last";
     const stages = Array.isArray(plantLayout.stages) ? plantLayout.stages : [];
     select.innerHTML = stages.length
-      ? stages.map((stage, index) => `<option value="${index}">${escapeHtml(stage.title || stage.short || `Stage ${index + 1}`)}${index === stages.length - 1 ? " Â· current" : ""}</option>`).join("")
+      ? stages.map((stage, index) => `<option value="${index}">${escapeHtml(stage.title || stage.short || `Stage ${index + 1}`)}${index === stages.length - 1 ? " \u00B7 current" : ""}</option>`).join("")
       : '<option value="0">Current plant</option>';
     const preferred = currentValue === "last" ? String(Math.max(0, stages.length - 1)) : currentValue;
     select.value = [...select.options].some((option) => option.value === preferred)
@@ -2604,8 +2604,8 @@
     if (!select) return;
     const currentValue = select.value || queryMachineId || "";
     const machines = [...plantLayout.machines].sort((first, second) => String(first.name).localeCompare(String(second.name)));
-    select.innerHTML = `<option value="">Choose a machineâ€¦</option>${machines.map((machine) => (
-      `<option value="${escapeHtml(machine.instanceId)}">${escapeHtml(machine.name || machine.type)} Â· ${escapeHtml(machine.type || "object")}${machine.designId ? " Â· custom design" : ""}</option>`
+    select.innerHTML = `<option value="">Choose a machine\u2026</option>${machines.map((machine) => (
+      `<option value="${escapeHtml(machine.instanceId)}">${escapeHtml(machine.name || machine.type)} \u00B7 ${escapeHtml(machine.type || "object")}${machine.designId ? " \u00B7 custom design" : ""}</option>`
     )).join("")}`;
     select.value = machines.some((machine) => machine.instanceId === currentValue) ? currentValue : "";
     const status = document.getElementById("assignment-status");
@@ -2637,11 +2637,11 @@
     });
     if (status) {
       const design = machine?.designId && library[machine.designId] ? library[machine.designId] : currentDesign();
-      const dimensions = design?.base ? `${Number(design.base.w).toFixed(1)} Ã— ${Number(design.base.d).toFixed(1)} Ã— ${Number(design.base.h).toFixed(1)} ft` : "no custom envelope";
+      const dimensions = design?.base ? `${Number(design.base.w).toFixed(1)} \u00D7 ${Number(design.base.d).toFixed(1)} \u00D7 ${Number(design.base.h).toFixed(1)} ft` : "no custom envelope";
       const mode = normalizedDesignScaleMode(machine?.designScaleMode);
       const modeLabel = mode === "match" ? "matches and stays synced" : mode === "stretch" ? "stretches on each axis" : "preserves proportions";
       status.textContent = machine
-        ? `${machine.name} Â· ${dimensions} Â· ${modeLabel}.${machine.instanceId === state.linkedMachineId ? " Every saved design change updates this plant object automatically." : ""}`
+        ? `${machine.name} \u00B7 ${dimensions} \u00B7 ${modeLabel}.${machine.instanceId === state.linkedMachineId ? " Every saved design change updates this plant object automatically." : ""}`
         : "Assignments save directly to the plant layout stored in this browser.";
     }
   }
@@ -4477,7 +4477,7 @@
     const belowFloor = state.pitch < 0;
     canvas.classList.toggle("below-floor-view", belowFloor);
     const cameraPosition = document.getElementById("designer-camera-position");
-    if (cameraPosition) cameraPosition.textContent = belowFloor ? "Below floor Â· floor transparent" : "Above floor Â· full orbit enabled";
+    if (cameraPosition) cameraPosition.textContent = belowFloor ? "Below floor \u00B7 floor transparent" : "Above floor \u00B7 full orbit enabled";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     depthRenderer.beginFrame(canvas.width, canvas.height, project, rendererViewState());
     renderPerformance.beginPhase?.("grid");
@@ -5921,7 +5921,7 @@
     if (components.length > 1 || components[0].type === "group") {
       rotateSelectionTogether(components, components.map(clone), selectionCenter(components), degrees, axis);
     } else rotateComponent(components[0], degrees, axis, clone(components[0]));
-    commit(`Rotated ${components.length > 1 ? `${components.length} selected parts` : axis.toUpperCase()} ${degrees > 0 ? "+" : ""}${degrees}Â°.`);
+    commit(`Rotated ${components.length > 1 ? `${components.length} selected parts` : axis.toUpperCase()} ${degrees > 0 ? "+" : ""}${degrees}\u00B0.`);
   }
   document.getElementById("rotate-negative")?.addEventListener("click", () => rotateSelectedBy(-90));
   document.getElementById("rotate-positive")?.addEventListener("click", () => rotateSelectedBy(90));

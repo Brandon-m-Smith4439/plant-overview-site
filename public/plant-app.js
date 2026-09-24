@@ -2652,6 +2652,10 @@
           : "Right-drag orbit · Middle-drag pan · Wheel up/down zoom";
       return;
     }
+    if (state.editorTool === "flow") {
+      help.textContent = "Flow: drag S/E/M/B handles · middle-drag pan · right/Alt-drag orbit";
+      return;
+    }
     help.textContent = state.editorInteraction === "navigate"
       ? "Navigate: right-drag orbit · middle/Shift/Space-drag pan · wheel zoom"
       : "Edit: drag an object · middle-drag pan · right/Alt-drag orbit";
@@ -2670,6 +2674,42 @@
       value: first ?? "",
       mixed: items.some((item) => String(item?.[field] ?? "") !== String(first ?? "")),
     };
+  }
+
+  function activeFlowPointerDefinition() {
+    const selected = FLOW_POINTER_DEFINITIONS.find((definition) => definition.key === state.selectedFlowPointerKey);
+    return selected || FLOW_POINTER_DEFINITIONS[0] || null;
+  }
+
+  function activeFlowPointerSettings() {
+    const definition = activeFlowPointerDefinition();
+    if (!definition) return null;
+    if (!state.flowPointers[definition.key]) state.flowPointers[definition.key] = normalizeFlowPointer();
+    return state.flowPointers[definition.key];
+  }
+
+  function updateFlowPointerEditorFields(panel = document.querySelector(".layout-editor")) {
+    if (!panel) return;
+    const definition = activeFlowPointerDefinition();
+    const settings = activeFlowPointerSettings();
+    const picker = panel.querySelector("[data-flow-pointer-picker]");
+    if (picker && definition) picker.value = definition.key;
+    panel.querySelectorAll("[data-flow-pointer-field]").forEach((input) => {
+      const field = input.dataset.flowPointerField;
+      if (!settings || document.activeElement === input) return;
+      input.value = String(settings[field] ?? "");
+      if (field === "elbowDirection") input.disabled = settings.lineShape !== "elbow";
+    });
+    panel.querySelectorAll("[data-flow-pointer-check]").forEach((input) => {
+      if (!settings) return;
+      input.checked = Boolean(settings[input.dataset.flowPointerCheck]);
+    });
+    const summary = panel.querySelector("[data-flow-pointer-summary]");
+    if (summary) {
+      summary.textContent = definition
+        ? `${definition.label} · ${settings.visible ? "visible" : "hidden"} · ${settings.lineShape} ${settings.headStyle}`
+        : "No process pointer is available.";
+    }
   }
 
   function updateEditorPanel() {
@@ -2694,6 +2734,7 @@
     const selection = panel.querySelector("[data-editor-selection]");
     if (selection) {
       if (state.editorTool === "timeline") selection.textContent = currentStage()?.title || "Timeline";
+      else if (state.editorTool === "flow") selection.textContent = activeFlowPointerDefinition()?.label || "Process pointers";
       else if (state.editorTool === "pillars") {
         const column = structuralColumns().find((item) => item.key === state.selectedColumnKey);
         selection.textContent = column ? `Pillar ${column.key}` : "Structure controls";
@@ -2705,6 +2746,7 @@
     panel.querySelectorAll("[data-needs-selection]").forEach((control) => {
       control.disabled = selectionCount === 0;
     });
+    updateFlowPointerEditorFields(panel);
 
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       const field = input.dataset.machineField;
@@ -3099,6 +3141,57 @@
       input.value = state.paint[input.dataset.paintColor];
     });
 
+    panel.querySelector("[data-flow-pointer-picker]")?.addEventListener("change", (event) => {
+      if (!state.flowPointers[event.target.value]) return;
+      state.selectedFlowPointerKey = event.target.value;
+      renderPerformance.invalidate?.("flow-pointer-selection");
+      updateEditorPanel();
+    });
+    panel.querySelectorAll("[data-flow-pointer-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const definition = activeFlowPointerDefinition();
+        const settings = activeFlowPointerSettings();
+        if (!definition || !settings) return;
+        pushHistory();
+        const field = input.dataset.flowPointerField;
+        const stringFields = new Set(["lineColor", "outlineColor", "lineStyle", "lineShape", "elbowDirection", "headStyle"]);
+        const nextValue = stringFields.has(field) ? input.value : Number(input.value);
+        state.flowPointers[definition.key] = normalizeFlowPointer({ ...settings, [field]: nextValue });
+        persistLayout();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelectorAll("[data-flow-pointer-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const definition = activeFlowPointerDefinition();
+        const settings = activeFlowPointerSettings();
+        if (!definition || !settings) return;
+        pushHistory();
+        state.flowPointers[definition.key] = normalizeFlowPointer({
+          ...settings,
+          [input.dataset.flowPointerCheck]: input.checked,
+        });
+        persistLayout();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelector("[data-editor-action='reset-flow-pointer']")?.addEventListener("click", () => {
+      const definition = activeFlowPointerDefinition();
+      if (!definition) return;
+      pushHistory();
+      state.flowPointers[definition.key] = normalizeFlowPointer();
+      persistLayout();
+      updateEditorPanel();
+      showToast(`${definition.label} pointer reset.`);
+    });
+    panel.querySelector("[data-editor-action='reset-all-flow-pointers']")?.addEventListener("click", () => {
+      pushHistory();
+      state.flowPointers = normalizeFlowPointers();
+      persistLayout();
+      updateEditorPanel();
+      showToast("All production process pointers reset.");
+    });
+
     const objectSearch = panel.querySelector("[data-object-search]");
     const objectPicker = panel.querySelector("[data-object-picker]");
     if (objectPicker) {
@@ -3285,6 +3378,7 @@
       wallGeometry: state.wallGeometry,
       paint: state.paint,
       roof: state.roof,
+      flowPointers: state.flowPointers,
       playbackSpeed: state.playbackSpeed,
       stageDurationSeconds: state.stageDurationSeconds,
     };
@@ -3384,6 +3478,7 @@
       state.wallGeometry = normalizeWallGeometry(payload.wallGeometry);
       state.paint = normalizePaintSettings(payload.paint);
       state.roof = normalizeRoofSettings(payload.roof);
+      state.flowPointers = normalizeFlowPointers(payload.flowPointers);
       state.playbackSpeed = Number(payload.playbackSpeed) || 1;
       state.stageDurationSeconds = normalizeStageDuration(payload.stageDurationSeconds);
       state.stage = clamp(state.stage, 0, stages.length - 1);
@@ -3971,10 +4066,19 @@
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {
         state.editorTool = button.dataset.editorTool;
-        // Keep a machine selection while visiting Project so the selected
-        // instance can be exported. Pillar editing remains mutually exclusive.
-        if (state.editorTool === "pillars") clearMachineSelection();
+        // Flow and Structure are independent editing modes. Flow always opens
+        // the Today overview because those process pointers only exist there.
+        if (state.editorTool === "pillars" || state.editorTool === "flow") clearMachineSelection();
         else state.selectedColumnKey = null;
+        if (state.editorTool === "flow") {
+          state.selectedColumnKey = null;
+          state.todayLabelMode = "necessary";
+          state.labelMode = state.labelMode === "off" ? "smart" : state.labelMode;
+          state.showLabels = true;
+          setStage(stages.length - 1);
+          state.stageFloat = stages.length - 1;
+          renderPerformance.invalidate?.("flow-editor-open");
+        }
         updateEditorPanel();
       });
     });

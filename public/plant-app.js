@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.12";
+  const APP_VERSION = "0.13.13";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -728,6 +728,16 @@
       labelAnchorYPercent: clamp(Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100, 0, 100),
       labelAnchorZPercent: clamp(Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50, 0, 100),
       labelHeightOffset: clamp(Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4, 0, 60),
+      labelScreenOffsetX: clamp(Number.isFinite(Number(machine.labelScreenOffsetX)) ? Number(machine.labelScreenOffsetX) : 0, -400, 400),
+      labelScreenOffsetY: clamp(Number.isFinite(Number(machine.labelScreenOffsetY)) ? Number(machine.labelScreenOffsetY) : 0, -400, 400),
+      labelLineColor: /^#[0-9a-f]{6}$/i.test(String(machine.labelLineColor || "")) ? machine.labelLineColor : "#52b7aa",
+      labelLineWidth: clamp(Number.isFinite(Number(machine.labelLineWidth)) ? Number(machine.labelLineWidth) : 1.65, .5, 10),
+      labelLineOpacity: clamp(Number.isFinite(Number(machine.labelLineOpacity)) ? Number(machine.labelLineOpacity) : 100, 10, 100),
+      labelLineStyle: ["solid", "dashed", "dotted"].includes(machine.labelLineStyle) ? machine.labelLineStyle : "solid",
+      labelLineShape: ["straight", "elbow"].includes(machine.labelLineShape) ? machine.labelLineShape : "straight",
+      labelLeaderSide: ["auto", "top", "bottom", "left", "right"].includes(machine.labelLeaderSide) ? machine.labelLeaderSide : "auto",
+      labelTargetStyle: ["dot", "ring", "arrow", "none"].includes(machine.labelTargetStyle) ? machine.labelTargetStyle : "dot",
+      labelTargetSize: clamp(Number.isFinite(Number(machine.labelTargetSize)) ? Number(machine.labelTargetSize) : 3.2, 1, 12),
       category: machine.category || objectCategory(machine.type),
       designId: machine.designId || defaultDesignForType(machine.type),
       designScaleMode: normalizedDesignScaleMode(machine.designScaleMode || (isFloorFeatureType(machine.type) ? "stretch" : "preserve")),
@@ -1297,7 +1307,8 @@
           "naturalW", "naturalD", "naturalH", "scaleXPercent", "scaleYPercent", "scaleZPercent", "scaleEditMode",
           "rotationX", "rotationY", "rotationZ", "rotation", "color", "visible", "locked", "showLabel", "useDesignName",
           "labelUseMachineName", "labelText", "labelAbbreviation", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase",
-          "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset",
+          "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset", "labelScreenOffsetX", "labelScreenOffsetY",
+          "labelLineColor", "labelLineWidth", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
         ];
         synchronizedFields.forEach((field) => {
           if (incoming[field] !== undefined && String(machine[field] ?? "") !== String(incoming[field] ?? "")) {
@@ -3557,19 +3568,32 @@
             <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
           </div>
           <div class="label-pointer-grid">
-            <label>Pointer X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="5" value="50"></label>
-            <label>Pointer Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="5" value="100"></label>
-            <label>Pointer Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="5" value="50"></label>
-            <label>Label offset (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="1" value="4"></label>
+            <label>Pointer X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+            <label>Pointer Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
+            <label>Pointer Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+            <label>Label offset (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
+            <label>Tag X shift (px)<input type="number" data-label-field="labelScreenOffsetX" data-needs-selection min="-400" max="400" step="2" value="0"></label>
+            <label>Tag Y shift (px)<input type="number" data-label-field="labelScreenOffsetY" data-needs-selection min="-400" max="400" step="2" value="0"></label>
+          </div>
+          <div class="label-line-grid">
+            <label>Line color<input type="color" data-label-field="labelLineColor" data-needs-selection value="#52b7aa"></label>
+            <label>Line width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25" value="1.65"></label>
+            <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5" value="100"></label>
+            <label>Line style<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+            <label>Line form<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+            <label>Label connection<select data-label-field="labelLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
+            <label>Pointer end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
+            <label>Pointer size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5" value="3.2"></label>
           </div>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
             <button type="button" data-editor-action="center-label-pointer" data-needs-selection>Center pointer</button>
+            <button type="button" data-editor-action="reset-label-line" data-needs-selection>Reset pointer &amp; line</button>
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">Typing custom text only changes the layout label. Update linked labels preserves custom text; Reset all removes every custom label name.</p>
+          <p class="label-help">Today Necessary labels use this custom label text when provided. Pointer anchor, tag position, line color, width, opacity, style, form, connection edge, and endpoint are saved independently for every machine.</p>
         </fieldset>
         <fieldset class="crane-controls">
           <legend>Attached overhead crane</legend>
@@ -3768,7 +3792,7 @@
             <label>Wall height (ft)<input type="number" min="8" max="150" step="1" data-wall-geometry-field="height"></label>
             <label>Wall thickness (ft)<input type="number" min="0.25" max="20" step="0.25" data-wall-geometry-field="thickness"></label>
           </div>
-          <div class="roof-checks"><label><input type="checkbox" data-wall-geometry-check="extendToRoof"> Extend visible walls to the roof when it is shown</label></div>
+          <div class="roof-checks"><label><input type="checkbox" data-wall-geometry-check="extendToRoof"> Extend walls to the full building height (roof can stay hidden)</label></div>
           <button type="button" data-editor-action="wall-geometry-defaults">Restore wall defaults</button>
         </fieldset>
         <button class="editor-wide-button" type="button" data-editor-action="restore-pillars">Restore every pillar and position</button>
@@ -4125,7 +4149,7 @@
           machine.labelText = machine.labelUseMachineName ? "" : value;
         } else if (field === "labelAbbreviation") {
           machine.labelAbbreviation = input.value.trim();
-        } else if (["labelTextColor", "labelBackgroundColor"].includes(field)) {
+        } else if (["labelTextColor", "labelBackgroundColor", "labelLineColor"].includes(field)) {
           if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
         } else if (field === "labelSizePercent") {
           machine.labelSizePercent = clamp(Number(input.value) || 100, 50, 250);
@@ -4135,6 +4159,26 @@
         } else if (field === "labelHeightOffset") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelHeightOffset = clamp(value, 0, 60);
+        } else if (["labelScreenOffsetX", "labelScreenOffsetY"].includes(field)) {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine[field] = clamp(value, -400, 400);
+        } else if (field === "labelLineWidth") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelLineWidth = clamp(value, .5, 10);
+        } else if (field === "labelLineOpacity") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelLineOpacity = clamp(value, 10, 100);
+        } else if (field === "labelTargetSize") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelTargetSize = clamp(value, 1, 12);
+        } else if (field === "labelLineStyle") {
+          machine.labelLineStyle = ["solid", "dashed", "dotted"].includes(input.value) ? input.value : "solid";
+        } else if (field === "labelLineShape") {
+          machine.labelLineShape = ["straight", "elbow"].includes(input.value) ? input.value : "straight";
+        } else if (field === "labelLeaderSide") {
+          machine.labelLeaderSide = ["auto", "top", "bottom", "left", "right"].includes(input.value) ? input.value : "auto";
+        } else if (field === "labelTargetStyle") {
+          machine.labelTargetStyle = ["dot", "ring", "arrow", "none"].includes(input.value) ? input.value : "dot";
         } else if (field === "labelFontWeight") {
           machine.labelFontWeight = ["regular", "semibold", "bold"].includes(input.value) ? input.value : "semibold";
         }
@@ -4174,9 +4218,35 @@
       machine.labelAnchorYPercent = 100;
       machine.labelAnchorZPercent = 50;
       machine.labelHeightOffset = 4;
+      machine.labelScreenOffsetX = 0;
+      machine.labelScreenOffsetY = 0;
       persistLayout();
+      renderPerformance.invalidate();
       updateEditorPanel();
       showToast("Label pointer centered above the machine.");
+    });
+    panel.querySelector("[data-editor-action='reset-label-line']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      if (!machine || selectedMachines().length !== 1) return;
+      pushHistory();
+      machine.labelAnchorXPercent = 50;
+      machine.labelAnchorYPercent = 100;
+      machine.labelAnchorZPercent = 50;
+      machine.labelHeightOffset = 4;
+      machine.labelScreenOffsetX = 0;
+      machine.labelScreenOffsetY = 0;
+      machine.labelLineColor = "#52b7aa";
+      machine.labelLineWidth = 1.65;
+      machine.labelLineOpacity = 100;
+      machine.labelLineStyle = "solid";
+      machine.labelLineShape = "straight";
+      machine.labelLeaderSide = "auto";
+      machine.labelTargetStyle = "dot";
+      machine.labelTargetSize = 3.2;
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast("Pointer position and line styling reset for this label.");
     });
     panel.querySelector("[data-editor-action='refresh-labels']")?.addEventListener("click", () => {
       pushHistory();
@@ -4363,7 +4433,7 @@
         state.wallGeometry[input.dataset.wallGeometryCheck] = input.checked;
         persistLayout();
         updateEditorPanel();
-        showToast(input.checked ? "Walls now extend to the visible roof." : "Walls now use the custom wall height.");
+        showToast(input.checked ? "Walls now extend to the full building height, independent of roof visibility." : "Walls now use the custom wall height.");
       });
     });
     panel.querySelector("[data-editor-action='wall-geometry-defaults']")?.addEventListener("click", () => {
@@ -5387,9 +5457,7 @@
     ];
   }
 
-  function displayedRoofProfile() {
-    const roofIsVisible = state.roof.enabled && (state.cameraMode === "walk" || state.roof.overviewVisible);
-    if (!roofIsVisible) return null;
+  function structuralHeightProfile() {
     const bounds = floorBounds();
     return {
       splitX: bounds[0] + (bounds[2] - bounds[0]) * state.roof.splitPercent / 100,
@@ -5398,15 +5466,20 @@
     };
   }
 
-  function displayedColumnHeight(column, roofProfile = displayedRoofProfile()) {
-    if (!roofProfile) return 22;
-    return Number(column?.x) < roofProfile.splitX ? roofProfile.leftHeight : roofProfile.rightHeight;
+  function displayedRoofProfile() {
+    const roofIsVisible = state.roof.enabled && (state.cameraMode === "walk" || state.roof.overviewVisible);
+    return roofIsVisible ? structuralHeightProfile() : null;
+  }
+
+  function displayedColumnHeight(column, heightProfile = structuralHeightProfile()) {
+    if (!heightProfile) return 22;
+    return Number(column?.x) < heightProfile.splitX ? heightProfile.leftHeight : heightProfile.rightHeight;
   }
 
   function displayedWallSections() {
     const sections = wallSections();
-    const roofProfile = displayedRoofProfile();
-    if (!roofProfile || !state.wallGeometry.extendToRoof) return sections;
+    const roofProfile = structuralHeightProfile();
+    if (!state.wallGeometry.extendToRoof) return sections;
     const heightAt = (x) => x < roofProfile.splitX ? roofProfile.leftHeight : roofProfile.rightHeight;
     const result = [];
     sections.forEach((section) => {
@@ -5994,15 +6067,18 @@
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-    if (type === "cutting" || /cutting table/.test(source)) return { key: "cutting", text: "Cutting", order: 0 };
-    if (type === "kodiak" && !/skiati/.test(source)) return { key: "polisher", text: "Polisher", order: 1 };
-    if (type === "denver" || /denver/.test(source)) return { key: "denver-cnc", text: "Denver CNC", order: 2 };
-    if (type === "waterjet" || /waterjet/.test(source)) return { key: "waterjet", text: "Waterjet", order: 3 };
-    if (type === "washer" || /washer/.test(source)) return { key: "washer", text: "Washer", order: 4 };
-    if (type === "furnace" || /tempering line/.test(source)) return { key: "tempering", text: "Tempering Line", order: 5 };
-    if (type === "wrapping" || /wrapp/.test(source)) return { key: "wrap", text: "Wrap", order: 6 };
-    if (type === "aframetruck" || /glass truck/.test(source)) return { key: "glass-truck", text: "Glass Truck", order: 7 };
-    if (type === "glassrack" && Number(machine.reveal) >= 11) return { key: "rack", text: "Rack", order: 8 };
+    const flowText = (fallback) => machine.labelUseMachineName === false && String(machine.labelText || "").trim()
+      ? String(machine.labelText).trim()
+      : fallback;
+    if (type === "cutting" || /cutting table/.test(source)) return { key: "cutting", text: flowText("Cutting"), order: 0 };
+    if (type === "kodiak" && !/skiati/.test(source)) return { key: "polisher", text: flowText("Polisher"), order: 1 };
+    if (type === "denver" || /denver/.test(source)) return { key: "denver-cnc", text: flowText("Denver CNC"), order: 2 };
+    if (type === "waterjet" || /waterjet/.test(source)) return { key: "waterjet", text: flowText("Waterjet"), order: 3 };
+    if (type === "washer" || /washer/.test(source)) return { key: "washer", text: flowText("Washer"), order: 4 };
+    if (type === "furnace" || /tempering line/.test(source)) return { key: "tempering", text: flowText("Tempering Line"), order: 5 };
+    if (type === "wrapping" || /wrapp/.test(source)) return { key: "wrap", text: flowText("Wrap"), order: 6 };
+    if (type === "aframetruck" || /glass truck/.test(source)) return { key: "glass-truck", text: flowText("Glass Truck"), order: 7 };
+    if (type === "glassrack" && Number(machine.reveal) >= 11) return { key: "rack", text: flowText("Rack"), order: 8 };
     return null;
   }
 
@@ -6158,7 +6234,14 @@
     [...nodes.entries()]
       .sort((first, second) => first[1].flow.order - second[1].flow.order)
       .forEach(([key, entry]) => {
-        const anchor = flowEntryWorldAnchor(entry);
+        const rendered = entry.rendered;
+        const machine = entry.machine;
+        const anchor = localPoint(
+          rendered,
+          rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), 0, 100) / 100,
+          rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), 0, 100) / 100,
+          rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), 0, 100) / 100,
+        );
         if (!anchor) return;
         const labelKey = `today-flow:${key}`;
         activeKeys.add(labelKey);
@@ -6170,7 +6253,17 @@
             labelKey,
             time,
             visibleTarget: true,
-            labelLiftFeet: compactLabelViewport() ? 1.8 : 2.5,
+            labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? (compactLabelViewport() ? 1.8 : 2.5)), 0, 60),
+            screenOffsetX: clamp(Number(machine.labelScreenOffsetX ?? 0), -400, 400),
+            screenOffsetY: clamp(Number(machine.labelScreenOffsetY ?? 0), -400, 400),
+            lineColor: machine.labelLineColor,
+            lineWidth: machine.labelLineWidth,
+            lineOpacity: machine.labelLineOpacity,
+            lineStyle: machine.labelLineStyle,
+            lineShape: machine.labelLineShape,
+            leaderSide: machine.labelLeaderSide,
+            targetStyle: machine.labelTargetStyle,
+            targetSize: machine.labelTargetSize,
             forceVisible: true,
             priority: true,
             selected: false,
@@ -6201,6 +6294,50 @@
       top: rectangle.top - padding,
       bottom: rectangle.bottom + padding,
     };
+  }
+
+
+  function labelLeaderConnection(rectangle, anchorPoint, requestedSide, pixelScale) {
+    const padding = 5 * pixelScale;
+    const side = requestedSide === "auto"
+      ? (() => {
+          const distances = {
+            top: Math.abs(anchorPoint[1] - rectangle.top),
+            bottom: Math.abs(anchorPoint[1] - rectangle.bottom),
+            left: Math.abs(anchorPoint[0] - rectangle.left),
+            right: Math.abs(anchorPoint[0] - rectangle.right),
+          };
+          return Object.entries(distances).sort((first, second) => first[1] - second[1])[0][0];
+        })()
+      : requestedSide;
+    if (side === "top") return { side, x: clamp(anchorPoint[0], rectangle.left + padding, rectangle.right - padding), y: rectangle.top };
+    if (side === "left") return { side, x: rectangle.left, y: clamp(anchorPoint[1], rectangle.top + padding, rectangle.bottom - padding) };
+    if (side === "right") return { side, x: rectangle.right, y: clamp(anchorPoint[1], rectangle.top + padding, rectangle.bottom - padding) };
+    return { side: "bottom", x: clamp(anchorPoint[0], rectangle.left + padding, rectangle.right - padding), y: rectangle.bottom };
+  }
+
+  function labelLineDash(style, width, pixelScale) {
+    const scale = Math.max(1, width * pixelScale);
+    if (style === "dashed") return [Math.max(4, scale * 3.4), Math.max(3, scale * 2.2)];
+    if (style === "dotted") return [Math.max(1, scale * .8), Math.max(3, scale * 2.1)];
+    return [];
+  }
+
+  function traceLabelLeader(connection, anchorPoint, shape) {
+    ctx.beginPath();
+    ctx.moveTo(connection.x, connection.y);
+    if (shape === "elbow") {
+      if (["top", "bottom"].includes(connection.side)) {
+        const midY = connection.y + (anchorPoint[1] - connection.y) * .52;
+        ctx.lineTo(connection.x, midY);
+        ctx.lineTo(anchorPoint[0], midY);
+      } else {
+        const midX = connection.x + (anchorPoint[0] - connection.x) * .52;
+        ctx.lineTo(midX, connection.y);
+        ctx.lineTo(midX, anchorPoint[1]);
+      }
+    }
+    ctx.lineTo(anchorPoint[0], anchorPoint[1]);
   }
 
   function compactLabelViewport() {
@@ -6412,8 +6549,8 @@
     ctx.font = `${fontWeight} ${fontSize}px "Segoe UI", sans-serif`;
     const width = ctx.measureText(text).width + paddingX * 2 + indicatorSpace;
     const clampX = (value) => clamp(value, width / 2 + 4 * pixelScale, canvas.width - width / 2 - 4 * pixelScale);
-    const labelX = clampX(point[0]);
-    const baseY = point[1] - height - topGap;
+    const labelX = clampX(point[0] + clamp(Number(options.screenOffsetX) || 0, -400, 400) * pixelScale);
+    const baseY = point[1] - height - topGap + clamp(Number(options.screenOffsetY) || 0, -400, 400) * pixelScale;
     const step = height + collisionGap;
     const side = Array.from(labelKey).reduce((sum, character) => sum + character.charCodeAt(0), 0) % 2 ? 1 : -1;
     const sideOffset = width * .56 + 12 * pixelScale;
@@ -6505,21 +6642,31 @@
       !["#141c20", "#132126"].includes(savedBackground.toLowerCase());
     const background = customBackground ? options.backgroundColor : selected ? "#2b241b" : current ? "#142827" : "#132126";
     const accent = selected ? "#f5b353" : current ? "#52b7aa" : color;
+    const savedLineColor = /^#[0-9a-f]{6}$/i.test(String(options.lineColor || "")) ? options.lineColor : accent;
+    const lineWidth = clamp(Number(options.lineWidth) || 1.65, .5, 10);
+    const lineOpacity = clamp(Number(options.lineOpacity) || 100, 10, 100) / 100;
+    const lineStyle = ["solid", "dashed", "dotted"].includes(options.lineStyle) ? options.lineStyle : "solid";
+    const lineShape = ["straight", "elbow"].includes(options.lineShape) ? options.lineShape : "straight";
+    const leaderSide = ["auto", "top", "bottom", "left", "right"].includes(options.leaderSide) ? options.leaderSide : "auto";
+    const targetStyle = ["dot", "ring", "arrow", "none"].includes(options.targetStyle) ? options.targetStyle : "dot";
+    const targetSize = clamp(Number(options.targetSize) || 3.2, 1, 12) * pixelScale;
+    const pointerTarget = [anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale];
+    const connection = labelLeaderConnection(rectangle, pointerTarget, leaderSide, pixelScale);
     if (targetVisible) {
-      const leaderX = clamp(anchorPoint[0], rectangle.left + 5 * pixelScale, rectangle.right - 5 * pixelScale);
-      const leaderY = rectangle.bottom;
-      ctx.beginPath();
-      ctx.moveTo(leaderX, leaderY);
-      ctx.lineTo(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale);
-      ctx.strokeStyle = "rgba(9,18,21,.78)";
-      ctx.lineWidth = Math.max(3.2, pixelScale * 3.1);
+      ctx.save();
+      ctx.globalAlpha = labelAlpha * lineOpacity;
+      ctx.setLineDash(labelLineDash(lineStyle, lineWidth, pixelScale));
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      traceLabelLeader(connection, pointerTarget, lineShape);
+      ctx.strokeStyle = "rgba(9,18,21,.82)";
+      ctx.lineWidth = Math.max(lineWidth * pixelScale + 2.15 * pixelScale, 2.8 * pixelScale);
       ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(leaderX, leaderY);
-      ctx.lineTo(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale);
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = Math.max(1.5, pixelScale * 1.65);
+      traceLabelLeader(connection, pointerTarget, lineShape);
+      ctx.strokeStyle = savedLineColor;
+      ctx.lineWidth = Math.max(.75 * pixelScale, lineWidth * pixelScale);
       ctx.stroke();
+      ctx.restore();
     }
     const radius = Math.min(6 * pixelScale, height * .28);
     ctx.shadowColor = "rgba(3,10,13,.28)";
@@ -6553,15 +6700,38 @@
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(text, rectangle.left + paddingX + indicatorSpace, drawY + height / 2 + pixelScale * .15);
-    if (targetVisible) {
-      ctx.beginPath();
-      ctx.arc(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale, Math.max(3.6, 3.2 * pixelScale), 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(9,18,21,.86)";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(anchorPoint[0], anchorPoint[1] - 1.5 * pixelScale, Math.max(2, 1.9 * pixelScale), 0, Math.PI * 2);
-      ctx.fillStyle = accent;
-      ctx.fill();
+    if (targetVisible && targetStyle !== "none") {
+      ctx.save();
+      ctx.globalAlpha = labelAlpha * lineOpacity;
+      ctx.fillStyle = savedLineColor;
+      ctx.strokeStyle = savedLineColor;
+      ctx.lineWidth = Math.max(1, lineWidth * pixelScale * .75);
+      if (targetStyle === "ring") {
+        ctx.beginPath();
+        ctx.arc(pointerTarget[0], pointerTarget[1], Math.max(2, targetSize), 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (targetStyle === "arrow") {
+        const dx = pointerTarget[0] - connection.x;
+        const dy = pointerTarget[1] - connection.y;
+        const angle = Math.atan2(dy, dx);
+        const size = Math.max(4 * pixelScale, targetSize * 1.8);
+        ctx.beginPath();
+        ctx.moveTo(pointerTarget[0], pointerTarget[1]);
+        ctx.lineTo(pointerTarget[0] - Math.cos(angle - .48) * size, pointerTarget[1] - Math.sin(angle - .48) * size);
+        ctx.lineTo(pointerTarget[0] - Math.cos(angle + .48) * size, pointerTarget[1] - Math.sin(angle + .48) * size);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(pointerTarget[0], pointerTarget[1], Math.max(2.8 * pixelScale, targetSize + 1.2 * pixelScale), 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(9,18,21,.86)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(pointerTarget[0], pointerTarget[1], Math.max(1.5 * pixelScale, targetSize * .62), 0, Math.PI * 2);
+        ctx.fillStyle = savedLineColor;
+        ctx.fill();
+      }
+      ctx.restore();
     }
     ctx.restore();
     return { drawn: true, targetVisible };
@@ -9475,6 +9645,16 @@
           cssSize: profile.cssSize,
           textColor: machine.labelTextColor,
           backgroundColor: machine.labelBackgroundColor,
+          screenOffsetX: clamp(Number(machine.labelScreenOffsetX ?? 0), -400, 400),
+          screenOffsetY: clamp(Number(machine.labelScreenOffsetY ?? 0), -400, 400),
+          lineColor: machine.labelLineColor,
+          lineWidth: machine.labelLineWidth,
+          lineOpacity: machine.labelLineOpacity,
+          lineStyle: machine.labelLineStyle,
+          lineShape: machine.labelLineShape,
+          leaderSide: machine.labelLeaderSide,
+          targetStyle: machine.labelTargetStyle,
+          targetSize: machine.labelTargetSize,
           fontWeight: flow ? "regular" : machine.labelFontWeight,
         }
       );

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Build editable component-based machine models for the Monroe glass plant.">
-  <title>Machine Design Studio Â· v0.13.12</title>
+  <title>Machine Design Studio Â· v0.13.13</title>
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="plant-icon.png" type="image/png" sizes="512x512">
   <link rel="apple-touch-icon" href="plant-icon.png">
@@ -19,14 +19,14 @@
   <main class="machine-studio-shell">
     <header class="studio-topbar">
       <div class="studio-brand">
-        <a class="studio-back-link" href="preview.html" aria-label="Return to plant layout">â†</a>
+        <a class="studio-back-link" href="preview.html" aria-label="Return to plant layout"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/><path d="M8 12h10"/></svg></a>
         <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-        <span class="studio-version-badge">v0.13.12</span>
+        <span class="studio-version-badge">v0.13.13</span>
       </div>
       <div class="studio-top-actions" role="toolbar" aria-label="Design commands">
         <span id="save-state" class="studio-save-state">Auto-saved</span>
-        <button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">â†¶</button>
-        <button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">â†·</button>
+        <button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H5v-4"/><path d="M5.5 7.2A8 8 0 1 1 6 17"/></svg></button>
+        <button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7h4v-4"/><path d="M18.5 7.2A8 8 0 1 0 18 17"/></svg></button>
         <span class="studio-toolbar-divider"></span>
         <button id="save-design" type="button" title="Save machine (Ctrl+S)">Save</button>
         <button id="save-design-as" type="button" title="Save as a new reusable machine (Ctrl+Shift+S)">Save as...</button>
@@ -91,11 +91,11 @@
           <p class="studio-help">Choose a shape, add it to the current machine, then use the Transform tab on the right to place and size it.</p>
           <section class="component-add-panel expanded-add-panel">
             <div class="shape-quick-grid" aria-label="Common shapes">
-              <button type="button" data-add-component="box"><span>â–£</span>Box</button>
-              <button type="button" data-add-component="cylinder"><span>â—</span>Cylinder</button>
-              <button type="button" data-add-component="beam"><span>â•±</span>Beam</button>
-              <button type="button" data-add-component="glassPanel"><span>â—‡</span>Glass</button>
-              <button type="button" data-add-component="text"><span>T</span>Text</button>
+              <button type="button" data-add-component="box"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg></span>Box</button>
+              <button type="button" data-add-component="cylinder"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="3"/><path d="M5 5.5v13c0 1.7 3.1 3 7 3s7-1.3 7-3v-13"/></svg></span>Cylinder</button>
+              <button type="button" data-add-component="beam"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 17.5 5.5 20 8 7.5 20.5 5 18Z"/></svg></span>Beam</button>
+              <button type="button" data-add-component="glassPanel"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="m8 16 8-8"/></svg></span>Glass</button>
+              <button type="button" data-add-component="text"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M12 5v14M8.5 19h7"/></svg></span>Text</button>
             </div>
             <div class="shape-picker-row vertical-shape-picker">
               <label class="studio-field">Additional shape
@@ -199,12 +199,12 @@
         </div>
 
         <div class="viewport-toolrail" role="toolbar" aria-label="Transform tools">
-          <button type="button" data-design-mode="select" class="active" title="Select (V)"><span>â†–</span><small>Select</small></button>
-          <button type="button" data-design-mode="move" title="Move (M)"><span>âœ£</span><small>Move</small></button>
-          <button type="button" data-design-mode="rotate" title="Rotate (R)"><span>âŸ³</span><small>Rotate</small></button>
-          <button type="button" data-design-mode="scale" title="Scale (S)"><span>â¤¢</span><small>Scale</small></button>
-          <button type="button" data-design-mode="pan" title="Pan view (H)"><span>âœ‹</span><small>Pan</small></button>
-          <button id="toggle-animation-timeline" type="button" class="animation-tool-button" title="Animation timeline (A)" aria-pressed="false"><span>â—†</span><small>Animation</small></button>
+          <button type="button" data-design-mode="select" class="active" title="Select (V)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 18 12l-6 1.5L9.5 20 5 3Z"/></svg></span><small>Select</small></button>
+          <button type="button" data-design-mode="move" title="Move (M)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/></svg></span><small>Move</small></button>
+          <button type="button" data-design-mode="rotate" title="Rotate (R)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8V4l-3 2.2A8 8 0 1 0 20 13"/></svg></span><small>Rotate</small></button>
+          <button type="button" data-design-mode="scale" title="Scale (S)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5m11 5h5v-5"/></svg></span><small>Scale</small></button>
+          <button type="button" data-design-mode="pan" title="Pan view (H)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V7.5a1.5 1.5 0 0 1 3 0V11M11 10V6.5a1.5 1.5 0 0 1 3 0V11"/></svg></span><small>Pan</small></button>
+          <button id="toggle-animation-timeline" type="button" class="animation-tool-button" title="Animation timeline (A)" aria-pressed="false"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 5 5-5 5-5-5 5-5Z"/></svg></span><small>Animation</small></button>
         </div>
 
         <canvas id="machine-design-canvas" aria-label="Interactive 3D preview of the selected machine design"></canvas>
@@ -213,10 +213,10 @@
             <div class="timeline-workspace-title"><strong>Animation timeline</strong><span id="timeline-summary">0 clips</span></div>
             <label class="timeline-target-control">Target<select id="timeline-target-picker" aria-label="Animation target"></select></label>
             <div class="timeline-play-actions">
-              <button id="timeline-restart" type="button" title="Restart from 0 seconds">â†º Restart</button>
-              <button id="timeline-play" type="button" class="primary" title="Play animation preview">â–¶ Play</button>
-              <button id="timeline-pause" type="button" title="Pause animation preview">â…¡ Pause</button>
-              <button id="close-animation-timeline" type="button" title="Close timeline">Ã—</button>
+              <button id="timeline-restart" type="button" title="Restart from 0 seconds"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7H3V3"/><path d="M4 7a9 9 0 1 1-1 8"/></svg>Restart</button>
+              <button id="timeline-play" type="button" class="primary" title="Play animation preview"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>Play</button>
+              <button id="timeline-pause" type="button" title="Pause animation preview"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>Pause</button>
+              <button id="close-animation-timeline" type="button" title="Close timeline" aria-label="Close animation timeline"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
           </header>
           <div class="timeline-workspace-body">

@@ -1,3 +1,10 @@
+## 0.13.13 - 2026-09-24
+
+- Replaced deployment-sensitive Machine Design Studio text glyphs with embedded SVG icons across the live editor, standalone editor, animation palette/timeline, and component visibility controls.
+- Preserved the v0.13.12 Today production-flow routing while allowing each production label to use custom text and independent pointer anchor, tag X/Y offset, line color, width, opacity, solid/dashed/dotted style, straight/elbow form, connection edge, endpoint style, and endpoint size.
+- Decoupled structural wall and pillar height from roof-panel visibility so full-height exterior walls remain visible in the overview when the roof is hidden.
+- Added regression checks for SVG Designer controls, editable production-label leaders, and roof-independent structural heights.
+
 # Changelog
 
 ## 0.13.12 - 2026-09-23

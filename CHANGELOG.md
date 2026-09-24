@@ -1,3 +1,12 @@
+## 0.13.14 - 2026-09-24
+
+- Removed the remaining Machine Design Studio mojibake from Build, Parts, timeline/status text, sizing readouts, standalone Studio markup, and standalone plant preview text.
+- Replaced deployment-sensitive punctuation with encoding-safe JavaScript Unicode escapes or HTML entities so separators, multiplication signs, arrows, ellipses, degree symbols, apostrophes, and dashes render consistently on Railway and local builds.
+- Added a recursive app/public encoding regression check to reject future `Â`, `Ã`, `â`, or replacement-character corruption.
+- Updated the Today production-flow regression to match the v0.13.13 custom-label-text path instead of the retired hard-coded label form.
+- Completed a focused performance review: designer switching, adaptive rendering, overlap detection, retained Three.js rendering, production animation caching, deep-performance checks, overview stability, production build, and TypeScript validation all passed. The 3,000-object overlap test completed in 808 ms with a 7.704 ms cached pass.
+- Confirmed the production dependency audit remains clean with `npm audit --omit=dev --audit-level=high`.
+
 ## 0.13.13 - 2026-09-24
 
 - Replaced deployment-sensitive Machine Design Studio text glyphs with embedded SVG icons across the live editor, standalone editor, animation palette/timeline, and component visibility controls.

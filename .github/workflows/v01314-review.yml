@@ -18,6 +18,8 @@ jobs:
         run: |
           npm run validate:encoding
           npm run validate:js
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
       - name: Designer and label regressions
         run: |
           npm run validate:designer

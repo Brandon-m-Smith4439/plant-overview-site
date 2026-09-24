@@ -2,6 +2,8 @@ name: Package v0.13.13 handoff
 on:
   push:
     branches: [package-v01313]
+  pull_request:
+    branches: [main]
 jobs:
   package:
     runs-on: ubuntu-latest

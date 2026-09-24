@@ -3510,6 +3510,7 @@
       </div>
       <div class="editor-tools" role="group" aria-label="Editor selection mode">
         <button type="button" data-editor-tool="machines" class="active">Objects</button>
+        <button type="button" data-editor-tool="flow">Flow</button>
         <button type="button" data-editor-tool="pillars">Structure</button>
         <button type="button" data-editor-tool="timeline">Stages</button>
         <button type="button" data-editor-tool="project">Project</button>
@@ -3656,32 +3657,32 @@
             <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
           </div>
           <div class="label-pointer-grid">
-            <label>Pointer X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-            <label>Pointer Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
-            <label>Pointer Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+            <label>Label target X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+            <label>Label target Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
+            <label>Label target Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
             <label>Label offset (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
             <label>Tag X shift (px)<input type="number" data-label-field="labelScreenOffsetX" data-needs-selection min="-400" max="400" step="2" value="0"></label>
             <label>Tag Y shift (px)<input type="number" data-label-field="labelScreenOffsetY" data-needs-selection min="-400" max="400" step="2" value="0"></label>
           </div>
           <div class="label-line-grid">
-            <label>Line color<input type="color" data-label-field="labelLineColor" data-needs-selection value="#52b7aa"></label>
-            <label>Line width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25" value="1.65"></label>
-            <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5" value="100"></label>
-            <label>Line style<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
-            <label>Line form<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+            <label>Leader color<input type="color" data-label-field="labelLineColor" data-needs-selection value="#52b7aa"></label>
+            <label>Leader width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25" value="1.65"></label>
+            <label>Leader opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5" value="100"></label>
+            <label>Leader style<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+            <label>Leader form<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
             <label>Label connection<select data-label-field="labelLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
-            <label>Pointer end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
-            <label>Pointer size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5" value="3.2"></label>
+            <label>Leader end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
+            <label>Leader size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5" value="3.2"></label>
           </div>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
-            <button type="button" data-editor-action="center-label-pointer" data-needs-selection>Center pointer</button>
-            <button type="button" data-editor-action="reset-label-line" data-needs-selection>Reset pointer &amp; line</button>
+            <button type="button" data-editor-action="center-label-pointer" data-needs-selection>Center label leader</button>
+            <button type="button" data-editor-action="reset-label-line" data-needs-selection>Reset label leader</button>
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">Today Necessary labels use this custom label text when provided. Pointer anchor, tag position, line color, width, opacity, style, form, connection edge, and endpoint are saved independently for every machine.</p>
+          <p class="label-help">These controls edit only the leader from a machine label to its machine. The production-process arrows are separate and are edited under <strong>Flow</strong>.</p>
         </fieldset>
         <fieldset class="crane-controls">
           <legend>Attached overhead crane</legend>
@@ -3799,6 +3800,49 @@
           </details>
         </details>
         </section>
+      </div>
+
+      <div class="flow-pointer-editor" data-editor-section="flow" hidden>
+        <div class="editor-callout flow-pointer-callout"><strong>Production process pointers</strong><p>These arrows show how glass moves through the facility. They are completely separate from machine labels and label leaders.</p></div>
+        <label class="flow-pointer-picker">Process pointer<select data-flow-pointer-picker><option value="cutting>polisher">Cutting → Polisher</option><option value="polisher>denver-cnc">Polisher → Denver CNC</option><option value="polisher>waterjet">Polisher → Waterjet</option><option value="denver-cnc>washer">Denver CNC → Washer</option><option value="waterjet>washer">Waterjet → Washer</option><option value="washer>tempering">Washer → Tempering Line</option><option value="tempering>wrap">Tempering Line → Wrap</option><option value="wrap>glass-truck">Wrap → Glass Truck</option><option value="wrap>rack">Wrap → Rack</option></select></label>
+        <div class="flow-pointer-drag-help"><strong>Drag directly in the overview</strong><span><b>S</b> start · <b>E</b> end · <b>M</b> move the whole pointer · <b>B</b> bend/control point</span></div>
+        <fieldset class="flow-pointer-controls">
+          <legend>Pointer appearance</legend>
+          <label class="flow-pointer-toggle"><input type="checkbox" data-flow-pointer-check="visible"> Show this process pointer</label>
+          <div class="flow-pointer-grid">
+            <label>Line color<input type="color" data-flow-pointer-field="lineColor" value="#67c9bc"></label>
+            <label>Outline color<input type="color" data-flow-pointer-field="outlineColor" value="#071212"></label>
+            <label>Line width<input type="number" data-flow-pointer-field="lineWidth" min="0.5" max="12" step="0.25"></label>
+            <label>Outline width<input type="number" data-flow-pointer-field="outlineWidth" min="0" max="12" step="0.25"></label>
+            <label>Opacity (%)<input type="number" data-flow-pointer-field="opacity" min="10" max="100" step="5"></label>
+            <label>Line style<select data-flow-pointer-field="lineStyle"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+            <label>Path form<select data-flow-pointer-field="lineShape"><option value="straight">Straight</option><option value="elbow">Elbow</option><option value="curve">Curve</option></select></label>
+            <label>Elbow direction<select data-flow-pointer-field="elbowDirection"><option value="horizontalFirst">Horizontal first</option><option value="verticalFirst">Vertical first</option></select></label>
+            <label>End style<select data-flow-pointer-field="headStyle"><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
+            <label>End size<input type="number" data-flow-pointer-field="headSize" min="2" max="24" step="0.5"></label>
+          </div>
+        </fieldset>
+        <fieldset class="flow-pointer-controls">
+          <legend>Pointer position</legend>
+          <p>Offsets are in screen pixels so each process arrow can be routed cleanly around machines from the Today overview.</p>
+          <div class="flow-pointer-grid">
+            <label>Whole X<input type="number" data-flow-pointer-field="offsetX" min="-1200" max="1200" step="2"></label>
+            <label>Whole Y<input type="number" data-flow-pointer-field="offsetY" min="-1200" max="1200" step="2"></label>
+            <label>Start X<input type="number" data-flow-pointer-field="startOffsetX" min="-1200" max="1200" step="2"></label>
+            <label>Start Y<input type="number" data-flow-pointer-field="startOffsetY" min="-1200" max="1200" step="2"></label>
+            <label>End X<input type="number" data-flow-pointer-field="endOffsetX" min="-1200" max="1200" step="2"></label>
+            <label>End Y<input type="number" data-flow-pointer-field="endOffsetY" min="-1200" max="1200" step="2"></label>
+            <label>Bend X<input type="number" data-flow-pointer-field="bendOffsetX" min="-1200" max="1200" step="2"></label>
+            <label>Bend Y<input type="number" data-flow-pointer-field="bendOffsetY" min="-1200" max="1200" step="2"></label>
+            <label>Start inset<input type="number" data-flow-pointer-field="startInset" min="0" max="100" step="1"></label>
+            <label>End inset<input type="number" data-flow-pointer-field="endInset" min="0" max="100" step="1"></label>
+          </div>
+          <div class="flow-pointer-actions">
+            <button type="button" data-editor-action="reset-flow-pointer">Reset selected pointer</button>
+            <button type="button" data-editor-action="reset-all-flow-pointers">Reset all process pointers</button>
+          </div>
+        </fieldset>
+        <p class="flow-pointer-summary" data-flow-pointer-summary>Select a process pointer above, then drag its handles in the plant view or enter exact values here.</p>
       </div>
 
       <div data-editor-section="pillars" hidden>

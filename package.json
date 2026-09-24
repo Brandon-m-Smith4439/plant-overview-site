@@ -1,6 +1,6 @@
 {
   "name": "monroe-glass-plant-evolution",
-  "version": "0.13.14",
+  "version": "0.13.15",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -43,6 +43,7 @@
     "validate:transition-envelope-visuals": "node tests/validate-transition-envelope-visuals.mjs",
     "validate:plant-scaling": "node tests/validate-plant-scaling.mjs",
     "validate:labels": "node tests/validate-label-system.mjs",
+    "validate:process-pointers": "node tests/validate-process-pointers.mjs",
     "validate:first-person": "node tests/validate-first-person.mjs",
     "validate:first-person-collisions": "node tests/validate-first-person-collisions.mjs",
     "validate:first-person-rendering": "node tests/validate-first-person-rendering.mjs",

@@ -1,3 +1,13 @@
+## 0.13.15 - 2026-09-24
+
+- Made the Plant Layout editor viewport-aware so the bottom of the edit UI remains reachable when editing in a normal browser window instead of fullscreen.
+- Added a dedicated **Pointers** object-editor tab for the Today/Necessary production-flow pointers, separate from normal machine labels.
+- Added independent per-machine process-pointer controls for target X/Y/Z, process-tag lift and screen offset, visibility, color, width, opacity, solid/dashed/dotted pattern, straight/elbow shape, tag connection side, endpoint type, and endpoint size.
+- Migrated existing saved label-pointer geometry into the new process-pointer fields on load so current production-flow layouts keep their existing placement while future pointer edits remain independent.
+- Kept normal machine-label text and appearance controls separate from process-flow pointer geometry.
+- Added regression coverage for process-pointer separation, saved-data migration, Today-flow rendering, and non-fullscreen editor viewport containment.
+- Updated the public-viewer regression to validate the owner-entry version against the current `VERSION` file instead of a stale hard-coded release number.
+
 ## 0.13.14 - 2026-09-24
 
 - Removed the remaining Machine Design Studio mojibake from Build, Parts, timeline/status text, sizing readouts, standalone Studio markup, and standalone plant preview text.

@@ -1,3 +1,7 @@
+## Version 0.13.15
+
+Version 0.13.15 keeps the Plant Layout editor fully reachable when it is used outside fullscreen by sizing the editor against the actual remaining browser viewport. It also separates production-flow pointers from regular machine labels. A new **Pointers** tab edits each process pointer independently: target X/Y/Z on the machine, process-tag lift and X/Y screen offset, visibility, line color/width/opacity/pattern/shape, tag connection edge, and endpoint type/size. Existing saved pointer placement migrates forward so the current Today production flow keeps its layout while normal machine-label editing remains independent.
+
 ## Version 0.13.14
 
 Version 0.13.14 removes the remaining text-encoding artifacts from the Machine Design Studio and standalone viewer surfaces. Dynamic Studio punctuation now uses encoding-safe Unicode escapes, static markup uses HTML entities, and a recursive app/public regression test blocks the mojibake patterns that produced visible `Â`/garbled punctuation. The release also completed a focused rendering and Designer performance review: designer switching, adaptive rendering, overlap detection, retained rendering, production animation caching, deep-performance checks, overview stability, production build, TypeScript, and the production dependency audit all passed.
@@ -8,7 +12,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.14**
+Current project version: **0.13.15**
 
 ## Full-production rendering performance
 

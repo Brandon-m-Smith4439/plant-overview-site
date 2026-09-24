@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.14";
+  const APP_VERSION = "0.13.15";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -738,6 +738,21 @@
       labelLeaderSide: ["auto", "top", "bottom", "left", "right"].includes(machine.labelLeaderSide) ? machine.labelLeaderSide : "auto",
       labelTargetStyle: ["dot", "ring", "arrow", "none"].includes(machine.labelTargetStyle) ? machine.labelTargetStyle : "dot",
       labelTargetSize: clamp(Number.isFinite(Number(machine.labelTargetSize)) ? Number(machine.labelTargetSize) : 3.2, 1, 12),
+      processPointerVisible: machine.processPointerVisible !== false,
+      processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), 0, 100),
+      processPointerAnchorYPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorYPercent)) ? Number(machine.processPointerAnchorYPercent) : (Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100), 0, 100),
+      processPointerAnchorZPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorZPercent)) ? Number(machine.processPointerAnchorZPercent) : (Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50), 0, 100),
+      processPointerLabelOffset: clamp(Number.isFinite(Number(machine.processPointerLabelOffset)) ? Number(machine.processPointerLabelOffset) : (Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4), 0, 60),
+      processPointerScreenOffsetX: clamp(Number.isFinite(Number(machine.processPointerScreenOffsetX)) ? Number(machine.processPointerScreenOffsetX) : (Number.isFinite(Number(machine.labelScreenOffsetX)) ? Number(machine.labelScreenOffsetX) : 0), -500, 500),
+      processPointerScreenOffsetY: clamp(Number.isFinite(Number(machine.processPointerScreenOffsetY)) ? Number(machine.processPointerScreenOffsetY) : (Number.isFinite(Number(machine.labelScreenOffsetY)) ? Number(machine.labelScreenOffsetY) : 0), -500, 500),
+      processPointerColor: /^#[0-9a-f]{6}$/i.test(String(machine.processPointerColor || "")) ? machine.processPointerColor : (/^#[0-9a-f]{6}$/i.test(String(machine.labelLineColor || "")) ? machine.labelLineColor : "#52b7aa"),
+      processPointerWidth: clamp(Number.isFinite(Number(machine.processPointerWidth)) ? Number(machine.processPointerWidth) : (Number.isFinite(Number(machine.labelLineWidth)) ? Number(machine.labelLineWidth) : 1.65), .5, 12),
+      processPointerOpacity: clamp(Number.isFinite(Number(machine.processPointerOpacity)) ? Number(machine.processPointerOpacity) : (Number.isFinite(Number(machine.labelLineOpacity)) ? Number(machine.labelLineOpacity) : 100), 5, 100),
+      processPointerStyle: ["solid", "dashed", "dotted"].includes(machine.processPointerStyle) ? machine.processPointerStyle : (["solid", "dashed", "dotted"].includes(machine.labelLineStyle) ? machine.labelLineStyle : "solid"),
+      processPointerShape: ["straight", "elbow"].includes(machine.processPointerShape) ? machine.processPointerShape : (["straight", "elbow"].includes(machine.labelLineShape) ? machine.labelLineShape : "straight"),
+      processPointerLeaderSide: ["auto", "top", "bottom", "left", "right"].includes(machine.processPointerLeaderSide) ? machine.processPointerLeaderSide : (["auto", "top", "bottom", "left", "right"].includes(machine.labelLeaderSide) ? machine.labelLeaderSide : "auto"),
+      processPointerEndStyle: ["dot", "ring", "arrow", "none"].includes(machine.processPointerEndStyle) ? machine.processPointerEndStyle : (["dot", "ring", "arrow", "none"].includes(machine.labelTargetStyle) ? machine.labelTargetStyle : "arrow"),
+      processPointerEndSize: clamp(Number.isFinite(Number(machine.processPointerEndSize)) ? Number(machine.processPointerEndSize) : (Number.isFinite(Number(machine.labelTargetSize)) ? Number(machine.labelTargetSize) : 3.2), 1, 14),
       category: machine.category || objectCategory(machine.type),
       designId: machine.designId || defaultDesignForType(machine.type),
       designScaleMode: normalizedDesignScaleMode(machine.designScaleMode || (isFloorFeatureType(machine.type) ? "stretch" : "preserve")),
@@ -1309,6 +1324,10 @@
           "labelUseMachineName", "labelText", "labelAbbreviation", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase",
           "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset", "labelScreenOffsetX", "labelScreenOffsetY",
           "labelLineColor", "labelLineWidth", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
+          "processPointerVisible", "processPointerAnchorXPercent", "processPointerAnchorYPercent", "processPointerAnchorZPercent",
+          "processPointerLabelOffset", "processPointerScreenOffsetX", "processPointerScreenOffsetY", "processPointerColor",
+          "processPointerWidth", "processPointerOpacity", "processPointerStyle", "processPointerShape",
+          "processPointerLeaderSide", "processPointerEndStyle", "processPointerEndSize",
         ];
         synchronizedFields.forEach((field) => {
           if (incoming[field] !== undefined && String(machine[field] ?? "") !== String(incoming[field] ?? "")) {
@@ -2732,6 +2751,56 @@
         input.placeholder = compactMachineLabel(machine, machineLabelProfile(machine));
       } else input.value = String(machine[field] ?? "");
     });
+    panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const machine = selectedMachine();
+        if (!machine || selectedMachines().length !== 1) return;
+        pushHistory();
+        const field = input.dataset.processPointerField;
+        if (field === "processPointerColor") {
+          if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
+        } else if (["processPointerStyle", "processPointerShape", "processPointerLeaderSide", "processPointerEndStyle"].includes(field)) {
+          const allowed = {
+            processPointerStyle: ["solid", "dashed", "dotted"],
+            processPointerShape: ["straight", "elbow"],
+            processPointerLeaderSide: ["auto", "top", "bottom", "left", "right"],
+            processPointerEndStyle: ["arrow", "dot", "ring", "none"],
+          };
+          if (allowed[field].includes(input.value)) machine[field] = input.value;
+        } else {
+          const value = Number(input.value);
+          if (!Number.isFinite(value)) return;
+          const ranges = {
+            processPointerAnchorXPercent: [0, 100],
+            processPointerAnchorYPercent: [0, 100],
+            processPointerAnchorZPercent: [0, 100],
+            processPointerLabelOffset: [0, 60],
+            processPointerScreenOffsetX: [-500, 500],
+            processPointerScreenOffsetY: [-500, 500],
+            processPointerWidth: [.5, 12],
+            processPointerOpacity: [5, 100],
+            processPointerEndSize: [1, 14],
+          };
+          const [min, max] = ranges[field] || [-10000, 10000];
+          machine[field] = clamp(value, min, max);
+        }
+        persistLayout();
+        renderPerformance.invalidate();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const machine = selectedMachine();
+        if (!machine || selectedMachines().length !== 1) return;
+        pushHistory();
+        machine[input.dataset.processPointerCheck] = input.checked;
+        persistLayout();
+        renderPerformance.invalidate();
+        updateEditorPanel();
+      });
+    });
+
     panel.querySelectorAll("[data-label-check]").forEach((input) => {
       input.disabled = selectionCount !== 1;
       input.checked = selectionCount === 1 && Boolean(machine?.[input.dataset.labelCheck]);
@@ -2743,6 +2812,29 @@
         : machine.labelUseMachineName === false
           ? `Custom label for ${machine.name}.`
           : `Linked to machine name: ${machine.name}`;
+    }
+
+    panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
+      const field = input.dataset.processPointerField;
+      input.disabled = selectionCount !== 1;
+      if (!machine || selectionCount !== 1) {
+        if (input.type !== "color") input.value = "";
+        return;
+      }
+      input.value = String(machine[field] ?? "");
+    });
+    panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
+      input.disabled = selectionCount !== 1;
+      input.checked = selectionCount === 1 && machine?.[input.dataset.processPointerCheck] !== false;
+    });
+    const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
+    if (processPointerSummary) {
+      const flow = machine && selectionCount === 1 ? necessaryFlowLabel(machine) : null;
+      processPointerSummary.textContent = !machine || selectionCount !== 1
+        ? "Select one process machine to edit its Today flow pointer."
+        : flow
+          ? `${flow.text} pointer for ${machine.name}.`
+          : `${machine.name} is not currently part of the automatic Today production flow.`;
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -3431,6 +3523,7 @@
         <div class="object-editor-tabs" role="tablist" aria-label="Object editing sections">
           <button type="button" data-object-editor-tab="select" class="active" aria-selected="true">Select</button>
           <button type="button" data-object-editor-tab="transform" aria-selected="false">Transform</button>
+          <button type="button" data-object-editor-tab="pointers" aria-selected="false">Pointers</button>
           <button type="button" data-object-editor-tab="animation" aria-selected="false">Animation</button>
           <button type="button" data-object-editor-tab="add" aria-selected="false">Add</button>
         </div>
@@ -3567,33 +3660,13 @@
             <label>Size (%)<input type="number" data-label-field="labelSizePercent" data-needs-selection min="50" max="250" step="5" value="100"></label>
             <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
           </div>
-          <div class="label-pointer-grid">
-            <label>Pointer X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-            <label>Pointer Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
-            <label>Pointer Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-            <label>Label offset (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
-            <label>Tag X shift (px)<input type="number" data-label-field="labelScreenOffsetX" data-needs-selection min="-400" max="400" step="2" value="0"></label>
-            <label>Tag Y shift (px)<input type="number" data-label-field="labelScreenOffsetY" data-needs-selection min="-400" max="400" step="2" value="0"></label>
-          </div>
-          <div class="label-line-grid">
-            <label>Line color<input type="color" data-label-field="labelLineColor" data-needs-selection value="#52b7aa"></label>
-            <label>Line width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25" value="1.65"></label>
-            <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5" value="100"></label>
-            <label>Line style<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
-            <label>Line form<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
-            <label>Label connection<select data-label-field="labelLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
-            <label>Pointer end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
-            <label>Pointer size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5" value="3.2"></label>
-          </div>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
-            <button type="button" data-editor-action="center-label-pointer" data-needs-selection>Center pointer</button>
-            <button type="button" data-editor-action="reset-label-line" data-needs-selection>Reset pointer &amp; line</button>
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">Today Necessary labels use this custom label text when provided. Pointer anchor, tag position, line color, width, opacity, style, form, connection edge, and endpoint are saved independently for every machine.</p>
+          <p class="label-help">This section controls the normal machine label text and appearance. Production-flow pointer geometry is edited separately in the Pointers tab.</p>
         </fieldset>
         <fieldset class="crane-controls">
           <legend>Attached overhead crane</legend>
@@ -3604,6 +3677,50 @@
             <label>Rail height<input type="number" min="4" step="0.5" data-crane-field="height"></label>
           </div>
         </fieldset>
+        </section>
+        <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
+          <div class="process-pointer-intro">
+            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one process machine to edit its Today flow pointer.</span></div>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-pointer-check="processPointerVisible" data-needs-selection> Show pointer leader</label>
+          </div>
+          <fieldset class="process-pointer-controls">
+            <legend>Pointer target on machine</legend>
+            <p>Move the pointer target independently from the machine label. X/Y/Z are percentages across the selected machine's local width, height, and depth.</p>
+            <div class="process-pointer-grid">
+              <label>Target X (%)<input type="number" data-process-pointer-field="processPointerAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+              <label>Target Y (%)<input type="number" data-process-pointer-field="processPointerAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
+              <label>Target Z (%)<input type="number" data-process-pointer-field="processPointerAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+            </div>
+            <div class="process-pointer-actions">
+              <button type="button" data-editor-action="center-process-pointer" data-needs-selection>Center target</button>
+            </div>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>Process tag position</legend>
+            <p>Move the small process tag without changing the regular machine label.</p>
+            <div class="process-pointer-grid">
+              <label>Lift (ft)<input type="number" data-process-pointer-field="processPointerLabelOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
+              <label>Tag X (px)<input type="number" data-process-pointer-field="processPointerScreenOffsetX" data-needs-selection min="-500" max="500" step="2" value="0"></label>
+              <label>Tag Y (px)<input type="number" data-process-pointer-field="processPointerScreenOffsetY" data-needs-selection min="-500" max="500" step="2" value="0"></label>
+            </div>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>Leader line</legend>
+            <div class="process-pointer-grid">
+              <label>Color<input type="color" data-process-pointer-field="processPointerColor" data-needs-selection value="#52b7aa"></label>
+              <label>Width<input type="number" data-process-pointer-field="processPointerWidth" data-needs-selection min="0.5" max="12" step="0.25" value="1.65"></label>
+              <label>Opacity (%)<input type="number" data-process-pointer-field="processPointerOpacity" data-needs-selection min="5" max="100" step="5" value="100"></label>
+              <label>Pattern<select data-process-pointer-field="processPointerStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+              <label>Shape<select data-process-pointer-field="processPointerShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+              <label>Tag connection<select data-process-pointer-field="processPointerLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
+              <label>Target end<select data-process-pointer-field="processPointerEndStyle" data-needs-selection><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
+              <label>End size<input type="number" data-process-pointer-field="processPointerEndSize" data-needs-selection min="1" max="14" step="0.5" value="3.2"></label>
+            </div>
+            <div class="process-pointer-actions">
+              <button type="button" data-editor-action="reset-process-pointer" data-needs-selection>Reset entire process pointer</button>
+            </div>
+          </fieldset>
+          <div class="process-pointer-note"><strong>Today / Necessary flow only</strong><span>These controls edit the process pointer used to explain how glass moves through the facility. They do not alter the machine's normal label.</span></div>
         </section>
         <section data-object-editor-panel="animation" class="object-editor-panel" hidden>
         <fieldset class="object-animation-controls">
@@ -3835,6 +3952,16 @@
       <div class="editor-close-bar"><button type="button" data-editor-action="done" class="primary">Done editing</button></div>
     `;
     frame.appendChild(panel);
+
+    const syncEditorViewportHeight = () => {
+      const frameRect = frame.getBoundingClientRect();
+      const absolutePanelTop = Math.max(8, frameRect.top + 18);
+      const available = Math.max(260, window.innerHeight - absolutePanelTop - 10);
+      panel.style.setProperty("--editor-viewport-max-height", `${Math.floor(available)}px`);
+    };
+    syncEditorViewportHeight();
+    window.addEventListener("resize", syncEditorViewportHeight);
+    window.addEventListener("scroll", syncEditorViewportHeight, { passive: true });
 
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -4210,43 +4337,41 @@
       updateEditorPanel();
       showToast(`Label reset to ${machine.name}.`);
     });
-    panel.querySelector("[data-editor-action='center-label-pointer']")?.addEventListener("click", () => {
+    panel.querySelector("[data-editor-action='center-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
       if (!machine || selectedMachines().length !== 1) return;
       pushHistory();
-      machine.labelAnchorXPercent = 50;
-      machine.labelAnchorYPercent = 100;
-      machine.labelAnchorZPercent = 50;
-      machine.labelHeightOffset = 4;
-      machine.labelScreenOffsetX = 0;
-      machine.labelScreenOffsetY = 0;
+      machine.processPointerAnchorXPercent = 50;
+      machine.processPointerAnchorYPercent = 100;
+      machine.processPointerAnchorZPercent = 50;
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast("Label pointer centered above the machine.");
+      showToast("Process pointer target centered on the selected machine.");
     });
-    panel.querySelector("[data-editor-action='reset-label-line']")?.addEventListener("click", () => {
+    panel.querySelector("[data-editor-action='reset-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
       if (!machine || selectedMachines().length !== 1) return;
       pushHistory();
-      machine.labelAnchorXPercent = 50;
-      machine.labelAnchorYPercent = 100;
-      machine.labelAnchorZPercent = 50;
-      machine.labelHeightOffset = 4;
-      machine.labelScreenOffsetX = 0;
-      machine.labelScreenOffsetY = 0;
-      machine.labelLineColor = "#52b7aa";
-      machine.labelLineWidth = 1.65;
-      machine.labelLineOpacity = 100;
-      machine.labelLineStyle = "solid";
-      machine.labelLineShape = "straight";
-      machine.labelLeaderSide = "auto";
-      machine.labelTargetStyle = "dot";
-      machine.labelTargetSize = 3.2;
+      machine.processPointerVisible = true;
+      machine.processPointerAnchorXPercent = 50;
+      machine.processPointerAnchorYPercent = 100;
+      machine.processPointerAnchorZPercent = 50;
+      machine.processPointerLabelOffset = 4;
+      machine.processPointerScreenOffsetX = 0;
+      machine.processPointerScreenOffsetY = 0;
+      machine.processPointerColor = "#52b7aa";
+      machine.processPointerWidth = 1.65;
+      machine.processPointerOpacity = 100;
+      machine.processPointerStyle = "solid";
+      machine.processPointerShape = "straight";
+      machine.processPointerLeaderSide = "auto";
+      machine.processPointerEndStyle = "arrow";
+      machine.processPointerEndSize = 3.2;
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast("Pointer position and line styling reset for this label.");
+      showToast("Process pointer reset without changing the normal machine label.");
     });
     panel.querySelector("[data-editor-action='refresh-labels']")?.addEventListener("click", () => {
       pushHistory();
@@ -6238,9 +6363,9 @@
         const machine = entry.machine;
         const anchor = localPoint(
           rendered,
-          rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), 0, 100) / 100,
-          rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), 0, 100) / 100,
-          rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), 0, 100) / 100,
+          rendered.w * clamp(Number(machine.processPointerAnchorXPercent ?? 50), 0, 100) / 100,
+          rendered.h * clamp(Number(machine.processPointerAnchorYPercent ?? 100), 0, 100) / 100,
+          rendered.d * clamp(Number(machine.processPointerAnchorZPercent ?? 50), 0, 100) / 100,
         );
         if (!anchor) return;
         const labelKey = `today-flow:${key}`;
@@ -6252,18 +6377,18 @@
           {
             labelKey,
             time,
-            visibleTarget: true,
-            labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? (compactLabelViewport() ? 1.8 : 2.5)), 0, 60),
-            screenOffsetX: clamp(Number(machine.labelScreenOffsetX ?? 0), -400, 400),
-            screenOffsetY: clamp(Number(machine.labelScreenOffsetY ?? 0), -400, 400),
-            lineColor: machine.labelLineColor,
-            lineWidth: machine.labelLineWidth,
-            lineOpacity: machine.labelLineOpacity,
-            lineStyle: machine.labelLineStyle,
-            lineShape: machine.labelLineShape,
-            leaderSide: machine.labelLeaderSide,
-            targetStyle: machine.labelTargetStyle,
-            targetSize: machine.labelTargetSize,
+            visibleTarget: machine.processPointerVisible !== false,
+            labelLiftFeet: clamp(Number(machine.processPointerLabelOffset ?? (compactLabelViewport() ? 1.8 : 2.5)), 0, 60),
+            screenOffsetX: clamp(Number(machine.processPointerScreenOffsetX ?? 0), -500, 500),
+            screenOffsetY: clamp(Number(machine.processPointerScreenOffsetY ?? 0), -500, 500),
+            lineColor: machine.processPointerColor,
+            lineWidth: machine.processPointerWidth,
+            lineOpacity: machine.processPointerOpacity,
+            lineStyle: machine.processPointerStyle,
+            lineShape: machine.processPointerShape,
+            leaderSide: machine.processPointerLeaderSide,
+            targetStyle: machine.processPointerEndStyle,
+            targetSize: machine.processPointerEndSize,
             forceVisible: true,
             priority: true,
             selected: false,

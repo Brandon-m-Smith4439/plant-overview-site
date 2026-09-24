@@ -3953,6 +3953,16 @@
     `;
     frame.appendChild(panel);
 
+    const syncEditorViewportHeight = () => {
+      const frameRect = frame.getBoundingClientRect();
+      const absolutePanelTop = Math.max(8, frameRect.top + 18);
+      const available = Math.max(260, window.innerHeight - absolutePanelTop - 10);
+      panel.style.setProperty("--editor-viewport-max-height", `${Math.floor(available)}px`);
+    };
+    syncEditorViewportHeight();
+    window.addEventListener("resize", syncEditorViewportHeight);
+    window.addEventListener("scroll", syncEditorViewportHeight, { passive: true });
+
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {
         state.editorTool = button.dataset.editorTool;

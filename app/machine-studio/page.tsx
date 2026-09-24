@@ -31,7 +31,7 @@ function StudioIcon({ name }: { name: StudioIconName }) {
 
 
 export const metadata = {
-  title: "Machine Design Studio Â· Monroe Glass Plant Evolution",
+  title: "Machine Design Studio \u00B7 Monroe Glass Plant Evolution",
   robots: { index: false, follow: false, noarchive: true },
 };
 
@@ -48,7 +48,7 @@ export default function MachineStudio() {
 <div className="studio-brand">
 <a className="studio-back-link" href="/" aria-label="Return to plant layout"><StudioIcon name="back" /></a>
 <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-<span className="studio-version-badge">v0.13.13</span>
+<span className="studio-version-badge">v0.13.14</span>
 </div>
 <div className="studio-top-actions" role="toolbar" aria-label="Design commands">
 <span id="save-state" className="studio-save-state">Auto-saved</span>
@@ -153,10 +153,10 @@ export default function MachineStudio() {
 </section>
 <section data-browser-panel="plant" className="studio-browser-section assignment-panel" hidden>
 <div className="studio-panel-heading"><p>Use in plant layout</p><span>Live-linked</span></div>
-<label className="studio-field">Plant object<select id="machine-assignment"><option value="">Choose a machineâ€¦</option></select></label>
+<label className="studio-field">Plant object<select id="machine-assignment"><option value="">Choose a machine&hellip;</option></select></label>
 <label className="studio-field">Design sizing<select id="assignment-scale-mode">
-<option value="preserve">Preserve proportions Â· recommended</option>
-<option value="match">Match dimensions Â· keep synced</option>
+<option value="preserve">Preserve proportions &middot; recommended</option>
+<option value="match">Match dimensions &middot; keep synced</option>
 <option value="stretch">Stretch to plant object</option>
 </select></label>
 <section className="create-plant-machine-panel" aria-labelledby="create-plant-machine-heading">
@@ -169,7 +169,7 @@ export default function MachineStudio() {
 </div>
 <button id="create-plant-machine" type="button" className="primary full-width-button">Save &amp; add machine to Plant Layout</button>
 <button id="open-created-plant-machine" type="button" className="full-width-button success-action" hidden>Open and position this machine</button>
-<p id="create-plant-machine-status" className="studio-help">The design envelope becomes the new machineâ€™s starting dimensions.</p>
+<p id="create-plant-machine-status" className="studio-help">The design envelope becomes the new machine&rsquo;s starting dimensions.</p>
 </section>
 <button id="sync-machine-dimensions" type="button" className="full-width-button">Match plant dimensions to this design</button>
 <details className="plant-instance-transform">
@@ -243,16 +243,16 @@ export default function MachineStudio() {
 <label className="studio-switch"><input id="timeline-enabled" type="checkbox" defaultChecked /><span>Enabled</span></label>
 <label className="studio-switch"><input id="timeline-loop" type="checkbox" defaultChecked /><span>Loop machine</span></label>
 <label className="studio-field">Machine speed<input id="timeline-playback-rate" type="number" min="0" max="20" step="0.05" defaultValue="1" /></label>
-<label className="studio-field">Timeline span<input id="timeline-duration" type="number" min="30" step="5" defaultValue="30" readOnly aria-readonly="true" /><small>Shared Â· expands to fit every part</small></label>
+<label className="studio-field">Timeline span<input id="timeline-duration" type="number" min="30" step="5" defaultValue="30" readOnly aria-readonly="true" /><small>Shared &middot; expands to fit every part</small></label>
 <label className="studio-field">Snap<select id="timeline-snap-step" defaultValue="0.05"><option value="0.01">0.01s</option><option value="0.05">0.05s</option><option value="0.1">0.10s</option><option value="0.25">0.25s</option><option value="0.5">0.50s</option><option value="1">1.00s</option></select></label>
 </div>
-<div className="timeline-ruler-wrap timeline-dock-ruler"><div id="timeline-scroll-viewport" className="timeline-scroll-viewport"><div id="timeline-scroll-canvas" className="timeline-scroll-canvas"><div className="timeline-ruler-scale" id="timeline-ruler-scale"></div><div id="timeline-ruler-tracks" className="timeline-ruler-tracks" aria-label="Animation clips"></div></div></div><input id="timeline-playhead" className="timeline-playhead" type="range" min="0" max="30" step="0.01" defaultValue="0" aria-label="Animation playhead" /><div className="timeline-time-readout"><span id="timeline-time-label">0.00s / 30.00s</span><span>Start â† left Â· right â†’ end Â· extending a right edge pushes later clips; dragging a clip can overlap it</span></div></div>
+<div className="timeline-ruler-wrap timeline-dock-ruler"><div id="timeline-scroll-viewport" className="timeline-scroll-viewport"><div id="timeline-scroll-canvas" className="timeline-scroll-canvas"><div className="timeline-ruler-scale" id="timeline-ruler-scale"></div><div id="timeline-ruler-tracks" className="timeline-ruler-tracks" aria-label="Animation clips"></div></div></div><input id="timeline-playhead" className="timeline-playhead" type="range" min="0" max="30" step="0.01" defaultValue="0" aria-label="Animation playhead" /><div className="timeline-time-readout"><span id="timeline-time-label">0.00s / 30.00s</span><span>Start &larr; left &middot; right &rarr; end &middot; extending a right edge pushes later clips; dragging a clip can overlap it</span></div></div>
 </div>
 </div>
 <p id="timeline-target-help" className="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
 </section>
 
-<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> Â· Click a part to select it</span><span>Ctrl+left-drag box select Â· Right-drag orbit Â· Middle-drag pan Â· Wheel zoom Â· <span id="designer-camera-position">Above floor Â· full orbit enabled</span></span></div>
+<div className="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> &middot; Click a part to select it</span><span>Ctrl+left-drag box select &middot; Right-drag orbit &middot; Middle-drag pan &middot; Wheel zoom &middot; <span id="designer-camera-position">Above floor &middot; full orbit enabled</span></span></div>
 <div id="design-toast" className="design-toast" role="status" aria-live="polite"></div>
 </section>
 <aside className="studio-inspector-panel">
@@ -282,7 +282,7 @@ export default function MachineStudio() {
 <details className="transform-section" open><summary>Position, rotation, and scale</summary>
 <div className="transform-subheading">Position</div><div className="axis-fields"><label className="axis-x-field">X<input data-component-field="x" type="number" step="0.1" /></label><label className="axis-y-field">Y<input data-component-field="y" type="number" step="0.1" /></label><label className="axis-z-field">Z<input data-component-field="z" type="number" step="0.1" /></label></div>
 <div className="transform-subheading">Rotation</div><div className="axis-fields rotation-axis-fields"><label className="axis-x-field">X<input data-component-field="rotationX" type="number" step="1" /></label><label className="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1" /></label><label className="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1" /></label></div>
-<div className="rotation-row rotation-actions"><label className="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis" defaultValue="y"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">âˆ’90Â°</button><button id="rotate-positive" type="button">+90Â°</button><button id="reset-rotation" type="button">Reset</button></div>
+<div className="rotation-row rotation-actions"><label className="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis" defaultValue="y"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">&minus;90&deg;</button><button id="rotate-positive" type="button">+90&deg;</button><button id="reset-rotation" type="button">Reset</button></div>
 <div className="transform-subheading">Scale (%)</div><div className="axis-fields four"><label>All<input data-component-scale="uniform" type="number" min="1" max="10000" step="1" /></label><label className="axis-x-field">X<input data-component-scale="x" type="number" min="1" max="10000" step="1" /></label><label className="axis-y-field">Y<input data-component-scale="y" type="number" min="1" max="10000" step="1" /></label><label className="axis-z-field">Z<input data-component-scale="z" type="number" min="1" max="10000" step="1" /></label></div>
 <div className="transform-subheading">Mirror</div><div className="mirror-actions" role="group" aria-label="Mirror selected parts"><button type="button" data-mirror-component="x">Mirror X</button><button type="button" data-mirror-component="y">Mirror Y</button><button type="button" data-mirror-component="z">Mirror Z</button></div>
 <button id="center-component" type="button" className="full-width-button">Center on machine</button>

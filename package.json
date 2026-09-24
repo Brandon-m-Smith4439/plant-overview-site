@@ -1,6 +1,6 @@
 {
   "name": "monroe-glass-plant-evolution",
-  "version": "0.13.14",
+  "version": "0.13.15",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

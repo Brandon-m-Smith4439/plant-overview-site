@@ -43,7 +43,11 @@ assert.ok(plant.includes("function updateLabelVisualState") && plant.includes("l
 assert.ok(plant.includes("preferredSlot") && plant.includes("slotHoldUntil"), "Label collision placement must stay stable.");
 assert.ok(plant.includes("positionBlend") && plant.includes("visual.drawX"), "Label movement must remain interpolated.");
 assert.ok(plant.includes("labelAnchorXPercent") && plant.includes("labelAnchorYPercent") && plant.includes("labelAnchorZPercent"), "Machine label anchors must remain editable.");
-assert.ok(plant.includes('ctx.strokeStyle = "rgba(9,18,21,.78)"'), "Stage-label leaders must retain their contrast outline.");
+assert.ok(plant.includes("labelLineColor") && plant.includes("labelLineWidth") && plant.includes("labelLineOpacity"), "Each label leader needs independent color, width, and opacity.");
+assert.ok(plant.includes("labelLineStyle") && plant.includes("labelLineShape") && plant.includes("labelLeaderSide"), "Each label leader needs independent line style, shape, and connection edge.");
+assert.ok(plant.includes("labelTargetStyle") && plant.includes("labelTargetSize") && plant.includes("labelScreenOffsetX") && plant.includes("labelScreenOffsetY"), "Label pointer endpoint and tag position must be independently adjustable.");
+assert.ok(plant.includes("function labelLeaderConnection") && plant.includes("function traceLabelLeader"), "The label renderer must support editable connection geometry.");
+assert.ok(plant.includes("const flowText = (fallback)"), "Necessary production-flow labels must accept custom per-machine text.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");

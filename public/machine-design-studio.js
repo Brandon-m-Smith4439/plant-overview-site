@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.14";
+  const APP_VERSION = "0.13.15";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;

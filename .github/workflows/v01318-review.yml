@@ -1,0 +1,87 @@
+name: v0.13.18 sidebar browser review
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Static editor regressions
+        run: |
+          npm run validate:encoding
+          npm run validate:js
+          npm run validate:process-pointers
+          npm run validate:labels
+          npm run validate:editor-tabs
+          npm run validate:public-viewer
+          npm run validate:overview-stability
+      - name: Install browser test runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install chromium
+      - name: Non-fullscreen sidebar browser test
+        shell: bash
+        run: |
+          python3 -m http.server 4173 >/tmp/plant-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          node --input-type=module <<'NODE'
+          import { chromium } from "playwright";
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+          await page.addInitScript(() => sessionStorage.setItem("monroe-glass-editor-access-v1", "granted"));
+          await page.goto("http://127.0.0.1:4173/public/preview.html", { waitUntil: "networkidle" });
+          await page.waitForSelector('[data-toggle="editor"]');
+          await page.click('[data-toggle="editor"]');
+          await page.waitForSelector(".layout-editor:not([hidden])");
+          const initial = await page.locator(".editor-scroll-region").evaluate((el) => ({
+            scrollHeight: el.scrollHeight,
+            clientHeight: el.clientHeight,
+            scrollTop: el.scrollTop,
+          }));
+          if (!(initial.scrollHeight > initial.clientHeight + 20)) {
+            throw new Error(`Expected sidebar overflow, got scrollHeight=${initial.scrollHeight} clientHeight=${initial.clientHeight}`);
+          }
+          await page.locator(".editor-scroll-region").hover();
+          await page.mouse.wheel(0, 900);
+          await page.waitForTimeout(120);
+          const after = await page.locator(".editor-scroll-region").evaluate((el) => ({
+            scrollTop: el.scrollTop,
+            max: el.scrollHeight - el.clientHeight,
+          }));
+          if (!(after.scrollTop > 50 && after.max > after.scrollTop)) {
+            throw new Error(`Wheel did not advance sidebar scrollTop: ${JSON.stringify(after)}`);
+          }
+          const geometry = await page.evaluate(() => {
+            const panel = document.querySelector(".layout-editor").getBoundingClientRect();
+            const footer = document.querySelector(".editor-close-bar").getBoundingClientRect();
+            return {
+              panelTop: panel.top,
+              panelBottom: panel.bottom,
+              footerTop: footer.top,
+              footerBottom: footer.bottom,
+              viewportHeight: window.innerHeight,
+              fullscreen: Boolean(document.fullscreenElement),
+            };
+          });
+          if (geometry.fullscreen) throw new Error("Browser test unexpectedly entered fullscreen.");
+          if (geometry.panelBottom > geometry.viewportHeight + 1) {
+            throw new Error(`Editor panel extends below viewport: ${JSON.stringify(geometry)}`);
+          }
+          if (geometry.footerBottom > geometry.viewportHeight + 1 || geometry.footerTop < geometry.panelTop) {
+            throw new Error(`Done editing footer is not visible: ${JSON.stringify(geometry)}`);
+          }
+          console.log("Non-fullscreen sidebar browser scroll passed", { initial, after, geometry });
+          await browser.close();
+          NODE
+      - name: Production build
+        run: npm run build
+      - name: TypeScript
+        run: npx tsc --noEmit --incremental false

@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.15";
+  const APP_VERSION = "0.13.16";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -3951,17 +3951,32 @@
       </div>
       <div class="editor-close-bar"><button type="button" data-editor-action="done" class="primary">Done editing</button></div>
     `;
+    const closeBar = panel.querySelector(".editor-close-bar");
+    const scrollRegion = document.createElement("div");
+    scrollRegion.className = "editor-scroll-region";
+    while (panel.firstChild && panel.firstChild !== closeBar) {
+      scrollRegion.appendChild(panel.firstChild);
+    }
+    panel.insertBefore(scrollRegion, closeBar);
     frame.appendChild(panel);
 
     const syncEditorViewportHeight = () => {
-      const frameRect = frame.getBoundingClientRect();
-      const absolutePanelTop = Math.max(8, frameRect.top + 18);
-      const available = Math.max(260, window.innerHeight - absolutePanelTop - 10);
-      panel.style.setProperty("--editor-viewport-max-height", `${Math.floor(available)}px`);
+      const visualViewport = window.visualViewport;
+      const viewportBottom = visualViewport
+        ? visualViewport.offsetTop + visualViewport.height
+        : window.innerHeight;
+      const panelTop = panel.getBoundingClientRect().top;
+      const frameBottom = frame.getBoundingClientRect().bottom;
+      const usableBottom = Math.min(viewportBottom, frameBottom);
+      const available = Math.max(140, usableBottom - panelTop - 8);
+      panel.style.setProperty("--editor-viewport-height", `${Math.floor(available)}px`);
     };
     syncEditorViewportHeight();
     window.addEventListener("resize", syncEditorViewportHeight);
     window.addEventListener("scroll", syncEditorViewportHeight, { passive: true });
+    window.visualViewport?.addEventListener("resize", syncEditorViewportHeight);
+    window.visualViewport?.addEventListener("scroll", syncEditorViewportHeight);
+    document.addEventListener("fullscreenchange", syncEditorViewportHeight);
 
     panel.querySelectorAll("[data-editor-tool]").forEach((button) => {
       button.addEventListener("click", () => {

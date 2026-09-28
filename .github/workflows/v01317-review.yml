@@ -1,0 +1,31 @@
+name: v0.13.17 sidebar scroll review
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Editor regression checks
+        run: |
+          npm run validate:encoding
+          npm run validate:js
+          npm run validate:process-pointers
+          npm run validate:labels
+          npm run validate:editor-tabs
+          npm run validate:public-viewer
+          npm run validate:mobile-viewer
+          npm run validate:overview-stability
+      - name: Production build
+        run: npm run build
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: TypeScript
+        run: npx tsc --noEmit --incremental false

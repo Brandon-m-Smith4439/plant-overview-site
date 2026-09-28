@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.16";
+  const APP_VERSION = "0.13.17";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -3959,6 +3959,12 @@
     }
     panel.insertBefore(scrollRegion, closeBar);
     frame.appendChild(panel);
+
+    // The editor owns scrolling while the pointer is over its control region.
+    // Do not prevent the browser's default scroll behavior; only stop the event
+    // from escaping into any surrounding viewer interaction layer.
+    scrollRegion.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+    scrollRegion.addEventListener("touchmove", (event) => event.stopPropagation(), { passive: true });
 
     const syncEditorViewportHeight = () => {
       const visualViewport = window.visualViewport;

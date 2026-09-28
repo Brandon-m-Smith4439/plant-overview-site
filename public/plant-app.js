@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.17";
+  const APP_VERSION = "0.13.18";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -3961,20 +3961,36 @@
     frame.appendChild(panel);
 
     // The editor owns scrolling while the pointer is over its control region.
-    // Do not prevent the browser's default scroll behavior; only stop the event
-    // from escaping into any surrounding viewer interaction layer.
-    scrollRegion.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+    // Drive scrollTop directly so trackpads/mouse wheels still scroll the sidebar
+    // even when a surrounding viewer or browser scroll chain would otherwise win.
+    scrollRegion.tabIndex = 0;
+    scrollRegion.setAttribute("aria-label", "Layout editor controls");
+    scrollRegion.addEventListener("wheel", (event) => {
+      const maxScrollTop = Math.max(0, scrollRegion.scrollHeight - scrollRegion.clientHeight);
+      if (maxScrollTop <= 0) return;
+      const previousScrollTop = scrollRegion.scrollTop;
+      const nextScrollTop = clamp(previousScrollTop + event.deltaY, 0, maxScrollTop);
+      scrollRegion.scrollTop = nextScrollTop;
+      event.stopPropagation();
+      if (Math.abs(nextScrollTop - previousScrollTop) > .1) event.preventDefault();
+    }, { passive: false });
     scrollRegion.addEventListener("touchmove", (event) => event.stopPropagation(), { passive: true });
 
     const syncEditorViewportHeight = () => {
       const visualViewport = window.visualViewport;
-      const viewportBottom = visualViewport
-        ? visualViewport.offsetTop + visualViewport.height
-        : window.innerHeight;
-      const panelTop = panel.getBoundingClientRect().top;
-      const frameBottom = frame.getBoundingClientRect().bottom;
-      const usableBottom = Math.min(viewportBottom, frameBottom);
-      const available = Math.max(140, usableBottom - panelTop - 8);
+      const viewportTop = visualViewport ? visualViewport.offsetTop : 0;
+      const viewportHeight = visualViewport ? visualViewport.height : window.innerHeight;
+      const viewportBottom = viewportTop + viewportHeight;
+      const frameRect = frame.getBoundingClientRect();
+      const visibleTop = Math.max(frameRect.top, viewportTop + 8);
+      const visibleBottom = Math.min(frameRect.bottom, viewportBottom - 8);
+      const topWithinFrame = Math.max(0, visibleTop - frameRect.top);
+      const available = Math.max(96, visibleBottom - visibleTop);
+
+      panel.style.top = `${Math.floor(topWithinFrame)}px`;
+      panel.style.bottom = "auto";
+      panel.style.height = `${Math.floor(available)}px`;
+      panel.style.maxHeight = `${Math.floor(available)}px`;
       panel.style.setProperty("--editor-viewport-height", `${Math.floor(available)}px`);
     };
     syncEditorViewportHeight();

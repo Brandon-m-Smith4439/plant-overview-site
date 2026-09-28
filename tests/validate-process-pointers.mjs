@@ -53,7 +53,7 @@ assert.ok(!labelControls.includes("data-process-pointer-field"), "Normal machine
 assert.ok(labelControls.includes("normal machine label text and appearance"), "Normal label section should explain the process-pointer separation.");
 
 assert.ok(css.includes("var(--editor-viewport-height"), "Layout editor height must be constrained by the real browser viewport.");
-assert.ok(plant.includes("visualViewport.offsetTop + visualViewport.height") && plant.includes("usableBottom - panelTop"), "Editor must compute remaining visible browser height from the actual visual viewport and rendered panel position.");
+assert.ok(plant.includes("viewportTop + viewportHeight") && plant.includes("visibleBottom - visibleTop"), "Editor must compute remaining visible browser height from the actual visual viewport and rendered frame intersection.");
 assert.ok(css.includes("grid-template-columns: repeat(5, minmax(0, 1fr))"), "Desktop object editor needs room for the new fifth tab.");
 assert.ok(css.includes(".process-pointer-panel"), "Dedicated pointer controls need their own styling.");
 
@@ -67,12 +67,17 @@ const closeBarEnd = css.indexOf("}", closeBarStart);
 const closeBarCss = css.slice(closeBarStart, closeBarEnd + 1);
 assert.ok(closeBarStart >= 0 && !closeBarCss.includes("bottom: -18px") && closeBarCss.includes("position: relative"), "Editor footer must stay in its dedicated fixed row instead of being pushed below the scrollport.");
 
-console.log("Independent process-pointer editor and fixed-footer viewport checks passed.");
+assert.ok(!css.includes("height: 100%;\n  overflow-y: auto;\n  touch-action: pan-y;"), "Inner editor scroll region must not force itself to 100% height above the footer row.");
+const finalScrollFix = css.slice(css.lastIndexOf("v0.13.18"));
+assert.ok(finalScrollFix.includes(".model-frame.editing .layout-editor"), "Final scroll fix must override the older docked-editor rule with matching specificity.");
+assert.ok(finalScrollFix.includes("bottom: auto"), "Non-fullscreen editor must not stay simultaneously pinned to top and bottom when JavaScript supplies an explicit height.");
+assert.ok(finalScrollFix.includes("grid-template-rows: minmax(0, 1fr) auto"), "Editor shell must reserve the remaining height for controls and a separate footer row.");
+assert.ok(finalScrollFix.includes("height: auto") && finalScrollFix.includes("overflow-y: auto"), "Editor controls must use an auto-sized grid item with independent vertical scrolling.");
+assert.ok(plant.includes("scrollRegion.scrollHeight - scrollRegion.clientHeight"), "Wheel scrolling must calculate the real available sidebar scroll range.");
+assert.ok(plant.includes("scrollRegion.scrollTop = nextScrollTop"), "Wheel scrolling must explicitly advance the sidebar scroll position.");
+assert.ok(plant.includes('{ passive: false }'), "Wheel fallback must be able to prevent scroll chaining after the sidebar consumes movement.");
+assert.ok(plant.includes("visibleTop = Math.max(frameRect.top, viewportTop + 8)"), "Editor must anchor to the visible intersection of the model frame and browser viewport.");
+assert.ok(plant.includes("panel.style.top") && plant.includes("panel.style.height") && plant.includes('panel.style.bottom = "auto"'), "Editor must receive explicit top and height values instead of relying on conflicting legacy top/bottom CSS.");
+assert.ok(plant.includes('scrollRegion.tabIndex = 0') && plant.includes('aria-label", "Layout editor controls"'), "Scrollable controls should also be keyboard-focusable and accessible.");
 
-
-assert.ok(!css.includes("height: min(calc(100% - 36px), var(--editor-viewport-height"), "Editor height must not depend on a percentage of an auto-height plant frame.");
-assert.ok(css.includes("height: var(--editor-viewport-height, calc(100dvh - 36px))"), "Editor shell must use the explicit pixel viewport height supplied by JavaScript.");
-assert.ok(css.includes("touch-action: pan-y"), "Editor scroll region must explicitly allow vertical touch scrolling.");
-assert.ok(plant.includes('scrollRegion.addEventListener("wheel"') && plant.includes('scrollRegion.addEventListener("touchmove"'), "Editor scroll region must retain ownership of wheel and touch scrolling.");
-const finalScrollFix = css.slice(css.lastIndexOf("v0.13.17"));
-assert.ok(finalScrollFix.includes(".layout-editor") && finalScrollFix.includes("padding: 0"), "Final polish rules must not reintroduce shell padding that breaks the two-row scroll layout.");
+console.log("Independent process-pointer editor and reliable sidebar scrolling checks passed.");

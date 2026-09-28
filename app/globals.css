@@ -7369,16 +7369,49 @@ body.viewer-fullscreen-fallback-active {
 .layout-editor .editor-scroll-region > :last-child { margin-bottom: 0; }
 
 
-/* v0.13.17 — explicit viewport-height sidebar scroll containment */
-.layout-editor {
-  height: var(--editor-viewport-height, calc(100dvh - 36px));
-  max-height: var(--editor-viewport-height, calc(100dvh - 36px));
-  padding: 0;
+/* v0.13.18 — reliable non-fullscreen layout-editor scrolling */
+@media (min-width: 761px) {
+  .model-frame.editing .layout-editor {
+    top: 0;
+    right: 0;
+    bottom: auto;
+    height: var(--editor-viewport-height, calc(100dvh - 16px));
+    max-height: var(--editor-viewport-height, calc(100dvh - 16px));
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
+    padding: 0;
+  }
 }
 
-.layout-editor .editor-scroll-region {
+.layout-editor .editor-scroll-region,
+.model-frame.editing .layout-editor .editor-scroll-region {
   min-height: 0;
-  height: 100%;
+  height: auto;
+  max-height: none;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.layout-editor .editor-scroll-region:focus {
+  outline: none;
+}
+
+.layout-editor .editor-scroll-region::-webkit-scrollbar {
+  width: 12px;
+}
+
+.layout-editor .editor-scroll-region::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: #9baaa3;
+  background-clip: padding-box;
+}
+
+.layout-editor .editor-scroll-region::-webkit-scrollbar-track {
+  background: transparent;
 }

@@ -1,3 +1,7 @@
+## Version 0.13.17
+
+Version 0.13.17 fixes the remaining normal-window Plant Layout sidebar scrolling problem. The editor no longer sizes itself from a percentage of the model frame. Instead it uses the explicit visible-browser height calculated from the Visual Viewport, so the control area is always a real bounded scroll container while the **Done editing** footer remains reachable. Mouse-wheel and touch scrolling are owned by the sidebar while the pointer is over its controls.
+
 ## Version 0.13.16
 
 Version 0.13.16 fixes the remaining non-fullscreen Plant Layout editor scrolling issue. The sidebar now has an independently scrollable control region and a fixed footer row, so **Done editing** always stays visible while every control above it can be reached. Height is derived from the browser's actual Visual Viewport and the panel's rendered position rather than estimated from the model frame.
@@ -16,7 +20,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.16**
+Current project version: **0.13.17**
 
 ## Full-production rendering performance
 

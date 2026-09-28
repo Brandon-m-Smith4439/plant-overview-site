@@ -56,8 +56,14 @@ jobs:
             scrollTop: el.scrollTop,
             max: el.scrollHeight - el.clientHeight,
           }));
-          if (!(after.scrollTop > 50 && after.max > after.scrollTop)) {
+          if (!(after.scrollTop > 50 && after.scrollTop <= after.max)) {
             throw new Error(`Wheel did not advance sidebar scrollTop: ${JSON.stringify(after)}`);
+          }
+          await page.mouse.wheel(0, -60);
+          await page.waitForTimeout(80);
+          const afterUp = await page.locator(".editor-scroll-region").evaluate((el) => el.scrollTop);
+          if (!(afterUp < after.scrollTop)) {
+            throw new Error(`Reverse wheel did not move sidebar upward: down=${after.scrollTop} up=${afterUp}`);
           }
           const geometry = await page.evaluate(() => {
             const panel = document.querySelector(".layout-editor").getBoundingClientRect();

@@ -68,3 +68,11 @@ const closeBarCss = css.slice(closeBarStart, closeBarEnd + 1);
 assert.ok(closeBarStart >= 0 && !closeBarCss.includes("bottom: -18px") && closeBarCss.includes("position: relative"), "Editor footer must stay in its dedicated fixed row instead of being pushed below the scrollport.");
 
 console.log("Independent process-pointer editor and fixed-footer viewport checks passed.");
+
+
+assert.ok(!css.includes("height: min(calc(100% - 36px), var(--editor-viewport-height"), "Editor height must not depend on a percentage of an auto-height plant frame.");
+assert.ok(css.includes("height: var(--editor-viewport-height, calc(100dvh - 36px))"), "Editor shell must use the explicit pixel viewport height supplied by JavaScript.");
+assert.ok(css.includes("touch-action: pan-y"), "Editor scroll region must explicitly allow vertical touch scrolling.");
+assert.ok(plant.includes('scrollRegion.addEventListener("wheel"') && plant.includes('scrollRegion.addEventListener("touchmove"'), "Editor scroll region must retain ownership of wheel and touch scrolling.");
+const finalScrollFix = css.slice(css.lastIndexOf("v0.13.17"));
+assert.ok(finalScrollFix.includes(".layout-editor") && finalScrollFix.includes("padding: 0"), "Final polish rules must not reintroduce shell padding that breaks the two-row scroll layout.");

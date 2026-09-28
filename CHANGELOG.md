@@ -1,3 +1,13 @@
+## 0.13.18 - 2026-09-28
+
+- Fixed the remaining non-fullscreen Plant Layout sidebar scrolling regression introduced by the prior explicit-height scroll containment change.
+- Removed the forced `height: 100%` from the inner editor scroll region so it can correctly occupy only the grid row above the fixed **Done editing** footer.
+- Added a high-specificity docked-editor override so older `.model-frame.editing .layout-editor` rules can no longer reintroduce conflicting bottom pinning, padding, or max-height behavior.
+- Anchored the editor to the visible intersection of the model frame and browser Visual Viewport, with explicit inline top/height values that follow page scrolling and browser resizing.
+- Added a direct wheel/trackpad fallback that advances the editor scroll region's `scrollTop` and blocks scroll chaining only when the sidebar actually consumes the movement.
+- Kept touch scrolling enabled and made the scroll region keyboard-focusable for complete non-fullscreen access.
+- Strengthened regression coverage for the scroll track, fixed footer row, viewport anchoring, explicit wheel scrolling, and legacy CSS override protection.
+
 ## 0.13.17 - 2026-09-28
 
 - Fixed the remaining non-fullscreen Plant Layout sidebar scrolling failure by removing the percentage-based editor height that could resolve against an auto-height model frame and let the scroll region expand with its content.

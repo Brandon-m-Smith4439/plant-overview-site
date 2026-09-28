@@ -1,3 +1,7 @@
+## Version 0.13.16
+
+Version 0.13.16 fixes the remaining non-fullscreen Plant Layout editor scrolling issue. The sidebar now has an independently scrollable control region and a fixed footer row, so **Done editing** always stays visible while every control above it can be reached. Height is derived from the browser's actual Visual Viewport and the panel's rendered position rather than estimated from the model frame.
+
 ## Version 0.13.15
 
 Version 0.13.15 keeps the Plant Layout editor fully reachable when it is used outside fullscreen by sizing the editor against the actual remaining browser viewport. It also separates production-flow pointers from regular machine labels. A new **Pointers** tab edits each process pointer independently: target X/Y/Z on the machine, process-tag lift and X/Y screen offset, visibility, line color/width/opacity/pattern/shape, tag connection edge, and endpoint type/size. Existing saved pointer placement migrates forward so the current Today production flow keeps its layout while normal machine-label editing remains independent.
@@ -12,7 +16,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.15**
+Current project version: **0.13.16**
 
 ## Full-production rendering performance
 

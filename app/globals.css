@@ -133,8 +133,8 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 58px); line-height: .98; letter-spac
   right: 18px;
   box-sizing: border-box;
   width: min(340px, calc(100% - 36px));
-  height: min(calc(100% - 36px), var(--editor-viewport-height, calc(100dvh - 36px)));
-  max-height: min(calc(100% - 36px), var(--editor-viewport-height, calc(100dvh - 36px)));
+  height: var(--editor-viewport-height, calc(100dvh - 36px));
+  max-height: var(--editor-viewport-height, calc(100dvh - 36px));
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
@@ -4901,6 +4901,8 @@ summary:focus-visible {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   padding: 16px;
 }
 
@@ -7365,3 +7367,18 @@ body.viewer-fullscreen-fallback-active {
 /* v0.13.16 — keep the editor footer reachable outside fullscreen */
 .layout-editor .editor-scroll-region > :first-child { margin-top: 0; }
 .layout-editor .editor-scroll-region > :last-child { margin-bottom: 0; }
+
+
+/* v0.13.17 — explicit viewport-height sidebar scroll containment */
+.layout-editor {
+  height: var(--editor-viewport-height, calc(100dvh - 36px));
+  max-height: var(--editor-viewport-height, calc(100dvh - 36px));
+  padding: 0;
+}
+
+.layout-editor .editor-scroll-region {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  touch-action: pan-y;
+}

@@ -1,3 +1,11 @@
+## 0.13.17 - 2026-09-28
+
+- Fixed the remaining non-fullscreen Plant Layout sidebar scrolling failure by removing the percentage-based editor height that could resolve against an auto-height model frame and let the scroll region expand with its content.
+- The layout editor now uses the explicit pixel height calculated from the browser Visual Viewport, guaranteeing that the inner control region has a bounded height and can actually scroll.
+- Reasserted the two-row editor shell after the final polish CSS so later legacy/polish rules cannot restore outer padding or break the dedicated scroll region and fixed footer.
+- Added vertical touch scrolling and scroll-event ownership to the editor control region while leaving the viewer canvas zoom/pan behavior unchanged outside the sidebar.
+- Extended regression coverage to reject percentage-based sidebar sizing and require the explicit viewport-height scroll shell.
+
 ## 0.13.16 - 2026-09-28
 
 - Rebuilt the Plant Layout editor sidebar as a two-row shell: independently scrollable controls plus a permanently reachable Done editing footer.

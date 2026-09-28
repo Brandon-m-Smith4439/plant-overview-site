@@ -62,6 +62,9 @@ assert.ok(plant.includes("panel.insertBefore(scrollRegion, closeBar)"), "Done ed
 assert.ok(plant.includes("window.visualViewport"), "Editor height must use the browser visual viewport when available.");
 assert.ok(css.includes("grid-template-rows: minmax(0, 1fr) auto"), "Editor shell must reserve a fixed row for the footer.");
 assert.ok(css.includes(".editor-scroll-region") && css.includes("overflow-y: auto"), "Editor scroll region must scroll independently.");
-assert.ok(css.includes(".editor-close-bar") && !css.includes("bottom: -18px"), "Editor footer must not be pushed below the scrollport.");
+const closeBarStart = css.indexOf(".editor-close-bar {");
+const closeBarEnd = css.indexOf("}", closeBarStart);
+const closeBarCss = css.slice(closeBarStart, closeBarEnd + 1);
+assert.ok(closeBarStart >= 0 && !closeBarCss.includes("bottom: -18px") && closeBarCss.includes("position: relative"), "Editor footer must stay in its dedicated fixed row instead of being pushed below the scrollport.");
 
 console.log("Independent process-pointer editor and fixed-footer viewport checks passed.");

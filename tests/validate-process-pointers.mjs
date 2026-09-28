@@ -58,3 +58,11 @@ assert.ok(css.includes("grid-template-columns: repeat(5, minmax(0, 1fr))"), "Des
 assert.ok(css.includes(".process-pointer-panel"), "Dedicated pointer controls need their own styling.");
 
 console.log("Independent process-pointer editor and viewport containment checks passed.");
+
+
+assert.ok(plant.includes('scrollRegion.className = "editor-scroll-region"'), "Editor controls must live in a dedicated scroll region.");
+assert.ok(plant.includes("panel.insertBefore(scrollRegion, closeBar)"), "Done editing footer must stay outside the scrolling controls.");
+assert.ok(plant.includes("window.visualViewport"), "Editor height must use the browser visual viewport when available.");
+assert.ok(css.includes("grid-template-rows: minmax(0, 1fr) auto"), "Editor shell must reserve a fixed row for the footer.");
+assert.ok(css.includes(".editor-scroll-region") && css.includes("overflow-y: auto"), "Editor scroll region must scroll independently.");
+assert.ok(css.includes(".editor-close-bar") && !css.includes("bottom: -18px"), "Editor footer must not be pushed below the scrollport.");

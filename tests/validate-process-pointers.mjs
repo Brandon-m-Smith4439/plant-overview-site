@@ -52,13 +52,10 @@ const labelControls = plant.slice(labelControlsStart, labelControlsEnd);
 assert.ok(!labelControls.includes("data-process-pointer-field"), "Normal machine labels must not contain process-pointer controls.");
 assert.ok(labelControls.includes("normal machine label text and appearance"), "Normal label section should explain the process-pointer separation.");
 
-assert.ok(css.includes("var(--editor-viewport-max-height"), "Layout editor height must be constrained by the real browser viewport.");
-assert.ok(plant.includes("window.innerHeight - absolutePanelTop"), "Editor must compute remaining visible browser height.");
+assert.ok(css.includes("var(--editor-viewport-height"), "Layout editor height must be constrained by the real browser viewport.");
+assert.ok(plant.includes("visualViewport.offsetTop + visualViewport.height") && plant.includes("usableBottom - panelTop"), "Editor must compute remaining visible browser height from the actual visual viewport and rendered panel position.");
 assert.ok(css.includes("grid-template-columns: repeat(5, minmax(0, 1fr))"), "Desktop object editor needs room for the new fifth tab.");
 assert.ok(css.includes(".process-pointer-panel"), "Dedicated pointer controls need their own styling.");
-
-console.log("Independent process-pointer editor and viewport containment checks passed.");
-
 
 assert.ok(plant.includes('scrollRegion.className = "editor-scroll-region"'), "Editor controls must live in a dedicated scroll region.");
 assert.ok(plant.includes("panel.insertBefore(scrollRegion, closeBar)"), "Done editing footer must stay outside the scrolling controls.");
@@ -66,3 +63,5 @@ assert.ok(plant.includes("window.visualViewport"), "Editor height must use the b
 assert.ok(css.includes("grid-template-rows: minmax(0, 1fr) auto"), "Editor shell must reserve a fixed row for the footer.");
 assert.ok(css.includes(".editor-scroll-region") && css.includes("overflow-y: auto"), "Editor scroll region must scroll independently.");
 assert.ok(css.includes(".editor-close-bar") && !css.includes("bottom: -18px"), "Editor footer must not be pushed below the scrollport.");
+
+console.log("Independent process-pointer editor and fixed-footer viewport checks passed.");

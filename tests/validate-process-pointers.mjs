@@ -53,7 +53,7 @@ assert.ok(!labelControls.includes("data-process-pointer-field"), "Normal machine
 assert.ok(labelControls.includes("normal machine label text and appearance"), "Normal label section should explain the process-pointer separation.");
 
 assert.ok(css.includes("var(--editor-viewport-height"), "Layout editor height must be constrained by the real browser viewport.");
-assert.ok(plant.includes("visualViewport.offsetTop + visualViewport.height") && plant.includes("usableBottom - panelTop"), "Editor must compute remaining visible browser height from the actual visual viewport and rendered panel position.");
+assert.ok(plant.includes("viewportTop + viewportHeight") && plant.includes("visibleBottom - visibleTop"), "Editor must compute remaining visible browser height from the actual visual viewport and rendered frame intersection.");
 assert.ok(css.includes("grid-template-columns: repeat(5, minmax(0, 1fr))"), "Desktop object editor needs room for the new fifth tab.");
 assert.ok(css.includes(".process-pointer-panel"), "Dedicated pointer controls need their own styling.");
 
@@ -66,9 +66,6 @@ const closeBarStart = css.indexOf(".editor-close-bar {");
 const closeBarEnd = css.indexOf("}", closeBarStart);
 const closeBarCss = css.slice(closeBarStart, closeBarEnd + 1);
 assert.ok(closeBarStart >= 0 && !closeBarCss.includes("bottom: -18px") && closeBarCss.includes("position: relative"), "Editor footer must stay in its dedicated fixed row instead of being pushed below the scrollport.");
-
-console.log("Independent process-pointer editor and fixed-footer viewport checks passed.");
-
 
 assert.ok(!css.includes("height: 100%;\n  overflow-y: auto;\n  touch-action: pan-y;"), "Inner editor scroll region must not force itself to 100% height above the footer row.");
 const finalScrollFix = css.slice(css.lastIndexOf("v0.13.18"));

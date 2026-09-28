@@ -1,3 +1,10 @@
+## 0.13.16 - 2026-09-28
+
+- Rebuilt the Plant Layout editor sidebar as a two-row shell: independently scrollable controls plus a permanently reachable Done editing footer.
+- Removed the negative sticky-footer offset that could leave the bottom of the editor below the visible browser window.
+- Switched sidebar sizing to the actual rendered panel position and the browser Visual Viewport, with frame-bottom clamping for normal, zoomed, and fullscreen layouts.
+- Added regression coverage for the dedicated scroll region, fixed footer row, Visual Viewport sizing, and removal of the off-screen footer behavior.
+
 ## 0.13.15 - 2026-09-24
 
 - Made the Plant Layout editor viewport-aware so the bottom of the edit UI remains reachable when editing in a normal browser window instead of fullscreen.

@@ -9,74 +9,67 @@ const css = await readFile(path.join(root, "app", "globals.css"), "utf8");
 
 assert.ok(plant.includes('data-object-editor-tab="pointers"'), "Object editor needs a dedicated Pointers tab.");
 assert.ok(plant.includes('data-object-editor-panel="pointers"'), "Object editor needs a dedicated process-pointer panel.");
-assert.ok(plant.includes('data-process-pointer-field="processPointerAnchorXPercent"'), "Process pointer target X must be independently editable.");
-assert.ok(plant.includes('data-process-pointer-field="processPointerScreenOffsetX"'), "Process pointer tag X must be independently editable.");
-assert.ok(plant.includes('data-process-pointer-field="processPointerColor"'), "Process pointer color must be independently editable.");
-assert.ok(plant.includes('data-process-pointer-field="processPointerShape"'), "Process pointer line shape must be independently editable.");
-assert.ok(plant.includes('data-process-pointer-field="processPointerEndStyle"'), "Process pointer endpoint must be independently editable.");
-assert.ok(plant.includes('data-process-pointer-check="processPointerVisible"'), "Process pointer leader visibility must be independently editable.");
-assert.ok(plant.includes("data-process-pointer-assignment"), "Pointers tab must let the editor assign the selected machine to a process-flow step.");
-assert.ok(plant.includes('data-editor-action="remove-process-pointer"'), "Pointers tab must let the editor remove the selected machine from the process flow.");
-assert.ok(plant.includes("assignProcessPointerToMachine"), "Process-flow assignment must use the explicit machine-binding helper.");
-assert.ok(plant.includes("processPointersInitialized"), "Saved layouts must persist whether the one-time Necessary pointer migration has completed.");
-assert.ok(plant.includes("processPointers: state.processPointers"), "Saved layouts must persist exact process-node bindings.");
-assert.ok(plant.includes('data-process-pointer-field="processPointerText"'), "Process route text must be editable separately from the machine label.");
-assert.ok(plant.includes("processPointerText: String(machine.processPointerText"), "Saved machines must persist process-only text separately from normal label text.");
-assert.ok(plant.includes("String(machine?.processPointerText"), "Process-flow text must read from processPointerText rather than the normal machine label.");
-assert.ok(plant.includes("processPointerAssignment.disabled = !machine"), "Pointer assignment must remain editable for the active machine inside a multi-object assembly.");
-assert.ok(!plant.includes("processPointerAssignment.disabled = selectionCount !== 1"), "Pointer assignment must not be blocked solely because attached children are selected with the active machine.");
+assert.ok(plant.includes('data-process-pointer-assignment'), "Pointers tab must assign machines to process nodes separately from connection geometry.");
+assert.ok(plant.includes('data-process-node-field="processPointerText"'), "Process node text must remain separate from machine-label text.");
+assert.ok(plant.includes('data-process-connection-select'), "Pointers tab must select an exact machine-to-machine connection.");
+assert.ok(plant.includes('data-process-connection-target'), "Pointers tab must be able to add a connection to another process node.");
+assert.ok(plant.includes('data-editor-action="add-process-connection"'), "Pointers tab must add process connections.");
+assert.ok(plant.includes('data-editor-action="remove-process-connection"'), "Pointers tab must remove process connections.");
+assert.ok(plant.includes('data-process-connection-check="visible"'), "Each machine-to-machine pointer must have independent visibility.");
+for (const field of [
+  "startAnchorXPercent", "startAnchorYPercent", "startAnchorZPercent",
+  "endAnchorXPercent", "endAnchorYPercent", "endAnchorZPercent",
+  "tagLift", "tagScreenOffsetX", "tagScreenOffsetY",
+  "color", "width", "opacity", "style", "shape", "endStyle", "endSize",
+]) {
+  assert.ok(plant.includes(`data-process-connection-field="${field}"`), `Process connection field missing: ${field}`);
+}
+assert.ok(plant.includes('data-process-connection-check="tagVisible"'), "Route tags must be independently optional per connection.");
+
+assert.ok(plant.includes("function defaultProcessConnection"), "Machine-to-machine pointers need their own connection data model.");
+assert.ok(plant.includes("function normalizeProcessConnections"), "Saved process connections must be normalized independently from machines.");
+assert.ok(plant.includes("processConnections: state.processConnections"), "Saved layouts must persist connection geometry separately from process-node assignments.");
+assert.ok(plant.includes("processConnectionsInitialized: true"), "Connection migration must run only once for existing layouts.");
+assert.ok(plant.includes("processConnections: initialProcessConnections"), "Runtime state must keep a dedicated processConnections collection.");
+assert.ok(plant.includes('selectedProcessConnectionKey: ""'), "The editor needs an active connection independent from the active machine.");
+assert.ok(plant.includes("legacyProcessConnectionFallback"), "Existing process-pointer settings should migrate once into independent connection geometry.");
+
 const updatePanelStart = plant.indexOf("function updateEditorPanel");
 const updatePanelEnd = plant.indexOf("function updateEditorLiveTransformFields", updatePanelStart);
 const updatePanelBody = plant.slice(updatePanelStart, updatePanelEnd);
-assert.ok(!updatePanelBody.includes('input.addEventListener("change"'), "Inspector refresh must not register new change listeners repeatedly.");
-const pointerHandlersStart = plant.indexOf('panel.querySelectorAll("[data-process-pointer-field]")', updatePanelEnd);
-assert.ok(pointerHandlersStart > updatePanelEnd, "Process pointer handlers must be registered in the one-time editor setup path.");
-assert.ok(plant.includes("if (!machine || !processPointerKeyForMachine(machine)) return;"), "Pointer geometry edits must follow the active assigned machine without requiring a single-object selection.");
+assert.ok(updatePanelBody.includes("selectedProcessConnection(machine)"), "Pointer panel must edit the selected connection edge, not a machine-label leader.");
+assert.ok(updatePanelBody.includes("processConnectionDisplayName(activeConnection)"), "Pointer panel should clearly identify the exact connection being edited.");
+assert.ok(!updatePanelBody.includes('input.addEventListener("change"'), "Inspector refresh must not register duplicate handlers.");
 
-
-const normalizeStart = plant.indexOf("function normalizeMachine");
-const normalizeEnd = plant.indexOf("function defaultAnimationObjects", normalizeStart);
-const normalizeBody = plant.slice(normalizeStart, normalizeEnd);
-assert.ok(normalizeBody.includes("processPointerAnchorXPercent"), "Saved machines must normalize process pointer geometry.");
-assert.ok(normalizeBody.includes("machine.labelAnchorXPercent"), "Existing label pointer geometry must migrate into the new process pointer fields.");
-
-const nodeResolverStart = plant.indexOf("function buildTodayFlowNodes");
-const nodeResolverEnd = plant.indexOf("function drawTodayFlowArrow", nodeResolverStart);
-const nodeResolverBody = plant.slice(nodeResolverStart, nodeResolverEnd);
-assert.ok(nodeResolverBody.includes("state.processPointers?.[definition.key]"), "Today flow must resolve each Necessary step from its saved machine instance binding.");
-assert.ok(nodeResolverBody.includes("entriesById.get(instanceId)"), "Today flow must look up the exact rendered machine instance assigned to each Necessary step.");
-assert.ok(!nodeResolverBody.includes("nearestFlowEntry") && !nodeResolverBody.includes("flowEntryPlanPoint") && !nodeResolverBody.includes("largest(groups"), "Today flow must not retarget Necessary labels by runtime position or proximity.");
+const handlerStart = plant.indexOf('panel.querySelectorAll("[data-process-connection-field]")', updatePanelEnd);
+const handlerEnd = plant.indexOf(`panel.querySelector("[data-editor-action='refresh-labels']")`, handlerStart);
+const handlerBody = plant.slice(handlerStart, handlerEnd);
+assert.ok(handlerBody.includes("const connection = selectedProcessConnection()"), "Connection controls must modify the selected edge object.");
+assert.ok(handlerBody.includes("connection[field] = clamp"), "Numeric pointer edits must write to connection geometry.");
+assert.ok(plant.includes("delete state.processConnections[connection.key]"), "Removing a pointer must remove the machine-to-machine edge.");
+assert.ok(plant.includes("state.processConnections[key] = defaultProcessConnection"), "Adding a pointer must create a new machine-to-machine edge.");
+assert.ok(!handlerBody.includes("machine.labelAnchor"), "Process connection handlers must never edit machine-label anchors.");
+assert.ok(!handlerBody.includes("machine.labelLine"), "Process connection handlers must never edit machine-label leader styling.");
 
 const flowStart = plant.indexOf("function flowEntryWorldAnchor");
 const flowEnd = plant.indexOf("function rectanglesIntersect", flowStart);
 const flowBody = plant.slice(flowStart, flowEnd);
-for (const field of [
-  "processPointerAnchorXPercent",
-  "processPointerAnchorYPercent",
-  "processPointerAnchorZPercent",
-  "processPointerLabelOffset",
-  "processPointerScreenOffsetX",
-  "processPointerScreenOffsetY",
-  "processPointerColor",
-  "processPointerWidth",
-  "processPointerOpacity",
-  "processPointerStyle",
-  "processPointerShape",
-  "processPointerEndStyle",
-  "processPointerEndSize",
-]) {
-  assert.ok(flowBody.includes(field), `Today production flow must use independent ${field}.`);
-}
-assert.ok(flowBody.includes("function drawProcessRouteTag"), "Process flow must render its own route tag independently from machine labels.");
-assert.ok(flowBody.includes("fromEntry.flow.text") && flowBody.includes("toEntry.flow.text"), "Process route tags must describe the machine-to-machine process connection.");
-assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Today production flow must no longer use the normal machine-label pointer anchor.");
-assert.ok(!flowBody.includes("machine.labelLineColor"), "Today production flow must no longer use the normal machine-label line styling.");
+assert.ok(flowBody.includes("connection.startAnchorXPercent") || flowBody.includes('connection[`${prefix}AnchorXPercent`]'), "Renderer must use connection-owned start anchors.");
+assert.ok(flowBody.includes("connection.color"), "Renderer must use connection-owned line color.");
+assert.ok(flowBody.includes("connection.endStyle"), "Renderer must use connection-owned endpoint style.");
+assert.ok(flowBody.includes("Object.values(state.processConnections || {})"), "Today flow must render the saved edge collection rather than a fixed line tied to machine fields.");
+assert.ok(flowBody.includes("drawTodayFlowArrow(fromEntry, toEntry, connection)"), "Renderer must pass the edge object into the machine-to-machine arrow renderer.");
+assert.ok(!flowBody.includes("machine.processPointerAnchorXPercent"), "Machine-to-machine rendering must no longer read process geometry from the machine record.");
+assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Machine-to-machine rendering must never read machine-label pointer geometry.");
+assert.ok(!flowBody.includes("machine.labelLineColor"), "Machine-to-machine rendering must never read machine-label leader styling.");
 
 const labelControlsStart = plant.indexOf('<fieldset class="label-controls">');
 const labelControlsEnd = plant.indexOf('<fieldset class="crane-controls">', labelControlsStart);
 const labelControls = plant.slice(labelControlsStart, labelControlsEnd);
-assert.ok(!labelControls.includes("data-process-pointer-field"), "Normal machine labels must not contain process-pointer controls.");
-assert.ok(labelControls.includes("normal machine label text and appearance"), "Normal label section should explain the process-pointer separation.");
+assert.ok(labelControls.includes('data-label-field="labelAnchorXPercent"'), "Machine-label pointer must keep its own anchor controls.");
+assert.ok(labelControls.includes('data-label-field="labelLineColor"'), "Machine-label pointer must keep its own leader style controls.");
+assert.ok(!labelControls.includes("data-process-connection-field"), "Machine-label controls must not contain process connection geometry.");
+assert.ok(plant.includes("Completely separate from machine labels"), "Pointers panel should explicitly explain the separation.");
 
 assert.ok(css.includes("var(--editor-viewport-height"), "Layout editor height must be constrained by the real browser viewport.");
 assert.ok(plant.includes("viewportTop + viewportHeight") && plant.includes("visibleBottom - visibleTop"), "Editor must compute remaining visible browser height from the actual visual viewport and rendered frame intersection.");
@@ -106,4 +99,4 @@ assert.ok(plant.includes("visibleTop = Math.max(frameRect.top, viewportTop + 8)"
 assert.ok(plant.includes("panel.style.top") && plant.includes("panel.style.height") && plant.includes('panel.style.bottom = "auto"'), "Editor must receive explicit top and height values instead of relying on conflicting legacy top/bottom CSS.");
 assert.ok(plant.includes('scrollRegion.tabIndex = 0') && plant.includes('aria-label", "Layout editor controls"'), "Scrollable controls should also be keyboard-focusable and accessible.");
 
-console.log("Independent process-pointer editor and reliable sidebar scrolling checks passed.");
+console.log("Independent machine-to-machine process connection editor and reliable sidebar scrolling checks passed.");

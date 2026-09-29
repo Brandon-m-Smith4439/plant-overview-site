@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.21";
+  const APP_VERSION = "0.13.22";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -696,6 +696,17 @@
     { key: "rack", text: "Rack", order: 8 },
   ]);
   const PROCESS_POINTER_FLOW_BY_KEY = new Map(PROCESS_POINTER_FLOW_DEFINITIONS.map((item) => [item.key, item]));
+  const DEFAULT_PROCESS_CONNECTION_LINKS = Object.freeze([
+    ["cutting", "polisher"],
+    ["polisher", "denver-cnc"],
+    ["polisher", "waterjet"],
+    ["denver-cnc", "washer"],
+    ["waterjet", "washer"],
+    ["washer", "tempering"],
+    ["tempering", "wrap"],
+    ["wrap", "glass-truck"],
+    ["wrap", "rack"],
+  ]);
 
   function processPointerFlowDefinition(key) {
     return PROCESS_POINTER_FLOW_BY_KEY.get(String(key || "")) || null;
@@ -986,8 +997,7 @@
       type: "trench",
       reveal: 1,
       retire: 2,
-      x, z, w, d,
-      h: 0.22,
+      x, z, w, d,      h: 0.22,
       color: "#4a3a31",
       showLabel: false,
       collisionMode: "ignore",
@@ -1192,6 +1202,125 @@
     return result;
   }
 
+  function processConnectionKey(fromKey, toKey) {
+    return `${String(fromKey || "")}->${String(toKey || "")}`;
+  }
+
+  function defaultProcessConnection(fromKey, toKey) {
+    return {
+      key: processConnectionKey(fromKey, toKey),
+      fromKey,
+      toKey,
+      visible: true,
+      startAnchorXPercent: 50,
+      startAnchorYPercent: 100,
+      startAnchorZPercent: 50,
+      endAnchorXPercent: 50,
+      endAnchorYPercent: 100,
+      endAnchorZPercent: 50,
+      tagVisible: false,
+      tagLift: 4,
+      tagScreenOffsetX: 0,
+      tagScreenOffsetY: 0,
+      color: "#52b7aa",
+      width: 1.65,
+      opacity: 100,
+      style: "solid",
+      shape: "straight",
+      endStyle: "arrow",
+      endSize: 3.2,
+    };
+  }
+
+  function normalizeProcessConnection(value, fromKey, toKey, fallback = null) {
+    const defaults = { ...defaultProcessConnection(fromKey, toKey), ...(fallback || {}) };
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const readNumber = (field, min, max) => {
+      const candidate = Number(source[field]);
+      const base = Number(defaults[field]);
+      return clamp(Number.isFinite(candidate) ? candidate : base, min, max);
+    };
+    return {
+      ...defaults,
+      key: processConnectionKey(fromKey, toKey),
+      fromKey,
+      toKey,
+      visible: source.visible !== undefined ? source.visible !== false : defaults.visible !== false,
+      startAnchorXPercent: readNumber("startAnchorXPercent", 0, 100),
+      startAnchorYPercent: readNumber("startAnchorYPercent", 0, 100),
+      startAnchorZPercent: readNumber("startAnchorZPercent", 0, 100),
+      endAnchorXPercent: readNumber("endAnchorXPercent", 0, 100),
+      endAnchorYPercent: readNumber("endAnchorYPercent", 0, 100),
+      endAnchorZPercent: readNumber("endAnchorZPercent", 0, 100),
+      tagVisible: source.tagVisible !== undefined ? source.tagVisible === true : defaults.tagVisible === true,
+      tagLift: readNumber("tagLift", 0, 60),
+      tagScreenOffsetX: readNumber("tagScreenOffsetX", -500, 500),
+      tagScreenOffsetY: readNumber("tagScreenOffsetY", -500, 500),
+      color: /^#[0-9a-f]{6}$/i.test(String(source.color || "")) ? source.color : defaults.color,
+      width: readNumber("width", .5, 12),
+      opacity: readNumber("opacity", 5, 100),
+      style: ["solid", "dashed", "dotted"].includes(source.style) ? source.style : defaults.style,
+      shape: ["straight", "elbow"].includes(source.shape) ? source.shape : defaults.shape,
+      endStyle: ["arrow", "dot", "ring", "none"].includes(source.endStyle) ? source.endStyle : defaults.endStyle,
+      endSize: readNumber("endSize", 1, 14),
+    };
+  }
+
+  function legacyProcessConnectionFallback(fromKey, toKey, assignments, machineList) {
+    const machineByInstanceId = new Map((machineList || []).map((machine) => [machine?.instanceId, machine]));
+    const fromMachine = machineByInstanceId.get(assignments?.[fromKey]);
+    const toMachine = machineByInstanceId.get(assignments?.[toKey]);
+    const fallback = defaultProcessConnection(fromKey, toKey);
+    if (fromMachine) {
+      fallback.visible = fromMachine.processPointerVisible !== false;
+      fallback.startAnchorXPercent = Number(fromMachine.processPointerAnchorXPercent ?? 50);
+      fallback.startAnchorYPercent = Number(fromMachine.processPointerAnchorYPercent ?? 100);
+      fallback.startAnchorZPercent = Number(fromMachine.processPointerAnchorZPercent ?? 50);
+      fallback.tagLift = Number(fromMachine.processPointerLabelOffset ?? 4);
+      fallback.tagScreenOffsetX = Number(fromMachine.processPointerScreenOffsetX ?? 0);
+      fallback.tagScreenOffsetY = Number(fromMachine.processPointerScreenOffsetY ?? 0);
+      fallback.color = fromMachine.processPointerColor || fallback.color;
+      fallback.width = Number(fromMachine.processPointerWidth ?? fallback.width);
+      fallback.opacity = Number(fromMachine.processPointerOpacity ?? fallback.opacity);
+      fallback.style = fromMachine.processPointerStyle || fallback.style;
+      fallback.shape = fromMachine.processPointerShape || fallback.shape;
+      fallback.endStyle = fromMachine.processPointerEndStyle || fallback.endStyle;
+      fallback.endSize = Number(fromMachine.processPointerEndSize ?? fallback.endSize);
+    }
+    if (toMachine) {
+      fallback.endAnchorXPercent = Number(toMachine.processPointerAnchorXPercent ?? 50);
+      fallback.endAnchorYPercent = Number(toMachine.processPointerAnchorYPercent ?? 100);
+      fallback.endAnchorZPercent = Number(toMachine.processPointerAnchorZPercent ?? 50);
+    }
+    return fallback;
+  }
+
+  function normalizeProcessConnections(value, assignments, machineList, { fillDefaults = false } = {}) {
+    const result = {};
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    Object.entries(source).forEach(([storedKey, raw]) => {
+      const pieces = String(storedKey || "").split("->");
+      const fromKey = String(raw?.fromKey || pieces[0] || "");
+      const toKey = String(raw?.toKey || pieces[1] || "");
+      if (!processPointerFlowDefinition(fromKey) || !processPointerFlowDefinition(toKey) || fromKey === toKey) return;
+      const key = processConnectionKey(fromKey, toKey);
+      result[key] = normalizeProcessConnection(raw, fromKey, toKey);
+    });
+    if (fillDefaults) {
+      DEFAULT_PROCESS_CONNECTION_LINKS.forEach(([fromKey, toKey]) => {
+        const key = processConnectionKey(fromKey, toKey);
+        if (result[key]) return;
+        result[key] = normalizeProcessConnection(
+          null,
+          fromKey,
+          toKey,
+          legacyProcessConnectionFallback(fromKey, toKey, assignments, machineList),
+        );
+      });
+    }
+    return result;
+  }
+
   function loadLayout() {
     try {
       const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
@@ -1200,6 +1329,8 @@
           machines: loadSceneAwareMachines(current),
           processPointers: current.processPointers && typeof current.processPointers === "object" ? current.processPointers : {},
           processPointersInitialized: current.processPointersInitialized === true,
+          processConnections: current.processConnections && typeof current.processConnections === "object" ? current.processConnections : {},
+          processConnectionsInitialized: current.processConnectionsInitialized === true,
           stages: normalizeStages(current.stages),
           floor: normalizeFloor(current.floor),
           columnGrid: normalizeColumnGrid(current.columnGrid),
@@ -1224,6 +1355,8 @@
           machines: loadSceneAwareMachines(legacy),
           processPointers: {},
           processPointersInitialized: false,
+          processConnections: {},
+          processConnectionsInitialized: false,
           stages: normalizeStages(legacy.stages),
           floor: normalizeFloor(legacy.floor),
           columnGrid: normalizeColumnGrid(legacy.columnGrid),
@@ -1244,6 +1377,8 @@
           machines: loadSceneAwareMachines(older),
           processPointers: {},
           processPointersInitialized: false,
+          processConnections: {},
+          processConnectionsInitialized: false,
           stages: normalizeStages(older.stages),
           floor: normalizeFloor(older.floor),
           columnGrid: normalizeColumnGrid(older.columnGrid),
@@ -1264,6 +1399,8 @@
           machines: loadSceneAwareMachines(oldest, true),
           processPointers: {},
           processPointersInitialized: false,
+          processConnections: {},
+          processConnectionsInitialized: false,
           stages: normalizeStages(defaultStages),
           floor: normalizeFloor(oldest.floor),
           columnGrid: normalizeColumnGrid(oldest.columnGrid),
@@ -1285,6 +1422,8 @@
       machines: defaultSceneMachines(),
       processPointers: {},
       processPointersInitialized: false,
+      processConnections: {},
+      processConnectionsInitialized: false,
       stages: normalizeStages(defaultStages),
       floor: normalizeFloor(defaultFloor),
       columnGrid: normalizeColumnGrid(defaultColumnGrid),
@@ -1305,6 +1444,9 @@
   let machines = savedLayout.machines;
   const initialProcessPointers = normalizeProcessPointerAssignments(savedLayout.processPointers, machines, {
     fillDefaults: savedLayout.processPointersInitialized !== true,
+  });
+  const initialProcessConnections = normalizeProcessConnections(savedLayout.processConnections, initialProcessPointers, machines, {
+    fillDefaults: savedLayout.processConnectionsInitialized !== true,
   });
   // v0.10.2 automatically suppressed a child animation when it matched its
   // parent. Preserve that visual behavior once, then store an explicit choice
@@ -1369,6 +1511,8 @@
     labelTextMode: "abbreviated",
     todayLabelMode: "necessary",
     processPointers: initialProcessPointers,
+    processConnections: initialProcessConnections,
+    selectedProcessConnectionKey: "",
     playing: false,
     playAt: 0,
     editing: false,
@@ -1533,6 +1677,7 @@
     return {
       machines: clone(machines),
       processPointers: clone(state.processPointers),
+      processConnections: clone(state.processConnections),
       stages: clone(stages),
       floor: clone(floor),
       columnGrid: clone(columnGrid),
@@ -1558,6 +1703,10 @@
   function restoreSnapshot(snapshot) {
     machines = normalizeMachines(snapshot.machines || []);
     state.processPointers = normalizeProcessPointerAssignments(snapshot.processPointers, machines);
+    state.processConnections = normalizeProcessConnections(snapshot.processConnections, state.processPointers, machines, {
+      fillDefaults: snapshot.processConnections === undefined,
+    });
+    state.selectedProcessConnectionKey = "";
     stages = normalizeStages(snapshot.stages);
     floor = normalizeFloor(snapshot.floor);
     columnGrid = normalizeColumnGrid(snapshot.columnGrid);
@@ -1607,6 +1756,7 @@
   function persistLayout() {
     invalidateWalkSpatialIndex();
     state.processPointers = normalizeProcessPointerAssignments(state.processPointers, machines);
+    state.processConnections = normalizeProcessConnections(state.processConnections, state.processPointers, machines);
     try {
       const previous = localStorage.getItem(STORAGE_KEY);
       if (previous) localStorage.setItem(BACKUP_STORAGE_KEY, previous);
@@ -1618,6 +1768,8 @@
         machines,
         processPointers: state.processPointers,
         processPointersInitialized: true,
+        processConnections: state.processConnections,
+        processConnectionsInitialized: true,
         stages,
         floor,
         columnGrid,
@@ -1704,6 +1856,43 @@
       state.processPointers[normalizedKey] = machine.instanceId;
     }
     return { key: normalizedKey, previousKey, displacedMachine };
+  }
+
+  function processConnectionEntriesForNode(nodeKey) {
+    if (!nodeKey) return [];
+    const orderOf = (key) => processPointerFlowDefinition(key)?.order ?? 999;
+    return Object.entries(state.processConnections || {})
+      .filter(([, connection]) => connection?.fromKey === nodeKey || connection?.toKey === nodeKey)
+      .map(([key, connection]) => ({
+        key,
+        connection,
+        outgoing: connection.fromKey === nodeKey,
+        otherKey: connection.fromKey === nodeKey ? connection.toKey : connection.fromKey,
+      }))
+      .sort((first, second) => (
+        Number(second.outgoing) - Number(first.outgoing) ||
+        orderOf(first.otherKey) - orderOf(second.otherKey)
+      ));
+  }
+
+  function processConnectionDisplayName(connection) {
+    if (!connection) return "Process connection";
+    const fromText = processPointerFlowDefinition(connection.fromKey)?.text || connection.fromKey;
+    const toText = processPointerFlowDefinition(connection.toKey)?.text || connection.toKey;
+    return `${fromText} → ${toText}`;
+  }
+
+  function selectedProcessConnection(machine = selectedMachine()) {
+    const nodeKey = machine ? processPointerKeyForMachine(machine) : "";
+    if (!nodeKey) return null;
+    const entries = processConnectionEntriesForNode(nodeKey);
+    if (!entries.length) {
+      state.selectedProcessConnectionKey = "";
+      return null;
+    }
+    const current = entries.find((entry) => entry.key === state.selectedProcessConnectionKey) || entries[0];
+    state.selectedProcessConnectionKey = current.key;
+    return current.connection;
   }
 
   function animationGroupMembers(groupId) {
@@ -1807,8 +1996,7 @@
       showToast("Choose which selected object should carry the other objects.");
       return;
     }
-    pushHistory();
-    const selectedIds = new Set(selection.map((machine) => machine.instanceId));
+    pushHistory();    const selectedIds = new Set(selection.map((machine) => machine.instanceId));
     // Detach the chosen parent from any selected ancestor first. This allows a
     // hierarchy to be re-rooted without creating a cycle.
     parent.motionParentId = "";
@@ -2807,8 +2995,7 @@
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       const field = input.dataset.machineField;
       const bulkEditable = BULK_MACHINE_FIELDS.has(field);
-      input.disabled = !machine || (selectionCount > 1 && !bulkEditable);
-      input.dataset.mixed = "false";
+      input.disabled = !machine || (selectionCount > 1 && !bulkEditable);      input.dataset.mixed = "false";
       input.removeAttribute("title");
       if (input.dataset.stageSelect !== undefined) {
         const includeNever = input.dataset.allowNever !== undefined;
@@ -2946,31 +3133,62 @@
       processPointerAssignment.disabled = !machine;
       processPointerAssignment.value = assignedProcessPointerKey;
     }
-    panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
-      const field = input.dataset.processPointerField;
+    panel.querySelectorAll("[data-process-node-field]").forEach((input) => {
       input.disabled = !machine || !assignedProcessPointerKey;
-      if (!machine) {
+      input.value = machine && assignedProcessPointerKey ? String(machine[input.dataset.processNodeField] ?? "") : "";
+    });
+    const removeProcessNode = panel.querySelector("[data-editor-action='remove-process-node']");
+    if (removeProcessNode) removeProcessNode.disabled = !machine || !assignedProcessPointerKey;
+
+    const connectionEntries = assignedProcessPointerKey ? processConnectionEntriesForNode(assignedProcessPointerKey) : [];
+    const activeConnection = machine && assignedProcessPointerKey ? selectedProcessConnection(machine) : null;
+    const processConnectionSelect = panel.querySelector("[data-process-connection-select]");
+    if (processConnectionSelect) {
+      processConnectionSelect.innerHTML = connectionEntries.length
+        ? connectionEntries.map(({ key, connection, outgoing }) => `<option value="${escapeHtml(key)}">${outgoing ? "Outgoing · " : "Incoming · "}${escapeHtml(processConnectionDisplayName(connection))}</option>`).join("")
+        : `<option value="">No connection selected</option>`;
+      processConnectionSelect.disabled = !machine || !assignedProcessPointerKey || connectionEntries.length === 0;
+      processConnectionSelect.value = activeConnection?.key || "";
+    }
+    const processConnectionTarget = panel.querySelector("[data-process-connection-target]");
+    if (processConnectionTarget) {
+      const previousTarget = processConnectionTarget.value;
+      const targets = PROCESS_POINTER_FLOW_DEFINITIONS.filter(({ key }) => key !== assignedProcessPointerKey && state.processPointers?.[key]);
+      processConnectionTarget.innerHTML = `<option value="">Choose another process step</option>${targets.map(({ key, text }) => `<option value="${escapeHtml(key)}">${escapeHtml(text)}</option>`).join("")}`;
+      processConnectionTarget.disabled = !machine || !assignedProcessPointerKey || targets.length === 0;
+      processConnectionTarget.value = targets.some(({ key }) => key === previousTarget) ? previousTarget : "";
+    }
+    const addProcessConnection = panel.querySelector("[data-editor-action='add-process-connection']");
+    if (addProcessConnection) addProcessConnection.disabled = !machine || !assignedProcessPointerKey || !processConnectionTarget?.value;
+    const removeProcessConnection = panel.querySelector("[data-editor-action='remove-process-connection']");
+    if (removeProcessConnection) removeProcessConnection.disabled = !activeConnection;
+    panel.querySelectorAll("[data-process-connection-field]").forEach((input) => {
+      const field = input.dataset.processConnectionField;
+      input.disabled = !activeConnection;
+      if (!activeConnection) {
         if (input.type !== "color") input.value = "";
         return;
       }
-      input.value = String(machine[field] ?? "");
+      input.value = String(activeConnection[field] ?? "");
     });
-    panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
-      input.disabled = !machine || !assignedProcessPointerKey;
-      input.checked = Boolean(machine) && machine?.[input.dataset.processPointerCheck] !== false;
+    panel.querySelectorAll("[data-process-connection-check]").forEach((input) => {
+      input.disabled = !activeConnection;
+      input.checked = Boolean(activeConnection?.[input.dataset.processConnectionCheck]);
     });
-    const removeProcessPointer = panel.querySelector("[data-editor-action='remove-process-pointer']");
-    if (removeProcessPointer) removeProcessPointer.disabled = !machine || !assignedProcessPointerKey;
+    ["center-process-connection-start", "center-process-connection-end", "reset-process-connection"].forEach((action) => {
+      const button = panel.querySelector(`[data-editor-action='${action}']`);
+      if (button) button.disabled = !activeConnection;
+    });
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
       const flow = assignedProcessPointerKey ? processPointerFlowLabel(assignedProcessPointerKey, machine) : null;
-      const outgoing = flow ? TODAY_FLOW_LINKS.filter(([fromKey]) => fromKey === flow.key).map(([, toKey]) => processPointerFlowDefinition(toKey)?.text).filter(Boolean) : [];
-      const incoming = flow ? TODAY_FLOW_LINKS.filter(([, toKey]) => toKey === flow.key).map(([fromKey]) => processPointerFlowDefinition(fromKey)?.text).filter(Boolean) : [];
       processPointerSummary.textContent = !machine
-        ? "Select a machine, then assign it to the Today process flow."
-        : flow
-          ? `${machine.name} is the ${flow.text} process node. Incoming: ${incoming.join(" / ") || "none"}. Outgoing: ${outgoing.join(" / ") || "none"}.`
-          : `${machine.name} is not assigned to the Today process flow. Its normal machine label is still edited separately.`;
+        ? "Select a process machine, then choose the exact machine-to-machine connection line."
+        : !flow
+          ? `${machine.name} is not assigned to the Today process flow. Its machine label is edited separately.`
+          : activeConnection
+            ? `Editing ${processConnectionDisplayName(activeConnection)}. These controls change only the machine-to-machine process arrow, never the machine-label pointer.`
+            : `${machine.name} is the ${flow.text} process node. Add or select a machine-to-machine connection to edit its arrow.`;
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -3423,6 +3641,8 @@
       machines,
       processPointers: state.processPointers,
       processPointersInitialized: true,
+      processConnections: state.processConnections,
+      processConnectionsInitialized: true,
       stages,
       floor,
       columnGrid,
@@ -3520,6 +3740,13 @@
       }
       pushHistory();
       machines = loadSceneAwareMachines(payload);
+      state.processPointers = normalizeProcessPointerAssignments(payload.processPointers, machines, {
+        fillDefaults: payload.processPointersInitialized !== true,
+      });
+      state.processConnections = normalizeProcessConnections(payload.processConnections, state.processPointers, machines, {
+        fillDefaults: payload.processConnectionsInitialized !== true,
+      });
+      state.selectedProcessConnectionKey = "";
       stages = normalizeStages(payload.stages);
       floor = normalizeFloor(payload.floor);
       columnGrid = normalizeColumnGrid(payload.columnGrid);
@@ -3767,8 +3994,7 @@
           <label>Collision check<select data-machine-field="collisionMode" data-needs-selection>
             <option value="solid">Solid · warn on overlap</option>
             <option value="ignore">Ignore overlaps</option>
-          </select></label>
-          <label class="wide">Design preset<select data-design-picker data-needs-selection></select></label>
+          </select></label>          <label class="wide">Design preset<select data-design-picker data-needs-selection></select></label>
           <label class="wide">Design sizing<select data-machine-field="designScaleMode" data-needs-selection>
             <option value="preserve">Preserve proportions · fit uniformly</option>
             <option value="match">Match design dimensions · keep synced</option>
@@ -3854,12 +4080,11 @@
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
           <div class="process-pointer-intro">
-            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one machine, then assign it to the Today process flow.</span></div>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-pointer-check="processPointerVisible" data-needs-selection> Show outgoing process connection</label>
+            <div><strong>Machine-to-machine process pointers</strong><span data-process-pointer-summary>Select a process machine, then choose the exact connection line you want to edit.</span></div>
           </div>
           <fieldset class="process-pointer-controls">
-            <legend>Process-flow assignment</legend>
-            <p>This assignment is separate from the machine label. It places the selected machine at one step in the Today glass-flow map and connects it to the next assigned process machine.</p>
+            <legend>Process node</legend>
+            <p>This assigns the selected machine to a production step. It does not edit the machine label or its label leader.</p>
             <label class="wide">Process step<select data-process-pointer-assignment data-needs-selection>
               <option value="">Not in process flow</option>
               <option value="cutting">Cutting</option>
@@ -3872,48 +4097,65 @@
               <option value="glass-truck">Glass Truck</option>
               <option value="rack">Rack</option>
             </select></label>
-            <label class="wide">Process step text<input type="text" data-process-pointer-field="processPointerText" data-needs-selection placeholder="Uses the process step name"></label>
+            <label class="wide">Process node name<input type="text" data-process-node-field="processPointerText" data-needs-selection placeholder="Uses the process step name"></label>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="remove-process-pointer" data-needs-selection>Remove from process flow</button>
+              <button type="button" data-editor-action="remove-process-node" data-needs-selection>Remove machine from process flow</button>
             </div>
           </fieldset>
-          <fieldset class="process-pointer-controls">
-            <legend>Connection point on machine</legend>
-            <p>This point is used by incoming and outgoing process arrows. It is completely separate from the normal machine-label anchor.</p>
-            <div class="process-pointer-grid">
-              <label>Connection X (%)<input type="number" data-process-pointer-field="processPointerAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-              <label>Connection Y (%)<input type="number" data-process-pointer-field="processPointerAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
-              <label>Connection Z (%)<input type="number" data-process-pointer-field="processPointerAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-            </div>
+          <fieldset class="process-pointer-controls process-connection-picker">
+            <legend>Process connection</legend>
+            <p>Select the actual machine-to-machine arrow. For example, selecting Cutting lets you edit the green Cutting → Polisher line from your screenshot.</p>
+            <label class="wide">Connection<select data-process-connection-select data-needs-selection><option value="">No connection selected</option></select></label>
+            <label class="wide">Add connection to<select data-process-connection-target data-needs-selection><option value="">Choose another process step</option></select></label>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="center-process-pointer" data-needs-selection>Center connection point</button>
+              <button type="button" data-editor-action="add-process-connection" data-needs-selection>Add connection</button>
+              <button type="button" data-editor-action="remove-process-connection" data-needs-selection>Remove selected connection</button>
             </div>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="visible" data-needs-selection> Show selected machine-to-machine pointer</label>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>Start point · source machine</legend>
+            <p>Moves only where the selected process arrow leaves the source machine.</p>
+            <div class="process-pointer-grid">
+              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
+            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-start" data-needs-selection>Center start point</button></div>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>End point · destination machine</legend>
+            <p>Moves only where the selected process arrow lands on the destination machine.</p>
+            <div class="process-pointer-grid">
+              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
+            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end" data-needs-selection>Center end point</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>Process route tag</legend>
-            <p>The route tag is drawn on the connection between machines (for example, Cutting → Polisher). These controls move that tag without moving either machine label.</p>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible" data-needs-selection> Show route tag on this connection</label>
             <div class="process-pointer-grid">
-              <label>Lift (ft)<input type="number" data-process-pointer-field="processPointerLabelOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
-              <label>Tag X (px)<input type="number" data-process-pointer-field="processPointerScreenOffsetX" data-needs-selection min="-500" max="500" step="2" value="0"></label>
-              <label>Tag Y (px)<input type="number" data-process-pointer-field="processPointerScreenOffsetY" data-needs-selection min="-500" max="500" step="2" value="0"></label>
+              <label>Lift (ft)<input type="number" data-process-connection-field="tagLift" data-needs-selection min="0" max="60" step="0.5"></label>
+              <label>Tag X (px)<input type="number" data-process-connection-field="tagScreenOffsetX" data-needs-selection min="-500" max="500" step="2"></label>
+              <label>Tag Y (px)<input type="number" data-process-connection-field="tagScreenOffsetY" data-needs-selection min="-500" max="500" step="2"></label>
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Process connection line</legend>
+            <legend>Machine-to-machine line</legend>
             <div class="process-pointer-grid">
-              <label>Color<input type="color" data-process-pointer-field="processPointerColor" data-needs-selection value="#52b7aa"></label>
-              <label>Width<input type="number" data-process-pointer-field="processPointerWidth" data-needs-selection min="0.5" max="12" step="0.25" value="1.65"></label>
-              <label>Opacity (%)<input type="number" data-process-pointer-field="processPointerOpacity" data-needs-selection min="5" max="100" step="5" value="100"></label>
-              <label>Pattern<select data-process-pointer-field="processPointerStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
-              <label>Shape<select data-process-pointer-field="processPointerShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
-              <label>Target end<select data-process-pointer-field="processPointerEndStyle" data-needs-selection><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
-              <label>End size<input type="number" data-process-pointer-field="processPointerEndSize" data-needs-selection min="1" max="14" step="0.5" value="3.2"></label>
+              <label>Color<input type="color" data-process-connection-field="color" data-needs-selection></label>
+              <label>Width<input type="number" data-process-connection-field="width" data-needs-selection min="0.5" max="12" step="0.25"></label>
+              <label>Opacity (%)<input type="number" data-process-connection-field="opacity" data-needs-selection min="5" max="100" step="5"></label>
+              <label>Pattern<select data-process-connection-field="style" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+              <label>Shape<select data-process-connection-field="shape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+              <label>Target end<select data-process-connection-field="endStyle" data-needs-selection><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
+              <label>End size<input type="number" data-process-connection-field="endSize" data-needs-selection min="1" max="14" step="0.5"></label>
             </div>
-            <div class="process-pointer-actions">
-              <button type="button" data-editor-action="reset-process-pointer" data-needs-selection>Reset process connection</button>
-            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection" data-needs-selection>Reset selected connection</button></div>
           </fieldset>
-          <div class="process-pointer-note"><strong>Independent Today overlay</strong><span>Process pointers connect machines to machines. Machine labels are edited only in the Layout label section and remain visible as a separate layer.</span></div>
+          <div class="process-pointer-note"><strong>Completely separate from machine labels</strong><span>Everything below “Process connection” edits the line between two machines. Machine-label text, tag position, and label leader remain only in the Layout label controls.</span></div>
         </section>
         <section data-object-editor-panel="animation" class="object-editor-panel" hidden>
         <fieldset class="object-animation-controls">
@@ -4576,52 +4818,12 @@
       updateEditorPanel();
       showToast(`Label reset to ${machine.name}.`);
     });
-    panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
+    panel.querySelectorAll("[data-process-node-field]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
         if (!machine || !processPointerKeyForMachine(machine)) return;
         pushHistory();
-        const field = input.dataset.processPointerField;
-        if (field === "processPointerText") {
-          machine.processPointerText = String(input.value || "").trim();
-        } else if (field === "processPointerColor") {
-          if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
-        } else if (["processPointerStyle", "processPointerShape", "processPointerLeaderSide", "processPointerEndStyle"].includes(field)) {
-          const allowed = {
-            processPointerStyle: ["solid", "dashed", "dotted"],
-            processPointerShape: ["straight", "elbow"],
-            processPointerLeaderSide: ["auto", "top", "bottom", "left", "right"],
-            processPointerEndStyle: ["arrow", "dot", "ring", "none"],
-          };
-          if (allowed[field].includes(input.value)) machine[field] = input.value;
-        } else {
-          const value = Number(input.value);
-          if (!Number.isFinite(value)) return;
-          const ranges = {
-            processPointerAnchorXPercent: [0, 100],
-            processPointerAnchorYPercent: [0, 100],
-            processPointerAnchorZPercent: [0, 100],
-            processPointerLabelOffset: [0, 60],
-            processPointerScreenOffsetX: [-500, 500],
-            processPointerScreenOffsetY: [-500, 500],
-            processPointerWidth: [.5, 12],
-            processPointerOpacity: [5, 100],
-            processPointerEndSize: [1, 14],
-          };
-          const [min, max] = ranges[field] || [-10000, 10000];
-          machine[field] = clamp(value, min, max);
-        }
-        persistLayout();
-        renderPerformance.invalidate();
-        updateEditorPanel();
-      });
-    });
-    panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
-      input.addEventListener("change", () => {
-        const machine = selectedMachine();
-        if (!machine || !processPointerKeyForMachine(machine)) return;
-        pushHistory();
-        machine[input.dataset.processPointerCheck] = input.checked;
+        if (input.dataset.processNodeField === "processPointerText") machine.processPointerText = String(input.value || "").trim();
         persistLayout();
         renderPerformance.invalidate();
         updateEditorPanel();
@@ -4633,6 +4835,7 @@
       if (!machine) return;
       pushHistory();
       const result = assignProcessPointerToMachine(event.target.value, machine);
+      state.selectedProcessConnectionKey = "";
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
@@ -4644,53 +4847,128 @@
       const displaced = result.displacedMachine ? ` It was moved from ${result.displacedMachine.name}.` : "";
       showToast(`${machine.name} is now the ${flow?.text || "process"} node.${displaced}`);
     });
-    panel.querySelector("[data-editor-action='remove-process-pointer']")?.addEventListener("click", () => {
+    panel.querySelector("[data-editor-action='remove-process-node']")?.addEventListener("click", () => {
       const machine = selectedMachine();
       if (!machine || !processPointerKeyForMachine(machine)) return;
       pushHistory();
       assignProcessPointerToMachine("", machine);
+      state.selectedProcessConnectionKey = "";
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast(`Removed ${machine.name} from the Today process flow.`);
+      showToast(`Removed ${machine.name} from the Today process flow. Machine labels were unchanged.`);
     });
 
-    panel.querySelector("[data-editor-action='center-process-pointer']")?.addEventListener("click", () => {
-      const machine = selectedMachine();
-      if (!machine || !processPointerKeyForMachine(machine)) return;
-      pushHistory();
-      machine.processPointerAnchorXPercent = 50;
-      machine.processPointerAnchorYPercent = 100;
-      machine.processPointerAnchorZPercent = 50;
-      persistLayout();
-      renderPerformance.invalidate();
+    panel.querySelector("[data-process-connection-select]")?.addEventListener("change", (event) => {
+      state.selectedProcessConnectionKey = String(event.target.value || "");
       updateEditorPanel();
-      showToast("Process pointer target centered on the selected machine.");
+      renderPerformance.invalidate();
     });
-    panel.querySelector("[data-editor-action='reset-process-pointer']")?.addEventListener("click", () => {
+    panel.querySelector("[data-process-connection-target]")?.addEventListener("change", (event) => {
+      const button = panel.querySelector("[data-editor-action='add-process-connection']");
+      if (button) button.disabled = !String(event.target.value || "");
+    });
+    panel.querySelector("[data-editor-action='add-process-connection']")?.addEventListener("click", () => {
       const machine = selectedMachine();
-      if (!machine || !processPointerKeyForMachine(machine)) return;
+      const fromKey = machine ? processPointerKeyForMachine(machine) : "";
+      const toKey = String(panel.querySelector("[data-process-connection-target]")?.value || "");
+      if (!fromKey || !toKey || fromKey === toKey) return;
       pushHistory();
-      machine.processPointerVisible = true;
-      machine.processPointerText = "";
-      machine.processPointerAnchorXPercent = 50;
-      machine.processPointerAnchorYPercent = 100;
-      machine.processPointerAnchorZPercent = 50;
-      machine.processPointerLabelOffset = 4;
-      machine.processPointerScreenOffsetX = 0;
-      machine.processPointerScreenOffsetY = 0;
-      machine.processPointerColor = "#52b7aa";
-      machine.processPointerWidth = 1.65;
-      machine.processPointerOpacity = 100;
-      machine.processPointerStyle = "solid";
-      machine.processPointerShape = "straight";
-      machine.processPointerLeaderSide = "auto";
-      machine.processPointerEndStyle = "arrow";
-      machine.processPointerEndSize = 3.2;
+      const key = processConnectionKey(fromKey, toKey);
+      if (!state.processConnections[key]) state.processConnections[key] = defaultProcessConnection(fromKey, toKey);
+      state.selectedProcessConnectionKey = key;
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast("Process pointer reset without changing the normal machine label.");
+      showToast(`${processConnectionDisplayName(state.processConnections[key])} process pointer is ready to edit.`);
+    });
+    panel.querySelector("[data-editor-action='remove-process-connection']")?.addEventListener("click", () => {
+      const connection = selectedProcessConnection();
+      if (!connection) return;
+      pushHistory();
+      const label = processConnectionDisplayName(connection);
+      delete state.processConnections[connection.key];
+      state.selectedProcessConnectionKey = "";
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(`Removed the ${label} machine-to-machine process pointer. Machine labels were unchanged.`);
+    });
+
+    panel.querySelectorAll("[data-process-connection-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const connection = selectedProcessConnection();
+        if (!connection) return;
+        pushHistory();
+        const field = input.dataset.processConnectionField;
+        if (field === "color") {
+          if (/^#[0-9a-f]{6}$/i.test(input.value)) connection.color = input.value;
+        } else if (field === "style") connection.style = ["solid", "dashed", "dotted"].includes(input.value) ? input.value : "solid";
+        else if (field === "shape") connection.shape = ["straight", "elbow"].includes(input.value) ? input.value : "straight";
+        else if (field === "endStyle") connection.endStyle = ["arrow", "dot", "ring", "none"].includes(input.value) ? input.value : "arrow";
+        else {
+          const value = Number(input.value);
+          if (!Number.isFinite(value)) return;
+          const ranges = {
+            startAnchorXPercent: [0, 100], startAnchorYPercent: [0, 100], startAnchorZPercent: [0, 100],
+            endAnchorXPercent: [0, 100], endAnchorYPercent: [0, 100], endAnchorZPercent: [0, 100],
+            tagLift: [0, 60], tagScreenOffsetX: [-500, 500], tagScreenOffsetY: [-500, 500],
+            width: [.5, 12], opacity: [5, 100], endSize: [1, 14],
+          };
+          const [min, max] = ranges[field] || [-10000, 10000];
+          connection[field] = clamp(value, min, max);
+        }
+        persistLayout();
+        renderPerformance.invalidate();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelectorAll("[data-process-connection-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const connection = selectedProcessConnection();
+        if (!connection) return;
+        pushHistory();
+        connection[input.dataset.processConnectionCheck] = input.checked;
+        persistLayout();
+        renderPerformance.invalidate();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelector("[data-editor-action='center-process-connection-start']")?.addEventListener("click", () => {
+      const connection = selectedProcessConnection();
+      if (!connection) return;
+      pushHistory();
+      connection.startAnchorXPercent = 50;
+      connection.startAnchorYPercent = 100;
+      connection.startAnchorZPercent = 50;
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast("Process connection start point centered on the source machine.");
+    });
+    panel.querySelector("[data-editor-action='center-process-connection-end']")?.addEventListener("click", () => {
+      const connection = selectedProcessConnection();
+      if (!connection) return;
+      pushHistory();
+      connection.endAnchorXPercent = 50;
+      connection.endAnchorYPercent = 100;
+      connection.endAnchorZPercent = 50;
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast("Process connection end point centered on the destination machine.");
+    });
+    panel.querySelector("[data-editor-action='reset-process-connection']")?.addEventListener("click", () => {
+      const connection = selectedProcessConnection();
+      if (!connection) return;
+      pushHistory();
+      const reset = defaultProcessConnection(connection.fromKey, connection.toKey);
+      state.processConnections[connection.key] = reset;
+      state.selectedProcessConnectionKey = reset.key;
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(`Reset the ${processConnectionDisplayName(reset)} machine-to-machine pointer. Machine labels were unchanged.`);
     });
     panel.querySelector("[data-editor-action='refresh-labels']")?.addEventListener("click", () => {
       pushHistory();
@@ -4715,8 +4993,7 @@
         pushHistory();
         const field = input.dataset.animationField;
         if (["animationMode", "animationAxis", "animationSecondaryAxis"].includes(field)) targets.forEach((item) => { item[field] = input.value; });
-        else {
-          const value = Number(input.value);
+        else {          const value = Number(input.value);
           if (!Number.isFinite(value)) return;
           const normalized = ["animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds"].includes(field) ? Math.max(0, value) : value;
           targets.forEach((item) => { item[field] = normalized; });
@@ -5715,8 +5992,7 @@
         if (button.dataset.toggle === "walk") {
           setWalkMode(state.cameraMode !== "walk");
           return;
-        }
-        if (button.dataset.toggle === "fullscreen") {
+        }        if (button.dataset.toggle === "fullscreen") {
           toggleModelFullscreen(frame);
           return;
         }
@@ -6523,27 +6799,17 @@
     return null;
   }
 
-  const TODAY_FLOW_LINKS = [
-    ["cutting", "polisher"],
-    ["polisher", "denver-cnc"],
-    ["polisher", "waterjet"],
-    ["denver-cnc", "washer"],
-    ["waterjet", "washer"],
-    ["washer", "tempering"],
-    ["tempering", "wrap"],
-    ["wrap", "glass-truck"],
-    ["wrap", "rack"],
-  ];
+  const TODAY_FLOW_LINKS = DEFAULT_PROCESS_CONNECTION_LINKS;
 
-  function flowEntryWorldAnchor(entry) {
+  function flowEntryWorldAnchor(entry, connection, endpoint) {
     const rendered = entry?.rendered;
-    const machine = entry?.machine;
-    if (!rendered || !machine) return null;
+    if (!rendered || !connection) return null;
+    const prefix = endpoint === "end" ? "end" : "start";
     return localPoint(
       rendered,
-      rendered.w * clamp(Number(machine.processPointerAnchorXPercent ?? 50), 0, 100) / 100,
-      rendered.h * clamp(Number(machine.processPointerAnchorYPercent ?? 100), 0, 100) / 100,
-      rendered.d * clamp(Number(machine.processPointerAnchorZPercent ?? 50), 0, 100) / 100,
+      rendered.w * clamp(Number(connection[`${prefix}AnchorXPercent`] ?? 50), 0, 100) / 100,
+      rendered.h * clamp(Number(connection[`${prefix}AnchorYPercent`] ?? 100), 0, 100) / 100,
+      rendered.d * clamp(Number(connection[`${prefix}AnchorZPercent`] ?? 50), 0, 100) / 100,
     );
   }
 
@@ -6576,14 +6842,14 @@
     ctx.lineTo(ex, ey);
   }
 
-  function drawProcessRouteTag(text, worldMidpoint, machine, color) {
-    if (!text || !worldMidpoint) return;
-    const lifted = [worldMidpoint[0], worldMidpoint[1] + clamp(Number(machine.processPointerLabelOffset ?? 4), 0, 60), worldMidpoint[2]];
+  function drawProcessRouteTag(text, worldMidpoint, connection, color) {
+    if (!text || !worldMidpoint || connection?.tagVisible !== true) return;
+    const lifted = [worldMidpoint[0], worldMidpoint[1] + clamp(Number(connection.tagLift ?? 4), 0, 60), worldMidpoint[2]];
     const point = project(...lifted);
     const rect = canvas.getBoundingClientRect();
     const pixelScale = canvas.width / Math.max(1, rect.width);
-    const x = point[0] + clamp(Number(machine.processPointerScreenOffsetX ?? 0), -500, 500) * pixelScale;
-    const y = point[1] + clamp(Number(machine.processPointerScreenOffsetY ?? 0), -500, 500) * pixelScale;
+    const x = point[0] + clamp(Number(connection.tagScreenOffsetX ?? 0), -500, 500) * pixelScale;
+    const y = point[1] + clamp(Number(connection.tagScreenOffsetY ?? 0), -500, 500) * pixelScale;
     const fontSize = (compactLabelViewport() ? 7.2 : 8.4) * pixelScale;
     ctx.save();
     ctx.font = `600 ${fontSize}px "Segoe UI", sans-serif`;
@@ -6612,11 +6878,10 @@
     labelRects.push(paddedLabelRectangle(box, 3 * pixelScale));
   }
 
-  function drawTodayFlowArrow(fromEntry, toEntry) {
-    const machine = fromEntry?.machine;
-    if (!machine || machine.processPointerVisible === false) return;
-    const startWorld = flowEntryWorldAnchor(fromEntry);
-    const endWorld = flowEntryWorldAnchor(toEntry);
+  function drawTodayFlowArrow(fromEntry, toEntry, connection) {
+    if (!connection || connection.visible === false) return;
+    const startWorld = flowEntryWorldAnchor(fromEntry, connection, "start");
+    const endWorld = flowEntryWorldAnchor(toEntry, connection, "end");
     if (!startWorld || !endWorld) return;
     const start = project(...startWorld);
     const end = project(...endWorld);
@@ -6634,13 +6899,13 @@
     const sy = start[1] + uy * startInset;
     const ex = end[0] - ux * endInset;
     const ey = end[1] - uy * endInset;
-    const color = /^#[0-9a-f]{6}$/i.test(String(machine.processPointerColor || "")) ? machine.processPointerColor : "#52b7aa";
-    const width = clamp(Number(machine.processPointerWidth) || 1.65, .5, 12) * pixelScale;
-    const opacity = clamp(Number(machine.processPointerOpacity) || 100, 5, 100) / 100;
-    const style = ["solid", "dashed", "dotted"].includes(machine.processPointerStyle) ? machine.processPointerStyle : "solid";
-    const shape = ["straight", "elbow"].includes(machine.processPointerShape) ? machine.processPointerShape : "straight";
-    const endStyle = ["arrow", "dot", "ring", "none"].includes(machine.processPointerEndStyle) ? machine.processPointerEndStyle : "arrow";
-    const endSize = clamp(Number(machine.processPointerEndSize) || 3.2, 1, 14) * pixelScale;
+    const color = /^#[0-9a-f]{6}$/i.test(String(connection.color || "")) ? connection.color : "#52b7aa";
+    const width = clamp(Number(connection.width) || 1.65, .5, 12) * pixelScale;
+    const opacity = clamp(Number(connection.opacity) || 100, 5, 100) / 100;
+    const style = ["solid", "dashed", "dotted"].includes(connection.style) ? connection.style : "solid";
+    const shape = ["straight", "elbow"].includes(connection.shape) ? connection.shape : "straight";
+    const endStyle = ["arrow", "dot", "ring", "none"].includes(connection.endStyle) ? connection.endStyle : "arrow";
+    const endSize = clamp(Number(connection.endSize) || 3.2, 1, 14) * pixelScale;
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -6684,16 +6949,22 @@
       (startWorld[0] + endWorld[0]) / 2,
       (startWorld[1] + endWorld[1]) / 2,
       (startWorld[2] + endWorld[2]) / 2,
-    ], machine, color);
+    ], connection, color);
   }
 
   function drawTodayProductionFlow(machineEntries) {
     const nodes = buildTodayFlowNodes(machineEntries);
-    TODAY_FLOW_LINKS.forEach(([fromKey, toKey]) => {
-      const fromEntry = nodes.get(fromKey);
-      const toEntry = nodes.get(toKey);
-      if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry);
-    });
+    Object.values(state.processConnections || {})
+      .sort((first, second) => (
+        (processPointerFlowDefinition(first.fromKey)?.order ?? 999) - (processPointerFlowDefinition(second.fromKey)?.order ?? 999) ||
+        (processPointerFlowDefinition(first.toKey)?.order ?? 999) - (processPointerFlowDefinition(second.toKey)?.order ?? 999)
+      ))
+      .forEach((connection) => {
+        if (connection?.visible === false) return;
+        const fromEntry = nodes.get(connection.fromKey);
+        const toEntry = nodes.get(connection.toKey);
+        if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry, connection);
+      });
     return nodes;
   }
 
@@ -6720,8 +6991,7 @@
     const padding = 5 * pixelScale;
     const side = requestedSide === "auto"
       ? (() => {
-          const distances = {
-            top: Math.abs(anchorPoint[1] - rectangle.top),
+          const distances = {            top: Math.abs(anchorPoint[1] - rectangle.top),
             bottom: Math.abs(anchorPoint[1] - rectangle.bottom),
             left: Math.abs(anchorPoint[0] - rectangle.left),
             right: Math.abs(anchorPoint[0] - rectangle.right),
@@ -7720,8 +7990,7 @@
       ? [
           Number(component.x) + Number(component.w) / 2,
           Number(component.y) + Number(component.h) / 2,
-          Number(component.z) + Number(component.d) / 2,
-        ]
+          Number(component.z) + Number(component.d) / 2,        ]
       : [
           (bounds.minX + bounds.maxX) / 2,
           (bounds.minY + bounds.maxY) / 2,
@@ -8720,8 +8989,7 @@
       }
       for (let offset=6; offset<machine.d; offset+=9) {
         localLine(machine,[2,1.74*grow,offset],[machine.w-2,1.74*grow,offset],"#56777a",.8,alpha*.58);
-      }
-      drawControlConsole(machine,Math.max(1,machine.w-6),1,4.6,3.2,4.4*grow,1.2*grow,alpha);
+      }      drawControlConsole(machine,Math.max(1,machine.w-6),1,4.6,3.2,4.4*grow,1.2*grow,alpha);
     } else if (machine.type === "waterjet") {
       const basinHeight = Math.max(.8,3.2*grow);
       box(localBox(machine,0,0,machine.w,machine.d,basinHeight,shade(machine.color,-.05)),alpha,1);
@@ -9720,8 +9988,7 @@
   }
 
   function affineMatrixFromPoints(origin, x, y, z) {
-    return [
-      x[0]-origin[0], x[1]-origin[1], x[2]-origin[2], 0,
+    return [      x[0]-origin[0], x[1]-origin[1], x[2]-origin[2], 0,
       y[0]-origin[0], y[1]-origin[1], y[2]-origin[2], 0,
       z[0]-origin[0], z[1]-origin[1], z[2]-origin[2], 0,
       origin[0], origin[1], origin[2], 1,
@@ -10720,8 +10987,7 @@
       setEditing(false);
       return;
     }
-    if (typing) return;
-    if (event.key === "ArrowRight") setStage(state.stage + 1);
+    if (typing) return;    if (event.key === "ArrowRight") setStage(state.stage + 1);
     if (event.key === "ArrowLeft") setStage(state.stage - 1);
   });
   addLifecycleListener(window, "keyup", (event) => {

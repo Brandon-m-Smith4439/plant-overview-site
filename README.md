@@ -1,3 +1,7 @@
+## Version 0.13.19
+
+Version 0.13.19 makes Today / Necessary process pointers explicit and stable. Each flow label is now saved to one exact machine instance instead of being recalculated from whichever compatible machine is nearest in the current rendered view. In **Edit layout → Objects → Pointers**, select a machine and use **Necessary label** to add or reassign Cutting, Polisher, Denver CNC, Waterjet, Washer, Tempering Line, Wrap, Glass Truck, or Rack; choose **No necessary pointer** or **Remove pointer from this machine** to remove it. The existing target, tag-position, leader-line, and endpoint controls continue to edit the assigned pointer independently from normal machine labels.
+
 ## Version 0.13.18
 
 Version 0.13.18 restores complete access to the Plant Layout edit sidebar outside fullscreen. The control area now occupies only the flexible grid row above the fixed footer, and wheel/trackpad input explicitly scrolls that region when content exceeds the visible height. The sidebar's top and height are calculated from the actual visible intersection of the model frame and browser Visual Viewport, preventing older docked-editor CSS from trapping content outside the window.
@@ -24,7 +28,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.18**
+Current project version: **0.13.19**
 
 ## Full-production rendering performance
 

@@ -15,12 +15,25 @@ assert.ok(plant.includes('data-process-pointer-field="processPointerColor"'), "P
 assert.ok(plant.includes('data-process-pointer-field="processPointerShape"'), "Process pointer line shape must be independently editable.");
 assert.ok(plant.includes('data-process-pointer-field="processPointerEndStyle"'), "Process pointer endpoint must be independently editable.");
 assert.ok(plant.includes('data-process-pointer-check="processPointerVisible"'), "Process pointer leader visibility must be independently editable.");
+assert.ok(plant.includes("data-process-pointer-assignment"), "Pointers tab must let the editor bind a Necessary label to the selected machine.");
+assert.ok(plant.includes('data-editor-action="remove-process-pointer"'), "Pointers tab must let the editor remove a Necessary pointer from the selected machine.");
+assert.ok(plant.includes("assignProcessPointerToMachine"), "Necessary pointer assignment must use the explicit machine-binding helper.");
+assert.ok(plant.includes("processPointersInitialized"), "Saved layouts must persist whether the one-time Necessary pointer migration has completed.");
+assert.ok(plant.includes("processPointers: state.processPointers"), "Saved layouts must persist exact Necessary pointer bindings.");
+
 
 const normalizeStart = plant.indexOf("function normalizeMachine");
 const normalizeEnd = plant.indexOf("function defaultAnimationObjects", normalizeStart);
 const normalizeBody = plant.slice(normalizeStart, normalizeEnd);
 assert.ok(normalizeBody.includes("processPointerAnchorXPercent"), "Saved machines must normalize process pointer geometry.");
 assert.ok(normalizeBody.includes("machine.labelAnchorXPercent"), "Existing label pointer geometry must migrate into the new process pointer fields.");
+
+const nodeResolverStart = plant.indexOf("function buildTodayFlowNodes");
+const nodeResolverEnd = plant.indexOf("function drawTodayFlowArrow", nodeResolverStart);
+const nodeResolverBody = plant.slice(nodeResolverStart, nodeResolverEnd);
+assert.ok(nodeResolverBody.includes("state.processPointers?.[definition.key]"), "Today flow must resolve each Necessary step from its saved machine instance binding.");
+assert.ok(nodeResolverBody.includes("entriesById.get(instanceId)"), "Today flow must look up the exact rendered machine instance assigned to each Necessary step.");
+assert.ok(!nodeResolverBody.includes("nearestFlowEntry") && !nodeResolverBody.includes("flowEntryPlanPoint") && !nodeResolverBody.includes("largest(groups"), "Today flow must not retarget Necessary labels by runtime position or proximity.");
 
 const flowStart = plant.indexOf("function drawTodayProductionFlow");
 const flowEnd = plant.indexOf("function rectanglesIntersect", flowStart);

@@ -1,3 +1,13 @@
+## 0.13.20 - 2026-09-29
+
+- Fixed Pointers controls being disabled for machines that belong to multi-object motion assemblies. Pointer editing now follows the active machine instead of requiring the entire selection to contain exactly one object.
+- Moved process-pointer change listeners out of the inspector refresh path so they are registered once and no longer accumulate duplicate handlers.
+- Restored add, reassign, remove, center, reset, visibility, geometry, and styling edits for Necessary pointers.
+- Added independent `labelReveal` / `labelRetire` timing to each machine label with **Label appears at** and **Label disappears after** stage selectors.
+- Construction-stage labels now honor their own timing window while Today Overview continues to use its separate Necessary / Abbreviated / Full label modes.
+- Timeline stage insert, delete, and reorder operations now keep machine-label timing references synchronized.
+- Label controls also follow the active machine inside attached motion assemblies, matching the repaired pointer workflow.
+
 ## 0.13.19 - 2026-09-29
 
 - Fixed Today / Necessary labels selecting a nearby rendered machine instead of staying attached to their intended machine.

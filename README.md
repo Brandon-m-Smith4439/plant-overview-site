@@ -1,3 +1,7 @@
+## Version 0.13.20
+
+Version 0.13.20 repairs the Layout Editor pointer workflow and adds independent construction-stage label timing. Pointers now edit the active machine even when it belongs to an attached motion assembly, and process-pointer change handlers are registered only once instead of stacking every time the inspector refreshes. In **Edit layout → Objects → Pointers**, the active machine can add, reassign, remove, center, reset, and style its Necessary pointer normally. In the machine **Layout label** section, **Label appears at** and **Label disappears after** control when that machine label is shown across construction stages without changing when the physical machine appears. Today Overview continues to use the separate Necessary / Abbreviated / Full label-mode controls.
+
 ## Version 0.13.19
 
 Version 0.13.19 makes Today / Necessary process pointers explicit and stable. Each flow label is now saved to one exact machine instance instead of being recalculated from whichever compatible machine is nearest in the current rendered view. In **Edit layout → Objects → Pointers**, select a machine and use **Necessary label** to add or reassign Cutting, Polisher, Denver CNC, Waterjet, Washer, Tempering Line, Wrap, Glass Truck, or Rack; choose **No necessary pointer** or **Remove pointer from this machine** to remove it. The existing target, tag-position, leader-line, and endpoint controls continue to edit the assigned pointer independently from normal machine labels.
@@ -28,7 +32,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.19**
+Current project version: **0.13.20**
 
 ## Full-production rendering performance
 

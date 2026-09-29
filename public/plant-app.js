@@ -3421,6 +3421,8 @@
       sceneAnimationsInitialized: true,
       floorFeaturesInitialized: true,
       machines,
+      processPointers: state.processPointers,
+      processPointersInitialized: true,
       stages,
       floor,
       columnGrid,
@@ -6535,12 +6537,13 @@
 
   function flowEntryWorldAnchor(entry) {
     const rendered = entry?.rendered;
-    if (!rendered) return null;
+    const machine = entry?.machine;
+    if (!rendered || !machine) return null;
     return localPoint(
       rendered,
-      rendered.w / 2,
-      Math.max(1, Number(rendered.h) || 0) + 1.15,
-      rendered.d / 2,
+      rendered.w * clamp(Number(machine.processPointerAnchorXPercent ?? 50), 0, 100) / 100,
+      rendered.h * clamp(Number(machine.processPointerAnchorYPercent ?? 100), 0, 100) / 100,
+      rendered.d * clamp(Number(machine.processPointerAnchorZPercent ?? 50), 0, 100) / 100,
     );
   }
 
@@ -6562,7 +6565,56 @@
     return nodes;
   }
 
+  function traceProcessConnection(sx, sy, ex, ey, shape) {
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    if (shape === "elbow") {
+      const midX = sx + (ex - sx) * .5;
+      ctx.lineTo(midX, sy);
+      ctx.lineTo(midX, ey);
+    }
+    ctx.lineTo(ex, ey);
+  }
+
+  function drawProcessRouteTag(text, worldMidpoint, machine, color) {
+    if (!text || !worldMidpoint) return;
+    const lifted = [worldMidpoint[0], worldMidpoint[1] + clamp(Number(machine.processPointerLabelOffset ?? 4), 0, 60), worldMidpoint[2]];
+    const point = project(...lifted);
+    const rect = canvas.getBoundingClientRect();
+    const pixelScale = canvas.width / Math.max(1, rect.width);
+    const x = point[0] + clamp(Number(machine.processPointerScreenOffsetX ?? 0), -500, 500) * pixelScale;
+    const y = point[1] + clamp(Number(machine.processPointerScreenOffsetY ?? 0), -500, 500) * pixelScale;
+    const fontSize = (compactLabelViewport() ? 7.2 : 8.4) * pixelScale;
+    ctx.save();
+    ctx.font = `600 ${fontSize}px "Segoe UI", sans-serif`;
+    const paddingX = 6 * pixelScale;
+    const height = 19 * pixelScale;
+    const width = ctx.measureText(text).width + paddingX * 2;
+    const box = { left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 };
+    ctx.globalAlpha = .96;
+    ctx.fillStyle = "rgba(8,24,22,.94)";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(.8, pixelScale);
+    if (typeof ctx.roundRect === "function") {
+      ctx.beginPath();
+      ctx.roundRect(box.left, box.top, width, height, 6 * pixelScale);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(box.left, box.top, width, height);
+      ctx.strokeRect(box.left, box.top, width, height);
+    }
+    ctx.fillStyle = "#f2faf8";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y + .4 * pixelScale);
+    ctx.restore();
+    labelRects.push(paddedLabelRectangle(box, 3 * pixelScale));
+  }
+
   function drawTodayFlowArrow(fromEntry, toEntry) {
+    const machine = fromEntry?.machine;
+    if (!machine || machine.processPointerVisible === false) return;
     const startWorld = flowEntryWorldAnchor(fromEntry);
     const endWorld = flowEntryWorldAnchor(toEntry);
     if (!startWorld || !endWorld) return;
@@ -6576,97 +6628,73 @@
     const pixelScale = canvas.width / Math.max(1, rect.width);
     const ux = dx / length;
     const uy = dy / length;
-    const startInset = Math.min(length * .12, 10 * pixelScale);
-    const endInset = Math.min(length * .18, 16 * pixelScale);
+    const startInset = Math.min(length * .08, 8 * pixelScale);
+    const endInset = Math.min(length * .12, 12 * pixelScale);
     const sx = start[0] + ux * startInset;
     const sy = start[1] + uy * startInset;
     const ex = end[0] - ux * endInset;
     const ey = end[1] - uy * endInset;
-    const arrowSize = Math.max(6, 7.5 * pixelScale);
-    const normalX = -uy;
-    const normalY = ux;
+    const color = /^#[0-9a-f]{6}$/i.test(String(machine.processPointerColor || "")) ? machine.processPointerColor : "#52b7aa";
+    const width = clamp(Number(machine.processPointerWidth) || 1.65, .5, 12) * pixelScale;
+    const opacity = clamp(Number(machine.processPointerOpacity) || 100, 5, 100) / 100;
+    const style = ["solid", "dashed", "dotted"].includes(machine.processPointerStyle) ? machine.processPointerStyle : "solid";
+    const shape = ["straight", "elbow"].includes(machine.processPointerShape) ? machine.processPointerShape : "straight";
+    const endStyle = ["arrow", "dot", "ring", "none"].includes(machine.processPointerEndStyle) ? machine.processPointerEndStyle : "arrow";
+    const endSize = clamp(Number(machine.processPointerEndSize) || 3.2, 1, 14) * pixelScale;
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.globalAlpha = .92;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "rgba(7,18,18,.82)";
-    ctx.lineWidth = Math.max(4, 4.6 * pixelScale);
+    ctx.globalAlpha = opacity;
+    ctx.setLineDash(labelLineDash(style, Math.max(1, width / pixelScale), pixelScale));
+    traceProcessConnection(sx, sy, ex, ey, shape);
+    ctx.strokeStyle = "rgba(7,18,18,.84)";
+    ctx.lineWidth = Math.max(width + 2.4 * pixelScale, 3.5 * pixelScale);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "#67c9bc";
-    ctx.lineWidth = Math.max(1.5, 2.1 * pixelScale);
+    traceProcessConnection(sx, sy, ex, ey, shape);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(width, 1.2 * pixelScale);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
-    ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
-    ctx.closePath();
-    ctx.fillStyle = "#67c9bc";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(7,18,18,.9)";
-    ctx.lineWidth = Math.max(1, 1.2 * pixelScale);
-    ctx.stroke();
+    ctx.setLineDash([]);
+    const normalX = -uy;
+    const normalY = ux;
+    if (endStyle === "arrow") {
+      const arrowSize = Math.max(5 * pixelScale, endSize * 1.8);
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
+      ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else if (endStyle === "dot") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, Math.max(2.5 * pixelScale, endSize), 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else if (endStyle === "ring") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, Math.max(3 * pixelScale, endSize), 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, width * .8);
+      ctx.stroke();
+    }
     ctx.restore();
+    const routeText = `${fromEntry.flow.text} → ${toEntry.flow.text}`;
+    drawProcessRouteTag(routeText, [
+      (startWorld[0] + endWorld[0]) / 2,
+      (startWorld[1] + endWorld[1]) / 2,
+      (startWorld[2] + endWorld[2]) / 2,
+    ], machine, color);
   }
 
-  function drawTodayProductionFlow(machineEntries, time) {
+  function drawTodayProductionFlow(machineEntries) {
     const nodes = buildTodayFlowNodes(machineEntries);
     TODAY_FLOW_LINKS.forEach(([fromKey, toKey]) => {
       const fromEntry = nodes.get(fromKey);
       const toEntry = nodes.get(toKey);
       if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry);
     });
-    const activeKeys = new Set();
-    [...nodes.entries()]
-      .sort((first, second) => first[1].flow.order - second[1].flow.order)
-      .forEach(([key, entry]) => {
-        const rendered = entry.rendered;
-        const machine = entry.machine;
-        const anchor = localPoint(
-          rendered,
-          rendered.w * clamp(Number(machine.processPointerAnchorXPercent ?? 50), 0, 100) / 100,
-          rendered.h * clamp(Number(machine.processPointerAnchorYPercent ?? 100), 0, 100) / 100,
-          rendered.d * clamp(Number(machine.processPointerAnchorZPercent ?? 50), 0, 100) / 100,
-        );
-        if (!anchor) return;
-        const labelKey = `today-flow:${key}`;
-        activeKeys.add(labelKey);
-        label(
-          entry.flow.text,
-          anchor[0], anchor[1], anchor[2],
-          "#67c9bc",
-          {
-            labelKey,
-            time,
-            visibleTarget: machine.processPointerVisible !== false,
-            labelLiftFeet: clamp(Number(machine.processPointerLabelOffset ?? (compactLabelViewport() ? 1.8 : 2.5)), 0, 60),
-            screenOffsetX: clamp(Number(machine.processPointerScreenOffsetX ?? 0), -500, 500),
-            screenOffsetY: clamp(Number(machine.processPointerScreenOffsetY ?? 0), -500, 500),
-            lineColor: machine.processPointerColor,
-            lineWidth: machine.processPointerWidth,
-            lineOpacity: machine.processPointerOpacity,
-            lineStyle: machine.processPointerStyle,
-            lineShape: machine.processPointerShape,
-            leaderSide: machine.processPointerLeaderSide,
-            targetStyle: machine.processPointerEndStyle,
-            targetSize: machine.processPointerEndSize,
-            forceVisible: true,
-            priority: true,
-            selected: false,
-            current: false,
-            cssSize: compactLabelViewport() ? 7.1 : 8.5,
-            textColor: "#f0f8f6",
-            backgroundColor: "#0b1c1a",
-            fontWeight: "regular",
-          }
-        );
-      });
-    return activeKeys;
+    return nodes;
   }
 
   function rectanglesIntersect(first, second) {
@@ -6804,7 +6832,7 @@
       return roomName || machineLabelText(machine);
     }
     if (isTodayOverview() && state.todayLabelMode === "necessary") {
-      return necessaryFlowLabel(machine)?.text || "";
+      return machineLabelText(machine);
     }
     const resolvedMode = state.cameraMode === "walk" ? "full" : state.todayLabelMode;
     if (resolvedMode === "abbreviated") {
@@ -9934,9 +9962,9 @@
     });
 
     if (isTodayOverview() && state.todayLabelMode === "necessary") {
-      const activeFlowLabelKeys = drawTodayProductionFlow(machineEntries, time);
-      trimLabelVisualStates(activeFlowLabelKeys, time);
-    } else if (!isTodayStage() || isTodayOverview()) {
+      drawTodayProductionFlow(machineEntries);
+    }
+    if (!isTodayStage() || isTodayOverview()) {
       // Construction stages use each machine label's independent reveal/retire
       // window. Legacy layouts default to the original one-stage label behavior.
       const labelBudget = smartLabelBudget();
@@ -9959,20 +9987,12 @@
         const labelTimelineAlpha = stageAlpha(labelReveal, labelRetire);
         const current = Math.round(state.stageFloat) === labelReveal;
         const stageCurrent = state.stage === labelReveal;
-        const flow = necessaryTodayLabels ? necessaryFlowLabel(entry.machine) : null;
-        const baseProfile = machineLabelProfile(entry.machine);
-        const profile = flow
-          ? {
-              ...baseProfile,
-              rank: 5,
-              cssSize: compactLabelViewport() ? 7.2 : 8.4,
-              maxChars: 18,
-            }
-          : baseProfile;
-        const text = flow?.text || displayMachineLabel(entry.machine, profile);
-        const repeatKey = flow?.key || (stageSpecificLabels
+        const flow = necessaryTodayLabels ? assignedProcessFlowForMachine(entry.machine) : null;
+        const profile = machineLabelProfile(entry.machine);
+        const text = displayMachineLabel(entry.machine, profile);
+        const repeatKey = necessaryTodayLabels || stageSpecificLabels
           ? labelKey
-          : `${entry.machine.type || "generic"}|${text.toLocaleLowerCase()}`);
+          : `${entry.machine.type || "generic"}|${text.toLocaleLowerCase()}`;
         const priorVisual = labelVisualStates.get(labelKey);
         const wasVisible = Boolean(priorVisual?.targetVisible || priorVisual?.alpha > .5);
         let eligible;
@@ -10028,7 +10048,7 @@
           labelKey,
           time,
           visibleTarget,
-          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? (flow ? 2.5 : 4)), 0, 60),
+          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 60),
           forceVisible: stageSpecificLabels || necessaryTodayLabels || (
             isTodayOverview() &&
             ["full", "abbreviated"].includes(state.todayLabelMode)
@@ -10049,7 +10069,7 @@
           leaderSide: machine.labelLeaderSide,
           targetStyle: machine.labelTargetStyle,
           targetSize: machine.labelTargetSize,
-          fontWeight: flow ? "regular" : machine.labelFontWeight,
+          fontWeight: machine.labelFontWeight,
         }
       );
       if (result.targetVisible) {

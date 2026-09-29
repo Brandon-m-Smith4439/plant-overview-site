@@ -1,3 +1,7 @@
+## Version 0.13.22
+
+Version 0.13.22 fixes the remaining pointer-editor ambiguity by making the **machine-to-machine process arrow itself** the editable object. In **Edit layout → Objects → Pointers**, assign the selected machine to a process node, then choose a specific connection such as **Cutting → Polisher**. The connection has its own source-machine anchor, destination-machine anchor, visibility, line color/width/style, shape, arrowhead, and optional route tag. These values live in a dedicated `processConnections` collection and no longer edit the normal machine label or its label leader. Connections can also be added or removed independently from the process-node assignments.
+
 ## Version 0.13.21
 
 Version 0.13.21 fully separates Today machine labels from the Necessary production-flow overlay. A normal machine label remains attached to each process machine and continues to use its own machine-label text, timing, anchor, and styling. The separate process-pointer layer now connects one assigned process machine directly to the next assigned machine and draws a compact route tag such as **Cutting → Polisher** on the connection. Process text is stored independently as `processPointerText`, so changing a machine label no longer renames the process flow and changing a process pointer no longer moves or restyles the machine label. The Pointers tab now describes process-node assignment, connection anchors, route-tag placement, and process-line styling rather than treating the process pointer as a machine label.
@@ -36,7 +40,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.21**
+Current project version: **0.13.22**
 
 ## Full-production rendering performance
 

@@ -1,3 +1,14 @@
+## 0.13.22 - 2026-09-29
+
+- Rebuilt the Today process-pointer editor around the actual machine-to-machine connection edge instead of storing editable pointer geometry on the source machine.
+- Added a dedicated `processConnections` layout model with independent source anchor, destination anchor, visibility, route-tag, line style, arrowhead, and sizing for every process connection.
+- Cutting → Polisher and every other process arrow can now be selected directly and edited without changing the machine label or the machine-label leader.
+- Added separate start-point and end-point controls so a process arrow can leave one machine and land on another at independently chosen X/Y/Z positions.
+- Added connection selection plus add/remove controls, allowing process connections to be created or removed independently of process-node assignments.
+- Existing v0.13.21 process geometry migrates once into the new connection records; future edits no longer write to machine-label pointer fields.
+- Process route tags can now be shown or hidden per connection.
+- Layout save/load, undo/redo, JSON export/import, and workspace persistence now include the independent process-connection collection.
+
 ## 0.13.21 - 2026-09-29
 
 - Separated Today machine labels from Necessary process pointers at the renderer, data, and editor levels.

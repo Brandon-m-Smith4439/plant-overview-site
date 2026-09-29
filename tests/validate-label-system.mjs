@@ -37,7 +37,10 @@ assert.ok(plant.includes('labelKey = `today-flow:${key}`'), "Flow labels need de
 assert.ok(plant.includes('backgroundColor: "#0b1c1a"') && plant.includes('fontWeight: "regular"'), "Flow labels must use the compact special visual treatment.");
 assert.ok(plant.includes('if (machine.type === "room") return /office|maintenance/.test(name);'), "Office and Maintenance rooms must be eligible for their construction-stage labels.");
 assert.ok(plant.includes('const roomName = machine?.type === "room"'), "Room-stage labels must use full room names.");
-assert.ok(plant.includes("stageSpecificLabels") && plant.includes("stageCurrent && isStageEquipmentLabelCandidate"), "Construction stages must label only equipment introduced in the selected stage.");
+assert.ok(plant.includes("labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate"), "Construction stages must honor each machine label's independent reveal/retire window.");
+assert.ok(plant.includes('data-label-field="labelReveal"') && plant.includes('data-label-field="labelRetire"'), "Layout label controls must expose independent appear/disappear stages.");
+assert.ok(plant.includes("labelReveal: Number.isFinite") && plant.includes("labelRetire: Number.isFinite"), "Saved machines must normalize independent label timing.");
+assert.ok(plant.includes('["reveal", "retire", "labelReveal", "labelRetire"]'), "Timeline stage reordering must keep label timing references aligned.");
 assert.ok(plant.includes('return roomName || machineLabelText(machine);'), "Construction-stage labels must use complete machine/room names without truncation.");
 assert.ok(plant.includes('return machineLabelText(machine);'), "Today Full mode must use complete machine names without truncation.");
 assert.ok(plant.includes("function updateLabelVisualState") && plant.includes("labelTransitionsActive"), "Stage labels must still fade smoothly.");

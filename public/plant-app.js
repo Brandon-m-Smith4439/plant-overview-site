@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.19";
+  const APP_VERSION = "0.13.20";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -742,6 +742,12 @@
       visible: machine.visible !== false,
       locked: machine.locked === true,
       showLabel: machine.showLabel !== false,
+      labelReveal: Number.isFinite(Number(machine.labelReveal))
+        ? clamp(Math.round(Number(machine.labelReveal)), 0, 98)
+        : clamp(Math.round(Number(machine.reveal) || 0), 0, 98),
+      labelRetire: Number.isFinite(Number(machine.labelRetire))
+        ? (Number(machine.labelRetire) >= 99 ? 99 : clamp(Math.round(Number(machine.labelRetire)), 0, 98))
+        : clamp(Math.round(Number(machine.reveal) || 0), 0, 98),
       labelUseMachineName: labelUsesMachineName,
       labelText: labelUsesMachineName ? "" : String(machine.labelText || machine.name || "Object"),
       labelAbbreviation: String(machine.labelAbbreviation || "").trim(),
@@ -832,6 +838,9 @@
       playOwnAnimation: machine.playOwnAnimation !== false,
       playOwnAnimationWasExplicit: typeof machine.playOwnAnimation === "boolean",
     };
+    if (normalized.labelRetire < 99 && normalized.labelRetire < normalized.labelReveal) {
+      normalized.labelRetire = normalized.labelReveal;
+    }
     if (normalized.crane) {
       normalized.crane = {
         system: normalized.crane.system || "GORBEL bridge",
@@ -1449,6 +1458,7 @@
           "naturalW", "naturalD", "naturalH", "scaleXPercent", "scaleYPercent", "scaleZPercent", "scaleEditMode",
           "rotationX", "rotationY", "rotationZ", "rotation", "color", "visible", "locked", "showLabel", "useDesignName",
           "labelUseMachineName", "labelText", "labelAbbreviation", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase",
+          "labelReveal", "labelRetire",
           "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset", "labelScreenOffsetX", "labelScreenOffsetY",
           "labelLineColor", "labelLineWidth", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
           "processPointerVisible", "processPointerAnchorXPercent", "processPointerAnchorYPercent", "processPointerAnchorZPercent",
@@ -2891,8 +2901,14 @@
 
     panel.querySelectorAll("[data-label-field]").forEach((input) => {
       const field = input.dataset.labelField;
-      input.disabled = selectionCount !== 1;
-      if (!machine || selectionCount !== 1) {
+      input.disabled = !machine;
+      if (input.dataset.stageSelect !== undefined) {
+        const includeNever = input.dataset.allowNever !== undefined;
+        input.innerHTML = stages.map((stage, index) => (
+          `<option value="${index}">${String(index + 1).padStart(2, "0")} · ${escapeHtml(stage.short)}</option>`
+        )).join("") + (includeNever ? `<option value="99">Never</option>` : "");
+      }
+      if (!machine) {
         if (input.type !== "color") input.value = "";
         return;
       }
@@ -2904,97 +2920,50 @@
         input.placeholder = compactMachineLabel(machine, machineLabelProfile(machine));
       } else input.value = String(machine[field] ?? "");
     });
-    panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
-      input.addEventListener("change", () => {
-        const machine = selectedMachine();
-        if (!machine || selectedMachines().length !== 1) return;
-        pushHistory();
-        const field = input.dataset.processPointerField;
-        if (field === "processPointerColor") {
-          if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
-        } else if (["processPointerStyle", "processPointerShape", "processPointerLeaderSide", "processPointerEndStyle"].includes(field)) {
-          const allowed = {
-            processPointerStyle: ["solid", "dashed", "dotted"],
-            processPointerShape: ["straight", "elbow"],
-            processPointerLeaderSide: ["auto", "top", "bottom", "left", "right"],
-            processPointerEndStyle: ["arrow", "dot", "ring", "none"],
-          };
-          if (allowed[field].includes(input.value)) machine[field] = input.value;
-        } else {
-          const value = Number(input.value);
-          if (!Number.isFinite(value)) return;
-          const ranges = {
-            processPointerAnchorXPercent: [0, 100],
-            processPointerAnchorYPercent: [0, 100],
-            processPointerAnchorZPercent: [0, 100],
-            processPointerLabelOffset: [0, 60],
-            processPointerScreenOffsetX: [-500, 500],
-            processPointerScreenOffsetY: [-500, 500],
-            processPointerWidth: [.5, 12],
-            processPointerOpacity: [5, 100],
-            processPointerEndSize: [1, 14],
-          };
-          const [min, max] = ranges[field] || [-10000, 10000];
-          machine[field] = clamp(value, min, max);
-        }
-        persistLayout();
-        renderPerformance.invalidate();
-        updateEditorPanel();
-      });
-    });
-    panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
-      input.addEventListener("change", () => {
-        const machine = selectedMachine();
-        if (!machine || selectedMachines().length !== 1) return;
-        pushHistory();
-        machine[input.dataset.processPointerCheck] = input.checked;
-        persistLayout();
-        renderPerformance.invalidate();
-        updateEditorPanel();
-      });
-    });
 
     panel.querySelectorAll("[data-label-check]").forEach((input) => {
-      input.disabled = selectionCount !== 1;
-      input.checked = selectionCount === 1 && Boolean(machine?.[input.dataset.labelCheck]);
+      input.disabled = !machine;
+      input.checked = Boolean(machine?.[input.dataset.labelCheck]);
     });
     const labelSourceSummary = panel.querySelector("[data-label-source-summary]");
     if (labelSourceSummary) {
-      labelSourceSummary.textContent = !machine || selectionCount !== 1
-        ? "Select one object to edit its label."
-        : machine.labelUseMachineName === false
-          ? `Custom label for ${machine.name}.`
-          : `Linked to machine name: ${machine.name}`;
+      labelSourceSummary.textContent = !machine
+        ? "Select an object to edit its label."
+        : selectionCount > 1
+          ? `Editing the active member: ${machine.name}.`
+          : machine.labelUseMachineName === false
+            ? `Custom label for ${machine.name}.`
+            : `Linked to machine name: ${machine.name}`;
     }
 
-    const assignedProcessPointerKey = machine && selectionCount === 1 ? processPointerKeyForMachine(machine) : "";
+    const assignedProcessPointerKey = machine ? processPointerKeyForMachine(machine) : "";
     const processPointerAssignment = panel.querySelector("[data-process-pointer-assignment]");
     if (processPointerAssignment) {
-      processPointerAssignment.disabled = selectionCount !== 1;
+      processPointerAssignment.disabled = !machine;
       processPointerAssignment.value = assignedProcessPointerKey;
     }
     panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
       const field = input.dataset.processPointerField;
-      input.disabled = selectionCount !== 1 || !assignedProcessPointerKey;
-      if (!machine || selectionCount !== 1) {
+      input.disabled = !machine || !assignedProcessPointerKey;
+      if (!machine) {
         if (input.type !== "color") input.value = "";
         return;
       }
       input.value = String(machine[field] ?? "");
     });
     panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
-      input.disabled = selectionCount !== 1 || !assignedProcessPointerKey;
-      input.checked = selectionCount === 1 && machine?.[input.dataset.processPointerCheck] !== false;
+      input.disabled = !machine || !assignedProcessPointerKey;
+      input.checked = Boolean(machine) && machine?.[input.dataset.processPointerCheck] !== false;
     });
     const removeProcessPointer = panel.querySelector("[data-editor-action='remove-process-pointer']");
-    if (removeProcessPointer) removeProcessPointer.disabled = selectionCount !== 1 || !assignedProcessPointerKey;
+    if (removeProcessPointer) removeProcessPointer.disabled = !machine || !assignedProcessPointerKey;
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
       const flow = assignedProcessPointerKey ? processPointerFlowLabel(assignedProcessPointerKey, machine) : null;
-      processPointerSummary.textContent = !machine || selectionCount !== 1
-        ? "Select one machine, then assign or edit its Today / Necessary pointer."
+      processPointerSummary.textContent = !machine
+        ? "Select a machine, then assign or edit its Today / Necessary pointer."
         : flow
-          ? `${flow.text} is locked to ${machine.name}. This binding follows the machine, not the current camera view.`
+          ? `${flow.text} is locked to ${machine.name}. This binding follows the active machine even inside an attached assembly.`
           : `No Necessary label points to ${machine.name}. Choose a label below to add one.`;
     }
 
@@ -3348,7 +3317,7 @@
 
   function swapStageReferences(first, second) {
     machines.forEach((machine) => {
-      ["reveal", "retire"].forEach((field) => {
+      ["reveal", "retire", "labelReveal", "labelRetire"].forEach((field) => {
         if (machine[field] === first) machine[field] = second;
         else if (machine[field] === second) machine[field] = first;
       });
@@ -3376,6 +3345,8 @@
     machines.forEach((machine) => {
       if (machine.reveal >= insertAt) machine.reveal += 1;
       if (machine.retire >= insertAt && machine.retire < 99) machine.retire += 1;
+      if (machine.labelReveal >= insertAt) machine.labelReveal += 1;
+      if (machine.labelRetire >= insertAt && machine.labelRetire < 99) machine.labelRetire += 1;
     });
     stages.splice(insertAt, 0, {
       id: uniqueId("stage"),
@@ -3406,6 +3377,10 @@
       else if (machine.reveal > removed) machine.reveal -= 1;
       if (machine.retire === removed) machine.retire = Math.max(machine.reveal, removed - 1);
       else if (machine.retire > removed && machine.retire < 99) machine.retire -= 1;
+      if (machine.labelReveal === removed) machine.labelReveal = Math.max(0, removed - 1);
+      else if (machine.labelReveal > removed) machine.labelReveal -= 1;
+      if (machine.labelRetire === removed) machine.labelRetire = Math.max(machine.labelReveal, removed - 1);
+      else if (machine.labelRetire > removed && machine.labelRetire < 99) machine.labelRetire -= 1;
     });
     state.stage = clamp(removed, 0, stages.length - 1);
     state.stageFloat = state.stage;
@@ -3821,6 +3796,11 @@
             <label>Size (%)<input type="number" data-label-field="labelSizePercent" data-needs-selection min="50" max="250" step="5" value="100"></label>
             <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
           </div>
+          <div class="label-format-grid">
+            <label>Label appears at<select data-label-field="labelReveal" data-stage-select data-needs-selection></select></label>
+            <label>Label disappears after<select data-label-field="labelRetire" data-stage-select data-allow-never data-needs-selection></select></label>
+          </div>
+          <p class="label-help">Label timing controls the construction-stage views independently from when the machine itself appears. Today Overview still follows the selected Today label mode.</p>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
@@ -4484,7 +4464,7 @@
     panel.querySelectorAll("[data-label-field]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
-        if (!machine || selectedMachines().length !== 1) return;
+        if (!machine) return;
         const field = input.dataset.labelField;
         pushHistory();
         if (field === "labelText") {
@@ -4497,6 +4477,15 @@
           if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
         } else if (field === "labelSizePercent") {
           machine.labelSizePercent = clamp(Number(input.value) || 100, 50, 250);
+        } else if (field === "labelReveal") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) {
+            machine.labelReveal = clamp(Math.round(value), 0, stages.length - 1);
+            if (machine.labelRetire < 99 && machine.labelRetire < machine.labelReveal) machine.labelRetire = machine.labelReveal;
+          }
+        } else if (field === "labelRetire") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelRetire = value >= 99 ? 99 : clamp(Math.round(value), machine.labelReveal, stages.length - 1);
         } else if (["labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent"].includes(field)) {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine[field] = clamp(value, 0, 100);
@@ -4534,7 +4523,7 @@
     panel.querySelectorAll("[data-label-check]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
-        if (!machine || selectedMachines().length !== 1) return;
+        if (!machine) return;
         pushHistory();
         machine[input.dataset.labelCheck] = input.checked;
         persistLayout();
@@ -4544,7 +4533,7 @@
     });
     panel.querySelector("[data-editor-action='reset-selected-label']")?.addEventListener("click", () => {
       const machine = selectedMachine();
-      if (!machine || selectedMachines().length !== 1) return;
+      if (!machine) return;
       pushHistory();
       machine.labelUseMachineName = true;
       machine.labelText = "";
@@ -4554,9 +4543,59 @@
       updateEditorPanel();
       showToast(`Label reset to ${machine.name}.`);
     });
+    panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const machine = selectedMachine();
+        if (!machine || !processPointerKeyForMachine(machine)) return;
+        pushHistory();
+        const field = input.dataset.processPointerField;
+        if (field === "processPointerColor") {
+          if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
+        } else if (["processPointerStyle", "processPointerShape", "processPointerLeaderSide", "processPointerEndStyle"].includes(field)) {
+          const allowed = {
+            processPointerStyle: ["solid", "dashed", "dotted"],
+            processPointerShape: ["straight", "elbow"],
+            processPointerLeaderSide: ["auto", "top", "bottom", "left", "right"],
+            processPointerEndStyle: ["arrow", "dot", "ring", "none"],
+          };
+          if (allowed[field].includes(input.value)) machine[field] = input.value;
+        } else {
+          const value = Number(input.value);
+          if (!Number.isFinite(value)) return;
+          const ranges = {
+            processPointerAnchorXPercent: [0, 100],
+            processPointerAnchorYPercent: [0, 100],
+            processPointerAnchorZPercent: [0, 100],
+            processPointerLabelOffset: [0, 60],
+            processPointerScreenOffsetX: [-500, 500],
+            processPointerScreenOffsetY: [-500, 500],
+            processPointerWidth: [.5, 12],
+            processPointerOpacity: [5, 100],
+            processPointerEndSize: [1, 14],
+          };
+          const [min, max] = ranges[field] || [-10000, 10000];
+          machine[field] = clamp(value, min, max);
+        }
+        persistLayout();
+        renderPerformance.invalidate();
+        updateEditorPanel();
+      });
+    });
+    panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const machine = selectedMachine();
+        if (!machine || !processPointerKeyForMachine(machine)) return;
+        pushHistory();
+        machine[input.dataset.processPointerCheck] = input.checked;
+        persistLayout();
+        renderPerformance.invalidate();
+        updateEditorPanel();
+      });
+    });
+
     panel.querySelector("[data-process-pointer-assignment]")?.addEventListener("change", (event) => {
       const machine = selectedMachine();
-      if (!machine || selectedMachines().length !== 1) return;
+      if (!machine) return;
       pushHistory();
       const result = assignProcessPointerToMachine(event.target.value, machine);
       persistLayout();
@@ -4572,7 +4611,7 @@
     });
     panel.querySelector("[data-editor-action='remove-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
-      if (!machine || selectedMachines().length !== 1 || !processPointerKeyForMachine(machine)) return;
+      if (!machine || !processPointerKeyForMachine(machine)) return;
       pushHistory();
       assignProcessPointerToMachine("", machine);
       persistLayout();
@@ -4583,7 +4622,7 @@
 
     panel.querySelector("[data-editor-action='center-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
-      if (!machine || selectedMachines().length !== 1) return;
+      if (!machine || !processPointerKeyForMachine(machine)) return;
       pushHistory();
       machine.processPointerAnchorXPercent = 50;
       machine.processPointerAnchorYPercent = 100;
@@ -4595,7 +4634,7 @@
     });
     panel.querySelector("[data-editor-action='reset-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
-      if (!machine || selectedMachines().length !== 1) return;
+      if (!machine || !processPointerKeyForMachine(machine)) return;
       pushHistory();
       machine.processPointerVisible = true;
       machine.processPointerAnchorXPercent = 50;
@@ -9864,8 +9903,8 @@
       const activeFlowLabelKeys = drawTodayProductionFlow(machineEntries, time);
       trimLabelVisualStates(activeFlowLabelKeys, time);
     } else if (!isTodayStage() || isTodayOverview()) {
-      // Construction stages show only the equipment introduced in that stage
-      // using their full labels. Those labels fade away when the stage advances.
+      // Construction stages use each machine label's independent reveal/retire
+      // window. Legacy layouts default to the original one-stage label behavior.
       const labelBudget = smartLabelBudget();
     let ordinaryLabelsDrawn = 0;
     const repeatedLabelsDrawn = new Map();
@@ -9881,8 +9920,11 @@
         const labelKey = String(entry.machine.instanceId);
         activeLabelKeys.add(labelKey);
         const selected = state.selectedMachineIds.has(entry.machine.instanceId);
-        const current = Math.round(state.stageFloat) === entry.machine.reveal;
-        const stageCurrent = state.stage === entry.machine.reveal;
+        const labelReveal = Number.isFinite(Number(entry.machine.labelReveal)) ? Number(entry.machine.labelReveal) : Number(entry.machine.reveal) || 0;
+        const labelRetire = Number.isFinite(Number(entry.machine.labelRetire)) ? Number(entry.machine.labelRetire) : labelReveal;
+        const labelTimelineAlpha = stageAlpha(labelReveal, labelRetire);
+        const current = Math.round(state.stageFloat) === labelReveal;
+        const stageCurrent = state.stage === labelReveal;
         const flow = necessaryTodayLabels ? necessaryFlowLabel(entry.machine) : null;
         const baseProfile = machineLabelProfile(entry.machine);
         const profile = flow
@@ -9901,7 +9943,7 @@
         const wasVisible = Boolean(priorVisual?.targetVisible || priorVisual?.alpha > .5);
         let eligible;
         if (stageSpecificLabels) {
-          eligible = selected || (stageCurrent && isStageEquipmentLabelCandidate(entry.machine));
+          eligible = selected || (labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate(entry.machine));
         } else if (necessaryTodayLabels) {
           eligible = selected || Boolean(flow);
         } else if (isTodayOverview()) {

@@ -14,8 +14,9 @@ assert.ok(!plant.includes('state.todayLabelMode = "necessary";\n      state.labe
 assert.ok(plant.includes('if (isTodayOverview() && state.todayLabelMode === "necessary")'), "Necessary mode must use the dedicated production-flow overlay.");
 assert.ok(plant.includes('else if (!isTodayStage() || isTodayOverview())'), "Full and Abbreviated Today modes must use normal machine-label rendering.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
+assert.ok(plant.includes("PROCESS_POINTER_FLOW_DEFINITIONS"), "Necessary production-flow labels must use stable flow definitions.");
 for (const label of ["Cutting", "Polisher", "Denver CNC", "Waterjet", "Washer", "Tempering Line", "Wrap", "Glass Truck", "Rack"]) {
-  assert.ok(plant.includes(`text: flowText("${label}")`), `Production-flow label missing: ${label}`);
+  assert.ok(plant.includes(`text: "${label}"`), `Production-flow label missing: ${label}`);
 }
 assert.ok(plant.includes("const TODAY_FLOW_LINKS"), "Today needs an explicit process-flow graph.");
 for (const edge of [
@@ -47,7 +48,7 @@ assert.ok(plant.includes("labelLineColor") && plant.includes("labelLineWidth") &
 assert.ok(plant.includes("labelLineStyle") && plant.includes("labelLineShape") && plant.includes("labelLeaderSide"), "Each label leader needs independent line style, shape, and connection edge.");
 assert.ok(plant.includes("labelTargetStyle") && plant.includes("labelTargetSize") && plant.includes("labelScreenOffsetX") && plant.includes("labelScreenOffsetY"), "Label pointer endpoint and tag position must be independently adjustable.");
 assert.ok(plant.includes("function labelLeaderConnection") && plant.includes("function traceLabelLeader"), "The label renderer must support editable connection geometry.");
-assert.ok(plant.includes("const flowText = (fallback)"), "Necessary production-flow labels must accept custom per-machine text.");
+assert.ok(plant.includes("function processPointerFlowLabel") && plant.includes("customText"), "Necessary production-flow labels must accept custom per-machine text.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");

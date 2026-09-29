@@ -1,3 +1,14 @@
+## 0.13.23 - 2026-09-29
+
+- Reworked the Pointers tab around the actual machine-to-machine process connection rather than the selected machine.
+- Added a global **Line to edit** selector that lists each process edge with both process roles and exact machine names.
+- Added independent source and destination selectors for creating process lines without relying on whichever machine happens to be selected.
+- Removed the legacy process-node text editor from Pointers so no pointer-tab text control can be mistaken for the machine label.
+- Added a dedicated `applyProcessConnectionField()` mutator that accepts only connection-owned fields and rejects machine-label fields.
+- Added a visual highlight around the currently selected process connection while the Pointers tab is open.
+- Kept machine-label text, anchor, tag offset, and label-leader styling exclusively under **Objects → Label**.
+- Added a runtime regression test that changes Cutting → Polisher connection geometry/style and verifies the machine-label pointer object is byte-for-byte unchanged.
+
 ## 0.13.22 - 2026-09-29
 
 - Rebuilt the Today process-pointer editor around the actual machine-to-machine connection edge instead of storing editable pointer geometry on the source machine.

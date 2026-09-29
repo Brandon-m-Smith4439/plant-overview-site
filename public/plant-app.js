@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.22";
+  const APP_VERSION = "0.13.23";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -712,11 +712,9 @@
     return PROCESS_POINTER_FLOW_BY_KEY.get(String(key || "")) || null;
   }
 
-  function processPointerFlowLabel(key, machine) {
+  function processPointerFlowLabel(key) {
     const definition = processPointerFlowDefinition(key);
-    if (!definition) return null;
-    const customText = String(machine?.processPointerText || "").trim();
-    return { ...definition, text: customText || definition.text };
+    return definition ? { ...definition } : null;
   }
 
   function assignedProcessFlowForMachine(machine) {
@@ -1859,34 +1857,44 @@
     return { key: normalizedKey, previousKey, displacedMachine };
   }
 
-  function processConnectionEntriesForNode(nodeKey) {
-    if (!nodeKey) return [];
+  function allProcessConnectionEntries() {
     const orderOf = (key) => processPointerFlowDefinition(key)?.order ?? 999;
     return Object.entries(state.processConnections || {})
-      .filter(([, connection]) => connection?.fromKey === nodeKey || connection?.toKey === nodeKey)
-      .map(([key, connection]) => ({
+      .map(([key, connection]) => ({ key, connection }))
+      .filter(({ connection }) => connection?.fromKey && connection?.toKey)
+      .sort((first, second) => (
+        orderOf(first.connection.fromKey) - orderOf(second.connection.fromKey) ||
+        orderOf(first.connection.toKey) - orderOf(second.connection.toKey)
+      ));
+  }
+
+  function processConnectionEntriesForNode(nodeKey) {
+    if (!nodeKey) return [];
+    return allProcessConnectionEntries()
+      .filter(({ connection }) => connection.fromKey === nodeKey || connection.toKey === nodeKey)
+      .map(({ key, connection }) => ({
         key,
         connection,
         outgoing: connection.fromKey === nodeKey,
         otherKey: connection.fromKey === nodeKey ? connection.toKey : connection.fromKey,
-      }))
-      .sort((first, second) => (
-        Number(second.outgoing) - Number(first.outgoing) ||
-        orderOf(first.otherKey) - orderOf(second.otherKey)
-      ));
+      }));
   }
 
-  function processConnectionDisplayName(connection) {
+  function processNodeMachineName(nodeKey) {
+    const machine = machineById(state.processPointers?.[nodeKey]);
+    return machine?.name || "Unassigned machine";
+  }
+
+  function processConnectionDisplayName(connection, { includeMachines = false } = {}) {
     if (!connection) return "Process connection";
     const fromText = processPointerFlowDefinition(connection.fromKey)?.text || connection.fromKey;
     const toText = processPointerFlowDefinition(connection.toKey)?.text || connection.toKey;
-    return `${fromText} → ${toText}`;
+    if (!includeMachines) return `${fromText} → ${toText}`;
+    return `${fromText} · ${processNodeMachineName(connection.fromKey)} → ${toText} · ${processNodeMachineName(connection.toKey)}`;
   }
 
-  function selectedProcessConnection(machine = selectedMachine()) {
-    const nodeKey = machine ? processPointerKeyForMachine(machine) : "";
-    if (!nodeKey) return null;
-    const entries = processConnectionEntriesForNode(nodeKey);
+  function selectedProcessConnection() {
+    const entries = allProcessConnectionEntries();
     if (!entries.length) {
       state.selectedProcessConnectionKey = "";
       return null;
@@ -1894,6 +1902,39 @@
     const current = entries.find((entry) => entry.key === state.selectedProcessConnectionKey) || entries[0];
     state.selectedProcessConnectionKey = current.key;
     return current.connection;
+  }
+
+  function applyProcessConnectionField(connection, field, rawValue) {
+    if (!connection || !field) return false;
+    if (field === "color") {
+      if (!/^#[0-9a-f]{6}$/i.test(String(rawValue || ""))) return false;
+      connection.color = String(rawValue);
+      return true;
+    }
+    if (field === "style") {
+      connection.style = ["solid", "dashed", "dotted"].includes(rawValue) ? rawValue : "solid";
+      return true;
+    }
+    if (field === "shape") {
+      connection.shape = ["straight", "elbow"].includes(rawValue) ? rawValue : "straight";
+      return true;
+    }
+    if (field === "endStyle") {
+      connection.endStyle = ["arrow", "dot", "ring", "none"].includes(rawValue) ? rawValue : "arrow";
+      return true;
+    }
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return false;
+    const ranges = {
+      startAnchorXPercent: [0, 100], startAnchorYPercent: [0, 100], startAnchorZPercent: [0, 100],
+      endAnchorXPercent: [0, 100], endAnchorYPercent: [0, 100], endAnchorZPercent: [0, 100],
+      tagLift: [0, 60], tagScreenOffsetX: [-500, 500], tagScreenOffsetY: [-500, 500],
+      width: [.5, 12], opacity: [5, 100], endSize: [1, 14],
+    };
+    if (!ranges[field]) return false;
+    const [min, max] = ranges[field];
+    connection[field] = clamp(value, min, max);
+    return true;
   }
 
   function animationGroupMembers(groupId) {
@@ -3136,33 +3177,40 @@
       processPointerAssignment.disabled = !machine;
       processPointerAssignment.value = assignedProcessPointerKey;
     }
-    panel.querySelectorAll("[data-process-node-field]").forEach((input) => {
-      input.disabled = !machine || !assignedProcessPointerKey;
-      input.value = machine && assignedProcessPointerKey ? String(machine[input.dataset.processNodeField] ?? "") : "";
-    });
     const removeProcessNode = panel.querySelector("[data-editor-action='remove-process-node']");
     if (removeProcessNode) removeProcessNode.disabled = !machine || !assignedProcessPointerKey;
 
-    const connectionEntries = assignedProcessPointerKey ? processConnectionEntriesForNode(assignedProcessPointerKey) : [];
-    const activeConnection = machine && assignedProcessPointerKey ? selectedProcessConnection(machine) : null;
+    const connectionEntries = allProcessConnectionEntries();
+    const activeConnection = selectedProcessConnection();
     const processConnectionSelect = panel.querySelector("[data-process-connection-select]");
     if (processConnectionSelect) {
       processConnectionSelect.innerHTML = connectionEntries.length
-        ? connectionEntries.map(({ key, connection, outgoing }) => `<option value="${escapeHtml(key)}">${outgoing ? "Outgoing · " : "Incoming · "}${escapeHtml(processConnectionDisplayName(connection))}</option>`).join("")
-        : `<option value="">No connection selected</option>`;
-      processConnectionSelect.disabled = !machine || !assignedProcessPointerKey || connectionEntries.length === 0;
+        ? connectionEntries.map(({ key, connection }) => `<option value="${escapeHtml(key)}">${escapeHtml(processConnectionDisplayName(connection, { includeMachines: true }))}</option>`).join("")
+        : `<option value="">No machine-to-machine process pointers</option>`;
+      processConnectionSelect.disabled = connectionEntries.length === 0;
       processConnectionSelect.value = activeConnection?.key || "";
     }
+
+    const assignedNodes = PROCESS_POINTER_FLOW_DEFINITIONS.filter(({ key }) => state.processPointers?.[key]);
+    const processConnectionSource = panel.querySelector("[data-process-connection-source]");
     const processConnectionTarget = panel.querySelector("[data-process-connection-target]");
-    if (processConnectionTarget) {
-      const previousTarget = processConnectionTarget.value;
-      const targets = PROCESS_POINTER_FLOW_DEFINITIONS.filter(({ key }) => key !== assignedProcessPointerKey && state.processPointers?.[key]);
-      processConnectionTarget.innerHTML = `<option value="">Choose another process step</option>${targets.map(({ key, text }) => `<option value="${escapeHtml(key)}">${escapeHtml(text)}</option>`).join("")}`;
-      processConnectionTarget.disabled = !machine || !assignedProcessPointerKey || targets.length === 0;
-      processConnectionTarget.value = targets.some(({ key }) => key === previousTarget) ? previousTarget : "";
+    const buildNodeOptions = (placeholder) => `<option value="">${placeholder}</option>${assignedNodes.map(({ key, text }) => `<option value="${escapeHtml(key)}">${escapeHtml(text)} · ${escapeHtml(processNodeMachineName(key))}</option>`).join("")}`;
+    if (processConnectionSource) {
+      processConnectionSource.innerHTML = buildNodeOptions("Choose source machine");
+      processConnectionSource.disabled = assignedNodes.length < 2;
+      const preferred = activeConnection?.fromKey || assignedProcessPointerKey || "";
+      processConnectionSource.value = assignedNodes.some(({ key }) => key === preferred) ? preferred : "";
     }
+    if (processConnectionTarget) {
+      processConnectionTarget.innerHTML = buildNodeOptions("Choose destination machine");
+      processConnectionTarget.disabled = assignedNodes.length < 2;
+      const preferred = activeConnection?.toKey || "";
+      processConnectionTarget.value = assignedNodes.some(({ key }) => key === preferred) ? preferred : "";
+    }
+    const selectedSourceKey = String(processConnectionSource?.value || "");
+    const selectedTargetKey = String(processConnectionTarget?.value || "");
     const addProcessConnection = panel.querySelector("[data-editor-action='add-process-connection']");
-    if (addProcessConnection) addProcessConnection.disabled = !machine || !assignedProcessPointerKey || !processConnectionTarget?.value;
+    if (addProcessConnection) addProcessConnection.disabled = !selectedSourceKey || !selectedTargetKey || selectedSourceKey === selectedTargetKey;
     const removeProcessConnection = panel.querySelector("[data-editor-action='remove-process-connection']");
     if (removeProcessConnection) removeProcessConnection.disabled = !activeConnection;
     panel.querySelectorAll("[data-process-connection-field]").forEach((input) => {
@@ -3184,14 +3232,9 @@
     });
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
-      const flow = assignedProcessPointerKey ? processPointerFlowLabel(assignedProcessPointerKey, machine) : null;
-      processPointerSummary.textContent = !machine
-        ? "Select a process machine, then choose the exact machine-to-machine connection line."
-        : !flow
-          ? `${machine.name} is not assigned to the Today process flow. Its machine label is edited separately.`
-          : activeConnection
-            ? `Editing ${processConnectionDisplayName(activeConnection)}. These controls change only the machine-to-machine process arrow, never the machine-label pointer.`
-            : `${machine.name} is the ${flow.text} process node. Add or select a machine-to-machine connection to edit its arrow.`;
+      processPointerSummary.textContent = activeConnection
+        ? `Editing the long machine-to-machine line: ${processConnectionDisplayName(activeConnection, { includeMachines: true })}. Nothing here edits the machine-label callout or its leader.`
+        : "No process connection exists yet. Assign process machines below, then choose a source and destination to add the machine-to-machine line.";
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -4084,12 +4127,70 @@
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
           <div class="process-pointer-intro">
-            <div><strong>Machine-to-machine process pointers</strong><span data-process-pointer-summary>Select a process machine, then choose the exact connection line you want to edit.</span></div>
+            <div><strong>Machine-to-machine process line editor</strong><span data-process-pointer-summary>Select the long process line itself here. This tab does not edit the small machine-label callout or its leader.</span></div>
           </div>
+          <div class="process-pointer-note"><strong>What this edits</strong><span>The long line from the Cutting Table to the Kodiak Polisher is <b>Cutting → Polisher</b>. Select that connection below. Machine-label pointers remain exclusively in the Layout label controls.</span></div>
+          <fieldset class="process-pointer-controls process-connection-picker">
+            <legend>1 · Choose the process line</legend>
+            <label class="wide">Line to edit<select data-process-connection-select><option value="">No machine-to-machine process pointers</option></select></label>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="visible"> Show selected machine-to-machine line</label>
+            <div class="process-pointer-actions">
+              <button type="button" data-editor-action="remove-process-connection">Remove selected line</button>
+            </div>
+          </fieldset>
+          <fieldset class="process-pointer-controls process-connection-picker">
+            <legend>2 · Add a machine-to-machine line</legend>
+            <p>Choose the exact source and destination process machines. This creates a new independent process line.</p>
+            <label class="wide">Source<select data-process-connection-source><option value="">Choose source machine</option></select></label>
+            <label class="wide">Destination<select data-process-connection-target><option value="">Choose destination machine</option></select></label>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="add-process-connection">Add process line</button></div>
+          </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Process node</legend>
-            <p>This assigns the selected machine to a production step. It does not edit the machine label or its label leader.</p>
-            <label class="wide">Process step<select data-process-pointer-assignment data-needs-selection>
+            <legend>3 · Start point · source machine</legend>
+            <p>Moves only where the selected long process line leaves its source machine.</p>
+            <div class="process-pointer-grid">
+              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="0" max="100" step="1"></label>
+              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="0" max="100" step="1"></label>
+              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" min="0" max="100" step="1"></label>
+            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-start">Center source point</button></div>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>4 · End point · destination machine</legend>
+            <p>Moves only where the selected long process line lands on its destination machine.</p>
+            <div class="process-pointer-grid">
+              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="0" max="100" step="1"></label>
+              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="0" max="100" step="1"></label>
+              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" min="0" max="100" step="1"></label>
+            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end">Center destination point</button></div>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>5 · Machine-to-machine line style</legend>
+            <div class="process-pointer-grid">
+              <label>Color<input type="color" data-process-connection-field="color"></label>
+              <label>Width<input type="number" data-process-connection-field="width" min="0.5" max="12" step="0.25"></label>
+              <label>Opacity (%)<input type="number" data-process-connection-field="opacity" min="5" max="100" step="5"></label>
+              <label>Pattern<select data-process-connection-field="style"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+              <label>Shape<select data-process-connection-field="shape"><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+              <label>Destination end<select data-process-connection-field="endStyle"><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
+              <label>End size<input type="number" data-process-connection-field="endSize" min="1" max="14" step="0.5"></label>
+            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection">Reset selected process line</button></div>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>6 · Optional route tag</legend>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show Cutting → Polisher style route tag on this line</label>
+            <div class="process-pointer-grid">
+              <label>Lift (ft)<input type="number" data-process-connection-field="tagLift" min="0" max="60" step="0.5"></label>
+              <label>Tag X (px)<input type="number" data-process-connection-field="tagScreenOffsetX" min="-500" max="500" step="2"></label>
+              <label>Tag Y (px)<input type="number" data-process-connection-field="tagScreenOffsetY" min="-500" max="500" step="2"></label>
+            </div>
+          </fieldset>
+          <fieldset class="process-pointer-controls process-node-assignment">
+            <legend>Process-machine assignment</legend>
+            <p>This only tells the flow which machine is Cutting, Polisher, Waterjet, etc. It does not move a label pointer. Select a machine in the plant, then assign its process role here.</p>
+            <label class="wide">Selected machine process role<select data-process-pointer-assignment data-needs-selection>
               <option value="">Not in process flow</option>
               <option value="cutting">Cutting</option>
               <option value="polisher">Polisher</option>
@@ -4101,65 +4202,9 @@
               <option value="glass-truck">Glass Truck</option>
               <option value="rack">Rack</option>
             </select></label>
-            <label class="wide">Process node name<input type="text" data-process-node-field="processPointerText" data-needs-selection placeholder="Uses the process step name"></label>
-            <div class="process-pointer-actions">
-              <button type="button" data-editor-action="remove-process-node" data-needs-selection>Remove machine from process flow</button>
-            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="remove-process-node" data-needs-selection>Remove selected machine from process flow</button></div>
           </fieldset>
-          <fieldset class="process-pointer-controls process-connection-picker">
-            <legend>Process connection</legend>
-            <p>Select the actual machine-to-machine arrow. For example, selecting Cutting lets you edit the green Cutting → Polisher line from your screenshot.</p>
-            <label class="wide">Connection<select data-process-connection-select data-needs-selection><option value="">No connection selected</option></select></label>
-            <label class="wide">Add connection to<select data-process-connection-target data-needs-selection><option value="">Choose another process step</option></select></label>
-            <div class="process-pointer-actions">
-              <button type="button" data-editor-action="add-process-connection" data-needs-selection>Add connection</button>
-              <button type="button" data-editor-action="remove-process-connection" data-needs-selection>Remove selected connection</button>
-            </div>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="visible" data-needs-selection> Show selected machine-to-machine pointer</label>
-          </fieldset>
-          <fieldset class="process-pointer-controls">
-            <legend>Start point · source machine</legend>
-            <p>Moves only where the selected process arrow leaves the source machine.</p>
-            <div class="process-pointer-grid">
-              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
-            </div>
-            <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-start" data-needs-selection>Center start point</button></div>
-          </fieldset>
-          <fieldset class="process-pointer-controls">
-            <legend>End point · destination machine</legend>
-            <p>Moves only where the selected process arrow lands on the destination machine.</p>
-            <div class="process-pointer-grid">
-              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
-            </div>
-            <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end" data-needs-selection>Center end point</button></div>
-          </fieldset>
-          <fieldset class="process-pointer-controls">
-            <legend>Process route tag</legend>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible" data-needs-selection> Show route tag on this connection</label>
-            <div class="process-pointer-grid">
-              <label>Lift (ft)<input type="number" data-process-connection-field="tagLift" data-needs-selection min="0" max="60" step="0.5"></label>
-              <label>Tag X (px)<input type="number" data-process-connection-field="tagScreenOffsetX" data-needs-selection min="-500" max="500" step="2"></label>
-              <label>Tag Y (px)<input type="number" data-process-connection-field="tagScreenOffsetY" data-needs-selection min="-500" max="500" step="2"></label>
-            </div>
-          </fieldset>
-          <fieldset class="process-pointer-controls">
-            <legend>Machine-to-machine line</legend>
-            <div class="process-pointer-grid">
-              <label>Color<input type="color" data-process-connection-field="color" data-needs-selection></label>
-              <label>Width<input type="number" data-process-connection-field="width" data-needs-selection min="0.5" max="12" step="0.25"></label>
-              <label>Opacity (%)<input type="number" data-process-connection-field="opacity" data-needs-selection min="5" max="100" step="5"></label>
-              <label>Pattern<select data-process-connection-field="style" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
-              <label>Shape<select data-process-connection-field="shape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
-              <label>Target end<select data-process-connection-field="endStyle" data-needs-selection><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
-              <label>End size<input type="number" data-process-connection-field="endSize" data-needs-selection min="1" max="14" step="0.5"></label>
-            </div>
-            <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection" data-needs-selection>Reset selected connection</button></div>
-          </fieldset>
-          <div class="process-pointer-note"><strong>Completely separate from machine labels</strong><span>Everything below “Process connection” edits the line between two machines. Machine-label text, tag position, and label leader remain only in the Layout label controls.</span></div>
+          <div class="process-pointer-note"><strong>Machine labels are separate</strong><span>To edit the small “Cutting” label box or the short leader that points from that box to the cutting table, use <b>Objects → Label</b>. Nothing in the process-line controls above changes those label settings.</span></div>
         </section>
         <section data-object-editor-panel="animation" class="object-editor-panel" hidden>
         <fieldset class="object-animation-controls">
@@ -4822,18 +4867,6 @@
       updateEditorPanel();
       showToast(`Label reset to ${machine.name}.`);
     });
-    panel.querySelectorAll("[data-process-node-field]").forEach((input) => {
-      input.addEventListener("change", () => {
-        const machine = selectedMachine();
-        if (!machine || !processPointerKeyForMachine(machine)) return;
-        pushHistory();
-        if (input.dataset.processNodeField === "processPointerText") machine.processPointerText = String(input.value || "").trim();
-        persistLayout();
-        renderPerformance.invalidate();
-        updateEditorPanel();
-      });
-    });
-
     panel.querySelector("[data-process-pointer-assignment]")?.addEventListener("change", (event) => {
       const machine = selectedMachine();
       if (!machine) return;
@@ -4868,13 +4901,16 @@
       updateEditorPanel();
       renderPerformance.invalidate();
     });
-    panel.querySelector("[data-process-connection-target]")?.addEventListener("change", (event) => {
+    const refreshAddProcessConnectionButton = () => {
+      const fromKey = String(panel.querySelector("[data-process-connection-source]")?.value || "");
+      const toKey = String(panel.querySelector("[data-process-connection-target]")?.value || "");
       const button = panel.querySelector("[data-editor-action='add-process-connection']");
-      if (button) button.disabled = !String(event.target.value || "");
-    });
+      if (button) button.disabled = !fromKey || !toKey || fromKey === toKey;
+    };
+    panel.querySelector("[data-process-connection-source]")?.addEventListener("change", refreshAddProcessConnectionButton);
+    panel.querySelector("[data-process-connection-target]")?.addEventListener("change", refreshAddProcessConnectionButton);
     panel.querySelector("[data-editor-action='add-process-connection']")?.addEventListener("click", () => {
-      const machine = selectedMachine();
-      const fromKey = machine ? processPointerKeyForMachine(machine) : "";
+      const fromKey = String(panel.querySelector("[data-process-connection-source]")?.value || "");
       const toKey = String(panel.querySelector("[data-process-connection-target]")?.value || "");
       if (!fromKey || !toKey || fromKey === toKey) return;
       pushHistory();
@@ -4884,7 +4920,7 @@
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast(`${processConnectionDisplayName(state.processConnections[key])} process pointer is ready to edit.`);
+      showToast(`${processConnectionDisplayName(state.processConnections[key], { includeMachines: true })} process line is ready to edit.`);
     });
     panel.querySelector("[data-editor-action='remove-process-connection']")?.addEventListener("click", () => {
       const connection = selectedProcessConnection();
@@ -4904,24 +4940,7 @@
         const connection = selectedProcessConnection();
         if (!connection) return;
         pushHistory();
-        const field = input.dataset.processConnectionField;
-        if (field === "color") {
-          if (/^#[0-9a-f]{6}$/i.test(input.value)) connection.color = input.value;
-        } else if (field === "style") connection.style = ["solid", "dashed", "dotted"].includes(input.value) ? input.value : "solid";
-        else if (field === "shape") connection.shape = ["straight", "elbow"].includes(input.value) ? input.value : "straight";
-        else if (field === "endStyle") connection.endStyle = ["arrow", "dot", "ring", "none"].includes(input.value) ? input.value : "arrow";
-        else {
-          const value = Number(input.value);
-          if (!Number.isFinite(value)) return;
-          const ranges = {
-            startAnchorXPercent: [0, 100], startAnchorYPercent: [0, 100], startAnchorZPercent: [0, 100],
-            endAnchorXPercent: [0, 100], endAnchorYPercent: [0, 100], endAnchorZPercent: [0, 100],
-            tagLift: [0, 60], tagScreenOffsetX: [-500, 500], tagScreenOffsetY: [-500, 500],
-            width: [.5, 12], opacity: [5, 100], endSize: [1, 14],
-          };
-          const [min, max] = ranges[field] || [-10000, 10000];
-          connection[field] = clamp(value, min, max);
-        }
+        if (!applyProcessConnectionField(connection, input.dataset.processConnectionField, input.value)) return;
         persistLayout();
         renderPerformance.invalidate();
         updateEditorPanel();
@@ -6912,7 +6931,14 @@
     const shape = ["straight", "elbow"].includes(connection.shape) ? connection.shape : "straight";
     const endStyle = ["arrow", "dot", "ring", "none"].includes(connection.endStyle) ? connection.endStyle : "arrow";
     const endSize = clamp(Number(connection.endSize) || 3.2, 1, 14) * pixelScale;
+    const editingThisConnection = state.editing && state.objectEditorTab === "pointers" && connection.key === state.selectedProcessConnectionKey;
     ctx.save();
+    if (editingThisConnection) {
+      traceProcessConnection(sx, sy, ex, ey, shape);
+      ctx.strokeStyle = "rgba(255,255,255,.95)";
+      ctx.lineWidth = Math.max(width + 7 * pixelScale, 8 * pixelScale);
+      ctx.stroke();
+    }
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.globalAlpha = opacity;

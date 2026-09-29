@@ -1,3 +1,7 @@
+## Version 0.13.23
+
+Version 0.13.23 corrects the Pointers editor so it is truly **connection-first** instead of machine-first. The top of **Edit layout → Objects → Pointers** now lists every saved machine-to-machine process line directly, including the exact source and destination machine names. Selecting **Cutting · Cutting Table → Polisher · Kodiak Polisher** edits the long process line between those machines. Start/end anchors, visibility, color, width, opacity, pattern, shape, endpoint style, and optional route-tag position are stored only on the selected process connection. The small machine-label callout and its short leader are still edited only under **Objects → Label**. The legacy process-node text field was removed from the Pointers tab to prevent it from being confused with the machine label. The selected process line is highlighted while the Pointers tab is open, and a runtime regression test now proves that process-connection edits do not mutate any machine-label pointer properties.
+
 ## Version 0.13.22
 
 Version 0.13.22 fixes the remaining pointer-editor ambiguity by making the **machine-to-machine process arrow itself** the editable object. In **Edit layout → Objects → Pointers**, assign the selected machine to a process node, then choose a specific connection such as **Cutting → Polisher**. The connection has its own source-machine anchor, destination-machine anchor, visibility, line color/width/style, shape, arrowhead, and optional route tag. These values live in a dedicated `processConnections` collection and no longer edit the normal machine label or its label leader. Connections can also be added or removed independently from the process-node assignments.
@@ -40,7 +44,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.22**
+Current project version: **0.13.23**
 
 ## Full-production rendering performance
 

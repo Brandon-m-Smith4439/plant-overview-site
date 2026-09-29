@@ -997,7 +997,8 @@
       type: "trench",
       reveal: 1,
       retire: 2,
-      x, z, w, d,      h: 0.22,
+      x, z, w, d,
+      h: 0.22,
       color: "#4a3a31",
       showLabel: false,
       collisionMode: "ignore",
@@ -1996,7 +1997,8 @@
       showToast("Choose which selected object should carry the other objects.");
       return;
     }
-    pushHistory();    const selectedIds = new Set(selection.map((machine) => machine.instanceId));
+    pushHistory();
+    const selectedIds = new Set(selection.map((machine) => machine.instanceId));
     // Detach the chosen parent from any selected ancestor first. This allows a
     // hierarchy to be re-rooted without creating a cycle.
     parent.motionParentId = "";
@@ -2995,7 +2997,8 @@
     panel.querySelectorAll("[data-machine-field]").forEach((input) => {
       const field = input.dataset.machineField;
       const bulkEditable = BULK_MACHINE_FIELDS.has(field);
-      input.disabled = !machine || (selectionCount > 1 && !bulkEditable);      input.dataset.mixed = "false";
+      input.disabled = !machine || (selectionCount > 1 && !bulkEditable);
+      input.dataset.mixed = "false";
       input.removeAttribute("title");
       if (input.dataset.stageSelect !== undefined) {
         const includeNever = input.dataset.allowNever !== undefined;
@@ -3994,7 +3997,8 @@
           <label>Collision check<select data-machine-field="collisionMode" data-needs-selection>
             <option value="solid">Solid · warn on overlap</option>
             <option value="ignore">Ignore overlaps</option>
-          </select></label>          <label class="wide">Design preset<select data-design-picker data-needs-selection></select></label>
+          </select></label>
+          <label class="wide">Design preset<select data-design-picker data-needs-selection></select></label>
           <label class="wide">Design sizing<select data-machine-field="designScaleMode" data-needs-selection>
             <option value="preserve">Preserve proportions · fit uniformly</option>
             <option value="match">Match design dimensions · keep synced</option>
@@ -4993,7 +4997,8 @@
         pushHistory();
         const field = input.dataset.animationField;
         if (["animationMode", "animationAxis", "animationSecondaryAxis"].includes(field)) targets.forEach((item) => { item[field] = input.value; });
-        else {          const value = Number(input.value);
+        else {
+          const value = Number(input.value);
           if (!Number.isFinite(value)) return;
           const normalized = ["animationSpeed", "animationPauseSeconds", "animationSecondaryPauseSeconds", "animationStep1PauseSeconds", "animationStep2PauseSeconds", "animationStep3PauseSeconds", "animationStep4PauseSeconds"].includes(field) ? Math.max(0, value) : value;
           targets.forEach((item) => { item[field] = normalized; });
@@ -5992,7 +5997,8 @@
         if (button.dataset.toggle === "walk") {
           setWalkMode(state.cameraMode !== "walk");
           return;
-        }        if (button.dataset.toggle === "fullscreen") {
+        }
+        if (button.dataset.toggle === "fullscreen") {
           toggleModelFullscreen(frame);
           return;
         }
@@ -6991,7 +6997,8 @@
     const padding = 5 * pixelScale;
     const side = requestedSide === "auto"
       ? (() => {
-          const distances = {            top: Math.abs(anchorPoint[1] - rectangle.top),
+          const distances = {
+            top: Math.abs(anchorPoint[1] - rectangle.top),
             bottom: Math.abs(anchorPoint[1] - rectangle.bottom),
             left: Math.abs(anchorPoint[0] - rectangle.left),
             right: Math.abs(anchorPoint[0] - rectangle.right),
@@ -7990,7 +7997,8 @@
       ? [
           Number(component.x) + Number(component.w) / 2,
           Number(component.y) + Number(component.h) / 2,
-          Number(component.z) + Number(component.d) / 2,        ]
+          Number(component.z) + Number(component.d) / 2,
+        ]
       : [
           (bounds.minX + bounds.maxX) / 2,
           (bounds.minY + bounds.maxY) / 2,
@@ -8989,7 +8997,8 @@
       }
       for (let offset=6; offset<machine.d; offset+=9) {
         localLine(machine,[2,1.74*grow,offset],[machine.w-2,1.74*grow,offset],"#56777a",.8,alpha*.58);
-      }      drawControlConsole(machine,Math.max(1,machine.w-6),1,4.6,3.2,4.4*grow,1.2*grow,alpha);
+      }
+      drawControlConsole(machine,Math.max(1,machine.w-6),1,4.6,3.2,4.4*grow,1.2*grow,alpha);
     } else if (machine.type === "waterjet") {
       const basinHeight = Math.max(.8,3.2*grow);
       box(localBox(machine,0,0,machine.w,machine.d,basinHeight,shade(machine.color,-.05)),alpha,1);
@@ -9988,7 +9997,8 @@
   }
 
   function affineMatrixFromPoints(origin, x, y, z) {
-    return [      x[0]-origin[0], x[1]-origin[1], x[2]-origin[2], 0,
+    return [
+      x[0]-origin[0], x[1]-origin[1], x[2]-origin[2], 0,
       y[0]-origin[0], y[1]-origin[1], y[2]-origin[2], 0,
       z[0]-origin[0], z[1]-origin[1], z[2]-origin[2], 0,
       origin[0], origin[1], origin[2], 1,
@@ -10987,7 +10997,8 @@
       setEditing(false);
       return;
     }
-    if (typing) return;    if (event.key === "ArrowRight") setStage(state.stage + 1);
+    if (typing) return;
+    if (event.key === "ArrowRight") setStage(state.stage + 1);
     if (event.key === "ArrowLeft") setStage(state.stage - 1);
   });
   addLifecycleListener(window, "keyup", (event) => {

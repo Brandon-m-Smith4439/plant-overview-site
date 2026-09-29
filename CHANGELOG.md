@@ -997,7 +997,8 @@
 
 ### Changed
 
-- Safety lines, trenches, and drains now use the standard object editor for X/Z location, X/Y/Z rotation, width, depth/length, height, color, visibility, locking, timeline stages, copy/paste, and removal.- Loop and back-and-forth animation axes are now local to the animated object. Rotating the object rotates its movement direction on all three axes.
+- Safety lines, trenches, and drains now use the standard object editor for X/Z location, X/Y/Z rotation, width, depth/length, height, color, visibility, locking, timeline stages, copy/paste, and removal.
+- Loop and back-and-forth animation axes are now local to the animated object. Rotating the object rotates its movement direction on all three axes.
 - Removed the legacy hard-coded `drawSafety()` and `drawTrenches()` rendering paths.
 - Existing schema-6 browser layouts receive the default floor features once through the `floorFeaturesInitialized` migration marker.
 

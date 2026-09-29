@@ -2964,11 +2964,13 @@
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
       const flow = assignedProcessPointerKey ? processPointerFlowLabel(assignedProcessPointerKey, machine) : null;
+      const outgoing = flow ? TODAY_FLOW_LINKS.filter(([fromKey]) => fromKey === flow.key).map(([, toKey]) => processPointerFlowDefinition(toKey)?.text).filter(Boolean) : [];
+      const incoming = flow ? TODAY_FLOW_LINKS.filter(([, toKey]) => toKey === flow.key).map(([fromKey]) => processPointerFlowDefinition(fromKey)?.text).filter(Boolean) : [];
       processPointerSummary.textContent = !machine
-        ? "Select a machine, then assign or edit its Today / Necessary pointer."
+        ? "Select a machine, then assign it to the Today process flow."
         : flow
-          ? `${flow.text} is locked to ${machine.name}. This binding follows the active machine even inside an attached assembly.`
-          : `No Necessary label points to ${machine.name}. Choose a label below to add one.`;
+          ? `${machine.name} is the ${flow.text} process node. Incoming: ${incoming.join(" / ") || "none"}. Outgoing: ${outgoing.join(" / ") || "none"}.`
+          : `${machine.name} is not assigned to the Today process flow. Its normal machine label is still edited separately.`;
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -3805,6 +3807,31 @@
             <label>Label disappears after<select data-label-field="labelRetire" data-stage-select data-allow-never data-needs-selection></select></label>
           </div>
           <p class="label-help">Label timing controls the construction-stage views independently from when the machine itself appears. Today Overview still follows the selected Today label mode.</p>
+          <fieldset class="label-pointer-controls">
+            <legend>Machine-label position</legend>
+            <p>These controls move only the normal machine label. They do not change the process connection.</p>
+            <div class="label-format-grid">
+              <label>Anchor X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Anchor Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Anchor Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Lift (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5"></label>
+              <label>Tag X (px)<input type="number" data-label-field="labelScreenOffsetX" data-needs-selection min="-400" max="400" step="2"></label>
+              <label>Tag Y (px)<input type="number" data-label-field="labelScreenOffsetY" data-needs-selection min="-400" max="400" step="2"></label>
+            </div>
+          </fieldset>
+          <fieldset class="label-pointer-controls">
+            <legend>Machine-label leader</legend>
+            <div class="label-format-grid">
+              <label>Color<input type="color" data-label-field="labelLineColor" data-needs-selection></label>
+              <label>Width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25"></label>
+              <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5"></label>
+              <label>Pattern<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+              <label>Shape<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+              <label>Tag connection<select data-label-field="labelLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
+              <label>Machine end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
+              <label>End size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5"></label>
+            </div>
+          </fieldset>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
@@ -4608,12 +4635,12 @@
       renderPerformance.invalidate();
       updateEditorPanel();
       if (!result.key) {
-        showToast(`Removed the Necessary pointer from ${machine.name}.`);
+        showToast(`Removed ${machine.name} from the Today process flow.`);
         return;
       }
       const flow = processPointerFlowDefinition(result.key);
       const displaced = result.displacedMachine ? ` It was moved from ${result.displacedMachine.name}.` : "";
-      showToast(`${flow?.text || "Necessary"} pointer now targets ${machine.name}.${displaced}`);
+      showToast(`${machine.name} is now the ${flow?.text || "process"} node.${displaced}`);
     });
     panel.querySelector("[data-editor-action='remove-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
@@ -4623,7 +4650,7 @@
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast(`Removed the Necessary pointer from ${machine.name}.`);
+      showToast(`Removed ${machine.name} from the Today process flow.`);
     });
 
     panel.querySelector("[data-editor-action='center-process-pointer']")?.addEventListener("click", () => {

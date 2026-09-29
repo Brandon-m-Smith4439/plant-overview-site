@@ -20,6 +20,15 @@ assert.ok(plant.includes('data-editor-action="remove-process-pointer"'), "Pointe
 assert.ok(plant.includes("assignProcessPointerToMachine"), "Necessary pointer assignment must use the explicit machine-binding helper.");
 assert.ok(plant.includes("processPointersInitialized"), "Saved layouts must persist whether the one-time Necessary pointer migration has completed.");
 assert.ok(plant.includes("processPointers: state.processPointers"), "Saved layouts must persist exact Necessary pointer bindings.");
+assert.ok(plant.includes("processPointerAssignment.disabled = !machine"), "Pointer assignment must remain editable for the active machine inside a multi-object assembly.");
+assert.ok(!plant.includes("processPointerAssignment.disabled = selectionCount !== 1"), "Pointer assignment must not be blocked solely because attached children are selected with the active machine.");
+const updatePanelStart = plant.indexOf("function updateEditorPanel");
+const updatePanelEnd = plant.indexOf("function updateEditorLiveTransformFields", updatePanelStart);
+const updatePanelBody = plant.slice(updatePanelStart, updatePanelEnd);
+assert.ok(!updatePanelBody.includes('input.addEventListener("change"'), "Inspector refresh must not register new change listeners repeatedly.");
+const pointerHandlersStart = plant.indexOf('panel.querySelectorAll("[data-process-pointer-field]")', updatePanelEnd);
+assert.ok(pointerHandlersStart > updatePanelEnd, "Process pointer handlers must be registered in the one-time editor setup path.");
+assert.ok(plant.includes("if (!machine || !processPointerKeyForMachine(machine)) return;"), "Pointer geometry edits must follow the active assigned machine without requiring a single-object selection.");
 
 
 const normalizeStart = plant.indexOf("function normalizeMachine");

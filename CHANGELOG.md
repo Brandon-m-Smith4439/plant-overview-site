@@ -1,3 +1,12 @@
+## 0.13.19 - 2026-09-29
+
+- Fixed Today / Necessary labels selecting a nearby rendered machine instead of staying attached to their intended machine.
+- Replaced camera-dependent nearest-machine pointer resolution with persistent flow-step → machine instance bindings.
+- Added Necessary pointer assignment controls so each selected machine can add, reassign, remove, and edit its process pointer from the existing Pointers tab.
+- Added one-time migration that preserves the prior automatic flow choices using the complete saved plant, then persists the exact machine bindings for future renders.
+- Prevented a Necessary pointer from silently jumping to another candidate when its assigned machine is outside the current rendered set.
+- Added regression coverage for exact-machine bindings, assignment/removal controls, persistence, and removal of runtime nearest-machine selection.
+
 ## 0.13.18 - 2026-09-28
 
 - Fixed the remaining non-fullscreen Plant Layout sidebar scrolling regression introduced by the prior explicit-height scroll containment change.

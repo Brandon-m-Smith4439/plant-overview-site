@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.18";
+  const APP_VERSION = "0.13.19";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -684,6 +684,32 @@
     return defaults[type] || { animationMode: "none", animationAxis: "x", animationDistance: 10, animationSpeed: 0.1, animationPhase: 0 };
   }
 
+  const PROCESS_POINTER_FLOW_DEFINITIONS = Object.freeze([
+    { key: "cutting", text: "Cutting", order: 0 },
+    { key: "polisher", text: "Polisher", order: 1 },
+    { key: "denver-cnc", text: "Denver CNC", order: 2 },
+    { key: "waterjet", text: "Waterjet", order: 3 },
+    { key: "washer", text: "Washer", order: 4 },
+    { key: "tempering", text: "Tempering Line", order: 5 },
+    { key: "wrap", text: "Wrap", order: 6 },
+    { key: "glass-truck", text: "Glass Truck", order: 7 },
+    { key: "rack", text: "Rack", order: 8 },
+  ]);
+  const PROCESS_POINTER_FLOW_BY_KEY = new Map(PROCESS_POINTER_FLOW_DEFINITIONS.map((item) => [item.key, item]));
+
+  function processPointerFlowDefinition(key) {
+    return PROCESS_POINTER_FLOW_BY_KEY.get(String(key || "")) || null;
+  }
+
+  function processPointerFlowLabel(key, machine) {
+    const definition = processPointerFlowDefinition(key);
+    if (!definition) return null;
+    const customText = machine?.labelUseMachineName === false && String(machine?.labelText || "").trim()
+      ? String(machine.labelText).trim()
+      : "";
+    return { ...definition, text: customText || definition.text };
+  }
+
   function normalizeMachine(machine, index = 0) {
     const labelUsesMachineName = machine.labelUseMachineName !== false;
     const normalized = {
@@ -1066,12 +1092,101 @@
     return clamp(Math.round((Number(value) || 5) / 5) * 5, 5, 120);
   }
 
+  function createDefaultProcessPointerAssignments(machineList) {
+    const groups = new Map();
+    (machineList || []).forEach((machine) => {
+      const flow = necessaryFlowLabel(machine);
+      if (!flow || !machine?.instanceId) return;
+      if (!groups.has(flow.key)) groups.set(flow.key, []);
+      groups.get(flow.key).push(machine);
+    });
+    const planPoint = (machine) => [
+      Number(machine?.x || 0) + Number(machine?.w || 0) / 2,
+      Number(machine?.z || 0) + Number(machine?.d || 0) / 2,
+    ];
+    const distanceSquared = (first, second) => {
+      const dx = first[0] - second[0];
+      const dz = first[1] - second[1];
+      return dx * dx + dz * dz;
+    };
+    const nearest = (items, targetPoint) => {
+      if (!items?.length) return null;
+      return items.reduce((best, item) => (
+        !best || distanceSquared(planPoint(item), targetPoint) < distanceSquared(planPoint(best), targetPoint)
+          ? item
+          : best
+      ), null);
+    };
+    const midpoint = (...items) => {
+      const points = items.filter(Boolean).map(planPoint);
+      if (!points.length) return [0, 0];
+      return [
+        points.reduce((sum, point) => sum + point[0], 0) / points.length,
+        points.reduce((sum, point) => sum + point[1], 0) / points.length,
+      ];
+    };
+    const largest = (items = []) => items.reduce((best, item) => (
+      !best || Number(item.w || 0) * Number(item.d || 0) > Number(best.w || 0) * Number(best.d || 0)
+        ? item
+        : best
+    ), null);
+
+    // Migrate the old automatic flow once using the complete saved plant, not
+    // the camera-dependent set of entries rendered in the current frame.
+    const selected = new Map();
+    const cutting = largest(groups.get("cutting"));
+    if (cutting) selected.set("cutting", cutting);
+    const polisher = nearest(groups.get("polisher"), planPoint(cutting));
+    if (polisher) selected.set("polisher", polisher);
+    const denver = nearest(groups.get("denver-cnc"), planPoint(polisher || cutting));
+    if (denver) selected.set("denver-cnc", denver);
+    const waterjet = nearest(groups.get("waterjet"), planPoint(polisher || cutting));
+    if (waterjet) selected.set("waterjet", waterjet);
+    const washer = nearest(groups.get("washer"), midpoint(denver, waterjet, polisher));
+    if (washer) selected.set("washer", washer);
+    const tempering = nearest(groups.get("tempering"), planPoint(washer));
+    if (tempering) selected.set("tempering", tempering);
+    const wrap = nearest(groups.get("wrap"), planPoint(tempering || washer));
+    if (wrap) selected.set("wrap", wrap);
+    const truck = nearest(groups.get("glass-truck"), planPoint(wrap));
+    if (truck) selected.set("glass-truck", truck);
+    const rack = nearest(groups.get("rack"), planPoint(wrap));
+    if (rack) selected.set("rack", rack);
+
+    return Object.fromEntries([...selected].map(([key, machine]) => [key, machine.instanceId]));
+  }
+
+  function normalizeProcessPointerAssignments(value, machineList, { fillDefaults = false } = {}) {
+    const availableIds = new Set((machineList || []).map((machine) => machine?.instanceId).filter(Boolean));
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const result = {};
+    const usedMachineIds = new Set();
+    PROCESS_POINTER_FLOW_DEFINITIONS.forEach(({ key }) => {
+      const instanceId = String(source[key] || "");
+      if (!instanceId || !availableIds.has(instanceId) || usedMachineIds.has(instanceId)) return;
+      result[key] = instanceId;
+      usedMachineIds.add(instanceId);
+    });
+    if (fillDefaults) {
+      const defaults = createDefaultProcessPointerAssignments(machineList);
+      PROCESS_POINTER_FLOW_DEFINITIONS.forEach(({ key }) => {
+        const instanceId = String(defaults[key] || "");
+        if (result[key] || !instanceId || !availableIds.has(instanceId) || usedMachineIds.has(instanceId)) return;
+        result[key] = instanceId;
+        usedMachineIds.add(instanceId);
+      });
+    }
+    return result;
+  }
+
   function loadLayout() {
     try {
       const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
       if (current?.version === 6 && Array.isArray(current.machines)) {
         return {
           machines: loadSceneAwareMachines(current),
+          processPointers: current.processPointers && typeof current.processPointers === "object" ? current.processPointers : {},
+          processPointersInitialized: current.processPointersInitialized === true,
           stages: normalizeStages(current.stages),
           floor: normalizeFloor(current.floor),
           columnGrid: normalizeColumnGrid(current.columnGrid),
@@ -1094,6 +1209,8 @@
         }
         return {
           machines: loadSceneAwareMachines(legacy),
+          processPointers: {},
+          processPointersInitialized: false,
           stages: normalizeStages(legacy.stages),
           floor: normalizeFloor(legacy.floor),
           columnGrid: normalizeColumnGrid(legacy.columnGrid),
@@ -1112,6 +1229,8 @@
       if (older?.version === 4 && Array.isArray(older.machines)) {
         return {
           machines: loadSceneAwareMachines(older),
+          processPointers: {},
+          processPointersInitialized: false,
           stages: normalizeStages(older.stages),
           floor: normalizeFloor(older.floor),
           columnGrid: normalizeColumnGrid(older.columnGrid),
@@ -1130,6 +1249,8 @@
       if (oldest?.version === 3 && Array.isArray(oldest.machines)) {
         return {
           machines: loadSceneAwareMachines(oldest, true),
+          processPointers: {},
+          processPointersInitialized: false,
           stages: normalizeStages(defaultStages),
           floor: normalizeFloor(oldest.floor),
           columnGrid: normalizeColumnGrid(oldest.columnGrid),
@@ -1149,6 +1270,8 @@
     }
     return {
       machines: defaultSceneMachines(),
+      processPointers: {},
+      processPointersInitialized: false,
       stages: normalizeStages(defaultStages),
       floor: normalizeFloor(defaultFloor),
       columnGrid: normalizeColumnGrid(defaultColumnGrid),
@@ -1167,6 +1290,9 @@
   const savedLayout = loadLayout();
   let stages = savedLayout.stages;
   let machines = savedLayout.machines;
+  const initialProcessPointers = normalizeProcessPointerAssignments(savedLayout.processPointers, machines, {
+    fillDefaults: savedLayout.processPointersInitialized !== true,
+  });
   // v0.10.2 automatically suppressed a child animation when it matched its
   // parent. Preserve that visual behavior once, then store an explicit choice
   // that the user can change from the active-member animation controls.
@@ -1229,6 +1355,7 @@
     labelMode: "smart",
     labelTextMode: "abbreviated",
     todayLabelMode: "necessary",
+    processPointers: initialProcessPointers,
     playing: false,
     playAt: 0,
     editing: false,
@@ -1391,6 +1518,7 @@
   function snapshotLayout() {
     return {
       machines: clone(machines),
+      processPointers: clone(state.processPointers),
       stages: clone(stages),
       floor: clone(floor),
       columnGrid: clone(columnGrid),
@@ -1415,6 +1543,7 @@
 
   function restoreSnapshot(snapshot) {
     machines = normalizeMachines(snapshot.machines || []);
+    state.processPointers = normalizeProcessPointerAssignments(snapshot.processPointers, machines);
     stages = normalizeStages(snapshot.stages);
     floor = normalizeFloor(snapshot.floor);
     columnGrid = normalizeColumnGrid(snapshot.columnGrid);
@@ -1463,6 +1592,7 @@
 
   function persistLayout() {
     invalidateWalkSpatialIndex();
+    state.processPointers = normalizeProcessPointerAssignments(state.processPointers, machines);
     try {
       const previous = localStorage.getItem(STORAGE_KEY);
       if (previous) localStorage.setItem(BACKUP_STORAGE_KEY, previous);
@@ -1472,6 +1602,8 @@
         sceneAnimationsInitialized: true,
         floorFeaturesInitialized: true,
         machines,
+        processPointers: state.processPointers,
+        processPointersInitialized: true,
         stages,
         floor,
         columnGrid,
@@ -1537,6 +1669,27 @@
 
   function machineById(instanceId) {
     return machines.find((machine) => machine.instanceId === instanceId) || null;
+  }
+
+  function processPointerKeyForMachine(machine) {
+    if (!machine?.instanceId) return "";
+    return PROCESS_POINTER_FLOW_DEFINITIONS.find(({ key }) => state.processPointers?.[key] === machine.instanceId)?.key || "";
+  }
+
+  function assignProcessPointerToMachine(key, machine) {
+    if (!machine?.instanceId) return { key: "", previousKey: "", displacedMachine: null };
+    const normalizedKey = processPointerFlowDefinition(key)?.key || "";
+    const previousKey = processPointerKeyForMachine(machine);
+    Object.entries(state.processPointers || {}).forEach(([flowKey, instanceId]) => {
+      if (instanceId === machine.instanceId) delete state.processPointers[flowKey];
+    });
+    let displacedMachine = null;
+    if (normalizedKey) {
+      const previousTargetId = state.processPointers[normalizedKey];
+      if (previousTargetId && previousTargetId !== machine.instanceId) displacedMachine = machineById(previousTargetId);
+      state.processPointers[normalizedKey] = machine.instanceId;
+    }
+    return { key: normalizedKey, previousKey, displacedMachine };
   }
 
   function animationGroupMembers(groupId) {
@@ -2814,9 +2967,15 @@
           : `Linked to machine name: ${machine.name}`;
     }
 
+    const assignedProcessPointerKey = machine && selectionCount === 1 ? processPointerKeyForMachine(machine) : "";
+    const processPointerAssignment = panel.querySelector("[data-process-pointer-assignment]");
+    if (processPointerAssignment) {
+      processPointerAssignment.disabled = selectionCount !== 1;
+      processPointerAssignment.value = assignedProcessPointerKey;
+    }
     panel.querySelectorAll("[data-process-pointer-field]").forEach((input) => {
       const field = input.dataset.processPointerField;
-      input.disabled = selectionCount !== 1;
+      input.disabled = selectionCount !== 1 || !assignedProcessPointerKey;
       if (!machine || selectionCount !== 1) {
         if (input.type !== "color") input.value = "";
         return;
@@ -2824,17 +2983,19 @@
       input.value = String(machine[field] ?? "");
     });
     panel.querySelectorAll("[data-process-pointer-check]").forEach((input) => {
-      input.disabled = selectionCount !== 1;
+      input.disabled = selectionCount !== 1 || !assignedProcessPointerKey;
       input.checked = selectionCount === 1 && machine?.[input.dataset.processPointerCheck] !== false;
     });
+    const removeProcessPointer = panel.querySelector("[data-editor-action='remove-process-pointer']");
+    if (removeProcessPointer) removeProcessPointer.disabled = selectionCount !== 1 || !assignedProcessPointerKey;
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
-      const flow = machine && selectionCount === 1 ? necessaryFlowLabel(machine) : null;
+      const flow = assignedProcessPointerKey ? processPointerFlowLabel(assignedProcessPointerKey, machine) : null;
       processPointerSummary.textContent = !machine || selectionCount !== 1
-        ? "Select one process machine to edit its Today flow pointer."
+        ? "Select one machine, then assign or edit its Today / Necessary pointer."
         : flow
-          ? `${flow.text} pointer for ${machine.name}.`
-          : `${machine.name} is not currently part of the automatic Today production flow.`;
+          ? `${flow.text} is locked to ${machine.name}. This binding follows the machine, not the current camera view.`
+          : `No Necessary label points to ${machine.name}. Choose a label below to add one.`;
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -3680,9 +3841,28 @@
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
           <div class="process-pointer-intro">
-            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one process machine to edit its Today flow pointer.</span></div>
+            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one machine, then assign or edit its Today / Necessary pointer.</span></div>
             <label class="process-pointer-toggle"><input type="checkbox" data-process-pointer-check="processPointerVisible" data-needs-selection> Show pointer leader</label>
           </div>
+          <fieldset class="process-pointer-controls">
+            <legend>Necessary label assignment</legend>
+            <p>Each Necessary label is saved to one exact machine instance. Reassigning a label moves it from the previous machine; choosing no pointer removes it.</p>
+            <label class="wide">Necessary label<select data-process-pointer-assignment data-needs-selection>
+              <option value="">No necessary pointer</option>
+              <option value="cutting">Cutting</option>
+              <option value="polisher">Polisher</option>
+              <option value="denver-cnc">Denver CNC</option>
+              <option value="waterjet">Waterjet</option>
+              <option value="washer">Washer</option>
+              <option value="tempering">Tempering Line</option>
+              <option value="wrap">Wrap</option>
+              <option value="glass-truck">Glass Truck</option>
+              <option value="rack">Rack</option>
+            </select></label>
+            <div class="process-pointer-actions">
+              <button type="button" data-editor-action="remove-process-pointer" data-needs-selection>Remove pointer from this machine</button>
+            </div>
+          </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>Pointer target on machine</legend>
             <p>Move the pointer target independently from the machine label. X/Y/Z are percentages across the selected machine's local width, height, and depth.</p>
@@ -4374,6 +4554,33 @@
       updateEditorPanel();
       showToast(`Label reset to ${machine.name}.`);
     });
+    panel.querySelector("[data-process-pointer-assignment]")?.addEventListener("change", (event) => {
+      const machine = selectedMachine();
+      if (!machine || selectedMachines().length !== 1) return;
+      pushHistory();
+      const result = assignProcessPointerToMachine(event.target.value, machine);
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      if (!result.key) {
+        showToast(`Removed the Necessary pointer from ${machine.name}.`);
+        return;
+      }
+      const flow = processPointerFlowDefinition(result.key);
+      const displaced = result.displacedMachine ? ` It was moved from ${result.displacedMachine.name}.` : "";
+      showToast(`${flow?.text || "Necessary"} pointer now targets ${machine.name}.${displaced}`);
+    });
+    panel.querySelector("[data-editor-action='remove-process-pointer']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      if (!machine || selectedMachines().length !== 1 || !processPointerKeyForMachine(machine)) return;
+      pushHistory();
+      assignProcessPointerToMachine("", machine);
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(`Removed the Necessary pointer from ${machine.name}.`);
+    });
+
     panel.querySelector("[data-editor-action='center-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
       if (!machine || selectedMachines().length !== 1) return;
@@ -6229,18 +6436,15 @@
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-    const flowText = (fallback) => machine.labelUseMachineName === false && String(machine.labelText || "").trim()
-      ? String(machine.labelText).trim()
-      : fallback;
-    if (type === "cutting" || /cutting table/.test(source)) return { key: "cutting", text: flowText("Cutting"), order: 0 };
-    if (type === "kodiak" && !/skiati/.test(source)) return { key: "polisher", text: flowText("Polisher"), order: 1 };
-    if (type === "denver" || /denver/.test(source)) return { key: "denver-cnc", text: flowText("Denver CNC"), order: 2 };
-    if (type === "waterjet" || /waterjet/.test(source)) return { key: "waterjet", text: flowText("Waterjet"), order: 3 };
-    if (type === "washer" || /washer/.test(source)) return { key: "washer", text: flowText("Washer"), order: 4 };
-    if (type === "furnace" || /tempering line/.test(source)) return { key: "tempering", text: flowText("Tempering Line"), order: 5 };
-    if (type === "wrapping" || /wrapp/.test(source)) return { key: "wrap", text: flowText("Wrap"), order: 6 };
-    if (type === "aframetruck" || /glass truck/.test(source)) return { key: "glass-truck", text: flowText("Glass Truck"), order: 7 };
-    if (type === "glassrack" && Number(machine.reveal) >= 11) return { key: "rack", text: flowText("Rack"), order: 8 };
+    if (type === "cutting" || /cutting table/.test(source)) return processPointerFlowLabel("cutting", machine);
+    if (type === "kodiak" && !/skiati/.test(source)) return processPointerFlowLabel("polisher", machine);
+    if (type === "denver" || /denver/.test(source)) return processPointerFlowLabel("denver-cnc", machine);
+    if (type === "waterjet" || /waterjet/.test(source)) return processPointerFlowLabel("waterjet", machine);
+    if (type === "washer" || /washer/.test(source)) return processPointerFlowLabel("washer", machine);
+    if (type === "furnace" || /tempering line/.test(source)) return processPointerFlowLabel("tempering", machine);
+    if (type === "wrapping" || /wrapp/.test(source)) return processPointerFlowLabel("wrap", machine);
+    if (type === "aframetruck" || /glass truck/.test(source)) return processPointerFlowLabel("glass-truck", machine);
+    if (type === "glassrack" && Number(machine.reveal) >= 11) return processPointerFlowLabel("rack", machine);
     return null;
   }
 
@@ -6267,69 +6471,21 @@
     );
   }
 
-  function flowEntryPlanPoint(entry) {
-    const rendered = entry?.rendered;
-    return rendered
-      ? [rendered.x + rendered.w / 2, rendered.z + rendered.d / 2]
-      : [0, 0];
-  }
-
-  function planDistanceSquared(first, second) {
-    const dx = first[0] - second[0];
-    const dz = first[1] - second[1];
-    return dx * dx + dz * dz;
-  }
-
-  function nearestFlowEntry(entries, targetPoint) {
-    if (!entries?.length) return null;
-    return entries.reduce((best, entry) => (
-      !best || planDistanceSquared(flowEntryPlanPoint(entry), targetPoint) <
-        planDistanceSquared(flowEntryPlanPoint(best), targetPoint)
-        ? entry
-        : best
-    ), null);
-  }
-
-  function midpointPlanPoint(...entries) {
-    const points = entries.filter(Boolean).map(flowEntryPlanPoint);
-    if (!points.length) return [0, 0];
-    return [
-      points.reduce((sum, point) => sum + point[0], 0) / points.length,
-      points.reduce((sum, point) => sum + point[1], 0) / points.length,
-    ];
-  }
-
   function buildTodayFlowNodes(machineEntries) {
-    const groups = new Map();
-    machineEntries.forEach((entry) => {
-      if (entry.alpha <= .15) return;
-      const flow = necessaryFlowLabel(entry.machine);
-      if (!flow) return;
-      if (!groups.has(flow.key)) groups.set(flow.key, []);
-      groups.get(flow.key).push({ ...entry, flow });
-    });
+    const entriesById = new Map(
+      (machineEntries || [])
+        .filter((entry) => entry?.alpha > .15 && entry?.machine?.instanceId)
+        .map((entry) => [entry.machine.instanceId, entry])
+    );
     const nodes = new Map();
-    const largest = (entries = []) => entries.reduce((best, entry) => (
-      !best || entry.rendered.w * entry.rendered.d > best.rendered.w * best.rendered.d ? entry : best
-    ), null);
-    const cutting = largest(groups.get("cutting"));
-    if (cutting) nodes.set("cutting", cutting);
-    const polisher = nearestFlowEntry(groups.get("polisher"), flowEntryPlanPoint(cutting));
-    if (polisher) nodes.set("polisher", polisher);
-    const denver = nearestFlowEntry(groups.get("denver-cnc"), flowEntryPlanPoint(polisher || cutting));
-    if (denver) nodes.set("denver-cnc", denver);
-    const waterjet = nearestFlowEntry(groups.get("waterjet"), flowEntryPlanPoint(polisher || cutting));
-    if (waterjet) nodes.set("waterjet", waterjet);
-    const washer = nearestFlowEntry(groups.get("washer"), midpointPlanPoint(denver, waterjet, polisher));
-    if (washer) nodes.set("washer", washer);
-    const tempering = nearestFlowEntry(groups.get("tempering"), flowEntryPlanPoint(washer));
-    if (tempering) nodes.set("tempering", tempering);
-    const wrap = nearestFlowEntry(groups.get("wrap"), flowEntryPlanPoint(tempering || washer));
-    if (wrap) nodes.set("wrap", wrap);
-    const truck = nearestFlowEntry(groups.get("glass-truck"), flowEntryPlanPoint(wrap));
-    if (truck) nodes.set("glass-truck", truck);
-    const rack = nearestFlowEntry(groups.get("rack"), flowEntryPlanPoint(wrap));
-    if (rack) nodes.set("rack", rack);
+    PROCESS_POINTER_FLOW_DEFINITIONS.forEach((definition) => {
+      const instanceId = state.processPointers?.[definition.key];
+      if (!instanceId) return;
+      const entry = entriesById.get(instanceId);
+      if (!entry) return;
+      const flow = processPointerFlowLabel(definition.key, entry.machine);
+      if (flow) nodes.set(definition.key, { ...entry, flow });
+    });
     return nodes;
   }
 

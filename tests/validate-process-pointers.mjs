@@ -15,11 +15,14 @@ assert.ok(plant.includes('data-process-pointer-field="processPointerColor"'), "P
 assert.ok(plant.includes('data-process-pointer-field="processPointerShape"'), "Process pointer line shape must be independently editable.");
 assert.ok(plant.includes('data-process-pointer-field="processPointerEndStyle"'), "Process pointer endpoint must be independently editable.");
 assert.ok(plant.includes('data-process-pointer-check="processPointerVisible"'), "Process pointer leader visibility must be independently editable.");
-assert.ok(plant.includes("data-process-pointer-assignment"), "Pointers tab must let the editor bind a Necessary label to the selected machine.");
-assert.ok(plant.includes('data-editor-action="remove-process-pointer"'), "Pointers tab must let the editor remove a Necessary pointer from the selected machine.");
-assert.ok(plant.includes("assignProcessPointerToMachine"), "Necessary pointer assignment must use the explicit machine-binding helper.");
+assert.ok(plant.includes("data-process-pointer-assignment"), "Pointers tab must let the editor assign the selected machine to a process-flow step.");
+assert.ok(plant.includes('data-editor-action="remove-process-pointer"'), "Pointers tab must let the editor remove the selected machine from the process flow.");
+assert.ok(plant.includes("assignProcessPointerToMachine"), "Process-flow assignment must use the explicit machine-binding helper.");
 assert.ok(plant.includes("processPointersInitialized"), "Saved layouts must persist whether the one-time Necessary pointer migration has completed.");
-assert.ok(plant.includes("processPointers: state.processPointers"), "Saved layouts must persist exact Necessary pointer bindings.");
+assert.ok(plant.includes("processPointers: state.processPointers"), "Saved layouts must persist exact process-node bindings.");
+assert.ok(plant.includes('data-process-pointer-field="processPointerText"'), "Process route text must be editable separately from the machine label.");
+assert.ok(plant.includes("processPointerText: String(machine.processPointerText"), "Saved machines must persist process-only text separately from normal label text.");
+assert.ok(plant.includes("String(machine?.processPointerText"), "Process-flow text must read from processPointerText rather than the normal machine label.");
 assert.ok(plant.includes("processPointerAssignment.disabled = !machine"), "Pointer assignment must remain editable for the active machine inside a multi-object assembly.");
 assert.ok(!plant.includes("processPointerAssignment.disabled = selectionCount !== 1"), "Pointer assignment must not be blocked solely because attached children are selected with the active machine.");
 const updatePanelStart = plant.indexOf("function updateEditorPanel");
@@ -44,7 +47,7 @@ assert.ok(nodeResolverBody.includes("state.processPointers?.[definition.key]"), 
 assert.ok(nodeResolverBody.includes("entriesById.get(instanceId)"), "Today flow must look up the exact rendered machine instance assigned to each Necessary step.");
 assert.ok(!nodeResolverBody.includes("nearestFlowEntry") && !nodeResolverBody.includes("flowEntryPlanPoint") && !nodeResolverBody.includes("largest(groups"), "Today flow must not retarget Necessary labels by runtime position or proximity.");
 
-const flowStart = plant.indexOf("function drawTodayProductionFlow");
+const flowStart = plant.indexOf("function flowEntryWorldAnchor");
 const flowEnd = plant.indexOf("function rectanglesIntersect", flowStart);
 const flowBody = plant.slice(flowStart, flowEnd);
 for (const field of [
@@ -59,12 +62,13 @@ for (const field of [
   "processPointerOpacity",
   "processPointerStyle",
   "processPointerShape",
-  "processPointerLeaderSide",
   "processPointerEndStyle",
   "processPointerEndSize",
 ]) {
   assert.ok(flowBody.includes(field), `Today production flow must use independent ${field}.`);
 }
+assert.ok(flowBody.includes("function drawProcessRouteTag"), "Process flow must render its own route tag independently from machine labels.");
+assert.ok(flowBody.includes("fromEntry.flow.text") && flowBody.includes("toEntry.flow.text"), "Process route tags must describe the machine-to-machine process connection.");
 assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Today production flow must no longer use the normal machine-label pointer anchor.");
 assert.ok(!flowBody.includes("machine.labelLineColor"), "Today production flow must no longer use the normal machine-label line styling.");
 

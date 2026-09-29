@@ -1,3 +1,14 @@
+## 0.13.21 - 2026-09-29
+
+- Separated Today machine labels from Necessary process pointers at the renderer, data, and editor levels.
+- Today / Necessary now draws normal machine labels and the production-flow overlay at the same time instead of replacing machine labels with process labels.
+- Process pointers now connect the exact assigned machine to the next process machine and use their own connection anchors, line styling, endpoint styling, and route-tag placement.
+- Added compact machine-to-machine route tags such as `Cutting → Polisher` directly on process connections.
+- Added independent `processPointerText`; normal `labelText` no longer changes process-flow text.
+- Reworded the Pointers editor around process nodes and machine-to-machine connections so its controls are clearly separate from the Layout label editor.
+- Restored explicit machine-label anchor, tag-position, and leader-line controls in the Layout label section.
+- Preserved the existing independent machine-label appear/disappear stage controls.
+
 ## 0.13.20 - 2026-09-29
 
 - Fixed Pointers controls being disabled for machines that belong to multi-object motion assemblies. Pointer editing now follows the active machine instead of requiring the entire selection to contain exactly one object.

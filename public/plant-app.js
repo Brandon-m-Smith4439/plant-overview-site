@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.20";
+  const APP_VERSION = "0.13.21";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -704,10 +704,13 @@
   function processPointerFlowLabel(key, machine) {
     const definition = processPointerFlowDefinition(key);
     if (!definition) return null;
-    const customText = machine?.labelUseMachineName === false && String(machine?.labelText || "").trim()
-      ? String(machine.labelText).trim()
-      : "";
+    const customText = String(machine?.processPointerText || "").trim();
     return { ...definition, text: customText || definition.text };
+  }
+
+  function assignedProcessFlowForMachine(machine) {
+    const key = processPointerKeyForMachine(machine);
+    return key ? processPointerFlowLabel(key, machine) : null;
   }
 
   function normalizeMachine(machine, index = 0) {
@@ -771,6 +774,7 @@
       labelTargetStyle: ["dot", "ring", "arrow", "none"].includes(machine.labelTargetStyle) ? machine.labelTargetStyle : "dot",
       labelTargetSize: clamp(Number.isFinite(Number(machine.labelTargetSize)) ? Number(machine.labelTargetSize) : 3.2, 1, 12),
       processPointerVisible: machine.processPointerVisible !== false,
+      processPointerText: String(machine.processPointerText || "").trim(),
       processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), 0, 100),
       processPointerAnchorYPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorYPercent)) ? Number(machine.processPointerAnchorYPercent) : (Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100), 0, 100),
       processPointerAnchorZPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorZPercent)) ? Number(machine.processPointerAnchorZPercent) : (Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50), 0, 100),
@@ -1461,7 +1465,7 @@
           "labelReveal", "labelRetire",
           "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset", "labelScreenOffsetX", "labelScreenOffsetY",
           "labelLineColor", "labelLineWidth", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
-          "processPointerVisible", "processPointerAnchorXPercent", "processPointerAnchorYPercent", "processPointerAnchorZPercent",
+          "processPointerVisible", "processPointerText", "processPointerAnchorXPercent", "processPointerAnchorYPercent", "processPointerAnchorZPercent",
           "processPointerLabelOffset", "processPointerScreenOffsetX", "processPointerScreenOffsetY", "processPointerColor",
           "processPointerWidth", "processPointerOpacity", "processPointerStyle", "processPointerShape",
           "processPointerLeaderSide", "processPointerEndStyle", "processPointerEndSize",
@@ -2960,11 +2964,13 @@
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
       const flow = assignedProcessPointerKey ? processPointerFlowLabel(assignedProcessPointerKey, machine) : null;
+      const outgoing = flow ? TODAY_FLOW_LINKS.filter(([fromKey]) => fromKey === flow.key).map(([, toKey]) => processPointerFlowDefinition(toKey)?.text).filter(Boolean) : [];
+      const incoming = flow ? TODAY_FLOW_LINKS.filter(([, toKey]) => toKey === flow.key).map(([fromKey]) => processPointerFlowDefinition(fromKey)?.text).filter(Boolean) : [];
       processPointerSummary.textContent = !machine
-        ? "Select a machine, then assign or edit its Today / Necessary pointer."
+        ? "Select a machine, then assign it to the Today process flow."
         : flow
-          ? `${flow.text} is locked to ${machine.name}. This binding follows the active machine even inside an attached assembly.`
-          : `No Necessary label points to ${machine.name}. Choose a label below to add one.`;
+          ? `${machine.name} is the ${flow.text} process node. Incoming: ${incoming.join(" / ") || "none"}. Outgoing: ${outgoing.join(" / ") || "none"}.`
+          : `${machine.name} is not assigned to the Today process flow. Its normal machine label is still edited separately.`;
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -3415,6 +3421,8 @@
       sceneAnimationsInitialized: true,
       floorFeaturesInitialized: true,
       machines,
+      processPointers: state.processPointers,
+      processPointersInitialized: true,
       stages,
       floor,
       columnGrid,
@@ -3801,6 +3809,31 @@
             <label>Label disappears after<select data-label-field="labelRetire" data-stage-select data-allow-never data-needs-selection></select></label>
           </div>
           <p class="label-help">Label timing controls the construction-stage views independently from when the machine itself appears. Today Overview still follows the selected Today label mode.</p>
+          <fieldset class="label-pointer-controls">
+            <legend>Machine-label position</legend>
+            <p>These controls move only the normal machine label. They do not change the process connection.</p>
+            <div class="label-format-grid">
+              <label>Anchor X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Anchor Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Anchor Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
+              <label>Lift (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5"></label>
+              <label>Tag X (px)<input type="number" data-label-field="labelScreenOffsetX" data-needs-selection min="-400" max="400" step="2"></label>
+              <label>Tag Y (px)<input type="number" data-label-field="labelScreenOffsetY" data-needs-selection min="-400" max="400" step="2"></label>
+            </div>
+          </fieldset>
+          <fieldset class="label-pointer-controls">
+            <legend>Machine-label leader</legend>
+            <div class="label-format-grid">
+              <label>Color<input type="color" data-label-field="labelLineColor" data-needs-selection></label>
+              <label>Width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25"></label>
+              <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5"></label>
+              <label>Pattern<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+              <label>Shape<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
+              <label>Tag connection<select data-label-field="labelLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
+              <label>Machine end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
+              <label>End size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5"></label>
+            </div>
+          </fieldset>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
@@ -3821,14 +3854,14 @@
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
           <div class="process-pointer-intro">
-            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one machine, then assign or edit its Today / Necessary pointer.</span></div>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-pointer-check="processPointerVisible" data-needs-selection> Show pointer leader</label>
+            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one machine, then assign it to the Today process flow.</span></div>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-pointer-check="processPointerVisible" data-needs-selection> Show outgoing process connection</label>
           </div>
           <fieldset class="process-pointer-controls">
-            <legend>Necessary label assignment</legend>
-            <p>Each Necessary label is saved to one exact machine instance. Reassigning a label moves it from the previous machine; choosing no pointer removes it.</p>
-            <label class="wide">Necessary label<select data-process-pointer-assignment data-needs-selection>
-              <option value="">No necessary pointer</option>
+            <legend>Process-flow assignment</legend>
+            <p>This assignment is separate from the machine label. It places the selected machine at one step in the Today glass-flow map and connects it to the next assigned process machine.</p>
+            <label class="wide">Process step<select data-process-pointer-assignment data-needs-selection>
+              <option value="">Not in process flow</option>
               <option value="cutting">Cutting</option>
               <option value="polisher">Polisher</option>
               <option value="denver-cnc">Denver CNC</option>
@@ -3839,25 +3872,26 @@
               <option value="glass-truck">Glass Truck</option>
               <option value="rack">Rack</option>
             </select></label>
+            <label class="wide">Process step text<input type="text" data-process-pointer-field="processPointerText" data-needs-selection placeholder="Uses the process step name"></label>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="remove-process-pointer" data-needs-selection>Remove pointer from this machine</button>
+              <button type="button" data-editor-action="remove-process-pointer" data-needs-selection>Remove from process flow</button>
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Pointer target on machine</legend>
-            <p>Move the pointer target independently from the machine label. X/Y/Z are percentages across the selected machine's local width, height, and depth.</p>
+            <legend>Connection point on machine</legend>
+            <p>This point is used by incoming and outgoing process arrows. It is completely separate from the normal machine-label anchor.</p>
             <div class="process-pointer-grid">
-              <label>Target X (%)<input type="number" data-process-pointer-field="processPointerAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-              <label>Target Y (%)<input type="number" data-process-pointer-field="processPointerAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
-              <label>Target Z (%)<input type="number" data-process-pointer-field="processPointerAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+              <label>Connection X (%)<input type="number" data-process-pointer-field="processPointerAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+              <label>Connection Y (%)<input type="number" data-process-pointer-field="processPointerAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
+              <label>Connection Z (%)<input type="number" data-process-pointer-field="processPointerAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
             </div>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="center-process-pointer" data-needs-selection>Center target</button>
+              <button type="button" data-editor-action="center-process-pointer" data-needs-selection>Center connection point</button>
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Process tag position</legend>
-            <p>Move the small process tag without changing the regular machine label.</p>
+            <legend>Process route tag</legend>
+            <p>The route tag is drawn on the connection between machines (for example, Cutting → Polisher). These controls move that tag without moving either machine label.</p>
             <div class="process-pointer-grid">
               <label>Lift (ft)<input type="number" data-process-pointer-field="processPointerLabelOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
               <label>Tag X (px)<input type="number" data-process-pointer-field="processPointerScreenOffsetX" data-needs-selection min="-500" max="500" step="2" value="0"></label>
@@ -3865,22 +3899,21 @@
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Leader line</legend>
+            <legend>Process connection line</legend>
             <div class="process-pointer-grid">
               <label>Color<input type="color" data-process-pointer-field="processPointerColor" data-needs-selection value="#52b7aa"></label>
               <label>Width<input type="number" data-process-pointer-field="processPointerWidth" data-needs-selection min="0.5" max="12" step="0.25" value="1.65"></label>
               <label>Opacity (%)<input type="number" data-process-pointer-field="processPointerOpacity" data-needs-selection min="5" max="100" step="5" value="100"></label>
               <label>Pattern<select data-process-pointer-field="processPointerStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
               <label>Shape<select data-process-pointer-field="processPointerShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
-              <label>Tag connection<select data-process-pointer-field="processPointerLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
               <label>Target end<select data-process-pointer-field="processPointerEndStyle" data-needs-selection><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
               <label>End size<input type="number" data-process-pointer-field="processPointerEndSize" data-needs-selection min="1" max="14" step="0.5" value="3.2"></label>
             </div>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="reset-process-pointer" data-needs-selection>Reset entire process pointer</button>
+              <button type="button" data-editor-action="reset-process-pointer" data-needs-selection>Reset process connection</button>
             </div>
           </fieldset>
-          <div class="process-pointer-note"><strong>Today / Necessary flow only</strong><span>These controls edit the process pointer used to explain how glass moves through the facility. They do not alter the machine's normal label.</span></div>
+          <div class="process-pointer-note"><strong>Independent Today overlay</strong><span>Process pointers connect machines to machines. Machine labels are edited only in the Layout label section and remain visible as a separate layer.</span></div>
         </section>
         <section data-object-editor-panel="animation" class="object-editor-panel" hidden>
         <fieldset class="object-animation-controls">
@@ -4549,7 +4582,9 @@
         if (!machine || !processPointerKeyForMachine(machine)) return;
         pushHistory();
         const field = input.dataset.processPointerField;
-        if (field === "processPointerColor") {
+        if (field === "processPointerText") {
+          machine.processPointerText = String(input.value || "").trim();
+        } else if (field === "processPointerColor") {
           if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
         } else if (["processPointerStyle", "processPointerShape", "processPointerLeaderSide", "processPointerEndStyle"].includes(field)) {
           const allowed = {
@@ -4602,12 +4637,12 @@
       renderPerformance.invalidate();
       updateEditorPanel();
       if (!result.key) {
-        showToast(`Removed the Necessary pointer from ${machine.name}.`);
+        showToast(`Removed ${machine.name} from the Today process flow.`);
         return;
       }
       const flow = processPointerFlowDefinition(result.key);
       const displaced = result.displacedMachine ? ` It was moved from ${result.displacedMachine.name}.` : "";
-      showToast(`${flow?.text || "Necessary"} pointer now targets ${machine.name}.${displaced}`);
+      showToast(`${machine.name} is now the ${flow?.text || "process"} node.${displaced}`);
     });
     panel.querySelector("[data-editor-action='remove-process-pointer']")?.addEventListener("click", () => {
       const machine = selectedMachine();
@@ -4617,7 +4652,7 @@
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast(`Removed the Necessary pointer from ${machine.name}.`);
+      showToast(`Removed ${machine.name} from the Today process flow.`);
     });
 
     panel.querySelector("[data-editor-action='center-process-pointer']")?.addEventListener("click", () => {
@@ -4637,6 +4672,7 @@
       if (!machine || !processPointerKeyForMachine(machine)) return;
       pushHistory();
       machine.processPointerVisible = true;
+      machine.processPointerText = "";
       machine.processPointerAnchorXPercent = 50;
       machine.processPointerAnchorYPercent = 100;
       machine.processPointerAnchorZPercent = 50;
@@ -6501,12 +6537,13 @@
 
   function flowEntryWorldAnchor(entry) {
     const rendered = entry?.rendered;
-    if (!rendered) return null;
+    const machine = entry?.machine;
+    if (!rendered || !machine) return null;
     return localPoint(
       rendered,
-      rendered.w / 2,
-      Math.max(1, Number(rendered.h) || 0) + 1.15,
-      rendered.d / 2,
+      rendered.w * clamp(Number(machine.processPointerAnchorXPercent ?? 50), 0, 100) / 100,
+      rendered.h * clamp(Number(machine.processPointerAnchorYPercent ?? 100), 0, 100) / 100,
+      rendered.d * clamp(Number(machine.processPointerAnchorZPercent ?? 50), 0, 100) / 100,
     );
   }
 
@@ -6528,7 +6565,56 @@
     return nodes;
   }
 
+  function traceProcessConnection(sx, sy, ex, ey, shape) {
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    if (shape === "elbow") {
+      const midX = sx + (ex - sx) * .5;
+      ctx.lineTo(midX, sy);
+      ctx.lineTo(midX, ey);
+    }
+    ctx.lineTo(ex, ey);
+  }
+
+  function drawProcessRouteTag(text, worldMidpoint, machine, color) {
+    if (!text || !worldMidpoint) return;
+    const lifted = [worldMidpoint[0], worldMidpoint[1] + clamp(Number(machine.processPointerLabelOffset ?? 4), 0, 60), worldMidpoint[2]];
+    const point = project(...lifted);
+    const rect = canvas.getBoundingClientRect();
+    const pixelScale = canvas.width / Math.max(1, rect.width);
+    const x = point[0] + clamp(Number(machine.processPointerScreenOffsetX ?? 0), -500, 500) * pixelScale;
+    const y = point[1] + clamp(Number(machine.processPointerScreenOffsetY ?? 0), -500, 500) * pixelScale;
+    const fontSize = (compactLabelViewport() ? 7.2 : 8.4) * pixelScale;
+    ctx.save();
+    ctx.font = `600 ${fontSize}px "Segoe UI", sans-serif`;
+    const paddingX = 6 * pixelScale;
+    const height = 19 * pixelScale;
+    const width = ctx.measureText(text).width + paddingX * 2;
+    const box = { left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 };
+    ctx.globalAlpha = .96;
+    ctx.fillStyle = "rgba(8,24,22,.94)";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(.8, pixelScale);
+    if (typeof ctx.roundRect === "function") {
+      ctx.beginPath();
+      ctx.roundRect(box.left, box.top, width, height, 6 * pixelScale);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(box.left, box.top, width, height);
+      ctx.strokeRect(box.left, box.top, width, height);
+    }
+    ctx.fillStyle = "#f2faf8";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y + .4 * pixelScale);
+    ctx.restore();
+    labelRects.push(paddedLabelRectangle(box, 3 * pixelScale));
+  }
+
   function drawTodayFlowArrow(fromEntry, toEntry) {
+    const machine = fromEntry?.machine;
+    if (!machine || machine.processPointerVisible === false) return;
     const startWorld = flowEntryWorldAnchor(fromEntry);
     const endWorld = flowEntryWorldAnchor(toEntry);
     if (!startWorld || !endWorld) return;
@@ -6542,97 +6628,73 @@
     const pixelScale = canvas.width / Math.max(1, rect.width);
     const ux = dx / length;
     const uy = dy / length;
-    const startInset = Math.min(length * .12, 10 * pixelScale);
-    const endInset = Math.min(length * .18, 16 * pixelScale);
+    const startInset = Math.min(length * .08, 8 * pixelScale);
+    const endInset = Math.min(length * .12, 12 * pixelScale);
     const sx = start[0] + ux * startInset;
     const sy = start[1] + uy * startInset;
     const ex = end[0] - ux * endInset;
     const ey = end[1] - uy * endInset;
-    const arrowSize = Math.max(6, 7.5 * pixelScale);
-    const normalX = -uy;
-    const normalY = ux;
+    const color = /^#[0-9a-f]{6}$/i.test(String(machine.processPointerColor || "")) ? machine.processPointerColor : "#52b7aa";
+    const width = clamp(Number(machine.processPointerWidth) || 1.65, .5, 12) * pixelScale;
+    const opacity = clamp(Number(machine.processPointerOpacity) || 100, 5, 100) / 100;
+    const style = ["solid", "dashed", "dotted"].includes(machine.processPointerStyle) ? machine.processPointerStyle : "solid";
+    const shape = ["straight", "elbow"].includes(machine.processPointerShape) ? machine.processPointerShape : "straight";
+    const endStyle = ["arrow", "dot", "ring", "none"].includes(machine.processPointerEndStyle) ? machine.processPointerEndStyle : "arrow";
+    const endSize = clamp(Number(machine.processPointerEndSize) || 3.2, 1, 14) * pixelScale;
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.globalAlpha = .92;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "rgba(7,18,18,.82)";
-    ctx.lineWidth = Math.max(4, 4.6 * pixelScale);
+    ctx.globalAlpha = opacity;
+    ctx.setLineDash(labelLineDash(style, Math.max(1, width / pixelScale), pixelScale));
+    traceProcessConnection(sx, sy, ex, ey, shape);
+    ctx.strokeStyle = "rgba(7,18,18,.84)";
+    ctx.lineWidth = Math.max(width + 2.4 * pixelScale, 3.5 * pixelScale);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.strokeStyle = "#67c9bc";
-    ctx.lineWidth = Math.max(1.5, 2.1 * pixelScale);
+    traceProcessConnection(sx, sy, ex, ey, shape);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(width, 1.2 * pixelScale);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
-    ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
-    ctx.closePath();
-    ctx.fillStyle = "#67c9bc";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(7,18,18,.9)";
-    ctx.lineWidth = Math.max(1, 1.2 * pixelScale);
-    ctx.stroke();
+    ctx.setLineDash([]);
+    const normalX = -uy;
+    const normalY = ux;
+    if (endStyle === "arrow") {
+      const arrowSize = Math.max(5 * pixelScale, endSize * 1.8);
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
+      ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else if (endStyle === "dot") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, Math.max(2.5 * pixelScale, endSize), 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else if (endStyle === "ring") {
+      ctx.beginPath();
+      ctx.arc(ex, ey, Math.max(3 * pixelScale, endSize), 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, width * .8);
+      ctx.stroke();
+    }
     ctx.restore();
+    const routeText = `${fromEntry.flow.text} → ${toEntry.flow.text}`;
+    drawProcessRouteTag(routeText, [
+      (startWorld[0] + endWorld[0]) / 2,
+      (startWorld[1] + endWorld[1]) / 2,
+      (startWorld[2] + endWorld[2]) / 2,
+    ], machine, color);
   }
 
-  function drawTodayProductionFlow(machineEntries, time) {
+  function drawTodayProductionFlow(machineEntries) {
     const nodes = buildTodayFlowNodes(machineEntries);
     TODAY_FLOW_LINKS.forEach(([fromKey, toKey]) => {
       const fromEntry = nodes.get(fromKey);
       const toEntry = nodes.get(toKey);
       if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry);
     });
-    const activeKeys = new Set();
-    [...nodes.entries()]
-      .sort((first, second) => first[1].flow.order - second[1].flow.order)
-      .forEach(([key, entry]) => {
-        const rendered = entry.rendered;
-        const machine = entry.machine;
-        const anchor = localPoint(
-          rendered,
-          rendered.w * clamp(Number(machine.processPointerAnchorXPercent ?? 50), 0, 100) / 100,
-          rendered.h * clamp(Number(machine.processPointerAnchorYPercent ?? 100), 0, 100) / 100,
-          rendered.d * clamp(Number(machine.processPointerAnchorZPercent ?? 50), 0, 100) / 100,
-        );
-        if (!anchor) return;
-        const labelKey = `today-flow:${key}`;
-        activeKeys.add(labelKey);
-        label(
-          entry.flow.text,
-          anchor[0], anchor[1], anchor[2],
-          "#67c9bc",
-          {
-            labelKey,
-            time,
-            visibleTarget: machine.processPointerVisible !== false,
-            labelLiftFeet: clamp(Number(machine.processPointerLabelOffset ?? (compactLabelViewport() ? 1.8 : 2.5)), 0, 60),
-            screenOffsetX: clamp(Number(machine.processPointerScreenOffsetX ?? 0), -500, 500),
-            screenOffsetY: clamp(Number(machine.processPointerScreenOffsetY ?? 0), -500, 500),
-            lineColor: machine.processPointerColor,
-            lineWidth: machine.processPointerWidth,
-            lineOpacity: machine.processPointerOpacity,
-            lineStyle: machine.processPointerStyle,
-            lineShape: machine.processPointerShape,
-            leaderSide: machine.processPointerLeaderSide,
-            targetStyle: machine.processPointerEndStyle,
-            targetSize: machine.processPointerEndSize,
-            forceVisible: true,
-            priority: true,
-            selected: false,
-            current: false,
-            cssSize: compactLabelViewport() ? 7.1 : 8.5,
-            textColor: "#f0f8f6",
-            backgroundColor: "#0b1c1a",
-            fontWeight: "regular",
-          }
-        );
-      });
-    return activeKeys;
+    return nodes;
   }
 
   function rectanglesIntersect(first, second) {
@@ -6770,7 +6832,7 @@
       return roomName || machineLabelText(machine);
     }
     if (isTodayOverview() && state.todayLabelMode === "necessary") {
-      return necessaryFlowLabel(machine)?.text || "";
+      return machineLabelText(machine);
     }
     const resolvedMode = state.cameraMode === "walk" ? "full" : state.todayLabelMode;
     if (resolvedMode === "abbreviated") {
@@ -9900,9 +9962,9 @@
     });
 
     if (isTodayOverview() && state.todayLabelMode === "necessary") {
-      const activeFlowLabelKeys = drawTodayProductionFlow(machineEntries, time);
-      trimLabelVisualStates(activeFlowLabelKeys, time);
-    } else if (!isTodayStage() || isTodayOverview()) {
+      drawTodayProductionFlow(machineEntries);
+    }
+    if (!isTodayStage() || isTodayOverview()) {
       // Construction stages use each machine label's independent reveal/retire
       // window. Legacy layouts default to the original one-stage label behavior.
       const labelBudget = smartLabelBudget();
@@ -9925,20 +9987,12 @@
         const labelTimelineAlpha = stageAlpha(labelReveal, labelRetire);
         const current = Math.round(state.stageFloat) === labelReveal;
         const stageCurrent = state.stage === labelReveal;
-        const flow = necessaryTodayLabels ? necessaryFlowLabel(entry.machine) : null;
-        const baseProfile = machineLabelProfile(entry.machine);
-        const profile = flow
-          ? {
-              ...baseProfile,
-              rank: 5,
-              cssSize: compactLabelViewport() ? 7.2 : 8.4,
-              maxChars: 18,
-            }
-          : baseProfile;
-        const text = flow?.text || displayMachineLabel(entry.machine, profile);
-        const repeatKey = flow?.key || (stageSpecificLabels
+        const flow = necessaryTodayLabels ? assignedProcessFlowForMachine(entry.machine) : null;
+        const profile = machineLabelProfile(entry.machine);
+        const text = displayMachineLabel(entry.machine, profile);
+        const repeatKey = necessaryTodayLabels || stageSpecificLabels
           ? labelKey
-          : `${entry.machine.type || "generic"}|${text.toLocaleLowerCase()}`);
+          : `${entry.machine.type || "generic"}|${text.toLocaleLowerCase()}`;
         const priorVisual = labelVisualStates.get(labelKey);
         const wasVisible = Boolean(priorVisual?.targetVisible || priorVisual?.alpha > .5);
         let eligible;
@@ -9994,7 +10048,7 @@
           labelKey,
           time,
           visibleTarget,
-          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? (flow ? 2.5 : 4)), 0, 60),
+          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 60),
           forceVisible: stageSpecificLabels || necessaryTodayLabels || (
             isTodayOverview() &&
             ["full", "abbreviated"].includes(state.todayLabelMode)
@@ -10015,7 +10069,7 @@
           leaderSide: machine.labelLeaderSide,
           targetStyle: machine.labelTargetStyle,
           targetSize: machine.labelTargetSize,
-          fontWeight: flow ? "regular" : machine.labelFontWeight,
+          fontWeight: machine.labelFontWeight,
         }
       );
       if (result.targetVisible) {

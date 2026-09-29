@@ -11,8 +11,8 @@ assert.ok(
   "Today must expose Necessary, Abbreviated, and Full label modes."
 );
 assert.ok(!plant.includes('state.todayLabelMode = "necessary";\n      state.labelTextMode'), "Returning to Today must not erase the viewer's selected Today label mode.");
-assert.ok(plant.includes('if (isTodayOverview() && state.todayLabelMode === "necessary")'), "Necessary mode must use the dedicated production-flow overlay.");
-assert.ok(plant.includes('else if (!isTodayStage() || isTodayOverview())'), "Full and Abbreviated Today modes must use normal machine-label rendering.");
+assert.ok(plant.includes('if (isTodayOverview() && state.todayLabelMode === "necessary")'), "Necessary mode must draw the dedicated production-flow overlay.");
+assert.ok(plant.includes('if (!isTodayStage() || isTodayOverview())'), "Today must run normal machine-label rendering even when the process overlay is enabled.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
 assert.ok(plant.includes("PROCESS_POINTER_FLOW_DEFINITIONS"), "Necessary production-flow labels must use stable flow definitions.");
 for (const label of ["Cutting", "Polisher", "Denver CNC", "Waterjet", "Washer", "Tempering Line", "Wrap", "Glass Truck", "Rack"]) {
@@ -31,10 +31,10 @@ for (const edge of [
   '["wrap", "rack"]',
 ]) assert.ok(plant.includes(edge), `Missing flow edge ${edge}`);
 assert.ok(plant.includes("function drawTodayFlowArrow"), "Today flow must render directional connectors.");
-assert.ok(plant.includes('ctx.fillStyle = "#67c9bc"') && plant.includes("arrowSize"), "Flow connectors must include visible arrowheads.");
+assert.ok(plant.includes("function traceProcessConnection") && plant.includes("arrowSize"), "Flow connectors must include visible styled directional arrows.");
 assert.ok(plant.includes("function drawTodayProductionFlow"), "Today flow must use its own overlay renderer.");
-assert.ok(plant.includes('labelKey = `today-flow:${key}`'), "Flow labels need dedicated identities instead of normal machine-label identities.");
-assert.ok(plant.includes('backgroundColor: "#0b1c1a"') && plant.includes('fontWeight: "regular"'), "Flow labels must use the compact special visual treatment.");
+assert.ok(plant.includes("function drawProcessRouteTag"), "Process pointers must render a dedicated route tag instead of reusing the normal machine-label renderer.");
+assert.ok(plant.includes("labelRects.push(paddedLabelRectangle(box"), "Process route tags must reserve screen space separately from machine labels.");
 assert.ok(plant.includes('if (machine.type === "room") return /office|maintenance/.test(name);'), "Office and Maintenance rooms must be eligible for their construction-stage labels.");
 assert.ok(plant.includes('const roomName = machine?.type === "room"'), "Room-stage labels must use full room names.");
 assert.ok(plant.includes("labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate"), "Construction stages must honor each machine label's independent reveal/retire window.");
@@ -51,7 +51,9 @@ assert.ok(plant.includes("labelLineColor") && plant.includes("labelLineWidth") &
 assert.ok(plant.includes("labelLineStyle") && plant.includes("labelLineShape") && plant.includes("labelLeaderSide"), "Each label leader needs independent line style, shape, and connection edge.");
 assert.ok(plant.includes("labelTargetStyle") && plant.includes("labelTargetSize") && plant.includes("labelScreenOffsetX") && plant.includes("labelScreenOffsetY"), "Label pointer endpoint and tag position must be independently adjustable.");
 assert.ok(plant.includes("function labelLeaderConnection") && plant.includes("function traceLabelLeader"), "The label renderer must support editable connection geometry.");
-assert.ok(plant.includes("function processPointerFlowLabel") && plant.includes("customText"), "Necessary production-flow labels must accept custom per-machine text.");
+assert.ok(plant.includes("function processPointerFlowLabel") && plant.includes("processPointerText"), "Process-flow labels must use their own processPointerText instead of machine label text.");
+assert.ok(plant.includes("const text = displayMachineLabel(entry.machine, profile)"), "Necessary Today mode must still render the normal machine label as a separate layer.");
+assert.ok(plant.includes("const flow = necessaryTodayLabels ? assignedProcessFlowForMachine(entry.machine) : null"), "Necessary Today machine-label filtering must use explicit process assignments without replacing machine label text.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");

@@ -1,0 +1,58 @@
+name: Package v0.13.19 deliverables
+
+on:
+  push:
+    branches:
+      - package/necessary-pointers-v0.13.19
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build full project ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/full-project
+          rsync -a --exclude='.git' --exclude='.github/workflows/package-v0.13.19.yml' ./ /tmp/full-project/
+          cd /tmp/full-project
+          zip -qr "$GITHUB_WORKSPACE/monroe-glass-plant-evolution-v0.13.19-full-project.zip" .
+
+      - name: Build changed files ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          mkdir -p /tmp/changed-files
+          git diff --name-only origin/main...HEAD | grep -v '^.github/workflows/package-v0.13.19.yml$' > /tmp/changed-paths.txt || true
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ -f "$file" ] || continue
+            mkdir -p "/tmp/changed-files/$(dirname "$file")"
+            cp "$file" "/tmp/changed-files/$file"
+          done < /tmp/changed-paths.txt
+          cd /tmp/changed-files
+          zip -qr "$GITHUB_WORKSPACE/monroe-glass-plant-evolution-v0.13.19-changed-files.zip" .
+
+      - name: Upload full project
+        uses: actions/upload-artifact@v4
+        with:
+          name: monroe-glass-plant-evolution-v0.13.19-full-project
+          path: monroe-glass-plant-evolution-v0.13.19-full-project.zip
+          if-no-files-found: error
+
+      - name: Upload changed files
+        uses: actions/upload-artifact@v4
+        with:
+          name: monroe-glass-plant-evolution-v0.13.19-changed-files
+          path: monroe-glass-plant-evolution-v0.13.19-changed-files.zip
+          if-no-files-found: error

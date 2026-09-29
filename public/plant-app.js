@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.20";
+  const APP_VERSION = "0.13.21";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -704,10 +704,13 @@
   function processPointerFlowLabel(key, machine) {
     const definition = processPointerFlowDefinition(key);
     if (!definition) return null;
-    const customText = machine?.labelUseMachineName === false && String(machine?.labelText || "").trim()
-      ? String(machine.labelText).trim()
-      : "";
+    const customText = String(machine?.processPointerText || "").trim();
     return { ...definition, text: customText || definition.text };
+  }
+
+  function assignedProcessFlowForMachine(machine) {
+    const key = processPointerKeyForMachine(machine);
+    return key ? processPointerFlowLabel(key, machine) : null;
   }
 
   function normalizeMachine(machine, index = 0) {
@@ -771,6 +774,7 @@
       labelTargetStyle: ["dot", "ring", "arrow", "none"].includes(machine.labelTargetStyle) ? machine.labelTargetStyle : "dot",
       labelTargetSize: clamp(Number.isFinite(Number(machine.labelTargetSize)) ? Number(machine.labelTargetSize) : 3.2, 1, 12),
       processPointerVisible: machine.processPointerVisible !== false,
+      processPointerText: String(machine.processPointerText || "").trim(),
       processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), 0, 100),
       processPointerAnchorYPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorYPercent)) ? Number(machine.processPointerAnchorYPercent) : (Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100), 0, 100),
       processPointerAnchorZPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorZPercent)) ? Number(machine.processPointerAnchorZPercent) : (Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50), 0, 100),
@@ -1461,7 +1465,7 @@
           "labelReveal", "labelRetire",
           "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset", "labelScreenOffsetX", "labelScreenOffsetY",
           "labelLineColor", "labelLineWidth", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
-          "processPointerVisible", "processPointerAnchorXPercent", "processPointerAnchorYPercent", "processPointerAnchorZPercent",
+          "processPointerVisible", "processPointerText", "processPointerAnchorXPercent", "processPointerAnchorYPercent", "processPointerAnchorZPercent",
           "processPointerLabelOffset", "processPointerScreenOffsetX", "processPointerScreenOffsetY", "processPointerColor",
           "processPointerWidth", "processPointerOpacity", "processPointerStyle", "processPointerShape",
           "processPointerLeaderSide", "processPointerEndStyle", "processPointerEndSize",
@@ -3821,14 +3825,14 @@
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
           <div class="process-pointer-intro">
-            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one machine, then assign or edit its Today / Necessary pointer.</span></div>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-pointer-check="processPointerVisible" data-needs-selection> Show pointer leader</label>
+            <div><strong>Production process pointer</strong><span data-process-pointer-summary>Select one machine, then assign it to the Today process flow.</span></div>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-pointer-check="processPointerVisible" data-needs-selection> Show outgoing process connection</label>
           </div>
           <fieldset class="process-pointer-controls">
-            <legend>Necessary label assignment</legend>
-            <p>Each Necessary label is saved to one exact machine instance. Reassigning a label moves it from the previous machine; choosing no pointer removes it.</p>
-            <label class="wide">Necessary label<select data-process-pointer-assignment data-needs-selection>
-              <option value="">No necessary pointer</option>
+            <legend>Process-flow assignment</legend>
+            <p>This assignment is separate from the machine label. It places the selected machine at one step in the Today glass-flow map and connects it to the next assigned process machine.</p>
+            <label class="wide">Process step<select data-process-pointer-assignment data-needs-selection>
+              <option value="">Not in process flow</option>
               <option value="cutting">Cutting</option>
               <option value="polisher">Polisher</option>
               <option value="denver-cnc">Denver CNC</option>
@@ -3839,25 +3843,26 @@
               <option value="glass-truck">Glass Truck</option>
               <option value="rack">Rack</option>
             </select></label>
+            <label class="wide">Process step text<input type="text" data-process-pointer-field="processPointerText" data-needs-selection placeholder="Uses the process step name"></label>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="remove-process-pointer" data-needs-selection>Remove pointer from this machine</button>
+              <button type="button" data-editor-action="remove-process-pointer" data-needs-selection>Remove from process flow</button>
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Pointer target on machine</legend>
-            <p>Move the pointer target independently from the machine label. X/Y/Z are percentages across the selected machine's local width, height, and depth.</p>
+            <legend>Connection point on machine</legend>
+            <p>This point is used by incoming and outgoing process arrows. It is completely separate from the normal machine-label anchor.</p>
             <div class="process-pointer-grid">
-              <label>Target X (%)<input type="number" data-process-pointer-field="processPointerAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
-              <label>Target Y (%)<input type="number" data-process-pointer-field="processPointerAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
-              <label>Target Z (%)<input type="number" data-process-pointer-field="processPointerAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+              <label>Connection X (%)<input type="number" data-process-pointer-field="processPointerAnchorXPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
+              <label>Connection Y (%)<input type="number" data-process-pointer-field="processPointerAnchorYPercent" data-needs-selection min="0" max="100" step="1" value="100"></label>
+              <label>Connection Z (%)<input type="number" data-process-pointer-field="processPointerAnchorZPercent" data-needs-selection min="0" max="100" step="1" value="50"></label>
             </div>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="center-process-pointer" data-needs-selection>Center target</button>
+              <button type="button" data-editor-action="center-process-pointer" data-needs-selection>Center connection point</button>
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Process tag position</legend>
-            <p>Move the small process tag without changing the regular machine label.</p>
+            <legend>Process route tag</legend>
+            <p>The route tag is drawn on the connection between machines (for example, Cutting → Polisher). These controls move that tag without moving either machine label.</p>
             <div class="process-pointer-grid">
               <label>Lift (ft)<input type="number" data-process-pointer-field="processPointerLabelOffset" data-needs-selection min="0" max="60" step="0.5" value="4"></label>
               <label>Tag X (px)<input type="number" data-process-pointer-field="processPointerScreenOffsetX" data-needs-selection min="-500" max="500" step="2" value="0"></label>
@@ -3865,22 +3870,21 @@
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>Leader line</legend>
+            <legend>Process connection line</legend>
             <div class="process-pointer-grid">
               <label>Color<input type="color" data-process-pointer-field="processPointerColor" data-needs-selection value="#52b7aa"></label>
               <label>Width<input type="number" data-process-pointer-field="processPointerWidth" data-needs-selection min="0.5" max="12" step="0.25" value="1.65"></label>
               <label>Opacity (%)<input type="number" data-process-pointer-field="processPointerOpacity" data-needs-selection min="5" max="100" step="5" value="100"></label>
               <label>Pattern<select data-process-pointer-field="processPointerStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
               <label>Shape<select data-process-pointer-field="processPointerShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
-              <label>Tag connection<select data-process-pointer-field="processPointerLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
               <label>Target end<select data-process-pointer-field="processPointerEndStyle" data-needs-selection><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
               <label>End size<input type="number" data-process-pointer-field="processPointerEndSize" data-needs-selection min="1" max="14" step="0.5" value="3.2"></label>
             </div>
             <div class="process-pointer-actions">
-              <button type="button" data-editor-action="reset-process-pointer" data-needs-selection>Reset entire process pointer</button>
+              <button type="button" data-editor-action="reset-process-pointer" data-needs-selection>Reset process connection</button>
             </div>
           </fieldset>
-          <div class="process-pointer-note"><strong>Today / Necessary flow only</strong><span>These controls edit the process pointer used to explain how glass moves through the facility. They do not alter the machine's normal label.</span></div>
+          <div class="process-pointer-note"><strong>Independent Today overlay</strong><span>Process pointers connect machines to machines. Machine labels are edited only in the Layout label section and remain visible as a separate layer.</span></div>
         </section>
         <section data-object-editor-panel="animation" class="object-editor-panel" hidden>
         <fieldset class="object-animation-controls">
@@ -4549,7 +4553,9 @@
         if (!machine || !processPointerKeyForMachine(machine)) return;
         pushHistory();
         const field = input.dataset.processPointerField;
-        if (field === "processPointerColor") {
+        if (field === "processPointerText") {
+          machine.processPointerText = String(input.value || "").trim();
+        } else if (field === "processPointerColor") {
           if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
         } else if (["processPointerStyle", "processPointerShape", "processPointerLeaderSide", "processPointerEndStyle"].includes(field)) {
           const allowed = {
@@ -4637,6 +4643,7 @@
       if (!machine || !processPointerKeyForMachine(machine)) return;
       pushHistory();
       machine.processPointerVisible = true;
+      machine.processPointerText = "";
       machine.processPointerAnchorXPercent = 50;
       machine.processPointerAnchorYPercent = 100;
       machine.processPointerAnchorZPercent = 50;

@@ -364,6 +364,26 @@
       }
     }
 
+    function refreshViewProjection(view = {}) {
+      viewProjection.value.copy(matrixForView(view));
+      // The plant scene is retained in world coordinates while labels are
+      // projected independently on the 2D overlay canvas. Force every shader
+      // material that consumes the shared view matrix to upload it on camera
+      // interaction frames so retained geometry can never remain visually
+      // stuck while labels continue to move.
+      opaqueMaterial.uniformsNeedUpdate = true;
+      transparentMaterial.uniformsNeedUpdate = true;
+      lineMaterial.uniformsNeedUpdate = true;
+      instanceBatches.forEach((entry) => {
+        if (entry?.mesh?.material) entry.mesh.material.uniformsNeedUpdate = true;
+      });
+      geometryInstanceBatches.forEach((entry) => {
+        (entry?.meshes || []).forEach((mesh) => {
+          if (mesh?.material) mesh.material.uniformsNeedUpdate = true;
+        });
+      });
+    }
+
     function beginFrame(nextWidth, nextHeight, project, view = {}) {
       if (disposed) return;
       frame += 1;
@@ -378,7 +398,7 @@
         renderer.setSize(width, height, false);
         resizeCount += 1;
       }
-      viewProjection.value.copy(matrixForView(view));
+      refreshViewProjection(view);
       retained.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       templates.forEach((entry) => { entry.used = false; });
       instanceBatches.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });

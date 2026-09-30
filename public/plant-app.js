@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.24";
+  const APP_VERSION = "0.13.25";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -754,6 +754,7 @@
       visible: machine.visible !== false,
       locked: machine.locked === true,
       showLabel: machine.showLabel !== false,
+      labelShowToday: machine.labelShowToday === true,
       labelReveal: Number.isFinite(Number(machine.labelReveal))
         ? clamp(Math.round(Number(machine.labelReveal)), 0, 98)
         : clamp(Math.round(Number(machine.reveal) || 0), 0, 98),
@@ -1225,6 +1226,7 @@
       endAnchorYPercent: 100,
       endAnchorZPercent: 50,
       tagVisible: false,
+      tagText: "",
       tagLift: 4,
       tagScreenOffsetX: 0,
       tagScreenOffsetY: 0,
@@ -1263,6 +1265,7 @@
       endAnchorYPercent: readNumber("endAnchorYPercent", 0, 100),
       endAnchorZPercent: readNumber("endAnchorZPercent", 0, 100),
       tagVisible: source.tagVisible !== undefined ? source.tagVisible === true : defaults.tagVisible === true,
+      tagText: String(source.tagText ?? defaults.tagText ?? "").trim().slice(0, 120),
       tagLift: readNumber("tagLift", 0, 60),
       tagScreenOffsetX: readNumber("tagScreenOffsetX", -500, 500),
       tagScreenOffsetY: readNumber("tagScreenOffsetY", -500, 500),
@@ -1628,7 +1631,7 @@
           "name", "short", "type", "x", "y", "z", "w", "d", "h",
           "naturalW", "naturalD", "naturalH", "scaleXPercent", "scaleYPercent", "scaleZPercent", "scaleEditMode",
           "rotationX", "rotationY", "rotationZ", "rotation", "color", "visible", "locked", "showLabel", "useDesignName",
-          "labelUseMachineName", "labelText", "labelAbbreviation", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase",
+          "labelUseMachineName", "labelText", "labelAbbreviation", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase", "labelShowToday",
           "labelReveal", "labelRetire",
           "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset", "labelScreenOffsetX", "labelScreenOffsetY",
           "labelLineColor", "labelLineWidth", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
@@ -1980,6 +1983,10 @@
 
   function applyProcessConnectionField(connection, field, rawValue) {
     if (!connection || !field) return false;
+    if (field === "tagText") {
+      connection.tagText = String(rawValue ?? "").trim().slice(0, 120);
+      return true;
+    }
     if (field === "color") {
       if (!/^#[0-9a-f]{6}$/i.test(String(rawValue || ""))) return false;
       connection.color = String(rawValue);
@@ -4193,6 +4200,8 @@
             </div>
           </fieldset>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
+          <label class="label-uppercase"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show this machine label on Today Overview in Necessary mode</label>
+          <p class="label-help">Today label visibility is controlled here per machine. Necessary mode always keeps assigned flow-machine labels and also shows any extra machine whose Today checkbox is enabled. Full and Abbreviated Today modes continue to use the normal label set.</p>
           <div class="label-action-grid">
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
@@ -4271,7 +4280,9 @@
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>7 · Optional route tag</legend>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show source → destination route tag on this line</label>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show route tag on this line</label>
+            <label class="wide">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Blank = automatic Source → Destination"></label>
+            <p>Enter any text you want. Leave it blank to automatically use the source and destination object/process names.</p>
             <div class="process-pointer-grid">
               <label>Lift (ft)<input type="number" data-process-connection-field="tagLift" min="0" max="60" step="0.5"></label>
               <label>Tag X (px)<input type="number" data-process-connection-field="tagScreenOffsetX" min="-500" max="500" step="2"></label>
@@ -7097,7 +7108,8 @@
       ctx.stroke();
     }
     ctx.restore();
-    const routeText = `${processConnectionEndpointText(connection, "source")} → ${processConnectionEndpointText(connection, "target")}`;
+    const automaticRouteText = `${processConnectionEndpointText(connection, "source")} → ${processConnectionEndpointText(connection, "target")}`;
+    const routeText = String(connection.tagText || "").trim() || automaticRouteText;
     drawProcessRouteTag(routeText, [
       (startWorld[0] + endWorld[0]) / 2,
       (startWorld[1] + endWorld[1]) / 2,
@@ -10420,7 +10432,7 @@
         if (stageSpecificLabels) {
           eligible = selected || (labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate(entry.machine));
         } else if (necessaryTodayLabels) {
-          eligible = selected || Boolean(flow);
+          eligible = selected || Boolean(flow) || machine.labelShowToday === true;
         } else if (isTodayOverview()) {
           eligible = selected || isStageEquipmentLabelCandidate(entry.machine);
         } else {

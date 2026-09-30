@@ -25,12 +25,14 @@ assert.ok(plant.includes('data-process-connection-check="visible"'), "Each objec
 for (const field of [
   "startAnchorXPercent", "startAnchorYPercent", "startAnchorZPercent",
   "endAnchorXPercent", "endAnchorYPercent", "endAnchorZPercent",
-  "tagLift", "tagScreenOffsetX", "tagScreenOffsetY",
+  "tagText", "tagLift", "tagScreenOffsetX", "tagScreenOffsetY",
   "color", "width", "opacity", "style", "shape", "endStyle", "endSize",
 ]) {
   assert.ok(plant.includes(`data-process-connection-field="${field}"`), `Process connection field missing: ${field}`);
 }
 assert.ok(plant.includes('data-process-connection-check="tagVisible"'), "Route tags must be independently optional per connection.");
+assert.ok(plant.includes('data-process-connection-field="tagText"'), "Route tags must expose editable per-connection text.");
+assert.ok(plant.includes('String(connection.tagText || "").trim() || automaticRouteText'), "Blank route-tag text must fall back to the automatic source → destination text.");
 
 assert.ok(plant.includes("function defaultProcessConnection"), "Object-to-object pointers need their own connection data model.");
 assert.ok(plant.includes("function normalizeProcessConnections"), "Saved process connections must be normalized independently from machines.");

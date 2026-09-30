@@ -54,6 +54,9 @@ assert.ok(plant.includes("function labelLeaderConnection") && plant.includes("fu
 assert.ok(plant.includes("function processPointerFlowLabel") && plant.includes("processPointerText"), "Process-flow labels must use their own processPointerText instead of machine label text.");
 assert.ok(plant.includes("const text = displayMachineLabel(entry.machine, profile)"), "Necessary Today mode must still render the normal machine label as a separate layer.");
 assert.ok(plant.includes("const flow = necessaryTodayLabels ? assignedProcessFlowForMachine(entry.machine) : null"), "Necessary Today machine-label filtering must use explicit process assignments without replacing machine label text.");
+assert.ok(plant.includes('data-label-check="labelShowToday"'), "Layout Label controls must expose per-machine Today Overview visibility.");
+assert.ok(plant.includes("labelShowToday: machine.labelShowToday === true"), "Saved machines must normalize explicit Today label visibility.");
+assert.ok(plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must show both process-machine labels and explicitly enabled extra machine labels.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");

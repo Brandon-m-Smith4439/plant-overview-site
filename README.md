@@ -1,3 +1,7 @@
+## Version 0.13.25
+
+Version 0.13.25 adds editable route-tag text to every object-to-object process pointer and explicit per-machine control for showing normal machine labels on Today Overview. In **Objects → Pointers → Optional route tag**, each connection now has a **Route tag text** field; leave it blank for the automatic source → destination name, or enter any custom wording. In **Objects → Label**, the new **Show this machine label on Today Overview in Necessary mode** checkbox lets any machine/person/object label remain visible on Today without changing the process pointer or process-role assignment. Existing route tags and Today behavior are preserved by default.
+
 ## Version 0.13.24
 
 Version 0.13.24 expands Today process pointers so either endpoint can be any placed layout object. In **Edit layout → Objects → Pointers**, choose an existing pointer and use **Source object** / **Destination object** to retarget the line directly to a machine, person, rack, truck, table, custom object, or other placed object. New pointers use the same all-object selectors. The connection remains independent from the normal machine label and its short label leader. Existing Cutting → Polisher and other process lines migrate to their exact current objects automatically. Process-role assignment is now optional metadata used for Necessary-label naming, not a requirement for connecting objects.
@@ -48,7 +52,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.24**
+Current project version: **0.13.25**
 
 ## Full-production rendering performance
 

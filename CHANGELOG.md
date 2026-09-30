@@ -1,3 +1,12 @@
+## 0.13.25 - 2026-09-30
+
+- Added editable `tagText` to each object-to-object process connection.
+- Added a **Route tag text** field under **Objects → Pointers → Optional route tag**; blank text automatically falls back to the source → destination names.
+- Route-tag text is persisted, normalized, reset with the connection, and remains independent from machine-label text.
+- Added per-machine `labelShowToday` control under **Objects → Label**.
+- **Show this machine label on Today Overview in Necessary mode** can expose any normal machine/person/object label on Today without assigning it a process role.
+- Existing process-flow machine labels remain visible in Necessary mode, preserving the current production-flow view while allowing extra selected labels.
+
 ## 0.13.24 - 2026-09-30
 
 - Expanded process pointers from process-role-only connections to exact object-to-object connections.

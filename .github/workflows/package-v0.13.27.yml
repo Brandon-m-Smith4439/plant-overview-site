@@ -1,0 +1,79 @@
+name: Validate and package v0.13.27
+
+on:
+  push:
+    branches:
+      - package/v0.13.27-validation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused regression suite
+        run: |
+          node --check public/plant-app.js
+          node tests/validate-process-pointers.mjs
+          node tests/validate-process-connection-runtime.mjs
+          node tests/validate-label-system.mjs
+          node tests/validate-layout-rendering.mjs
+          node tests/validate-layout-designer-tools.mjs
+          node tests/validate-layout-label-editor.mjs
+          node tests/validate-multi-selection.mjs
+          node tests/validate-motion-groups.mjs
+          node tests/validate-public-viewer-controls.mjs
+          node tests/validate-mobile-viewer.mjs
+          node tests/validate-overview-stability.mjs
+          node tests/validate-published-workspace.mjs
+          node tests/validate-tabbed-editors.mjs
+          node tests/validate-ui-encoding.mjs
+          node tests/validate-renderer-runtime.mjs
+
+      - name: Production build
+        run: npm run build
+
+      - name: Package full project
+        run: |
+          mkdir -p /tmp/full
+          rsync -a --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='.github/workflows/package-v0.13.27.yml' ./ /tmp/full/
+          cd /tmp/full
+          zip -qr "$GITHUB_WORKSPACE/monroe-glass-plant-evolution-v0.13.27-full-project.zip" .
+
+      - name: Package changed files
+        run: |
+          git fetch origin main
+          mkdir -p /tmp/changed
+          git diff --name-only origin/main...HEAD | grep -v '^.github/workflows/package-v0.13.27.yml$' > /tmp/changed.txt || true
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ -f "$file" ] || continue
+            mkdir -p "/tmp/changed/$(dirname "$file")"
+            cp "$file" "/tmp/changed/$file"
+          done < /tmp/changed.txt
+          cd /tmp/changed
+          zip -qr "$GITHUB_WORKSPACE/monroe-glass-plant-evolution-v0.13.27-changed-files.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v0.13.27-full-project
+          path: monroe-glass-plant-evolution-v0.13.27-full-project.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v0.13.27-changed-files
+          path: monroe-glass-plant-evolution-v0.13.27-changed-files.zip

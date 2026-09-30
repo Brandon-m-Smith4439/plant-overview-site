@@ -11,12 +11,17 @@ assert.ok(plant.includes('data-object-editor-tab="pointers"'), "Object editor ne
 assert.ok(plant.includes('data-object-editor-panel="pointers"'), "Object editor needs a dedicated process-pointer panel.");
 assert.ok(plant.includes('data-process-pointer-assignment'), "Pointers tab must assign machines to process nodes separately from connection geometry.");
 assert.ok(!plant.includes('data-process-node-field="processPointerText"'), "Pointers tab must not expose legacy machine-owned process-pointer text fields.");
-assert.ok(plant.includes('data-process-connection-source'), "Pointers tab must choose a source process machine directly.");
-assert.ok(plant.includes('data-process-connection-select'), "Pointers tab must select an exact machine-to-machine connection.");
-assert.ok(plant.includes('data-process-connection-target'), "Pointers tab must be able to add a connection to another process node.");
+assert.ok(plant.includes('data-process-connection-source'), "Pointers tab must choose a source object directly.");
+assert.ok(plant.includes('data-process-connection-select'), "Pointers tab must select an exact object-to-object connection.");
+assert.ok(plant.includes('data-process-connection-target'), "Pointers tab must be able to add a connection to any destination object.");
+assert.ok(plant.includes('data-process-connection-edit-source'), "Selected process pointers must be retargetable to any source object.");
+assert.ok(plant.includes('data-process-connection-edit-target'), "Selected process pointers must be retargetable to any destination object.");
+assert.ok(plant.includes("function processConnectionObjectOptions"), "Pointer endpoint selectors must be populated from all placed layout objects.");
+assert.ok(plant.includes("function retargetProcessConnection"), "Existing process pointers need a dedicated object-to-object retarget helper.");
+assert.ok(plant.includes("sourceId") && plant.includes("targetId"), "Saved process connections must use exact object instance IDs for endpoints.");
 assert.ok(plant.includes('data-editor-action="add-process-connection"'), "Pointers tab must add process connections.");
 assert.ok(plant.includes('data-editor-action="remove-process-connection"'), "Pointers tab must remove process connections.");
-assert.ok(plant.includes('data-process-connection-check="visible"'), "Each machine-to-machine pointer must have independent visibility.");
+assert.ok(plant.includes('data-process-connection-check="visible"'), "Each object-to-object pointer must have independent visibility.");
 for (const field of [
   "startAnchorXPercent", "startAnchorYPercent", "startAnchorZPercent",
   "endAnchorXPercent", "endAnchorYPercent", "endAnchorZPercent",
@@ -27,7 +32,7 @@ for (const field of [
 }
 assert.ok(plant.includes('data-process-connection-check="tagVisible"'), "Route tags must be independently optional per connection.");
 
-assert.ok(plant.includes("function defaultProcessConnection"), "Machine-to-machine pointers need their own connection data model.");
+assert.ok(plant.includes("function defaultProcessConnection"), "Object-to-object pointers need their own connection data model.");
 assert.ok(plant.includes("function normalizeProcessConnections"), "Saved process connections must be normalized independently from machines.");
 assert.ok(plant.includes("processConnections: state.processConnections"), "Saved layouts must persist connection geometry separately from process-node assignments.");
 assert.ok(plant.includes("processConnectionsInitialized: true"), "Connection migration must run only once for existing layouts.");
@@ -39,7 +44,7 @@ const updatePanelStart = plant.indexOf("function updateEditorPanel");
 const updatePanelEnd = plant.indexOf("function updateEditorLiveTransformFields", updatePanelStart);
 const updatePanelBody = plant.slice(updatePanelStart, updatePanelEnd);
 assert.ok(updatePanelBody.includes("selectedProcessConnection()"), "Pointer panel must edit the selected connection edge independently from the selected machine.");
-assert.ok(updatePanelBody.includes("processConnectionDisplayName(activeConnection, { includeMachines: true })"), "Pointer panel should identify the exact source and destination machines being edited.");
+assert.ok(updatePanelBody.includes("processConnectionDisplayName(activeConnection, { includeMachines: true })"), "Pointer panel should identify the exact source and destination objects being edited.");
 assert.ok(!updatePanelBody.includes('input.addEventListener("change"'), "Inspector refresh must not register duplicate handlers.");
 
 const handlerStart = plant.indexOf('panel.querySelectorAll("[data-process-connection-field]")', updatePanelEnd);
@@ -48,8 +53,8 @@ const handlerBody = plant.slice(handlerStart, handlerEnd);
 assert.ok(handlerBody.includes("const connection = selectedProcessConnection()"), "Connection controls must modify the selected edge object.");
 assert.ok(handlerBody.includes("applyProcessConnectionField(connection"), "Pointer edits must go through the connection-only field mutator.");
 assert.ok(plant.includes("function applyProcessConnectionField"), "Connection-only edits need a dedicated mutator that never receives a machine label object.");
-assert.ok(plant.includes("delete state.processConnections[connection.key]"), "Removing a pointer must remove the machine-to-machine edge.");
-assert.ok(plant.includes("state.processConnections[key] = defaultProcessConnection"), "Adding a pointer must create a new machine-to-machine edge.");
+assert.ok(plant.includes("delete state.processConnections[connection.key]"), "Removing a pointer must remove the object-to-object edge.");
+assert.ok(plant.includes("state.processConnections[key] = defaultProcessConnection(sourceId, targetId"), "Adding a pointer must create a new object-to-object edge using exact object IDs.");
 assert.ok(!handlerBody.includes("machine.labelAnchor"), "Process connection handlers must never edit machine-label anchors.");
 assert.ok(!handlerBody.includes("machine.labelLine"), "Process connection handlers must never edit machine-label leader styling.");
 
@@ -60,10 +65,13 @@ assert.ok(flowBody.includes("connection.startAnchorXPercent") || flowBody.includ
 assert.ok(flowBody.includes("connection.color"), "Renderer must use connection-owned line color.");
 assert.ok(flowBody.includes("connection.endStyle"), "Renderer must use connection-owned endpoint style.");
 assert.ok(flowBody.includes("Object.values(state.processConnections || {})"), "Today flow must render the saved edge collection rather than a fixed line tied to machine fields.");
-assert.ok(flowBody.includes("drawTodayFlowArrow(fromEntry, toEntry, connection)"), "Renderer must pass the edge object into the machine-to-machine arrow renderer.");
-assert.ok(!flowBody.includes("machine.processPointerAnchorXPercent"), "Machine-to-machine rendering must no longer read process geometry from the machine record.");
-assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Machine-to-machine rendering must never read machine-label pointer geometry.");
-assert.ok(!flowBody.includes("machine.labelLineColor"), "Machine-to-machine rendering must never read machine-label leader styling.");
+assert.ok(flowBody.includes("entriesById.get(connection.sourceId)"), "Today flow must resolve the exact source object by instance ID.");
+assert.ok(flowBody.includes("entriesById.get(connection.targetId)"), "Today flow must resolve the exact destination object by instance ID.");
+assert.ok(flowBody.includes("processConnectionEndpointText"), "Route tags must support arbitrary object names as endpoints.");
+assert.ok(flowBody.includes("drawTodayFlowArrow(fromEntry, toEntry, connection)"), "Renderer must pass the edge object into the object-to-object arrow renderer.");
+assert.ok(!flowBody.includes("machine.processPointerAnchorXPercent"), "Object-to-object rendering must no longer read process geometry from the machine record.");
+assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Object-to-object rendering must never read machine-label pointer geometry.");
+assert.ok(!flowBody.includes("machine.labelLineColor"), "Object-to-object rendering must never read machine-label leader styling.");
 
 const labelControlsStart = plant.indexOf('<fieldset class="label-controls">');
 const labelControlsEnd = plant.indexOf('<fieldset class="crane-controls">', labelControlsStart);
@@ -71,7 +79,7 @@ const labelControls = plant.slice(labelControlsStart, labelControlsEnd);
 assert.ok(labelControls.includes('data-label-field="labelAnchorXPercent"'), "Machine-label pointer must keep its own anchor controls.");
 assert.ok(labelControls.includes('data-label-field="labelLineColor"'), "Machine-label pointer must keep its own leader style controls.");
 assert.ok(!labelControls.includes("data-process-connection-field"), "Machine-label controls must not contain process connection geometry.");
-assert.ok(plant.includes("Machine-to-machine process line editor"), "Pointers panel should clearly identify itself as the machine-to-machine line editor.");
+assert.ok(plant.includes("Object-to-object process pointer editor"), "Pointers panel should clearly identify itself as the object-to-object line editor.");
 assert.ok(plant.includes("Machine labels are separate"), "Pointers panel should explicitly explain that machine labels are edited elsewhere.");
 
 assert.ok(css.includes("var(--editor-viewport-height"), "Layout editor height must be constrained by the real browser viewport.");
@@ -102,4 +110,4 @@ assert.ok(plant.includes("visibleTop = Math.max(frameRect.top, viewportTop + 8)"
 assert.ok(plant.includes("panel.style.top") && plant.includes("panel.style.height") && plant.includes('panel.style.bottom = "auto"'), "Editor must receive explicit top and height values instead of relying on conflicting legacy top/bottom CSS.");
 assert.ok(plant.includes('scrollRegion.tabIndex = 0') && plant.includes('aria-label", "Layout editor controls"'), "Scrollable controls should also be keyboard-focusable and accessible.");
 
-console.log("Independent machine-to-machine process connection editor and reliable sidebar scrolling checks passed.");
+console.log("Independent object-to-object process connection editor and reliable sidebar scrolling checks passed.");

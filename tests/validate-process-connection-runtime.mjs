@@ -14,7 +14,9 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const applyProcessConnectionField = new Function("clamp", `${helperSource}\nreturn applyProcessConnectionField;`)(clamp);
 
 const connection = {
-  key: "cutting->polisher",
+  key: "object:cutting-table->kodiak-polisher",
+  sourceId: "cutting-table",
+  targetId: "kodiak-polisher",
   fromKey: "cutting",
   toKey: "polisher",
   startAnchorXPercent: 50,
@@ -55,12 +57,19 @@ assert.equal(connection.color, "#123456");
 assert.equal(connection.width, 4.25);
 assert.equal(connection.shape, "elbow");
 assert.equal(connection.endStyle, "ring");
-assert.deepEqual(machineLabel, labelBefore, "Editing Cutting → Polisher must not change any machine-label pointer property.");
+assert.deepEqual(machineLabel, labelBefore, "Editing an object-to-object process pointer must not change any machine-label pointer property.");
 
 assert.equal(applyProcessConnectionField(connection, "startAnchorXPercent", "999"), true);
 assert.equal(connection.startAnchorXPercent, 100, "Connection anchors must clamp to valid bounds.");
 assert.equal(applyProcessConnectionField(connection, "labelAnchorXPercent", "5"), false, "Connection editor must reject machine-label fields.");
 assert.equal(applyProcessConnectionField(connection, "labelLineColor", "#000000"), false, "Connection editor must reject machine-label line styling.");
+
+
+assert.ok(source.includes('data-process-connection-edit-source'), "Existing pointers must expose an editable source object selector.");
+assert.ok(source.includes('data-process-connection-edit-target'), "Existing pointers must expose an editable destination object selector.");
+assert.ok(source.includes("processConnectionObjectOptions()"), "Endpoint dropdowns must use all placed objects, not only process-role nodes.");
+assert.ok(source.includes("entriesById.get(connection.sourceId)"), "Renderer must resolve arbitrary source objects by exact instance ID.");
+assert.ok(source.includes("entriesById.get(connection.targetId)"), "Renderer must resolve arbitrary destination objects by exact instance ID.");
 
 const firstProcessFieldOccurrence = source.indexOf('panel.querySelectorAll("[data-process-connection-field]")');
 const handlerStart = source.indexOf('panel.querySelectorAll("[data-process-connection-field]")', firstProcessFieldOccurrence + 1);
@@ -78,4 +87,64 @@ assert.ok(renderBody.includes("connection.color"));
 assert.ok(!renderBody.includes("machine.labelAnchor"));
 assert.ok(!renderBody.includes("machine.processPointerAnchor"));
 
-console.log("Runtime process-connection isolation checks passed: connection edits leave machine-label pointers untouched.");
+console.log("Runtime object-to-object process-connection isolation checks passed: connection edits leave machine-label pointers untouched.");
+
+// Execute the real connection endpoint model with a machine, a person, and a rack.
+// This proves retargeting is no longer limited to process-role nodes.
+const modelStart = source.indexOf("  function processConnectionKey(sourceId, targetId) {");
+const modelEnd = source.indexOf("  function loadLayout() {", modelStart);
+assert.ok(modelStart >= 0 && modelEnd > modelStart, "Object-to-object process connection model must be present.");
+const modelSource = source.slice(modelStart, modelEnd);
+const PROCESS_POINTER_FLOW_DEFINITIONS = [
+  { key: "cutting", text: "Cutting", order: 0 },
+  { key: "polisher", text: "Polisher", order: 1 },
+];
+const processPointerFlowDefinition = (key) => PROCESS_POINTER_FLOW_DEFINITIONS.find((item) => item.key === key) || null;
+const objects = new Map([
+  ["cutting-table", { instanceId: "cutting-table", name: "Cutting Table", type: "cutting" }],
+  ["kodiak-polisher", { instanceId: "kodiak-polisher", name: "Kodiak Polisher", type: "kodiak" }],
+  ["person-1", { instanceId: "person-1", name: "Operator", type: "person" }],
+  ["rack-1", { instanceId: "rack-1", name: "Glass Rack 12", type: "glassRack" }],
+]);
+const objectState = {
+  processPointers: { cutting: "cutting-table", polisher: "kodiak-polisher" },
+  processConnections: {},
+  selectedProcessConnectionKey: "",
+};
+const model = new Function(
+  "state", "PROCESS_POINTER_FLOW_DEFINITIONS", "processPointerFlowDefinition", "machineById", "clamp",
+  `${modelSource}\nreturn { processConnectionKey, defaultProcessConnection, normalizeProcessConnections, normalizeProcessConnection, processConnectionRoleForObject };`,
+)(objectState, PROCESS_POINTER_FLOW_DEFINITIONS, processPointerFlowDefinition, (id) => objects.get(id) || null, clamp);
+
+const retargetStart = source.indexOf("  function retargetProcessConnection(connection, sourceId, targetId) {");
+const retargetEnd = source.indexOf("  function applyProcessConnectionField", retargetStart);
+assert.ok(retargetStart >= 0 && retargetEnd > retargetStart, "Retarget helper must be present.");
+const retargetSource = source.slice(retargetStart, retargetEnd);
+const retargetProcessConnection = new Function(
+  "state", "machineById", "processConnectionKey", "normalizeProcessConnection", "processConnectionRoleForObject",
+  `${retargetSource}\nreturn retargetProcessConnection;`,
+)(objectState, (id) => objects.get(id) || null, model.processConnectionKey, model.normalizeProcessConnection, model.processConnectionRoleForObject);
+
+const migrated = model.normalizeProcessConnections({
+  "cutting->polisher": { fromKey: "cutting", toKey: "polisher", width: 2.75 },
+}, objectState.processPointers, [...objects.values()]);
+const migratedConnection = Object.values(migrated)[0];
+assert.equal(migratedConnection.sourceId, "cutting-table", "Legacy Cutting source must migrate to its exact object ID.");
+assert.equal(migratedConnection.targetId, "kodiak-polisher", "Legacy Polisher destination must migrate to its exact object ID.");
+assert.equal(migratedConnection.width, 2.75, "Legacy connection styling must survive endpoint migration.");
+
+const arbitrary = model.defaultProcessConnection("cutting-table", "kodiak-polisher", { fromKey: "cutting", toKey: "polisher" });
+objectState.processConnections[arbitrary.key] = arbitrary;
+objectState.selectedProcessConnectionKey = arbitrary.key;
+const labelIsolation = structuredClone(machineLabel);
+const retargeted = retargetProcessConnection(arbitrary, "person-1", "rack-1");
+assert.ok(retargeted, "A process pointer must retarget from a process machine to arbitrary placed objects.");
+assert.equal(retargeted.sourceId, "person-1");
+assert.equal(retargeted.targetId, "rack-1");
+assert.equal(retargeted.fromKey, "", "A person without a process role must not be forced into a process-node key.");
+assert.equal(retargeted.toKey, "", "A rack without a process role must not be forced into a process-node key.");
+assert.ok(objectState.processConnections[retargeted.key], "Retargeted pointer must be persisted under its new object-to-object key.");
+assert.equal(objectState.processConnections[arbitrary.key], undefined, "Old connection key must be removed after retargeting.");
+assert.deepEqual(machineLabel, labelIsolation, "Retargeting to a person/rack must not touch machine-label pointer properties.");
+
+console.log("Arbitrary object endpoint runtime checks passed: process pointers can target machines, people, racks, and other placed objects.");

@@ -56,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/full-project
-          rsync -a --exclude='.git' --exclude='.github/workflows/verify-v0.13.27.yml' ./ /tmp/full-project/
+          rsync -a --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='dist' --exclude='worker-configuration.d.ts' --exclude='.github/workflows/verify-v0.13.27.yml' ./ /tmp/full-project/
           cd /tmp/full-project
           zip -qr "$GITHUB_WORKSPACE/monroe-glass-plant-evolution-v0.13.27-full-project.zip" .
 

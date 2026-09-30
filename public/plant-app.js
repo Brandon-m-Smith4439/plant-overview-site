@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.26";
+  const APP_VERSION = "0.13.27";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -3253,25 +3253,6 @@
     }
 
     const assignedProcessPointerKey = machine ? processPointerKeyForMachine(machine) : "";
-    const todayLabelButton = panel.querySelector("[data-editor-action='toggle-today-label']");
-    const todayLabelSummary = panel.querySelector("[data-today-label-summary]");
-    if (todayLabelButton) {
-      const explicitlyShown = Boolean(machine?.labelShowToday);
-      todayLabelButton.disabled = !machine;
-      todayLabelButton.classList.toggle("active", explicitlyShown);
-      todayLabelButton.setAttribute("aria-pressed", String(explicitlyShown));
-      todayLabelButton.textContent = explicitlyShown ? "Hide label on Today" : "Show label on Today";
-    }
-    if (todayLabelSummary) {
-      const role = assignedProcessPointerKey ? processPointerFlowDefinition(assignedProcessPointerKey)?.text : "";
-      todayLabelSummary.textContent = !machine
-        ? "Select one object to choose whether its normal label appears on Today."
-        : role
-          ? `${machine.name} already appears automatically in Necessary mode because it is assigned as ${role}.`
-          : machine.labelShowToday === true
-            ? `${machine.name} is explicitly enabled on Today Overview in Necessary mode.`
-            : `${machine.name} is currently hidden in Necessary mode unless it is selected.`;
-    }
     const processPointerAssignment = panel.querySelector("[data-process-pointer-assignment]");
     if (processPointerAssignment) {
       processPointerAssignment.disabled = !machine;
@@ -4204,6 +4185,10 @@
           <p data-label-source-summary>Select one object to edit its label.</p>
           <label class="wide">Label text<input type="text" data-label-field="labelText" data-needs-selection placeholder="Uses the machine name"></label>
           <label class="wide">Abbreviated label<input type="text" data-label-field="labelAbbreviation" data-needs-selection placeholder="Automatically shortened when left blank"></label>
+          <div class="today-label-control">
+            <div><strong>Today Overview · Necessary mode</strong><span>Control this normal machine/object label independently from process pointers and route tags.</span></div>
+            <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show this machine/object label in Necessary mode</label>
+          </div>
           <div class="label-format-grid">
             <label>Text color<input type="color" data-label-field="labelTextColor" data-needs-selection value="#ffffff"></label>
             <label>Background<input type="color" data-label-field="labelBackgroundColor" data-needs-selection value="#141c20"></label>
@@ -4241,11 +4226,6 @@
             </div>
           </fieldset>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
-          <div class="today-label-control">
-            <div><strong>Today Overview · Necessary mode</strong><span data-today-label-summary>Select one object to choose whether its normal label appears on Today.</span></div>
-            <button type="button" data-editor-action="toggle-today-label" data-needs-selection aria-pressed="false">Show label on Today</button>
-          </div>
-          <p class="label-help">This controls the normal machine/object label only. It does not change process pointers or route tags. Objects assigned to a Necessary process role already appear automatically; this setting is for any additional label you want visible on Today.</p>
           <div class="label-action-grid">
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
@@ -4262,8 +4242,6 @@
           <fieldset class="process-pointer-controls process-connection-picker">
             <legend>1 · Choose the process line</legend>
             <label class="wide">Line to edit<select data-process-connection-select><option value="">No object-to-object process pointers</option></select></label>
-            <label class="wide process-route-tag-text">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Blank = automatic Source → Destination"></label>
-            <p class="process-route-tag-preview" data-process-route-tag-preview>Select a line to edit its route-tag text.</p>
             <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="visible"> Show selected object-to-object line</label>
             <div class="process-pointer-actions">
               <button type="button" data-editor-action="remove-process-connection">Remove selected line</button>
@@ -4316,9 +4294,11 @@
             <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection">Reset selected process line</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>7 · Route tag visibility & position</legend>
+            <legend>7 · Optional route tag</legend>
             <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show route tag on this line</label>
-            <p>The route-tag text is edited at the top of this Pointers tab for the currently selected line.</p>
+            <label class="wide process-route-tag-text">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Blank = automatic Source → Destination"></label>
+            <p class="process-route-tag-preview" data-process-route-tag-preview>Select a line to edit its route-tag text.</p>
+            <p>Type any text you want. Leave it blank to use the automatic source → destination wording.</p>
             <div class="process-pointer-grid">
               <label>Lift (ft)<input type="number" data-process-connection-field="tagLift" min="0" max="60" step="0.5"></label>
               <label>Tag X (px)<input type="number" data-process-connection-field="tagScreenOffsetX" min="-500" max="500" step="2"></label>
@@ -4992,16 +4972,6 @@
         renderPerformance.invalidate();
         updateEditorPanel();
       });
-    });
-    panel.querySelector("[data-editor-action='toggle-today-label']")?.addEventListener("click", () => {
-      const machine = selectedMachine();
-      if (!machine) return;
-      pushHistory();
-      machine.labelShowToday = machine.labelShowToday !== true;
-      persistLayout();
-      renderPerformance.invalidate();
-      updateEditorPanel();
-      showToast(`${machine.name} label ${machine.labelShowToday ? "will show" : "will be hidden"} on Today Overview in Necessary mode.`);
     });
     panel.querySelector("[data-editor-action='reset-selected-label']")?.addEventListener("click", () => {
       const machine = selectedMachine();

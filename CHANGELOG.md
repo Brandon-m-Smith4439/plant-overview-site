@@ -1,3 +1,11 @@
+## 0.13.27 - 2026-09-30
+
+- Moved the Today Necessary-mode label control near the top of the dedicated **Objects → Labels** tab as a normal checkbox.
+- Replaced the separate Today label action-button workflow with **Show this machine/object label in Necessary mode**.
+- Moved editable route-tag text into **Pointers → 7 · Optional route tag**, directly beside its visibility and position controls.
+- Kept the live route-tag preview and live text editing behavior from v0.13.26.
+- Preserved the dedicated Labels tab and complete separation between process connections and normal machine-label pointers.
+
 ## 0.13.26 - 2026-09-30
 
 - Added a dedicated **Objects → Labels** tab so machine/object label controls are no longer buried inside Transform.

@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.27";
+  const APP_VERSION = "0.13.28";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -10473,7 +10473,7 @@
         if (stageSpecificLabels) {
           eligible = selected || (labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate(entry.machine));
         } else if (necessaryTodayLabels) {
-          eligible = selected || Boolean(flow) || machine.labelShowToday === true;
+          eligible = selected || Boolean(flow) || entry.machine.labelShowToday === true;
         } else if (isTodayOverview()) {
           eligible = selected || isStageEquipmentLabelCandidate(entry.machine);
         } else {

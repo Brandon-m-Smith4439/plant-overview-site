@@ -1,3 +1,11 @@
+## 0.13.31 - 2026-09-30
+
+- Fixed normal machine labels in **Today → Necessary** mode being forced on whenever the machine was assigned to a process-flow node.
+- Made **Show this machine/object label in Necessary mode** the authoritative visibility control for the normal machine/object label.
+- Kept process pointers and route tags independent, so hiding a Kodiak Polisher machine label does not remove the production-flow route.
+- Clear the selected label's transition state immediately when the Necessary-mode toggle changes and show explicit editor feedback.
+- Added a regression guard preventing process-flow assignment from re-enabling a hidden normal machine label.
+
 ## 0.13.30 - 2026-09-30
 
 - Fixed Railway/public sessions being able to run stale cached plant renderer scripts after a new site deployment.

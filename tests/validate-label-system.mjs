@@ -58,7 +58,8 @@ assert.ok(plant.includes('data-object-editor-tab="labels"') && plant.includes('d
 assert.ok(plant.includes('data-label-check="labelShowToday"'), "Labels tab must expose a normal Today Overview visibility checkbox.");
 assert.ok(plant.includes("Show this machine/object label in Necessary mode"), "Today Necessary-mode label visibility must be clearly labeled near the top of the Labels tab.");
 assert.ok(plant.includes("labelShowToday: machine.labelShowToday === true"), "Saved machines must normalize explicit Today label visibility.");
-assert.ok(plant.includes("Boolean(flow) || entry.machine.labelShowToday === true"), "Necessary Today mode must read Today visibility from the current label-candidate entry.");
+assert.ok(plant.includes("eligible = entry.machine.labelShowToday === true;"), "Necessary Today normal machine labels must obey only their explicit Today visibility toggle.");
+assert.ok(!plant.includes("Boolean(flow) || entry.machine.labelShowToday === true"), "A process-flow assignment must not force a normal machine label visible in Necessary mode.");
 assert.ok(!plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must not reference an undefined machine variable, which aborts the render loop before the 3D scene is presented.");
 assert.ok(plant.includes("function drawSceneObjects(time, presentPhysicalScene = null)"), "Plant scene drawing must expose a physical-scene presentation boundary before 2D overlays.");
 const sceneDrawBody = plant.slice(plant.indexOf("function drawSceneObjects(time, presentPhysicalScene = null)"), plant.indexOf("function drawDesignTextLabels"));

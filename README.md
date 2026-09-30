@@ -1,3 +1,7 @@
+## Version 0.13.31
+
+Version 0.13.31 separates **Necessary-mode process routing** from **normal machine-label visibility**. A machine participating in the Cutting → Polisher → CNC/Waterjet → Washer → Tempering → Wrap route no longer forces its normal machine label on. The **Show this machine/object label in Necessary mode** checkbox is now authoritative for that normal label, even for process-flow machines such as the Kodiak polishers. Turning the label off leaves the independent process pointer and route tag untouched. The selected label's visual state is cleared immediately when the toggle changes so the editor gives instant feedback.
+
 ## Version 0.13.30
 
 Version 0.13.30 fixes production viewer releases being paired with stale cached legacy renderer scripts. The Next.js shell uses hashed assets, but the large plant viewer scripts intentionally retain stable filenames such as `/plant-app.js` and `/three-depth-scene-renderer.js`. The loader previously added a cache-busting query only on localhost, allowing a Railway browser session to display the newest page/version badge while continuing to execute an older camera renderer. Every hosted and local legacy script now receives `?release=0.13.30`, the in-memory script cache is release-scoped, and the standalone Plant Layout / Machine Studio previews use the same release token. This guarantees that the v0.13.29 camera-layer fixes actually reach the browser after deployment.
@@ -72,7 +76,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.30**
+Current project version: **0.13.31**
 
 ## Full-production rendering performance
 

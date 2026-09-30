@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.30";
+  const APP_VERSION = "0.13.31";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -4186,7 +4186,7 @@
           <label class="wide">Label text<input type="text" data-label-field="labelText" data-needs-selection placeholder="Uses the machine name"></label>
           <label class="wide">Abbreviated label<input type="text" data-label-field="labelAbbreviation" data-needs-selection placeholder="Automatically shortened when left blank"></label>
           <div class="today-label-control">
-            <div><strong>Today Overview · Necessary mode</strong><span>Control this normal machine/object label independently from process pointers and route tags.</span></div>
+            <div><strong>Today Overview · Necessary mode</strong><span>Control this normal machine/object label independently. Turning it off does not hide process pointers or route tags.</span></div>
             <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show this machine/object label in Necessary mode</label>
           </div>
           <div class="label-format-grid">
@@ -4968,6 +4968,12 @@
         if (!machine) return;
         pushHistory();
         machine[input.dataset.labelCheck] = input.checked;
+        if (input.dataset.labelCheck === "labelShowToday") {
+          labelVisualStates.delete(String(machine.instanceId));
+          showToast(input.checked
+            ? `${machine.name} label enabled in Necessary mode.`
+            : `${machine.name} label hidden in Necessary mode. Process pointers stay visible.`);
+        }
         persistLayout();
         renderPerformance.invalidate();
         updateEditorPanel();
@@ -10480,7 +10486,7 @@
         if (stageSpecificLabels) {
           eligible = selected || (labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate(entry.machine));
         } else if (necessaryTodayLabels) {
-          eligible = selected || Boolean(flow) || entry.machine.labelShowToday === true;
+          eligible = entry.machine.labelShowToday === true;
         } else if (isTodayOverview()) {
           eligible = selected || isStageEquipmentLabelCandidate(entry.machine);
         } else {

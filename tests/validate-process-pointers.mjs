@@ -32,7 +32,7 @@ for (const field of [
 }
 assert.ok(plant.includes('data-process-connection-check="tagVisible"'), "Route tags must be independently optional per connection.");
 assert.ok(plant.includes('data-process-connection-field="tagText"'), "Route tags must expose editable per-connection text.");
-assert.ok(plant.indexOf('data-process-connection-field="tagText"') < plant.indexOf('<legend>2 · Point this line to any object</legend>'), "Route-tag text must be visible near the selected line instead of buried at the bottom of the Pointers tab.");
+assert.ok(plant.includes('<legend>7 · Optional route tag</legend>'), "Route-tag text must live in the dedicated Optional route tag section.");
 assert.ok(plant.includes('data-process-route-tag-preview'), "Pointers tab must show a route-tag text preview.");
 assert.ok(plant.includes('routeTagTextInput?.addEventListener("input"'), "Route-tag text must update live while typing.");
 assert.ok(plant.includes('String(connection.tagText || "").trim() || automaticRouteText'), "Blank route-tag text must fall back to the automatic source → destination text.");

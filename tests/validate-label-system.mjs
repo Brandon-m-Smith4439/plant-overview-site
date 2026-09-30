@@ -58,7 +58,8 @@ assert.ok(plant.includes('data-object-editor-tab="labels"') && plant.includes('d
 assert.ok(plant.includes('data-label-check="labelShowToday"'), "Labels tab must expose a normal Today Overview visibility checkbox.");
 assert.ok(plant.includes("Show this machine/object label in Necessary mode"), "Today Necessary-mode label visibility must be clearly labeled near the top of the Labels tab.");
 assert.ok(plant.includes("labelShowToday: machine.labelShowToday === true"), "Saved machines must normalize explicit Today label visibility.");
-assert.ok(plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must show both process-machine labels and explicitly enabled extra machine labels.");
+assert.ok(plant.includes("Boolean(flow) || entry.machine.labelShowToday === true"), "Necessary Today mode must read Today visibility from the current label-candidate entry.");
+assert.ok(!plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must not reference an undefined machine variable, which aborts the render loop before the 3D scene is presented.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");

@@ -1,12 +1,18 @@
+## 0.13.27 - 2026-09-30
+
+- Made the Today Necessary-mode label control impossible to miss by placing it near the top of **Objects → Labels** as a normal checkbox.
+- Moved editable route-tag text into **Pointers → 7 · Optional route tag**, directly beside route-tag visibility and positioning controls.
+- Added an inline route-tag preview in the Route Tag section.
+- Removed the separate Today-label action-button workflow so label visibility behaves like the other label properties.
+- Preserved full separation between route tags, process-line geometry, and normal machine-label pointers.
+
 ## 0.13.26 - 2026-09-30
 
-- Added a dedicated **Objects → Labels** tab so machine/object label controls are no longer buried inside Transform.
-- Replaced the easy-to-miss Today checkbox with a prominent **Show label on Today / Hide label on Today** button and status explanation.
-- Kept Necessary process-role labels automatic while allowing any extra object label to be explicitly shown on Today Overview.
-- Moved **Route tag text** directly beneath the selected process line in the Pointers tab.
-- Added a route-tag preview that clearly shows custom versus automatic source → destination text.
-- Route-tag text now updates live while typing and persists per connection without changing either endpoint or any machine-label pointer settings.
-- Expanded the desktop object-editor tab strip from five to six tabs to make Labels a first-class editing surface.
+- Moved route-tag text editing directly into **Pointers → 7 · Optional route tag** so the text field sits with the route-tag visibility and position controls.
+- Added a live route-tag preview under the text field for the currently selected object-to-object process line.
+- Moved Today Necessary-mode label visibility to a prominent **Today Overview** block near the top of **Objects → Label**.
+- Replaced the less-visible Today action with a normal checkbox: **Show this machine/object label in Necessary mode**.
+- Kept route-tag text, process-pointer geometry, and normal machine-label settings fully independent.
 
 ## 0.13.25 - 2026-09-30
 

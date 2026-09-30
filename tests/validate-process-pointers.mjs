@@ -32,9 +32,7 @@ for (const field of [
 }
 assert.ok(plant.includes('data-process-connection-check="tagVisible"'), "Route tags must be independently optional per connection.");
 assert.ok(plant.includes('data-process-connection-field="tagText"'), "Route tags must expose editable per-connection text.");
-assert.ok(plant.indexOf('data-process-connection-field="tagText"') < plant.indexOf('<legend>2 · Point this line to any object</legend>'), "Route-tag text must be visible near the selected line instead of buried at the bottom of the Pointers tab.");
-assert.ok(plant.includes('data-process-route-tag-preview'), "Pointers tab must show a route-tag text preview.");
-assert.ok(plant.includes('routeTagTextInput?.addEventListener("input"'), "Route-tag text must update live while typing.");
+assert.ok(plant.includes('<legend>7 · Optional route tag</legend>') && plant.includes('data-process-route-tag-preview'), "Route-tag text and preview must live inside the dedicated Route Tag section.");
 assert.ok(plant.includes('String(connection.tagText || "").trim() || automaticRouteText'), "Blank route-tag text must fall back to the automatic source → destination text.");
 
 assert.ok(plant.includes("function defaultProcessConnection"), "Object-to-object pointers need their own connection data model.");
@@ -78,8 +76,8 @@ assert.ok(!flowBody.includes("machine.processPointerAnchorXPercent"), "Object-to
 assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Object-to-object rendering must never read machine-label pointer geometry.");
 assert.ok(!flowBody.includes("machine.labelLineColor"), "Object-to-object rendering must never read machine-label leader styling.");
 
-const labelControlsStart = plant.indexOf('<section data-object-editor-panel="labels"');
-const labelControlsEnd = plant.indexOf('<section data-object-editor-panel="pointers"', labelControlsStart);
+const labelControlsStart = plant.indexOf('<fieldset class="label-controls">');
+const labelControlsEnd = plant.indexOf('<fieldset class="crane-controls">', labelControlsStart);
 const labelControls = plant.slice(labelControlsStart, labelControlsEnd);
 assert.ok(labelControls.includes('data-label-field="labelAnchorXPercent"'), "Machine-label pointer must keep its own anchor controls.");
 assert.ok(labelControls.includes('data-label-field="labelLineColor"'), "Machine-label pointer must keep its own leader style controls.");
@@ -89,7 +87,7 @@ assert.ok(plant.includes("Machine labels are separate"), "Pointers panel should 
 
 assert.ok(css.includes("var(--editor-viewport-height"), "Layout editor height must be constrained by the real browser viewport.");
 assert.ok(plant.includes("viewportTop + viewportHeight") && plant.includes("visibleBottom - visibleTop"), "Editor must compute remaining visible browser height from the actual visual viewport and rendered frame intersection.");
-assert.ok(css.includes("grid-template-columns: repeat(6, minmax(0, 1fr))"), "Desktop object editor needs room for the dedicated Labels tab.");
+assert.ok(css.includes("grid-template-columns: repeat(5, minmax(0, 1fr))"), "Desktop object editor needs room for the new fifth tab.");
 assert.ok(css.includes(".process-pointer-panel"), "Dedicated pointer controls need their own styling.");
 
 assert.ok(plant.includes('scrollRegion.className = "editor-scroll-region"'), "Editor controls must live in a dedicated scroll region.");

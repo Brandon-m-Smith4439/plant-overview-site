@@ -54,9 +54,8 @@ assert.ok(plant.includes("function labelLeaderConnection") && plant.includes("fu
 assert.ok(plant.includes("function processPointerFlowLabel") && plant.includes("processPointerText"), "Process-flow labels must use their own processPointerText instead of machine label text.");
 assert.ok(plant.includes("const text = displayMachineLabel(entry.machine, profile)"), "Necessary Today mode must still render the normal machine label as a separate layer.");
 assert.ok(plant.includes("const flow = necessaryTodayLabels ? assignedProcessFlowForMachine(entry.machine) : null"), "Necessary Today machine-label filtering must use explicit process assignments without replacing machine label text.");
-assert.ok(plant.includes('data-object-editor-tab="labels"') && plant.includes('data-object-editor-panel="labels"'), "Plant editor must expose a dedicated Labels tab.");
-assert.ok(plant.includes('data-editor-action="toggle-today-label"'), "Labels tab must expose an explicit Today Overview label toggle button.");
-assert.ok(plant.includes('data-today-label-summary'), "Labels tab must explain each selected object's Today Necessary label state.");
+assert.ok(plant.includes('data-label-check="labelShowToday"'), "Layout Label controls must expose per-machine Today Overview visibility.");
+assert.ok(plant.includes('<legend>Today Overview</legend>') && plant.includes('Show this machine/object label in Necessary mode'), "Today Necessary-mode label visibility must be a clearly visible checkbox near the top of the Label editor.");
 assert.ok(plant.includes("labelShowToday: machine.labelShowToday === true"), "Saved machines must normalize explicit Today label visibility.");
 assert.ok(plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must show both process-machine labels and explicitly enabled extra machine labels.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");

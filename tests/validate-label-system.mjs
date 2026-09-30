@@ -60,6 +60,9 @@ assert.ok(plant.includes("Show this machine/object label in Necessary mode"), "T
 assert.ok(plant.includes("labelShowToday: machine.labelShowToday === true"), "Saved machines must normalize explicit Today label visibility.");
 assert.ok(plant.includes("Boolean(flow) || entry.machine.labelShowToday === true"), "Necessary Today mode must read Today visibility from the current label-candidate entry.");
 assert.ok(!plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must not reference an undefined machine variable, which aborts the render loop before the 3D scene is presented.");
+assert.ok(plant.includes("function drawSceneObjects(time, presentPhysicalScene = null)"), "Plant scene drawing must expose a physical-scene presentation boundary before 2D overlays.");
+const sceneDrawBody = plant.slice(plant.indexOf("function drawSceneObjects(time, presentPhysicalScene = null)"), plant.indexOf("function drawDesignTextLabels"));
+assert.ok(sceneDrawBody.indexOf("presentPhysicalScene?.()") < sceneDrawBody.indexOf("drawTodayProductionFlow(machineEntries)"), "Necessary-mode pointers and labels must be drawn only after the physical 3D scene is presented.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");

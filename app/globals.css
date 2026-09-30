@@ -4510,7 +4510,7 @@ summary:focus-visible {
 
 .object-editor-tabs {
   top: -18px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0 -4px 13px;
   padding: 7px 4px;
 }
@@ -7248,6 +7248,61 @@ body.viewer-fullscreen-fallback-active {
 
 
 /* v0.13.15 — independent production-process pointer editor */
+.label-editor-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.today-label-control {
+  display: grid;
+  gap: 9px;
+  margin: 10px 0;
+  padding: 11px;
+  border: 1px solid #b9d4cf;
+  border-radius: 10px;
+  background: #edf7f5;
+}
+
+.today-label-control > div {
+  display: grid;
+  gap: 4px;
+}
+
+.today-label-control span {
+  color: #5d6a65;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.today-label-control button {
+  min-height: 36px;
+  border: 1px solid #277d78;
+  border-radius: 8px;
+  color: #277d78;
+  background: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.today-label-control button.active {
+  color: #fff;
+  background: #277d78;
+}
+
+.process-route-tag-text {
+  margin-top: 4px;
+}
+
+.process-route-tag-preview {
+  margin: -2px 0 4px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  color: #45524d;
+  background: #edf2f0;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .process-pointer-panel {
   gap: 11px;
 }

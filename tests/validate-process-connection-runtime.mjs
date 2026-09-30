@@ -25,6 +25,7 @@ const connection = {
   endAnchorXPercent: 50,
   endAnchorYPercent: 100,
   endAnchorZPercent: 50,
+  tagText: "",
   color: "#52b7aa",
   width: 1.65,
   opacity: 100,
@@ -50,6 +51,7 @@ assert.equal(applyProcessConnectionField(connection, "color", "#123456"), true);
 assert.equal(applyProcessConnectionField(connection, "width", "4.25"), true);
 assert.equal(applyProcessConnectionField(connection, "shape", "elbow"), true);
 assert.equal(applyProcessConnectionField(connection, "endStyle", "ring"), true);
+assert.equal(applyProcessConnectionField(connection, "tagText", "Cutting to polish inspection"), true);
 
 assert.equal(connection.startAnchorXPercent, 18);
 assert.equal(connection.endAnchorZPercent, 82);
@@ -57,6 +59,7 @@ assert.equal(connection.color, "#123456");
 assert.equal(connection.width, 4.25);
 assert.equal(connection.shape, "elbow");
 assert.equal(connection.endStyle, "ring");
+assert.equal(connection.tagText, "Cutting to polish inspection");
 assert.deepEqual(machineLabel, labelBefore, "Editing an object-to-object process pointer must not change any machine-label pointer property.");
 
 assert.equal(applyProcessConnectionField(connection, "startAnchorXPercent", "999"), true);
@@ -84,6 +87,7 @@ const renderEnd = source.indexOf("function rectanglesIntersect", renderStart);
 const renderBody = source.slice(renderStart, renderEnd);
 assert.ok(renderBody.includes("connection.startAnchor" ) || renderBody.includes('connection[`${prefix}Anchor'));
 assert.ok(renderBody.includes("connection.color"));
+assert.ok(renderBody.includes("connection.tagText"), "Renderer must prefer custom route-tag text when provided.");
 assert.ok(!renderBody.includes("machine.labelAnchor"));
 assert.ok(!renderBody.includes("machine.processPointerAnchor"));
 

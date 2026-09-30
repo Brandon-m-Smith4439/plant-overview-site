@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.25";
+  const APP_VERSION = "0.13.26";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -3253,6 +3253,25 @@
     }
 
     const assignedProcessPointerKey = machine ? processPointerKeyForMachine(machine) : "";
+    const todayLabelButton = panel.querySelector("[data-editor-action='toggle-today-label']");
+    const todayLabelSummary = panel.querySelector("[data-today-label-summary]");
+    if (todayLabelButton) {
+      const explicitlyShown = Boolean(machine?.labelShowToday);
+      todayLabelButton.disabled = !machine;
+      todayLabelButton.classList.toggle("active", explicitlyShown);
+      todayLabelButton.setAttribute("aria-pressed", String(explicitlyShown));
+      todayLabelButton.textContent = explicitlyShown ? "Hide label on Today" : "Show label on Today";
+    }
+    if (todayLabelSummary) {
+      const role = assignedProcessPointerKey ? processPointerFlowDefinition(assignedProcessPointerKey)?.text : "";
+      todayLabelSummary.textContent = !machine
+        ? "Select one object to choose whether its normal label appears on Today."
+        : role
+          ? `${machine.name} already appears automatically in Necessary mode because it is assigned as ${role}.`
+          : machine.labelShowToday === true
+            ? `${machine.name} is explicitly enabled on Today Overview in Necessary mode.`
+            : `${machine.name} is currently hidden in Necessary mode unless it is selected.`;
+    }
     const processPointerAssignment = panel.querySelector("[data-process-pointer-assignment]");
     if (processPointerAssignment) {
       processPointerAssignment.disabled = !machine;
@@ -3318,6 +3337,16 @@
       input.disabled = !activeConnection;
       input.checked = Boolean(activeConnection?.[input.dataset.processConnectionCheck]);
     });
+    const processRouteTagPreview = panel.querySelector("[data-process-route-tag-preview]");
+    if (processRouteTagPreview) {
+      const automaticText = activeConnection
+        ? `${processConnectionEndpointText(activeConnection, "source")} → ${processConnectionEndpointText(activeConnection, "target")}`
+        : "";
+      const customText = String(activeConnection?.tagText || "").trim();
+      processRouteTagPreview.textContent = activeConnection
+        ? `Route tag preview: ${customText || automaticText}${customText ? " · custom text" : " · automatic text"}`
+        : "Select a line to edit its route-tag text.";
+    }
     ["center-process-connection-start", "center-process-connection-end", "reset-process-connection"].forEach((action) => {
       const button = panel.querySelector(`[data-editor-action='${action}']`);
       if (button) button.disabled = !activeConnection;
@@ -4032,6 +4061,7 @@
         <div class="object-editor-tabs" role="tablist" aria-label="Object editing sections">
           <button type="button" data-object-editor-tab="select" class="active" aria-selected="true">Select</button>
           <button type="button" data-object-editor-tab="transform" aria-selected="false">Transform</button>
+          <button type="button" data-object-editor-tab="labels" aria-selected="false">Labels</button>
           <button type="button" data-object-editor-tab="pointers" aria-selected="false">Pointers</button>
           <button type="button" data-object-editor-tab="animation" aria-selected="false">Animation</button>
           <button type="button" data-object-editor-tab="add" aria-selected="false">Add</button>
@@ -4158,6 +4188,17 @@
           <label><input type="checkbox" data-machine-check="showLabel"> Label</label>
           <label><input type="checkbox" data-machine-check="locked"> Lock position</label>
         </div>
+        <fieldset class="crane-controls">
+          <legend>Attached overhead crane</legend>
+          <label class="crane-toggle"><input type="checkbox" data-crane-toggle> Enable attached crane</label>
+          <div>
+            <label>System<input type="text" data-crane-field="system"></label>
+            <label>Capacity<input type="text" data-crane-field="capacity"></label>
+            <label>Rail height<input type="number" min="4" step="0.5" data-crane-field="height"></label>
+          </div>
+        </fieldset>
+        </section>
+        <section data-object-editor-panel="labels" class="object-editor-panel label-editor-panel" hidden>
         <fieldset class="label-controls">
           <legend>Layout label</legend>
           <p data-label-source-summary>Select one object to edit its label.</p>
@@ -4200,23 +4241,17 @@
             </div>
           </fieldset>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
-          <label class="label-uppercase"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show this machine label on Today Overview in Necessary mode</label>
-          <p class="label-help">Today label visibility is controlled here per machine. Necessary mode always keeps assigned flow-machine labels and also shows any extra machine whose Today checkbox is enabled. Full and Abbreviated Today modes continue to use the normal label set.</p>
+          <div class="today-label-control">
+            <div><strong>Today Overview · Necessary mode</strong><span data-today-label-summary>Select one object to choose whether its normal label appears on Today.</span></div>
+            <button type="button" data-editor-action="toggle-today-label" data-needs-selection aria-pressed="false">Show label on Today</button>
+          </div>
+          <p class="label-help">This controls the normal machine/object label only. It does not change process pointers or route tags. Objects assigned to a Necessary process role already appear automatically; this setting is for any additional label you want visible on Today.</p>
           <div class="label-action-grid">
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
           <p class="label-help">This section controls the normal machine label text and appearance. Production-flow pointer geometry is edited separately in the Pointers tab.</p>
-        </fieldset>
-        <fieldset class="crane-controls">
-          <legend>Attached overhead crane</legend>
-          <label class="crane-toggle"><input type="checkbox" data-crane-toggle> Enable attached crane</label>
-          <div>
-            <label>System<input type="text" data-crane-field="system"></label>
-            <label>Capacity<input type="text" data-crane-field="capacity"></label>
-            <label>Rail height<input type="number" min="4" step="0.5" data-crane-field="height"></label>
-          </div>
         </fieldset>
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
@@ -4227,6 +4262,8 @@
           <fieldset class="process-pointer-controls process-connection-picker">
             <legend>1 · Choose the process line</legend>
             <label class="wide">Line to edit<select data-process-connection-select><option value="">No object-to-object process pointers</option></select></label>
+            <label class="wide process-route-tag-text">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Blank = automatic Source → Destination"></label>
+            <p class="process-route-tag-preview" data-process-route-tag-preview>Select a line to edit its route-tag text.</p>
             <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="visible"> Show selected object-to-object line</label>
             <div class="process-pointer-actions">
               <button type="button" data-editor-action="remove-process-connection">Remove selected line</button>
@@ -4279,10 +4316,9 @@
             <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection">Reset selected process line</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>7 · Optional route tag</legend>
+            <legend>7 · Route tag visibility & position</legend>
             <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show route tag on this line</label>
-            <label class="wide">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Blank = automatic Source → Destination"></label>
-            <p>Enter any text you want. Leave it blank to automatically use the source and destination object/process names.</p>
+            <p>The route-tag text is edited at the top of this Pointers tab for the currently selected line.</p>
             <div class="process-pointer-grid">
               <label>Lift (ft)<input type="number" data-process-connection-field="tagLift" min="0" max="60" step="0.5"></label>
               <label>Tag X (px)<input type="number" data-process-connection-field="tagScreenOffsetX" min="-500" max="500" step="2"></label>
@@ -4957,6 +4993,16 @@
         updateEditorPanel();
       });
     });
+    panel.querySelector("[data-editor-action='toggle-today-label']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      if (!machine) return;
+      pushHistory();
+      machine.labelShowToday = machine.labelShowToday !== true;
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(`${machine.name} label ${machine.labelShowToday ? "will show" : "will be hidden"} on Today Overview in Necessary mode.`);
+    });
     panel.querySelector("[data-editor-action='reset-selected-label']")?.addEventListener("click", () => {
       const machine = selectedMachine();
       if (!machine) return;
@@ -5078,6 +5124,7 @@
     });
 
     panel.querySelectorAll("[data-process-connection-field]").forEach((input) => {
+      if (input.dataset.processConnectionField === "tagText") return;
       input.addEventListener("change", () => {
         const connection = selectedProcessConnection();
         if (!connection) return;
@@ -5087,6 +5134,30 @@
         renderPerformance.invalidate();
         updateEditorPanel();
       });
+    });
+    const routeTagTextInput = panel.querySelector("[data-process-connection-field='tagText']");
+    routeTagTextInput?.addEventListener("focus", () => {
+      const connection = selectedProcessConnection();
+      if (!connection || routeTagTextInput.dataset.historyStarted === "true") return;
+      pushHistory();
+      routeTagTextInput.dataset.historyStarted = "true";
+    });
+    routeTagTextInput?.addEventListener("input", () => {
+      const connection = selectedProcessConnection();
+      if (!connection) return;
+      applyProcessConnectionField(connection, "tagText", routeTagTextInput.value);
+      persistLayout();
+      renderPerformance.invalidate();
+      const preview = panel.querySelector("[data-process-route-tag-preview]");
+      if (preview) {
+        const automaticText = `${processConnectionEndpointText(connection, "source")} → ${processConnectionEndpointText(connection, "target")}`;
+        const customText = String(connection.tagText || "").trim();
+        preview.textContent = `Route tag preview: ${customText || automaticText}${customText ? " · custom text" : " · automatic text"}`;
+      }
+    });
+    routeTagTextInput?.addEventListener("blur", () => {
+      delete routeTagTextInput.dataset.historyStarted;
+      updateEditorPanel();
     });
     panel.querySelectorAll("[data-process-connection-check]").forEach((input) => {
       input.addEventListener("change", () => {

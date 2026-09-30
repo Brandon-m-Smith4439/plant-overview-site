@@ -24,7 +24,7 @@ for (const tab of ["properties", "transform", "animation"]) {
   assert.ok(machineHtml.includes(`data-part-tab="${tab}"`), `Designer right panel should include ${tab} tab`);
   assert.ok(machineHtml.includes(`data-part-panel="${tab}"`), `Designer right panel should include ${tab} panel`);
 }
-for (const tab of ["select", "transform", "animation", "add"]) {
+for (const tab of ["select", "transform", "labels", "pointers", "animation", "add"]) {
   assert.ok(plantSource.includes(`data-object-editor-tab="${tab}"`), `Plant object editor should include ${tab} tab`);
   assert.ok(plantSource.includes(`data-object-editor-panel="${tab}"`), `Plant object editor should include ${tab} panel`);
 }

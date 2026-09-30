@@ -1,3 +1,13 @@
+## 0.13.26 - 2026-09-30
+
+- Added a dedicated **Objects → Labels** tab so machine/object label controls are no longer buried inside Transform.
+- Replaced the easy-to-miss Today checkbox with a prominent **Show label on Today / Hide label on Today** button and status explanation.
+- Kept Necessary process-role labels automatic while allowing any extra object label to be explicitly shown on Today Overview.
+- Moved **Route tag text** directly beneath the selected process line in the Pointers tab.
+- Added a route-tag preview that clearly shows custom versus automatic source → destination text.
+- Route-tag text now updates live while typing and persists per connection without changing either endpoint or any machine-label pointer settings.
+- Expanded the desktop object-editor tab strip from five to six tabs to make Labels a first-class editing surface.
+
 ## 0.13.25 - 2026-09-30
 
 - Added editable `tagText` to each object-to-object process connection.

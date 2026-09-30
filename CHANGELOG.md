@@ -1,3 +1,11 @@
+## 0.13.30 - 2026-09-30
+
+- Fixed Railway/public sessions being able to run stale cached plant renderer scripts after a new site deployment.
+- Added a release query token to every dynamically loaded legacy viewer script on both hosted and local environments.
+- Scoped the in-memory legacy script loader cache to the active release version.
+- Added matching release tokens to the standalone Plant Layout and Machine Studio previews.
+- Added regression coverage requiring the legacy build token to match `VERSION` and requiring hosted cache-busting to remain enabled.
+
 ## 0.13.29 - 2026-09-30
 
 - Fixed the remaining Today/Necessary camera freeze where process labels moved but the physical plant stayed on an older rendered frame.

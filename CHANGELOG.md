@@ -1,3 +1,10 @@
+## 0.13.29 - 2026-09-30
+
+- Fixed the remaining Today/Necessary camera freeze where process labels moved but the physical plant stayed on an older rendered frame.
+- Present the physical 3D scene before drawing Necessary-mode labels and process pointers so overlay errors cannot block camera updates.
+- Force the retained Three.js view-projection uniform to refresh across shared and instanced materials every rendered camera frame.
+- Added regression coverage for scene-before-overlay ordering and retained-camera uniform refresh.
+
 ## 0.13.28 - 2026-09-30
 
 - Fixed Today Overview becoming visually frozen when **Necessary** labels were active.

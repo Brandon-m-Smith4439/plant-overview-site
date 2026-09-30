@@ -1,3 +1,7 @@
+## Version 0.13.27
+
+Version 0.13.27 makes the two controls easy to find without removing the improvements from v0.13.26. Select an object and open **Objects → Labels**; near the top, use **Show this machine/object label in Necessary mode** to control its normal label on Today Overview. To rename a process-line route tag, open **Objects → Pointers**, select the line, then edit **Route tag text** inside **7 · Optional route tag**. The preview updates live while typing, and blank text still falls back to the automatic source → destination wording.
+
 ## Version 0.13.26
 
 Version 0.13.26 makes the two recently added controls unmistakable in the layout editor. **Objects → Labels** is now a dedicated tab instead of burying label controls below Transform, and it includes a prominent **Show label on Today / Hide label on Today** button for Necessary mode. The button affects only the normal machine/object label; process pointers and route tags remain separate. In **Objects → Pointers**, the selected connection's **Route tag text** field is now directly below **Line to edit**, includes an on-screen preview, and updates the route tag live while typing. Blank route-tag text still falls back to the automatic source → destination name.
@@ -56,7 +60,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.26**
+Current project version: **0.13.27**
 
 ## Full-production rendering performance
 

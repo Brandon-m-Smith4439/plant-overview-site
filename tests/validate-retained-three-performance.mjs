@@ -20,6 +20,8 @@ assert.doesNotMatch(retainedRenderer, /attribute vec4 color;/, "Three.js must ow
 assert.doesNotMatch(retainedRenderer, /attribute vec3 instanceColor;/, "Three.js must own the injected instance-color declaration");
 assert.match(retainedRenderer, /diagnostics\?\.runnable === false/, "a rejected first-frame shader must activate the compatible renderer");
 assert.match(retainedRenderer, /get available\(\) \{ return available; \}/, "renderer availability must update after a runtime GPU failure");
+assert.match(retainedRenderer, /function refreshViewProjection\(view = \{\}\)/, "retained renderer must refresh the camera projection explicitly every frame");
+assert.match(retainedRenderer, /uniformsNeedUpdate = true/, "retained renderer must force the shared camera uniform back to the GPU on camera changes");
 assert.match(plant, /addBoxInstances\("plant:structural-columns"/, "plant pillars should render as one instanced batch");
 assert.match(plant, /addBoxInstances\("plant:machine-lod-proxies"/, "distant machine proxies should render as an instanced batch");
 assert.match(plant, /function machineLodLevel/, "plant rendering must use multi-level detail");

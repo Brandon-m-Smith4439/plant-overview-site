@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.28";
+  const APP_VERSION = "0.13.29";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -10336,7 +10336,7 @@
   // old outline pass made rear columns show through solid machines. Sorting both
   // object types together gives the expected result: rear columns are covered by
   // machinery and front columns remain visible without any see-through outline.
-  function drawSceneObjects(time) {
+  function drawSceneObjects(time, presentPhysicalScene = null) {
     const overlappingIds = state.editing ? overlapIds() : new Set();
     const machineEntries = visibleMachineEntries(time);
     state.visibleAnimationsActive = visibleEntriesHaveActiveAnimations(machineEntries);
@@ -10428,6 +10428,13 @@
         if (!instancedDesignIds.has(machine.instanceId)) drawMachineShape(rendered,alpha,grow,time);
       });
     });
+
+    // Present the physical WebGL scene before drawing any 2D labels or process
+    // pointers. Necessary-mode overlays intentionally use the same camera
+    // projection but live on a different canvas. If an overlay ever throws or
+    // receives malformed saved data, it must not prevent the updated 3D camera
+    // frame from reaching the screen.
+    presentPhysicalScene?.();
 
     // Editor marks are UI overlays, so draw them after the physical scene.
     machineEntries.forEach(({ machine, rendered }) => {
@@ -10769,12 +10776,22 @@
       drawRoof,
     );
     renderPerformance.beginPhase?.("machines");
-    drawSceneObjects(time);
-    renderPerformance.beginPhase?.("gpu");
-    depthRenderer.render();
+    let physicalScenePresented = false;
+    drawSceneObjects(time, () => {
+      renderPerformance.beginPhase?.("gpu");
+      depthRenderer.render();
+      physicalScenePresented = true;
+      renderPerformance.beginPhase?.("overlays");
+    });
+    // Defensive fallback for future scene refactors: every rendered frame must
+    // present the physical scene exactly once even if there were no machines.
+    if (!physicalScenePresented) {
+      renderPerformance.beginPhase?.("gpu");
+      depthRenderer.render();
+      renderPerformance.beginPhase?.("overlays");
+    }
     drawLayoutRulers();
     renderPerformance.setRendererStats?.(depthRenderer.getStats?.());
-    renderPerformance.beginPhase?.("overlays");
     renderPerformance.endPhase?.();
     renderPerformance.recordFrame(performance.now() - frameStartedAt);
   }

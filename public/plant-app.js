@@ -208,7 +208,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.23";
+  const APP_VERSION = "0.13.24";
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
@@ -1201,15 +1201,22 @@
     return result;
   }
 
-  function processConnectionKey(fromKey, toKey) {
-    return `${String(fromKey || "")}->${String(toKey || "")}`;
+  function processConnectionKey(sourceId, targetId) {
+    return `object:${String(sourceId || "")}->${String(targetId || "")}`;
   }
 
-  function defaultProcessConnection(fromKey, toKey) {
+  function processConnectionRoleForObject(instanceId) {
+    if (!instanceId) return "";
+    return PROCESS_POINTER_FLOW_DEFINITIONS.find(({ key }) => state?.processPointers?.[key] === instanceId)?.key || "";
+  }
+
+  function defaultProcessConnection(sourceId, targetId, { fromKey = "", toKey = "" } = {}) {
     return {
-      key: processConnectionKey(fromKey, toKey),
-      fromKey,
-      toKey,
+      key: processConnectionKey(sourceId, targetId),
+      sourceId,
+      targetId,
+      fromKey: processPointerFlowDefinition(fromKey)?.key || "",
+      toKey: processPointerFlowDefinition(toKey)?.key || "",
       visible: true,
       startAnchorXPercent: 50,
       startAnchorYPercent: 100,
@@ -1231,17 +1238,21 @@
     };
   }
 
-  function normalizeProcessConnection(value, fromKey, toKey, fallback = null) {
-    const defaults = { ...defaultProcessConnection(fromKey, toKey), ...(fallback || {}) };
+  function normalizeProcessConnection(value, sourceId, targetId, fallback = null) {
+    const defaults = { ...defaultProcessConnection(sourceId, targetId), ...(fallback || {}) };
     const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
     const readNumber = (field, min, max) => {
       const candidate = Number(source[field]);
       const base = Number(defaults[field]);
       return clamp(Number.isFinite(candidate) ? candidate : base, min, max);
     };
+    const fromKey = processPointerFlowDefinition(source.fromKey)?.key || processPointerFlowDefinition(defaults.fromKey)?.key || "";
+    const toKey = processPointerFlowDefinition(source.toKey)?.key || processPointerFlowDefinition(defaults.toKey)?.key || "";
     return {
       ...defaults,
-      key: processConnectionKey(fromKey, toKey),
+      key: processConnectionKey(sourceId, targetId),
+      sourceId,
+      targetId,
       fromKey,
       toKey,
       visible: source.visible !== undefined ? source.visible !== false : defaults.visible !== false,
@@ -1267,9 +1278,11 @@
 
   function legacyProcessConnectionFallback(fromKey, toKey, assignments, machineList) {
     const machineByInstanceId = new Map((machineList || []).map((machine) => [machine?.instanceId, machine]));
-    const fromMachine = machineByInstanceId.get(assignments?.[fromKey]);
-    const toMachine = machineByInstanceId.get(assignments?.[toKey]);
-    const fallback = defaultProcessConnection(fromKey, toKey);
+    const sourceId = assignments?.[fromKey] || "";
+    const targetId = assignments?.[toKey] || "";
+    const fromMachine = machineByInstanceId.get(sourceId);
+    const toMachine = machineByInstanceId.get(targetId);
+    const fallback = defaultProcessConnection(sourceId, targetId, { fromKey, toKey });
     if (fromMachine) {
       fallback.visible = fromMachine.processPointerVisible !== false;
       fallback.startAnchorXPercent = Number(fromMachine.processPointerAnchorXPercent ?? 50);
@@ -1297,22 +1310,33 @@
   function normalizeProcessConnections(value, assignments, machineList, { fillDefaults = false } = {}) {
     const result = {};
     const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const availableIds = new Set((machineList || []).map((machine) => machine?.instanceId).filter(Boolean));
     Object.entries(source).forEach(([storedKey, raw]) => {
-      const pieces = String(storedKey || "").split("->");
-      const fromKey = String(raw?.fromKey || pieces[0] || "");
-      const toKey = String(raw?.toKey || pieces[1] || "");
-      if (!processPointerFlowDefinition(fromKey) || !processPointerFlowDefinition(toKey) || fromKey === toKey) return;
-      const key = processConnectionKey(fromKey, toKey);
-      result[key] = normalizeProcessConnection(raw, fromKey, toKey);
+      const legacyPieces = String(storedKey || "").replace(/^object:/, "").split("->");
+      const fromKey = processPointerFlowDefinition(raw?.fromKey)?.key || "";
+      const toKey = processPointerFlowDefinition(raw?.toKey)?.key || "";
+      const legacyFromKey = fromKey || (processPointerFlowDefinition(legacyPieces[0])?.key || "");
+      const legacyToKey = toKey || (processPointerFlowDefinition(legacyPieces[1])?.key || "");
+      const sourceId = String(raw?.sourceId || (legacyFromKey ? assignments?.[legacyFromKey] : "") || (storedKey.startsWith("object:") ? legacyPieces[0] : ""));
+      const targetId = String(raw?.targetId || (legacyToKey ? assignments?.[legacyToKey] : "") || (storedKey.startsWith("object:") ? legacyPieces[1] : ""));
+      if (!sourceId || !targetId || sourceId === targetId || !availableIds.has(sourceId) || !availableIds.has(targetId)) return;
+      const key = processConnectionKey(sourceId, targetId);
+      result[key] = normalizeProcessConnection(raw, sourceId, targetId, {
+        fromKey: legacyFromKey,
+        toKey: legacyToKey,
+      });
     });
     if (fillDefaults) {
       DEFAULT_PROCESS_CONNECTION_LINKS.forEach(([fromKey, toKey]) => {
-        const key = processConnectionKey(fromKey, toKey);
+        const sourceId = String(assignments?.[fromKey] || "");
+        const targetId = String(assignments?.[toKey] || "");
+        if (!sourceId || !targetId || sourceId === targetId || !availableIds.has(sourceId) || !availableIds.has(targetId)) return;
+        const key = processConnectionKey(sourceId, targetId);
         if (result[key]) return;
         result[key] = normalizeProcessConnection(
           null,
-          fromKey,
-          toKey,
+          sourceId,
+          targetId,
           legacyProcessConnectionFallback(fromKey, toKey, assignments, machineList),
         );
       });
@@ -1857,26 +1881,56 @@
     return { key: normalizedKey, previousKey, displacedMachine };
   }
 
+  function processConnectionObjectName(instanceId) {
+    const item = machineById(instanceId);
+    return item?.name || item?.short || "Missing object";
+  }
+
+  function processConnectionEndpointRole(connection, endpoint) {
+    if (!connection) return "";
+    const isTarget = endpoint === "target";
+    const roleKey = isTarget ? connection.toKey : connection.fromKey;
+    const instanceId = isTarget ? connection.targetId : connection.sourceId;
+    if (roleKey && state.processPointers?.[roleKey] === instanceId) return roleKey;
+    return processConnectionRoleForObject(instanceId);
+  }
+
+  function processConnectionEndpointText(connection, endpoint) {
+    const isTarget = endpoint === "target";
+    const instanceId = isTarget ? connection?.targetId : connection?.sourceId;
+    const roleKey = processConnectionEndpointRole(connection, endpoint);
+    return processPointerFlowDefinition(roleKey)?.text || processConnectionObjectName(instanceId);
+  }
+
+  function processConnectionObjectOptionLabel(machine) {
+    if (!machine) return "Object";
+    const typeLabel = TYPE_LABEL_FALLBACKS[machine.type] || String(machine.type || "Object").replace(/([a-z])([A-Z])/g, "$1 $2");
+    return `${machine.name || machine.short || typeLabel} · ${typeLabel}`;
+  }
+
+  function processConnectionObjectOptions() {
+    return [...machines]
+      .filter((machine) => machine?.instanceId)
+      .sort((first, second) => processConnectionObjectOptionLabel(first).localeCompare(processConnectionObjectOptionLabel(second)));
+  }
+
   function allProcessConnectionEntries() {
-    const orderOf = (key) => processPointerFlowDefinition(key)?.order ?? 999;
     return Object.entries(state.processConnections || {})
       .map(([key, connection]) => ({ key, connection }))
-      .filter(({ connection }) => connection?.fromKey && connection?.toKey)
-      .sort((first, second) => (
-        orderOf(first.connection.fromKey) - orderOf(second.connection.fromKey) ||
-        orderOf(first.connection.toKey) - orderOf(second.connection.toKey)
-      ));
+      .filter(({ connection }) => connection?.sourceId && connection?.targetId && machineById(connection.sourceId) && machineById(connection.targetId))
+      .sort((first, second) => processConnectionDisplayName(first.connection).localeCompare(processConnectionDisplayName(second.connection)));
   }
 
   function processConnectionEntriesForNode(nodeKey) {
-    if (!nodeKey) return [];
+    const instanceId = state.processPointers?.[nodeKey];
+    if (!instanceId) return [];
     return allProcessConnectionEntries()
-      .filter(({ connection }) => connection.fromKey === nodeKey || connection.toKey === nodeKey)
+      .filter(({ connection }) => connection.sourceId === instanceId || connection.targetId === instanceId)
       .map(({ key, connection }) => ({
         key,
         connection,
-        outgoing: connection.fromKey === nodeKey,
-        otherKey: connection.fromKey === nodeKey ? connection.toKey : connection.fromKey,
+        outgoing: connection.sourceId === instanceId,
+        otherKey: connection.sourceId === instanceId ? processConnectionEndpointRole(connection, "target") : processConnectionEndpointRole(connection, "source"),
       }));
   }
 
@@ -1887,10 +1941,12 @@
 
   function processConnectionDisplayName(connection, { includeMachines = false } = {}) {
     if (!connection) return "Process connection";
-    const fromText = processPointerFlowDefinition(connection.fromKey)?.text || connection.fromKey;
-    const toText = processPointerFlowDefinition(connection.toKey)?.text || connection.toKey;
-    if (!includeMachines) return `${fromText} → ${toText}`;
-    return `${fromText} · ${processNodeMachineName(connection.fromKey)} → ${toText} · ${processNodeMachineName(connection.toKey)}`;
+    const sourceName = processConnectionObjectName(connection.sourceId);
+    const targetName = processConnectionObjectName(connection.targetId);
+    const fromText = processConnectionEndpointText(connection, "source");
+    const toText = processConnectionEndpointText(connection, "target");
+    if (!includeMachines || (fromText === sourceName && toText === targetName)) return `${sourceName} → ${targetName}`;
+    return `${fromText} · ${sourceName} → ${toText} · ${targetName}`;
   }
 
   function selectedProcessConnection() {
@@ -1902,6 +1958,24 @@
     const current = entries.find((entry) => entry.key === state.selectedProcessConnectionKey) || entries[0];
     state.selectedProcessConnectionKey = current.key;
     return current.connection;
+  }
+
+  function retargetProcessConnection(connection, sourceId, targetId) {
+    if (!connection || !sourceId || !targetId || sourceId === targetId || !machineById(sourceId) || !machineById(targetId)) return null;
+    const nextKey = processConnectionKey(sourceId, targetId);
+    if (nextKey !== connection.key && state.processConnections[nextKey]) return null;
+    const previousKey = connection.key;
+    const next = normalizeProcessConnection({
+      ...connection,
+      sourceId,
+      targetId,
+      fromKey: processConnectionRoleForObject(sourceId),
+      toKey: processConnectionRoleForObject(targetId),
+    }, sourceId, targetId);
+    if (previousKey !== nextKey) delete state.processConnections[previousKey];
+    state.processConnections[nextKey] = next;
+    state.selectedProcessConnectionKey = nextKey;
+    return next;
   }
 
   function applyProcessConnectionField(connection, field, rawValue) {
@@ -3186,31 +3260,42 @@
     if (processConnectionSelect) {
       processConnectionSelect.innerHTML = connectionEntries.length
         ? connectionEntries.map(({ key, connection }) => `<option value="${escapeHtml(key)}">${escapeHtml(processConnectionDisplayName(connection, { includeMachines: true }))}</option>`).join("")
-        : `<option value="">No machine-to-machine process pointers</option>`;
+        : `<option value="">No object-to-object process pointers</option>`;
       processConnectionSelect.disabled = connectionEntries.length === 0;
       processConnectionSelect.value = activeConnection?.key || "";
     }
 
-    const assignedNodes = PROCESS_POINTER_FLOW_DEFINITIONS.filter(({ key }) => state.processPointers?.[key]);
+    const selectableObjects = processConnectionObjectOptions();
+    const buildObjectOptions = (placeholder) => `<option value="">${placeholder}</option>${selectableObjects.map((item) => `<option value="${escapeHtml(item.instanceId)}">${escapeHtml(processConnectionObjectOptionLabel(item))}</option>`).join("")}`;
+    const processConnectionEditSource = panel.querySelector("[data-process-connection-edit-source]");
+    const processConnectionEditTarget = panel.querySelector("[data-process-connection-edit-target]");
+    if (processConnectionEditSource) {
+      processConnectionEditSource.innerHTML = buildObjectOptions("Choose source object");
+      processConnectionEditSource.disabled = !activeConnection;
+      processConnectionEditSource.value = activeConnection?.sourceId || "";
+    }
+    if (processConnectionEditTarget) {
+      processConnectionEditTarget.innerHTML = buildObjectOptions("Choose destination object");
+      processConnectionEditTarget.disabled = !activeConnection;
+      processConnectionEditTarget.value = activeConnection?.targetId || "";
+    }
     const processConnectionSource = panel.querySelector("[data-process-connection-source]");
     const processConnectionTarget = panel.querySelector("[data-process-connection-target]");
-    const buildNodeOptions = (placeholder) => `<option value="">${placeholder}</option>${assignedNodes.map(({ key, text }) => `<option value="${escapeHtml(key)}">${escapeHtml(text)} · ${escapeHtml(processNodeMachineName(key))}</option>`).join("")}`;
     if (processConnectionSource) {
-      processConnectionSource.innerHTML = buildNodeOptions("Choose source machine");
-      processConnectionSource.disabled = assignedNodes.length < 2;
-      const preferred = activeConnection?.fromKey || assignedProcessPointerKey || "";
-      processConnectionSource.value = assignedNodes.some(({ key }) => key === preferred) ? preferred : "";
+      processConnectionSource.innerHTML = buildObjectOptions("Choose source object");
+      processConnectionSource.disabled = selectableObjects.length < 2;
+      const preferred = selectedMachine()?.instanceId || activeConnection?.sourceId || "";
+      processConnectionSource.value = selectableObjects.some((item) => item.instanceId === preferred) ? preferred : "";
     }
     if (processConnectionTarget) {
-      processConnectionTarget.innerHTML = buildNodeOptions("Choose destination machine");
-      processConnectionTarget.disabled = assignedNodes.length < 2;
-      const preferred = activeConnection?.toKey || "";
-      processConnectionTarget.value = assignedNodes.some(({ key }) => key === preferred) ? preferred : "";
+      processConnectionTarget.innerHTML = buildObjectOptions("Choose destination object");
+      processConnectionTarget.disabled = selectableObjects.length < 2;
+      processConnectionTarget.value = "";
     }
-    const selectedSourceKey = String(processConnectionSource?.value || "");
-    const selectedTargetKey = String(processConnectionTarget?.value || "");
+    const selectedSourceId = String(processConnectionSource?.value || "");
+    const selectedTargetId = String(processConnectionTarget?.value || "");
     const addProcessConnection = panel.querySelector("[data-editor-action='add-process-connection']");
-    if (addProcessConnection) addProcessConnection.disabled = !selectedSourceKey || !selectedTargetKey || selectedSourceKey === selectedTargetKey;
+    if (addProcessConnection) addProcessConnection.disabled = !selectedSourceId || !selectedTargetId || selectedSourceId === selectedTargetId;
     const removeProcessConnection = panel.querySelector("[data-editor-action='remove-process-connection']");
     if (removeProcessConnection) removeProcessConnection.disabled = !activeConnection;
     panel.querySelectorAll("[data-process-connection-field]").forEach((input) => {
@@ -3233,8 +3318,8 @@
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
       processPointerSummary.textContent = activeConnection
-        ? `Editing the long machine-to-machine line: ${processConnectionDisplayName(activeConnection, { includeMachines: true })}. Nothing here edits the machine-label callout or its leader.`
-        : "No process connection exists yet. Assign process machines below, then choose a source and destination to add the machine-to-machine line.";
+        ? `Editing the long object-to-object line: ${processConnectionDisplayName(activeConnection, { includeMachines: true })}. Both ends can be any placed object. Nothing here edits the machine-label callout or its leader.`
+        : "No process connection exists yet. Choose any source object and destination object below to create one.";
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -4127,27 +4212,33 @@
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
           <div class="process-pointer-intro">
-            <div><strong>Machine-to-machine process line editor</strong><span data-process-pointer-summary>Select the long process line itself here. This tab does not edit the small machine-label callout or its leader.</span></div>
+            <div><strong>Object-to-object process pointer editor</strong><span data-process-pointer-summary>Select the long process line itself here. This tab does not edit the small machine-label callout or its leader.</span></div>
           </div>
-          <div class="process-pointer-note"><strong>What this edits</strong><span>The long line from the Cutting Table to the Kodiak Polisher is <b>Cutting → Polisher</b>. Select that connection below. Machine-label pointers remain exclusively in the Layout label controls.</span></div>
+          <div class="process-pointer-note"><strong>What this edits</strong><span>The long Cutting → Polisher line is an object-to-object pointer. Select it below, then either endpoint can be changed to any placed object. Machine-label pointers remain exclusively in the Layout label controls.</span></div>
           <fieldset class="process-pointer-controls process-connection-picker">
             <legend>1 · Choose the process line</legend>
-            <label class="wide">Line to edit<select data-process-connection-select><option value="">No machine-to-machine process pointers</option></select></label>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="visible"> Show selected machine-to-machine line</label>
+            <label class="wide">Line to edit<select data-process-connection-select><option value="">No object-to-object process pointers</option></select></label>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="visible"> Show selected object-to-object line</label>
             <div class="process-pointer-actions">
               <button type="button" data-editor-action="remove-process-connection">Remove selected line</button>
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls process-connection-picker">
-            <legend>2 · Add a machine-to-machine line</legend>
-            <p>Choose the exact source and destination process machines. This creates a new independent process line.</p>
-            <label class="wide">Source<select data-process-connection-source><option value="">Choose source machine</option></select></label>
-            <label class="wide">Destination<select data-process-connection-target><option value="">Choose destination machine</option></select></label>
+            <legend>2 · Point this line to any object</legend>
+            <p>Retarget the selected line directly. Both ends can be any placed machine, person, rack, truck, table, custom object, or other layout object.</p>
+            <label class="wide">Source object<select data-process-connection-edit-source><option value="">Choose source object</option></select></label>
+            <label class="wide">Destination object<select data-process-connection-edit-target><option value="">Choose destination object</option></select></label>
+          </fieldset>
+          <fieldset class="process-pointer-controls process-connection-picker">
+            <legend>3 · Add another object-to-object pointer</legend>
+            <p>Create another independent process pointer between any two placed objects.</p>
+            <label class="wide">Source object<select data-process-connection-source><option value="">Choose source object</option></select></label>
+            <label class="wide">Destination object<select data-process-connection-target><option value="">Choose destination object</option></select></label>
             <div class="process-pointer-actions"><button type="button" data-editor-action="add-process-connection">Add process line</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>3 · Start point · source machine</legend>
-            <p>Moves only where the selected long process line leaves its source machine.</p>
+            <legend>4 · Start point · source object</legend>
+            <p>Moves only where the selected long process line leaves its source object.</p>
             <div class="process-pointer-grid">
               <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="0" max="100" step="1"></label>
               <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="0" max="100" step="1"></label>
@@ -4156,8 +4247,8 @@
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-start">Center source point</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>4 · End point · destination machine</legend>
-            <p>Moves only where the selected long process line lands on its destination machine.</p>
+            <legend>5 · End point · destination object</legend>
+            <p>Moves only where the selected long process line lands on its destination object.</p>
             <div class="process-pointer-grid">
               <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="0" max="100" step="1"></label>
               <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="0" max="100" step="1"></label>
@@ -4166,7 +4257,7 @@
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end">Center destination point</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>5 · Machine-to-machine line style</legend>
+            <legend>6 · Object-to-object line style</legend>
             <div class="process-pointer-grid">
               <label>Color<input type="color" data-process-connection-field="color"></label>
               <label>Width<input type="number" data-process-connection-field="width" min="0.5" max="12" step="0.25"></label>
@@ -4179,8 +4270,8 @@
             <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection">Reset selected process line</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>6 · Optional route tag</legend>
-            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show Cutting → Polisher style route tag on this line</label>
+            <legend>7 · Optional route tag</legend>
+            <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show source → destination route tag on this line</label>
             <div class="process-pointer-grid">
               <label>Lift (ft)<input type="number" data-process-connection-field="tagLift" min="0" max="60" step="0.5"></label>
               <label>Tag X (px)<input type="number" data-process-connection-field="tagScreenOffsetX" min="-500" max="500" step="2"></label>
@@ -4188,8 +4279,8 @@
             </div>
           </fieldset>
           <fieldset class="process-pointer-controls process-node-assignment">
-            <legend>Process-machine assignment</legend>
-            <p>This only tells the flow which machine is Cutting, Polisher, Waterjet, etc. It does not move a label pointer. Select a machine in the plant, then assign its process role here.</p>
+            <legend>Optional Necessary-label process role</legend>
+            <p>This is separate from pointer endpoints. Use it only when a selected object should represent Cutting, Polisher, Waterjet, etc. for the Today Necessary-label mode. Object-to-object pointers can connect to anything whether or not it has a process role.</p>
             <label class="wide">Selected machine process role<select data-process-pointer-assignment data-needs-selection>
               <option value="">Not in process flow</option>
               <option value="cutting">Cutting</option>
@@ -4901,21 +4992,61 @@
       updateEditorPanel();
       renderPerformance.invalidate();
     });
+    const retargetSelectedConnectionFromControls = () => {
+      const connection = selectedProcessConnection();
+      if (!connection) return;
+      const sourceId = String(panel.querySelector("[data-process-connection-edit-source]")?.value || "");
+      const targetId = String(panel.querySelector("[data-process-connection-edit-target]")?.value || "");
+      if (!sourceId || !targetId || sourceId === targetId) {
+        updateEditorPanel();
+        return;
+      }
+      const nextKey = processConnectionKey(sourceId, targetId);
+      if (nextKey !== connection.key && state.processConnections[nextKey]) {
+        showToast("That object-to-object process pointer already exists.");
+        updateEditorPanel();
+        return;
+      }
+      pushHistory();
+      const next = retargetProcessConnection(connection, sourceId, targetId);
+      if (!next) {
+        state.history.pop();
+        updateHistoryButtons();
+        updateEditorPanel();
+        return;
+      }
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(`Process pointer now connects ${processConnectionDisplayName(next)}. Machine labels were unchanged.`);
+    };
+    panel.querySelector("[data-process-connection-edit-source]")?.addEventListener("change", retargetSelectedConnectionFromControls);
+    panel.querySelector("[data-process-connection-edit-target]")?.addEventListener("change", retargetSelectedConnectionFromControls);
+
     const refreshAddProcessConnectionButton = () => {
-      const fromKey = String(panel.querySelector("[data-process-connection-source]")?.value || "");
-      const toKey = String(panel.querySelector("[data-process-connection-target]")?.value || "");
+      const sourceId = String(panel.querySelector("[data-process-connection-source]")?.value || "");
+      const targetId = String(panel.querySelector("[data-process-connection-target]")?.value || "");
       const button = panel.querySelector("[data-editor-action='add-process-connection']");
-      if (button) button.disabled = !fromKey || !toKey || fromKey === toKey;
+      if (button) button.disabled = !sourceId || !targetId || sourceId === targetId;
     };
     panel.querySelector("[data-process-connection-source]")?.addEventListener("change", refreshAddProcessConnectionButton);
     panel.querySelector("[data-process-connection-target]")?.addEventListener("change", refreshAddProcessConnectionButton);
     panel.querySelector("[data-editor-action='add-process-connection']")?.addEventListener("click", () => {
-      const fromKey = String(panel.querySelector("[data-process-connection-source]")?.value || "");
-      const toKey = String(panel.querySelector("[data-process-connection-target]")?.value || "");
-      if (!fromKey || !toKey || fromKey === toKey) return;
+      const sourceId = String(panel.querySelector("[data-process-connection-source]")?.value || "");
+      const targetId = String(panel.querySelector("[data-process-connection-target]")?.value || "");
+      if (!sourceId || !targetId || sourceId === targetId || !machineById(sourceId) || !machineById(targetId)) return;
+      const key = processConnectionKey(sourceId, targetId);
+      if (state.processConnections[key]) {
+        state.selectedProcessConnectionKey = key;
+        updateEditorPanel();
+        showToast("That object-to-object process pointer already exists, so it was selected instead.");
+        return;
+      }
       pushHistory();
-      const key = processConnectionKey(fromKey, toKey);
-      if (!state.processConnections[key]) state.processConnections[key] = defaultProcessConnection(fromKey, toKey);
+      state.processConnections[key] = defaultProcessConnection(sourceId, targetId, {
+        fromKey: processConnectionRoleForObject(sourceId),
+        toKey: processConnectionRoleForObject(targetId),
+      });
       state.selectedProcessConnectionKey = key;
       persistLayout();
       renderPerformance.invalidate();
@@ -4932,7 +5063,7 @@
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast(`Removed the ${label} machine-to-machine process pointer. Machine labels were unchanged.`);
+      showToast(`Removed the ${label} object-to-object process pointer. Machine labels were unchanged.`);
     });
 
     panel.querySelectorAll("[data-process-connection-field]").forEach((input) => {
@@ -4967,7 +5098,7 @@
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast("Process connection start point centered on the source machine.");
+      showToast("Process connection start point centered on the source object.");
     });
     panel.querySelector("[data-editor-action='center-process-connection-end']")?.addEventListener("click", () => {
       const connection = selectedProcessConnection();
@@ -4979,13 +5110,13 @@
       persistLayout();
       renderPerformance.invalidate();
       updateEditorPanel();
-      showToast("Process connection end point centered on the destination machine.");
+      showToast("Process connection end point centered on the destination object.");
     });
     panel.querySelector("[data-editor-action='reset-process-connection']")?.addEventListener("click", () => {
       const connection = selectedProcessConnection();
       if (!connection) return;
       pushHistory();
-      const reset = defaultProcessConnection(connection.fromKey, connection.toKey);
+      const reset = defaultProcessConnection(connection.sourceId, connection.targetId, { fromKey: processConnectionEndpointRole(connection, "source"), toKey: processConnectionEndpointRole(connection, "target") });
       state.processConnections[connection.key] = reset;
       state.selectedProcessConnectionKey = reset.key;
       persistLayout();
@@ -6838,22 +6969,12 @@
     );
   }
 
-  function buildTodayFlowNodes(machineEntries) {
-    const entriesById = new Map(
+  function buildTodayProcessObjectEntries(machineEntries) {
+    return new Map(
       (machineEntries || [])
         .filter((entry) => entry?.alpha > .15 && entry?.machine?.instanceId)
         .map((entry) => [entry.machine.instanceId, entry])
     );
-    const nodes = new Map();
-    PROCESS_POINTER_FLOW_DEFINITIONS.forEach((definition) => {
-      const instanceId = state.processPointers?.[definition.key];
-      if (!instanceId) return;
-      const entry = entriesById.get(instanceId);
-      if (!entry) return;
-      const flow = processPointerFlowLabel(definition.key, entry.machine);
-      if (flow) nodes.set(definition.key, { ...entry, flow });
-    });
-    return nodes;
   }
 
   function traceProcessConnection(sx, sy, ex, ey, shape) {
@@ -6976,7 +7097,7 @@
       ctx.stroke();
     }
     ctx.restore();
-    const routeText = `${fromEntry.flow.text} → ${toEntry.flow.text}`;
+    const routeText = `${processConnectionEndpointText(connection, "source")} → ${processConnectionEndpointText(connection, "target")}`;
     drawProcessRouteTag(routeText, [
       (startWorld[0] + endWorld[0]) / 2,
       (startWorld[1] + endWorld[1]) / 2,
@@ -6985,19 +7106,16 @@
   }
 
   function drawTodayProductionFlow(machineEntries) {
-    const nodes = buildTodayFlowNodes(machineEntries);
+    const entriesById = buildTodayProcessObjectEntries(machineEntries);
     Object.values(state.processConnections || {})
-      .sort((first, second) => (
-        (processPointerFlowDefinition(first.fromKey)?.order ?? 999) - (processPointerFlowDefinition(second.fromKey)?.order ?? 999) ||
-        (processPointerFlowDefinition(first.toKey)?.order ?? 999) - (processPointerFlowDefinition(second.toKey)?.order ?? 999)
-      ))
+      .sort((first, second) => processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second)))
       .forEach((connection) => {
         if (connection?.visible === false) return;
-        const fromEntry = nodes.get(connection.fromKey);
-        const toEntry = nodes.get(connection.toKey);
+        const fromEntry = entriesById.get(connection.sourceId);
+        const toEntry = entriesById.get(connection.targetId);
         if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry, connection);
       });
-    return nodes;
+    return entriesById;
   }
 
   function rectanglesIntersect(first, second) {

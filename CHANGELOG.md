@@ -1,3 +1,14 @@
+## 0.13.24 - 2026-09-30
+
+- Expanded process pointers from process-role-only connections to exact object-to-object connections.
+- Source and destination endpoints are now stored by exact layout object instance ID, so a pointer can connect to any placed machine, person, rack, truck, table, custom object, or other layout object.
+- Existing Cutting → Polisher and other process-role connections migrate automatically to the same exact source and destination objects.
+- Added direct **Source object** and **Destination object** controls for the selected pointer, allowing an existing line to be retargeted without deleting and recreating it.
+- Expanded the add-pointer controls to list all placed objects instead of only objects assigned to Cutting / Polisher / other process roles.
+- Today rendering now resolves pointer endpoints directly from object IDs; normal machine labels and their short leader pointers remain completely separate.
+- Optional process roles remain available only for Today Necessary-label semantics and no longer restrict where a process pointer can begin or end.
+- Route tags continue to use process names when an endpoint represents a process role, otherwise they use the connected object name.
+
 ## 0.13.23 - 2026-09-29
 
 - Reworked the Pointers tab around the actual machine-to-machine process connection rather than the selected machine.

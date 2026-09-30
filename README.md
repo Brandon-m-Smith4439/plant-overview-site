@@ -1,3 +1,7 @@
+## Version 0.13.24
+
+Version 0.13.24 expands Today process pointers so either endpoint can be any placed layout object. In **Edit layout → Objects → Pointers**, choose an existing pointer and use **Source object** / **Destination object** to retarget the line directly to a machine, person, rack, truck, table, custom object, or other placed object. New pointers use the same all-object selectors. The connection remains independent from the normal machine label and its short label leader. Existing Cutting → Polisher and other process lines migrate to their exact current objects automatically. Process-role assignment is now optional metadata used for Necessary-label naming, not a requirement for connecting objects.
+
 ## Version 0.13.23
 
 Version 0.13.23 corrects the Pointers editor so it is truly **connection-first** instead of machine-first. The top of **Edit layout → Objects → Pointers** now lists every saved machine-to-machine process line directly, including the exact source and destination machine names. Selecting **Cutting · Cutting Table → Polisher · Kodiak Polisher** edits the long process line between those machines. Start/end anchors, visibility, color, width, opacity, pattern, shape, endpoint style, and optional route-tag position are stored only on the selected process connection. The small machine-label callout and its short leader are still edited only under **Objects → Label**. The legacy process-node text field was removed from the Pointers tab to prevent it from being confused with the machine label. The selected process line is highlighted while the Pointers tab is open, and a runtime regression test now proves that process-connection edits do not mutate any machine-label pointer properties.
@@ -44,7 +48,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.23**
+Current project version: **0.13.24**
 
 ## Full-production rendering performance
 

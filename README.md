@@ -1,3 +1,7 @@
+## Version 0.13.28
+
+Version 0.13.28 fixes Today Overview navigation when **Necessary** labels are active. The Necessary-label candidate filter introduced in v0.13.25 referenced an out-of-scope `machine` variable for non-flow objects. That JavaScript exception occurred after the 2D production-flow labels were drawn but before the 3D scene renderer presented the updated frame, which made the plant appear frozen while the labels continued moving. The filter now reads `entry.machine.labelShowToday`, so orbit, pan, touch gestures, and wheel zoom continue to update both the plant and labels. The label regression test now explicitly guards against the undefined-variable form.
+
 ## Version 0.13.27
 
 Version 0.13.27 makes the two controls easy to find without removing the improvements from v0.13.26. Select an object and open **Objects → Labels**; near the top, use **Show this machine/object label in Necessary mode** to control its normal label on Today Overview. To rename a process-line route tag, open **Objects → Pointers**, select the line, then edit **Route tag text** inside **7 · Optional route tag**. The preview updates live while typing, and blank text still falls back to the automatic source → destination wording.
@@ -60,7 +64,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.27**
+Current project version: **0.13.28**
 
 ## Full-production rendering performance
 

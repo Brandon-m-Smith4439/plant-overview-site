@@ -1,3 +1,7 @@
+## Version 0.13.30
+
+Version 0.13.30 fixes production viewer releases being paired with stale cached legacy renderer scripts. The Next.js shell uses hashed assets, but the large plant viewer scripts intentionally retain stable filenames such as `/plant-app.js` and `/three-depth-scene-renderer.js`. The loader previously added a cache-busting query only on localhost, allowing a Railway browser session to display the newest page/version badge while continuing to execute an older camera renderer. Every hosted and local legacy script now receives `?release=0.13.30`, the in-memory script cache is release-scoped, and the standalone Plant Layout / Machine Studio previews use the same release token. This guarantees that the v0.13.29 camera-layer fixes actually reach the browser after deployment.
+
 ## Version 0.13.29
 
 Version 0.13.29 fixes the remaining camera-freeze behavior visible in **Today → Necessary** mode. The 3D plant and the Necessary labels are rendered on separate layers. The plant now presents its physical WebGL frame before any 2D process pointers or labels are drawn, so an overlay failure cannot leave the plant stuck on an old camera frame while labels keep moving. The retained Three.js renderer also explicitly refreshes the shared view-projection uniform on every rendered camera frame, including instanced materials. Regression checks verify both the scene-before-overlay ordering and the forced camera-uniform refresh.
@@ -68,7 +72,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.29**
+Current project version: **0.13.30**
 
 ## Full-production rendering performance
 

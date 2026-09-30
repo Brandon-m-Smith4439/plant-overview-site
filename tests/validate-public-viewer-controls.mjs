@@ -13,6 +13,7 @@ const studio = read("app", "machine-studio", "page.tsx");
 const owner = read("app", "plant-owner-7f3a9c", "page.tsx");
 const editorGate = read("app", "editor-access-gate.tsx");
 const layout = read("app", "layout.tsx");
+const legacyLoader = read("app", "legacy-script-loader.tsx");
 const standalonePlant = read("public", "preview.html");
 const standaloneStudio = read("public", "machine-studio.html");
 const css = read("app", "globals.css");
@@ -45,6 +46,10 @@ assert.match(worker, /X-Content-Type-Options[\s\S]*?nosniff/, "Hosted responses 
 assert.match(worker, /Permissions-Policy[\s\S]*?camera=\(\), microphone=\(\), geolocation=\(\)/, "The public viewer must disable unnecessary browser capabilities.");
 assert.match(home, /ProtectedEditorLink/, "Machine Studio navigation must be gated.");
 assert.ok(home.includes(`SecretOwnerEntry version="${version}"`), "The public header must expose the discreet owner-entry gesture using the current project version.");
+assert.ok(legacyLoader.includes(`const LEGACY_BUILD_TOKEN = "${version}"`), "The legacy viewer cache-bust token must match the project version.");
+assert.match(legacyLoader, /scriptUrl\.searchParams\.set\("release", LEGACY_BUILD_TOKEN\)/, "Hosted legacy viewer scripts must receive a release query token.");
+assert.match(legacyLoader, /const cacheKey = `\$\{LEGACY_BUILD_TOKEN\}\\u001f\$\{source\}`/, "In-memory legacy script caching must be scoped to the active release.");
+
 assert.match(editorGate, /SECRET_OWNER_CLICK_COUNT = 5/, "The hidden owner entry must require five rapid clicks.");
 assert.match(editorGate, /SECRET_OWNER_CLICK_WINDOW_MS = 3500/, "The hidden owner entry must expire slow click sequences.");
 assert.match(editorGate, /window\.location\.assign\(OWNER_ACCESS_PATH\)/, "The hidden owner entry must open the protected owner path.");

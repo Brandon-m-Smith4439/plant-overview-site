@@ -1,0 +1,90 @@
+name: Verify and package v0.13.27
+
+on:
+  push:
+    branches:
+      - package/verify-v0.13.27
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript
+        run: npm run validate:js
+
+      - name: Validate labels
+        run: npm run validate:labels
+
+      - name: Validate process pointers
+        run: npm run validate:process-pointers
+
+      - name: Validate layout tools
+        run: npm run validate:layout-tools
+
+      - name: Validate editor tabs
+        run: npm run validate:editor-tabs
+
+      - name: Validate public viewer
+        run: npm run validate:public-viewer
+
+      - name: Validate mobile viewer
+        run: npm run validate:mobile-viewer
+
+      - name: Production build
+        run: npm run build
+
+      - name: Build full project ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/full-project
+          rsync -a --exclude='.git' --exclude='.github/workflows/verify-v0.13.27.yml' ./ /tmp/full-project/
+          cd /tmp/full-project
+          zip -qr "$GITHUB_WORKSPACE/monroe-glass-plant-evolution-v0.13.27-full-project.zip" .
+
+      - name: Build changed files ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/changed-files
+          git diff --name-only 694c5980bc29bbb00cab93d43bed9375e1b40b20...HEAD | grep -v '^.github/workflows/verify-v0.13.27.yml$' > /tmp/changed-paths.txt || true
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ -f "$file" ] || continue
+            mkdir -p "/tmp/changed-files/$(dirname "$file")"
+            cp "$file" "/tmp/changed-files/$file"
+          done < /tmp/changed-paths.txt
+          cd /tmp/changed-files
+          zip -qr "$GITHUB_WORKSPACE/monroe-glass-plant-evolution-v0.13.27-changed-files.zip" .
+
+      - name: Upload full project
+        uses: actions/upload-artifact@v4
+        with:
+          name: monroe-glass-plant-evolution-v0.13.27-full-project
+          path: monroe-glass-plant-evolution-v0.13.27-full-project.zip
+          if-no-files-found: error
+
+      - name: Upload changed files
+        uses: actions/upload-artifact@v4
+        with:
+          name: monroe-glass-plant-evolution-v0.13.27-changed-files
+          path: monroe-glass-plant-evolution-v0.13.27-changed-files.zip
+          if-no-files-found: error

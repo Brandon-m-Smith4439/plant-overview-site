@@ -10,24 +10,31 @@ declare global {
   }
 }
 
+const LEGACY_BUILD_TOKEN = "0.13.30";
 const scriptLoads = new Map<string, Promise<void>>();
 
 function loadScript(source: string) {
-  const pending = scriptLoads.get(source);
+  const cacheKey = `${LEGACY_BUILD_TOKEN}\u001f${source}`;
+  const pending = scriptLoads.get(cacheKey);
   if (pending) return pending;
 
   const load = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
     const scriptUrl = new URL(source, window.location.href);
+    // These large public viewer scripts intentionally keep stable filenames so
+    // the standalone preview and saved work stay compatible. Production must
+    // still receive a new URL for every release; otherwise the browser/CDN can
+    // pair a fresh Next.js shell with an older plant renderer.
+    scriptUrl.searchParams.set("release", LEGACY_BUILD_TOKEN);
     if (["127.0.0.1", "localhost", "::1"].includes(window.location.hostname)) {
-      // Public legacy scripts use stable filenames. A per-document local token
-      // prevents an optimized local server from reusing an older one-hour
-      // browser cache entry after a fresh source build.
+      // Keep a per-document token locally as well so rebuilding the same release
+      // cannot reuse a stale optimized-server response during development.
       scriptUrl.searchParams.set("local-build", String(Math.round(performance.timeOrigin)));
     }
     script.src = scriptUrl.href;
     script.async = false;
     script.dataset.plantLegacyScript = source;
+    script.dataset.plantLegacyRelease = LEGACY_BUILD_TOKEN;
     script.addEventListener("load", () => resolve(), { once: true });
     script.addEventListener(
       "error",
@@ -37,8 +44,8 @@ function loadScript(source: string) {
     document.body.appendChild(script);
   });
 
-  scriptLoads.set(source, load);
-  load.catch(() => scriptLoads.delete(source));
+  scriptLoads.set(cacheKey, load);
+  load.catch(() => scriptLoads.delete(cacheKey));
   return load;
 }
 
@@ -100,7 +107,7 @@ export default function LegacyScriptLoader({ sources }: { sources: string[] }) {
       teardownEntry();
       // Shared renderer/data scripts stay cached between routes. The final
       // route bootstrap must run again when its DOM is mounted again.
-      scriptLoads.delete(entrySource);
+      scriptLoads.delete(`${LEGACY_BUILD_TOKEN}\u001f${entrySource}`);
       document.querySelectorAll<HTMLScriptElement>("script[data-plant-legacy-script]").forEach((script) => {
         if (script.dataset.plantLegacyScript === entrySource) script.remove();
       });

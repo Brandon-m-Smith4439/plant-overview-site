@@ -1,3 +1,10 @@
+## 0.13.28 - 2026-09-30
+
+- Fixed Today Overview becoming visually frozen when **Necessary** labels were active.
+- Corrected the Necessary-label candidate filter to read the current entry's machine instead of an undefined `machine` variable.
+- Restored live 3D scene presentation during orbit, pan, touch navigation, and wheel zoom while Necessary labels are enabled.
+- Added a regression guard so the render-loop-breaking undefined-variable form cannot return unnoticed.
+
 ## 0.13.27 - 2026-09-30
 
 - Moved the Today Necessary-mode label control near the top of the dedicated **Objects → Labels** tab as a normal checkbox.

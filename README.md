@@ -1,3 +1,7 @@
+## Version 0.13.29
+
+Version 0.13.29 fixes the remaining camera-freeze behavior visible in **Today → Necessary** mode. The 3D plant and the Necessary labels are rendered on separate layers. The plant now presents its physical WebGL frame before any 2D process pointers or labels are drawn, so an overlay failure cannot leave the plant stuck on an old camera frame while labels keep moving. The retained Three.js renderer also explicitly refreshes the shared view-projection uniform on every rendered camera frame, including instanced materials. Regression checks verify both the scene-before-overlay ordering and the forced camera-uniform refresh.
+
 ## Version 0.13.28
 
 Version 0.13.28 fixes Today Overview navigation when **Necessary** labels are active. The Necessary-label candidate filter introduced in v0.13.25 referenced an out-of-scope `machine` variable for non-flow objects. That JavaScript exception occurred after the 2D production-flow labels were drawn but before the 3D scene renderer presented the updated frame, which made the plant appear frozen while the labels continued moving. The filter now reads `entry.machine.labelShowToday`, so orbit, pan, touch gestures, and wheel zoom continue to update both the plant and labels. The label regression test now explicitly guards against the undefined-variable form.
@@ -64,7 +68,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.28**
+Current project version: **0.13.29**
 
 ## Full-production rendering performance
 

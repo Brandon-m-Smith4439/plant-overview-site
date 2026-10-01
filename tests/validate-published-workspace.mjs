@@ -7,14 +7,17 @@ const preview = fs.readFileSync(new URL("../public/preview.html", import.meta.ur
 const plant = fs.readFileSync(new URL("../public/plant-app.js", import.meta.url), "utf8");
 const transferSource = fs.readFileSync(new URL("../public/workspace-transfer.js", import.meta.url), "utf8");
 const publishedSource = fs.readFileSync(new URL("../public/published-workspace.js", import.meta.url), "utf8");
+const editorAccess = fs.readFileSync(new URL("../public/editor-access.js", import.meta.url), "utf8");
 
 assert.ok(page.indexOf('"/published-workspace.js"') > page.indexOf('"/workspace-transfer.js"'));
-assert.ok(preview.indexOf('src="published-workspace.js"') > preview.indexOf('src="workspace-transfer.js"'));
+assert.ok(preview.indexOf("workspace-transfer.js") >= 0 && preview.indexOf("published-workspace.js") > preview.indexOf("workspace-transfer.js"));
 assert.match(plant, /applyPublishedWorkspace\(\);/);
 assert.doesNotMatch(plant, /hostname\.endsWith\("\.chatgpt\.site"\)/);
 assert.match(plant, /editingAllowed\?\.\(\) !== false/);
 assert.match(publishedSource, /const hostedReadOnly = !\["127\.0\.0\.1", "localhost", "::1"\]\.includes\(window\.location\.hostname\)/);
 assert.match(publishedSource, /monroeEditorAccess\?\.editingAllowed\?\.\(\) === false/);
+assert.match(editorAccess, /hasEditorWorkspaceEvidence/, "Prior editor backup evidence must keep hosted editor workspaces out of read-only published seeding.");
+assert.match(editorAccess, /monroe-glass-plant-layout-v6-backup/, "Existing automatic layout backups must protect the browser before the new durable marker exists.");
 
 const sandbox = { window: { location: { hostname: "localhost" } } };
 vm.createContext(sandbox);

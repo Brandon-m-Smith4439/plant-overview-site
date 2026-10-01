@@ -1,3 +1,7 @@
+## Version 0.13.32
+
+Version 0.13.32 adds **workspace recovery and editor-browser protection** after a hosted read-only page could replace newer browser-local layout/design data with the older checked-in published workspace when an editor session expired. Once a browser successfully authenticates as an editor, a durable protection marker prevents public reloads from seeding over that browser's machines or custom designs while still requiring the normal password for future editing sessions. Existing automatic layout-backup evidence also protects an older editor browser immediately, before the new marker has been created. The Project panel now exposes recovery controls for the existing automatic layout backup, the new machine-design backup, and a pre-publish rescue snapshot. Full-workspace export no longer performs a save first, so exporting recovery evidence cannot overwrite the previous-layout backup. Machine Design Studio now preserves the previous design-library payload before every design save.
+
 ## Version 0.13.31
 
 Version 0.13.31 separates **Necessary-mode process routing** from **normal machine-label visibility**. A machine participating in the Cutting → Polisher → CNC/Waterjet → Washer → Tempering → Wrap route no longer forces its normal machine label on. The **Show this machine/object label in Necessary mode** checkbox is now authoritative for that normal label, even for process-flow machines such as the Kodiak polishers. Turning the label off leaves the independent process pointer and route tag untouched. The selected label's visual state is cleared immediately when the toggle changes so the editor gives instant feedback.
@@ -76,7 +80,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.31**
+Current project version: **0.13.32**
 
 ## Full-production rendering performance
 

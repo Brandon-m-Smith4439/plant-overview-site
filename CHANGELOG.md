@@ -1,3 +1,13 @@
+## 0.13.32 - 2026-10-01
+
+- Added durable editor-browser protection so an expired session cannot cause the public published snapshot to overwrite that browser's local plant layout or custom machine designs.
+- Existing automatic layout-backup evidence now protects older editor browsers immediately, before the new durable marker exists.
+- Preserve differing local layout/design data in a **pre-publish rescue snapshot** before Plant Layout applies a published workspace to an unprotected browser.
+- Added **Recovery & backups** controls in Project tools for restoring the previous layout backup, previous machine-design backup, or pre-publish rescue snapshot.
+- Machine Design Studio now writes a persistent previous-design-library backup before replacing the current saved library.
+- Full workspace export no longer calls `persistLayout()` first, preventing an export from overwriting the one-step layout backup needed for recovery.
+- Updated hosted published-workspace generation so future published snapshots retain the same safety behavior.
+
 ## 0.13.31 - 2026-09-30
 
 - Fixed normal machine labels in **Today → Necessary** mode being forced on whenever the machine was assigned to a process-flow node.

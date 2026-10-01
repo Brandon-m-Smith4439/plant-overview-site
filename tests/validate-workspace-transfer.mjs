@@ -66,4 +66,16 @@ for (const token of [
   assert.ok(plant.includes(token), `Plant Project tools are missing workspace transfer behavior: ${token}`);
 }
 
-console.log("Full workspace export, import, validation, and rollback checks passed.");
+for (const token of [
+  'data-editor-action="recover-layout-backup"',
+  'data-editor-action="recover-design-backup"',
+  'data-editor-action="recover-publish-snapshot"',
+  'monroe-glass-recovery-before-publish-v1',
+  'DESIGN_BACKUP_STORAGE_KEY',
+  'protectThisEditorBrowser',
+]) {
+  assert.ok(plant.includes(token), `Plant recovery tooling is missing: ${token}`);
+}
+assert.ok(!plant.includes('persistLayout();\n    const payload = workspaceTransfer.createPayload(localStorage'), "Workspace export must not overwrite the previous-layout backup before exporting it.");
+
+console.log("Full workspace export, import, validation, rollback, and recovery checks passed.");

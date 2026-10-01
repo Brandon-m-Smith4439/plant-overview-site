@@ -36,12 +36,31 @@ const output = `// Generated from the approved local Monroe Glass Plant workspac
     ...snapshot,
     items: Object.freeze(snapshot.items),
   });
-  // Seed any deployed read-only viewer. Localhost and password-unlocked
-  // owner/editor sessions retain their own editable browser workspaces.
+  // Seed fresh read-only browsers, but never overwrite a browser that has
+  // authenticated as an editor. Session expiry may lock editing; it must not
+  // erase that browser's local machines or custom designs.
+  const editorProfileProtected = (() => {
+    try {
+      return window.localStorage.getItem("monroe-glass-editor-profile-v1") === "protected"
+        || window.localStorage.getItem("monroe-glass-plant-layout-v6-backup") !== null
+        || window.localStorage.getItem("monroe-glass-machine-designs-v1-backup") !== null;
+    } catch { return false; }
+  })();
   const hostedReadOnly = !["127.0.0.1", "localhost", "::1"].includes(window.location.hostname)
     && window.monroeEditorAccess?.editingAllowed?.() === false;
-  if (hostedReadOnly) {
+  if (hostedReadOnly && !editorProfileProtected) {
     try {
+      const recoveryKey = "monroe-glass-recovery-before-publish-v1";
+      if (!window.localStorage.getItem(recoveryKey)) {
+        const items = {};
+        for (const [key, value] of Object.entries(snapshot.items)) {
+          const existing = window.localStorage.getItem(key);
+          if (existing !== null && existing !== value) items[key] = existing;
+        }
+        if (Object.keys(items).length) {
+          window.localStorage.setItem(recoveryKey, JSON.stringify({ capturedAt: new Date().toISOString(), appVersion: snapshot.appVersion, items }));
+        }
+      }
       for (const [key, value] of Object.entries(snapshot.items)) {
         window.localStorage.setItem(key, value);
       }

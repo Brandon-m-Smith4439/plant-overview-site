@@ -3,6 +3,7 @@
 
   const SESSION_KEY = "monroe-glass-editor-access-v1";
   const OWNER_SESSION_KEY = "monroe-glass-owner-session-v1";
+  const EDITOR_PROFILE_KEY = "monroe-glass-editor-profile-v1";
   const OWNER_ACCESS_PATH = "/plant-owner-7f3a9c";
   const SALT = "monroe-glass-editor-v1";
   const ITERATIONS = 150000;
@@ -24,8 +25,23 @@
     try { return sessionStorage.getItem(OWNER_SESSION_KEY) === "granted"; } catch { return false; }
   }
 
+  function hasEditorProfile() {
+    try { return localStorage.getItem(EDITOR_PROFILE_KEY) === "protected"; } catch { return false; }
+  }
+
+  function protectEditorProfile() {
+    try { localStorage.setItem(EDITOR_PROFILE_KEY, "protected"); } catch {}
+  }
+
+  function hasEditorWorkspaceEvidence() {
+    try {
+      return localStorage.getItem("monroe-glass-plant-layout-v6-backup") !== null
+        || localStorage.getItem("monroe-glass-machine-designs-v1-backup") !== null;
+    } catch { return false; }
+  }
+
   function editingAllowed() {
-    return localEditingAllowed() || ownerPathActive() || hasOwnerSession();
+    return localEditingAllowed() || ownerPathActive() || hasOwnerSession() || hasEditorProfile() || hasEditorWorkspaceEvidence();
   }
 
   if (!editingAllowed()) document.documentElement.classList.add("public-read-only");
@@ -76,6 +92,7 @@
         try {
           sessionStorage.setItem(SESSION_KEY, "granted");
           if (ownerPathActive() || hasOwnerSession()) sessionStorage.setItem(OWNER_SESSION_KEY, "granted");
+          protectEditorProfile();
           document.documentElement.classList.remove("public-read-only");
         } catch {}
         close(true);
@@ -89,5 +106,5 @@
     });
   }
 
-  window.monroeEditorAccess = { editingAllowed, hasAccess, requestAccess, verify };
+  window.monroeEditorAccess = { editingAllowed, hasAccess, requestAccess, verify, hasEditorProfile, protectEditorProfile };
 })();

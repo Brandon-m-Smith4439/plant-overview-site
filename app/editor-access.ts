@@ -2,6 +2,7 @@
 
 export const EDITOR_ACCESS_SESSION_KEY = "monroe-glass-editor-access-v1";
 export const OWNER_ACCESS_SESSION_KEY = "monroe-glass-owner-session-v1";
+export const EDITOR_PROFILE_KEY = "monroe-glass-editor-profile-v1";
 export const OWNER_ACCESS_PATH = "/plant-owner-7f3a9c";
 const SALT = "monroe-glass-editor-v1";
 const ITERATIONS = 150000;
@@ -26,8 +27,26 @@ export function hasOwnerSession() {
   try { return sessionStorage.getItem(OWNER_ACCESS_SESSION_KEY) === "granted"; } catch { return false; }
 }
 
+export function hasEditorProfile() {
+  if (typeof window === "undefined") return false;
+  try { return localStorage.getItem(EDITOR_PROFILE_KEY) === "protected"; } catch { return false; }
+}
+
+export function protectEditorProfile() {
+  if (typeof window === "undefined") return false;
+  try { localStorage.setItem(EDITOR_PROFILE_KEY, "protected"); return true; } catch { return false; }
+}
+
+export function hasEditorWorkspaceEvidence() {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem("monroe-glass-plant-layout-v6-backup") !== null
+      || localStorage.getItem("monroe-glass-machine-designs-v1-backup") !== null;
+  } catch { return false; }
+}
+
 export function isEditorEnvironment() {
-  return isLocalEditorHost() || isOwnerAccessPath() || hasOwnerSession();
+  return isLocalEditorHost() || isOwnerAccessPath() || hasOwnerSession() || hasEditorProfile() || hasEditorWorkspaceEvidence();
 }
 
 export function hasEditorAccess() {
@@ -40,6 +59,7 @@ export function grantEditorAccess() {
   try {
     sessionStorage.setItem(EDITOR_ACCESS_SESSION_KEY, "granted");
     if (isOwnerAccessPath() || hasOwnerSession()) sessionStorage.setItem(OWNER_ACCESS_SESSION_KEY, "granted");
+    protectEditorProfile();
     return true;
   } catch {
     return false;

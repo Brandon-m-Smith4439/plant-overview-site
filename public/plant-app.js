@@ -203,22 +203,51 @@
   const BACKUP_STORAGE_KEY = "monroe-glass-plant-layout-v6-backup";
   const MIGRATION_BACKUP_KEY = "monroe-glass-plant-layout-v5-before-v0.4";
   const DESIGN_STORAGE_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
+  const DESIGN_BACKUP_STORAGE_KEY = `${DESIGN_STORAGE_KEY}-backup`;
+  const EDITOR_PROFILE_KEY = "monroe-glass-editor-profile-v1";
+  const PUBLISH_RECOVERY_STORAGE_KEY = "monroe-glass-recovery-before-publish-v1";
+  const PRE_RECOVERY_LAYOUT_KEY = "monroe-glass-plant-layout-v6-pre-recovery";
+  const PRE_RECOVERY_DESIGN_KEY = "monroe-glass-machine-designs-v1-pre-recovery";
   const SYNC_CHANNEL_NAME = "monroe-glass-plant-sync-v1";
   const syncChannel = typeof window.BroadcastChannel === "function"
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.31";
+  const APP_VERSION = "0.13.32";
+
+  function editorProfileProtected() {
+    try {
+      return window.monroeEditorAccess?.hasEditorProfile?.() === true
+        || localStorage.getItem(EDITOR_PROFILE_KEY) === "protected"
+        || localStorage.getItem(BACKUP_STORAGE_KEY) !== null
+        || localStorage.getItem(DESIGN_BACKUP_STORAGE_KEY) !== null;
+    } catch { return false; }
+  }
+
+  function capturePublishedWorkspaceRecovery(publishedWorkspace) {
+    if (!publishedWorkspace?.items || localStorage.getItem(PUBLISH_RECOVERY_STORAGE_KEY)) return;
+    const items = {};
+    Object.entries(publishedWorkspace.items).forEach(([key, publishedValue]) => {
+      const existing = localStorage.getItem(key);
+      if (existing !== null && existing !== publishedValue) items[key] = existing;
+    });
+    if (!Object.keys(items).length) return;
+    localStorage.setItem(PUBLISH_RECOVERY_STORAGE_KEY, JSON.stringify({
+      capturedAt: new Date().toISOString(),
+      appVersion: APP_VERSION,
+      items,
+    }));
+  }
 
   function applyPublishedWorkspace() {
     const publishedWorkspace = window.PLANT_PUBLISHED_WORKSPACE;
-    // Localhost and owner/editor sessions remain the editable source of truth.
-    // Any hosted read-only viewer (ChatGPT Sites, Railway, or another host)
-    // uses the checked-in snapshot on every load so stale browser storage
-    // cannot hide newly published machines or layout changes.
+    // A browser that has ever authenticated as an editor owns its local
+    // workspace permanently. Session expiry may lock editing again, but a
+    // public page load must never replace that browser's machines/designs.
     if (!publishedWorkspace || !workspaceTransfer) return;
-    if (window.monroeEditorAccess?.editingAllowed?.() !== false) return;
+    if (window.monroeEditorAccess?.editingAllowed?.() !== false || editorProfileProtected()) return;
     try {
+      capturePublishedWorkspaceRecovery(publishedWorkspace);
       workspaceTransfer.applyPayload(localStorage, publishedWorkspace);
     } catch (error) {
       console.error("The published plant workspace could not be loaded.", error);
@@ -3629,6 +3658,7 @@
     });
     updateEditorHelp();
     updateHistoryButtons();
+    updateRecoveryPanel(panel);
   }
 
   // Dragging can deliver hundreds of pointer events per second. Updating the
@@ -3865,7 +3895,6 @@
       window.alert("Full workspace transfer is unavailable. Reload the page and try again.");
       return;
     }
-    persistLayout();
     const payload = workspaceTransfer.createPayload(localStorage, {
       appVersion: APP_VERSION,
       sourceOrigin: window.location.origin || "local-file",
@@ -3877,6 +3906,93 @@
     }
     downloadJson(payload, `monroe-glass-plant-workspace-${new Date().toISOString().slice(0, 10)}.json`);
     showToast(`Full workspace exported with ${itemCount} saved data section${itemCount === 1 ? "" : "s"}.`);
+  }
+
+  function parseStorageJson(key) {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
+  }
+
+  function recoverySummary() {
+    const currentLayout = parseStorageJson(STORAGE_KEY);
+    const backupLayout = parseStorageJson(BACKUP_STORAGE_KEY);
+    const currentDesigns = parseStorageJson(DESIGN_STORAGE_KEY);
+    const backupDesigns = parseStorageJson(DESIGN_BACKUP_STORAGE_KEY);
+    const publishRecovery = parseStorageJson(PUBLISH_RECOVERY_STORAGE_KEY);
+    return {
+      currentMachines: Array.isArray(currentLayout?.machines) ? currentLayout.machines.length : 0,
+      backupMachines: Array.isArray(backupLayout?.machines) ? backupLayout.machines.length : 0,
+      currentDesigns: currentDesigns?.designs && typeof currentDesigns.designs === "object" ? Object.keys(currentDesigns.designs).length : 0,
+      backupDesigns: backupDesigns?.designs && typeof backupDesigns.designs === "object" ? Object.keys(backupDesigns.designs).length : 0,
+      hasLayoutBackup: Array.isArray(backupLayout?.machines),
+      hasDesignBackup: Boolean(backupDesigns?.designs && typeof backupDesigns.designs === "object"),
+      hasPublishRecovery: Boolean(publishRecovery?.items && typeof publishRecovery.items === "object"),
+    };
+  }
+
+  function updateRecoveryPanel(panel = document.querySelector(".layout-editor")) {
+    if (!panel) return;
+    const summary = recoverySummary();
+    const message = panel.querySelector("[data-recovery-summary]");
+    if (message) {
+      message.textContent = `Current: ${summary.currentMachines} layout objects / ${summary.currentDesigns} saved designs. Previous layout backup: ${summary.backupMachines || "none"} objects. Design backup: ${summary.backupDesigns || "none"} designs.`;
+    }
+    const layoutButton = panel.querySelector("[data-editor-action='recover-layout-backup']");
+    const designButton = panel.querySelector("[data-editor-action='recover-design-backup']");
+    const publishButton = panel.querySelector("[data-editor-action='recover-publish-snapshot']");
+    if (layoutButton) layoutButton.disabled = !summary.hasLayoutBackup;
+    if (designButton) designButton.disabled = !summary.hasDesignBackup;
+    if (publishButton) publishButton.disabled = !summary.hasPublishRecovery;
+  }
+
+  function protectThisEditorBrowser() {
+    try {
+      localStorage.setItem(EDITOR_PROFILE_KEY, "protected");
+      window.monroeEditorAccess?.protectEditorProfile?.();
+    } catch {}
+  }
+
+  function recoverStorageValue(sourceKey, targetKey, safetyKey, label) {
+    const sourceValue = localStorage.getItem(sourceKey);
+    if (!sourceValue) {
+      window.alert(`No ${label} is available in this browser.`);
+      return;
+    }
+    const currentValue = localStorage.getItem(targetKey);
+    if (!window.confirm(`Restore the ${label}? The current value will be preserved as a pre-recovery safety copy before the page reloads.`)) return;
+    try {
+      if (currentValue) localStorage.setItem(safetyKey, currentValue);
+      localStorage.setItem(targetKey, sourceValue);
+      protectThisEditorBrowser();
+      window.alert(`${label[0].toUpperCase()}${label.slice(1)} restored. The page will reload now.`);
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      window.alert(`The ${label} could not be restored.`);
+    }
+  }
+
+  function recoverPublishedWorkspaceSnapshot() {
+    const recovery = parseStorageJson(PUBLISH_RECOVERY_STORAGE_KEY);
+    if (!recovery?.items || typeof recovery.items !== "object") {
+      window.alert("No pre-publish rescue snapshot is available in this browser.");
+      return;
+    }
+    if (!window.confirm("Restore the workspace captured immediately before a published snapshot replaced it? Current layout/design data will be preserved as pre-recovery safety copies.")) return;
+    try {
+      const currentLayout = localStorage.getItem(STORAGE_KEY);
+      const currentDesigns = localStorage.getItem(DESIGN_STORAGE_KEY);
+      if (currentLayout) localStorage.setItem(PRE_RECOVERY_LAYOUT_KEY, currentLayout);
+      if (currentDesigns) localStorage.setItem(PRE_RECOVERY_DESIGN_KEY, currentDesigns);
+      Object.entries(recovery.items).forEach(([key, value]) => {
+        if (typeof value === "string" && key.startsWith("monroe-glass-")) localStorage.setItem(key, value);
+      });
+      protectThisEditorBrowser();
+      window.alert("The pre-publish workspace was restored. The page will reload now.");
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      window.alert("The pre-publish workspace could not be restored.");
+    }
   }
 
   async function importLayout(file) {
@@ -4538,7 +4654,11 @@
 
       <div class="editor-project" data-editor-section="project" hidden>
         <div class="editor-callout"><strong>Move all saved work</strong><p>Use the full workspace file to move the layout, machines, custom designs, settings, and backups from preview.html into this site or another browser.</p></div>
+        <div class="editor-callout"><strong>Recovery & backups</strong><p data-recovery-summary>Checking saved recovery data...</p><p>Restore only the section you need. Current data is preserved as a pre-recovery safety copy before anything is replaced.</p></div>
         <div class="editor-project-actions">
+          <button type="button" data-editor-action="recover-layout-backup">Restore previous layout backup</button>
+          <button type="button" data-editor-action="recover-design-backup">Restore previous machine-design backup</button>
+          <button type="button" data-editor-action="recover-publish-snapshot">Restore pre-publish rescue snapshot</button>
           <button type="button" data-editor-action="export-workspace">Export full workspace</button>
           <button type="button" data-editor-action="import-workspace">Import full workspace</button>
           <input type="file" data-workspace-file accept="application/json,.json" hidden>
@@ -5540,6 +5660,13 @@
       await importWorkspace(workspaceFileInput.files?.[0]);
       workspaceFileInput.value = "";
     });
+    panel.querySelector("[data-editor-action='recover-layout-backup']")?.addEventListener("click", () => {
+      recoverStorageValue(BACKUP_STORAGE_KEY, STORAGE_KEY, PRE_RECOVERY_LAYOUT_KEY, "previous layout backup");
+    });
+    panel.querySelector("[data-editor-action='recover-design-backup']")?.addEventListener("click", () => {
+      recoverStorageValue(DESIGN_BACKUP_STORAGE_KEY, DESIGN_STORAGE_KEY, PRE_RECOVERY_DESIGN_KEY, "previous machine-design backup");
+    });
+    panel.querySelector("[data-editor-action='recover-publish-snapshot']")?.addEventListener("click", recoverPublishedWorkspaceSnapshot);
     panel.querySelector("[data-editor-action='done']").addEventListener("click",() => setEditing(false));
     panel.querySelectorAll("[data-paint-stage]").forEach((input) => {
       input.addEventListener("change", () => {

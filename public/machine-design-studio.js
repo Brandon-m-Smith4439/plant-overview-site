@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.14";
+  const APP_VERSION = "0.13.32";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -64,6 +64,7 @@
   const MAX_PAN_POINTER_DELTA = 160;
   const MARQUEE_DRAG_THRESHOLD = 5;
   const DESIGN_KEY = window.PLANT_MACHINE_DESIGN_STORAGE_KEY || "monroe-glass-machine-designs-v1";
+  const DESIGN_BACKUP_KEY = `${DESIGN_KEY}-backup`;
   const LAYOUT_KEY = "monroe-glass-plant-layout-v6";
   const LEGACY_LAYOUT_KEY = "monroe-glass-plant-layout-v5";
   const SYNC_CHANNEL_NAME = "monroe-glass-plant-sync-v1";
@@ -740,7 +741,7 @@
     const saveState = document.getElementById("save-state");
     if (saveState) saveState.textContent = "Saving\u2026";
     Object.keys(library).forEach((id) => deletedDesignIds.delete(id));
-    localStorage.setItem(DESIGN_KEY, JSON.stringify({
+    const serializedLibrary = JSON.stringify({
       version: 17,
       updatedAt: new Date().toISOString(),
       // JSON.stringify already walks the object graph once. Cloning every
@@ -748,7 +749,12 @@
       // a detailed component was pasted.
       designs: library,
       deletedDesignIds: [...deletedDesignIds],
-    }));
+    });
+    const previousLibrary = localStorage.getItem(DESIGN_KEY);
+    if (previousLibrary && previousLibrary !== serializedLibrary) {
+      localStorage.setItem(DESIGN_BACKUP_KEY, previousLibrary);
+    }
+    localStorage.setItem(DESIGN_KEY, serializedLibrary);
     broadcastProjectUpdate("design-library-updated", { designId: state?.designId || null });
     if (saveState) window.setTimeout(() => { saveState.textContent = "Auto-saved"; }, 180);
   }

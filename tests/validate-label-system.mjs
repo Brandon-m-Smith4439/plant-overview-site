@@ -11,7 +11,8 @@ assert.ok(
   "Today must expose Necessary, Abbreviated, and Full label modes."
 );
 assert.ok(!plant.includes('state.todayLabelMode = "necessary";\n      state.labelTextMode'), "Returning to Today must not erase the viewer's selected Today label mode.");
-assert.ok(plant.includes('if (isTodayOverview() && state.todayLabelMode === "necessary")'), "Necessary mode must draw the dedicated production-flow overlay.");
+assert.ok(plant.includes('if (isTodayStage() && state.todayLabelMode === "necessary")'), "Necessary route labels must remain available on the Today stage in both overview and first person.");
+assert.ok(plant.includes('labelsOnly: state.cameraMode === "walk"'), "First person must render Necessary route tags without the full overview route-line overlay.");
 assert.ok(plant.includes('if (!isTodayStage() || isTodayOverview())'), "Today must run normal machine-label rendering even when the process overlay is enabled.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
 assert.ok(plant.includes("PROCESS_POINTER_FLOW_DEFINITIONS"), "Necessary production-flow labels must use stable flow definitions.");
@@ -35,6 +36,7 @@ assert.ok(plant.includes("function traceProcessConnection") && plant.includes("a
 assert.ok(plant.includes("function drawTodayProductionFlow"), "Today flow must use its own overlay renderer.");
 assert.ok(plant.includes("function drawProcessRouteTag"), "Process pointers must render a dedicated route tag instead of reusing the normal machine-label renderer.");
 assert.ok(plant.includes("labelRects.push(paddedLabelRectangle(box"), "Process route tags must reserve screen space separately from machine labels.");
+assert.ok(plant.includes("routeTags.forEach"), "Route tags must render after every process line so a later route cannot draw over an earlier tag.");
 assert.ok(plant.includes('if (machine.type === "room") return /office|maintenance/.test(name);'), "Office and Maintenance rooms must be eligible for their construction-stage labels.");
 assert.ok(plant.includes('const roomName = machine?.type === "room"'), "Room-stage labels must use full room names.");
 assert.ok(plant.includes("labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate"), "Construction stages must honor each machine label's independent reveal/retire window.");
@@ -63,7 +65,7 @@ assert.ok(!plant.includes("Boolean(flow) || entry.machine.labelShowToday === tru
 assert.ok(!plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must not reference an undefined machine variable, which aborts the render loop before the 3D scene is presented.");
 assert.ok(plant.includes("function drawSceneObjects(time, presentPhysicalScene = null)"), "Plant scene drawing must expose a physical-scene presentation boundary before 2D overlays.");
 const sceneDrawBody = plant.slice(plant.indexOf("function drawSceneObjects(time, presentPhysicalScene = null)"), plant.indexOf("function drawDesignTextLabels"));
-assert.ok(sceneDrawBody.indexOf("presentPhysicalScene?.()") < sceneDrawBody.indexOf("drawTodayProductionFlow(machineEntries)"), "Necessary-mode pointers and labels must be drawn only after the physical 3D scene is presented.");
+assert.ok(sceneDrawBody.indexOf("presentPhysicalScene?.()") < sceneDrawBody.indexOf("drawTodayProductionFlow(machineEntries"), "Necessary-mode pointers and labels must be drawn only after the physical 3D scene is presented.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");

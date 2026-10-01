@@ -1,3 +1,11 @@
+## 0.13.33 - 2026-10-01
+
+- Render process route tags in a second overlay pass after all Necessary route lines so route lines can no longer cover route-tag text.
+- Added lightweight route-tag collision avoidance so nearby tags spread apart before normal machine-label placement runs.
+- Show Necessary route tags on the Today stage in first-person mode while keeping the full route-line overlay overview-only.
+- Expanded process-pointer start/end X/Y/Z anchor controls from 0–100% to -300–400%, allowing endpoints well outside machine/object boundaries.
+- Added regression coverage for route-tag layering, first-person route labels, and expanded endpoint ranges.
+
 ## 0.13.32 - 2026-10-01
 
 - Added durable editor-browser protection so an expired session cannot cause the public published snapshot to overwrite that browser's local plant layout or custom machine designs.

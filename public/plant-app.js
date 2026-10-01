@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.32";
+  const APP_VERSION = "0.13.33";
 
   function editorProfileProtected() {
     try {
@@ -1240,6 +1240,13 @@
     return PROCESS_POINTER_FLOW_DEFINITIONS.find(({ key }) => state?.processPointers?.[key] === instanceId)?.key || "";
   }
 
+  // Process-line endpoints may intentionally sit well outside the source or
+  // destination object. 0..100 is the object itself; the extended range gives
+  // enough room to route cleanly around equipment without creating fake helper
+  // objects just to hold an endpoint.
+  const PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -300;
+  const PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 400;
+
   function defaultProcessConnection(sourceId, targetId, { fromKey = "", toKey = "" } = {}) {
     return {
       key: processConnectionKey(sourceId, targetId),
@@ -1287,12 +1294,12 @@
       fromKey,
       toKey,
       visible: source.visible !== undefined ? source.visible !== false : defaults.visible !== false,
-      startAnchorXPercent: readNumber("startAnchorXPercent", 0, 100),
-      startAnchorYPercent: readNumber("startAnchorYPercent", 0, 100),
-      startAnchorZPercent: readNumber("startAnchorZPercent", 0, 100),
-      endAnchorXPercent: readNumber("endAnchorXPercent", 0, 100),
-      endAnchorYPercent: readNumber("endAnchorYPercent", 0, 100),
-      endAnchorZPercent: readNumber("endAnchorZPercent", 0, 100),
+      startAnchorXPercent: readNumber("startAnchorXPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+      startAnchorYPercent: readNumber("startAnchorYPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+      startAnchorZPercent: readNumber("startAnchorZPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+      endAnchorXPercent: readNumber("endAnchorXPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+      endAnchorYPercent: readNumber("endAnchorYPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+      endAnchorZPercent: readNumber("endAnchorZPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
       tagVisible: source.tagVisible !== undefined ? source.tagVisible === true : defaults.tagVisible === true,
       tagText: String(source.tagText ?? defaults.tagText ?? "").trim().slice(0, 120),
       tagLift: readNumber("tagLift", 0, 60),
@@ -2036,8 +2043,12 @@
     const value = Number(rawValue);
     if (!Number.isFinite(value)) return false;
     const ranges = {
-      startAnchorXPercent: [0, 100], startAnchorYPercent: [0, 100], startAnchorZPercent: [0, 100],
-      endAnchorXPercent: [0, 100], endAnchorYPercent: [0, 100], endAnchorZPercent: [0, 100],
+      startAnchorXPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
+      startAnchorYPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
+      startAnchorZPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
+      endAnchorXPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
+      endAnchorYPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
+      endAnchorZPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
       tagLift: [0, 60], tagScreenOffsetX: [-500, 500], tagScreenOffsetY: [-500, 500],
       width: [.5, 12], opacity: [5, 100], endSize: [1, 14],
     };
@@ -4378,21 +4389,21 @@
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>4 · Start point · source object</legend>
-            <p>Moves only where the selected long process line leaves its source object.</p>
+            <p>Moves where the selected long process line leaves its source object. Values below 0% or above 100% move the start point outside the object.</p>
             <div class="process-pointer-grid">
-              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="0" max="100" step="1"></label>
-              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="0" max="100" step="1"></label>
-              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" min="0" max="100" step="1"></label>
+              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="-300" max="400" step="5"></label>
+              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="-300" max="400" step="5"></label>
+              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" min="-300" max="400" step="5"></label>
             </div>
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-start">Center source point</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>5 · End point · destination object</legend>
-            <p>Moves only where the selected long process line lands on its destination object.</p>
+            <p>Moves where the selected long process line lands on its destination object. Values below 0% or above 100% move the end point outside the object.</p>
             <div class="process-pointer-grid">
-              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="0" max="100" step="1"></label>
-              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="0" max="100" step="1"></label>
-              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" min="0" max="100" step="1"></label>
+              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="-300" max="400" step="5"></label>
+              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="-300" max="400" step="5"></label>
+              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" min="-300" max="400" step="5"></label>
             </div>
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end">Center destination point</button></div>
           </fieldset>
@@ -7148,9 +7159,9 @@
     const prefix = endpoint === "end" ? "end" : "start";
     return localPoint(
       rendered,
-      rendered.w * clamp(Number(connection[`${prefix}AnchorXPercent`] ?? 50), 0, 100) / 100,
-      rendered.h * clamp(Number(connection[`${prefix}AnchorYPercent`] ?? 100), 0, 100) / 100,
-      rendered.d * clamp(Number(connection[`${prefix}AnchorZPercent`] ?? 50), 0, 100) / 100,
+      rendered.w * clamp(Number(connection[`${prefix}AnchorXPercent`] ?? 50), PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT) / 100,
+      rendered.h * clamp(Number(connection[`${prefix}AnchorYPercent`] ?? 100), PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT) / 100,
+      rendered.d * clamp(Number(connection[`${prefix}AnchorZPercent`] ?? 50), PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT) / 100,
     );
   }
 
@@ -7177,49 +7188,76 @@
     if (!text || !worldMidpoint || connection?.tagVisible !== true) return;
     const lifted = [worldMidpoint[0], worldMidpoint[1] + clamp(Number(connection.tagLift ?? 4), 0, 60), worldMidpoint[2]];
     const point = project(...lifted);
+    if (state.cameraMode === "walk" && point[3] < WALK_NEAR_CLIP) return;
     const rect = canvas.getBoundingClientRect();
     const pixelScale = canvas.width / Math.max(1, rect.width);
-    const x = point[0] + clamp(Number(connection.tagScreenOffsetX ?? 0), -500, 500) * pixelScale;
-    const y = point[1] + clamp(Number(connection.tagScreenOffsetY ?? 0), -500, 500) * pixelScale;
-    const fontSize = (compactLabelViewport() ? 7.2 : 8.4) * pixelScale;
+    const baseX = point[0] + clamp(Number(connection.tagScreenOffsetX ?? 0), -500, 500) * pixelScale;
+    const baseY = point[1] + clamp(Number(connection.tagScreenOffsetY ?? 0), -500, 500) * pixelScale;
+    const fontSize = (state.cameraMode === "walk" ? 11.5 : compactLabelViewport() ? 7.2 : 8.4) * pixelScale;
     ctx.save();
     ctx.font = `600 ${fontSize}px "Segoe UI", sans-serif`;
     const paddingX = 6 * pixelScale;
-    const height = 19 * pixelScale;
+    const height = (state.cameraMode === "walk" ? 23 : 19) * pixelScale;
     const width = ctx.measureText(text).width + paddingX * 2;
-    const box = { left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 };
-    ctx.globalAlpha = .96;
-    ctx.fillStyle = "rgba(8,24,22,.94)";
+    const collisionGap = 4 * pixelScale;
+    const offsets = [[0,0],[0,-24],[0,24],[30,0],[-30,0],[0,-48],[0,48],[42,-24],[-42,-24],[42,24],[-42,24],[0,-72],[0,72]];
+    let placement = null;
+    for (const [offsetX, offsetY] of offsets) {
+      const x = baseX + offsetX * pixelScale;
+      const y = baseY + offsetY * pixelScale;
+      const box = { left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 };
+      const onCanvas = box.right > 0 && box.left < canvas.width && box.bottom > 0 && box.top < canvas.height;
+      const collisionBox = paddedLabelRectangle(box, collisionGap);
+      if (onCanvas && !labelRects.some((used) => rectanglesIntersect(collisionBox, used))) {
+        placement = { x, y, box };
+        break;
+      }
+    }
+    if (!placement) {
+      const box = { left: baseX - width / 2, right: baseX + width / 2, top: baseY - height / 2, bottom: baseY + height / 2 };
+      placement = { x: baseX, y: baseY, box };
+    }
+    const { x, y, box } = placement;
+    ctx.globalAlpha = .98;
+    ctx.fillStyle = "rgba(8,24,22,.96)";
     ctx.strokeStyle = color;
     ctx.lineWidth = Math.max(.8, pixelScale);
     if (typeof ctx.roundRect === "function") {
-      ctx.beginPath();
-      ctx.roundRect(box.left, box.top, width, height, 6 * pixelScale);
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      ctx.fillRect(box.left, box.top, width, height);
-      ctx.strokeRect(box.left, box.top, width, height);
-    }
+      ctx.beginPath(); ctx.roundRect(box.left, box.top, width, height, 6 * pixelScale); ctx.fill(); ctx.stroke();
+    } else { ctx.fillRect(box.left, box.top, width, height); ctx.strokeRect(box.left, box.top, width, height); }
     ctx.fillStyle = "#f2faf8";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, x, y + .4 * pixelScale);
     ctx.restore();
-    labelRects.push(paddedLabelRectangle(box, 3 * pixelScale));
+    labelRects.push(paddedLabelRectangle(box, collisionGap));
+  }
+
+  function processRouteTagDescriptor(fromEntry, toEntry, connection) {
+    if (!connection || connection.visible === false) return null;
+    const startWorld = flowEntryWorldAnchor(fromEntry, connection, "start");
+    const endWorld = flowEntryWorldAnchor(toEntry, connection, "end");
+    if (!startWorld || !endWorld) return null;
+    const color = /^#[0-9a-f]{6}$/i.test(String(connection.color || "")) ? connection.color : "#52b7aa";
+    const automaticRouteText = `${processConnectionEndpointText(connection, "source")} → ${processConnectionEndpointText(connection, "target")}`;
+    const text = String(connection.tagText || "").trim() || automaticRouteText;
+    return {
+      text,
+      worldMidpoint: [(startWorld[0]+endWorld[0])/2,(startWorld[1]+endWorld[1])/2,(startWorld[2]+endWorld[2])/2],
+      connection, color, startWorld, endWorld,
+    };
   }
 
   function drawTodayFlowArrow(fromEntry, toEntry, connection) {
-    if (!connection || connection.visible === false) return;
-    const startWorld = flowEntryWorldAnchor(fromEntry, connection, "start");
-    const endWorld = flowEntryWorldAnchor(toEntry, connection, "end");
-    if (!startWorld || !endWorld) return;
+    const routeTag = processRouteTagDescriptor(fromEntry, toEntry, connection);
+    if (!routeTag) return null;
+    const { startWorld, endWorld, color } = routeTag;
     const start = project(...startWorld);
     const end = project(...endWorld);
     const dx = end[0] - start[0];
     const dy = end[1] - start[1];
     const length = Math.hypot(dx, dy);
-    if (!Number.isFinite(length) || length < 8) return;
+    if (!Number.isFinite(length) || length < 8) return routeTag;
     const rect = canvas.getBoundingClientRect();
     const pixelScale = canvas.width / Math.max(1, rect.width);
     const ux = dx / length;
@@ -7230,7 +7268,6 @@
     const sy = start[1] + uy * startInset;
     const ex = end[0] - ux * endInset;
     const ey = end[1] - uy * endInset;
-    const color = /^#[0-9a-f]{6}$/i.test(String(connection.color || "")) ? connection.color : "#52b7aa";
     const width = clamp(Number(connection.width) || 1.65, .5, 12) * pixelScale;
     const opacity = clamp(Number(connection.opacity) || 100, 5, 100) / 100;
     const style = ["solid", "dashed", "dotted"].includes(connection.style) ? connection.style : "solid";
@@ -7282,25 +7319,29 @@
       ctx.stroke();
     }
     ctx.restore();
-    const automaticRouteText = `${processConnectionEndpointText(connection, "source")} → ${processConnectionEndpointText(connection, "target")}`;
-    const routeText = String(connection.tagText || "").trim() || automaticRouteText;
-    drawProcessRouteTag(routeText, [
-      (startWorld[0] + endWorld[0]) / 2,
-      (startWorld[1] + endWorld[1]) / 2,
-      (startWorld[2] + endWorld[2]) / 2,
-    ], connection, color);
+    return routeTag;
   }
 
-  function drawTodayProductionFlow(machineEntries) {
+  function drawTodayProductionFlow(machineEntries, { labelsOnly = false } = {}) {
     const entriesById = buildTodayProcessObjectEntries(machineEntries);
+    const routeTags = [];
     Object.values(state.processConnections || {})
       .sort((first, second) => processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second)))
       .forEach((connection) => {
         if (connection?.visible === false) return;
         const fromEntry = entriesById.get(connection.sourceId);
         const toEntry = entriesById.get(connection.targetId);
-        if (fromEntry && toEntry) drawTodayFlowArrow(fromEntry, toEntry, connection);
+        if (!fromEntry || !toEntry) return;
+        const routeTag = labelsOnly
+          ? processRouteTagDescriptor(fromEntry, toEntry, connection)
+          : drawTodayFlowArrow(fromEntry, toEntry, connection);
+        if (routeTag) routeTags.push(routeTag);
       });
+    // Route tags are deliberately a second pass. No process line rendered later
+    // in the frame can cross over and hide a tag from an earlier connection.
+    routeTags.forEach(({ text, worldMidpoint, connection, color }) => {
+      drawProcessRouteTag(text, worldMidpoint, connection, color);
+    });
     return entriesById;
   }
 
@@ -10575,8 +10616,8 @@
       drawSelection(rendered);
     });
 
-    if (isTodayOverview() && state.todayLabelMode === "necessary") {
-      drawTodayProductionFlow(machineEntries);
+    if (isTodayStage() && state.todayLabelMode === "necessary") {
+      drawTodayProductionFlow(machineEntries, { labelsOnly: state.cameraMode === "walk" });
     }
     if (!isTodayStage() || isTodayOverview()) {
       // Construction stages use each machine label's independent reveal/retire

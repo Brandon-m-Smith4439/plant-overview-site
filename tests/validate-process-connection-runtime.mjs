@@ -11,7 +11,7 @@ const end = source.indexOf("\n  function animationGroupMembers", start);
 assert.ok(start >= 0 && end > start, "Runtime connection field mutator must be present in plant-app.js.");
 const helperSource = source.slice(start, end);
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-const applyProcessConnectionField = new Function("clamp", `${helperSource}\nreturn applyProcessConnectionField;`)(clamp);
+const applyProcessConnectionField = new Function("clamp", "PROCESS_CONNECTION_ANCHOR_MIN_PERCENT", "PROCESS_CONNECTION_ANCHOR_MAX_PERCENT", `${helperSource}\nreturn applyProcessConnectionField;`)(clamp, -300, 400);
 
 const connection = {
   key: "object:cutting-table->kodiak-polisher",
@@ -63,7 +63,7 @@ assert.equal(connection.tagText, "Cutting to polish inspection");
 assert.deepEqual(machineLabel, labelBefore, "Editing an object-to-object process pointer must not change any machine-label pointer property.");
 
 assert.equal(applyProcessConnectionField(connection, "startAnchorXPercent", "999"), true);
-assert.equal(connection.startAnchorXPercent, 100, "Connection anchors must clamp to valid bounds.");
+assert.equal(connection.startAnchorXPercent, 400, "Connection anchors must support endpoints beyond the object while still clamping to the expanded safety range.");\nassert.equal(applyProcessConnectionField(connection, "endAnchorYPercent", "-999"), true);\nassert.equal(connection.endAnchorYPercent, -300, "Connection anchors must support negative percentages outside the destination object.");
 assert.equal(applyProcessConnectionField(connection, "labelAnchorXPercent", "5"), false, "Connection editor must reject machine-label fields.");
 assert.equal(applyProcessConnectionField(connection, "labelLineColor", "#000000"), false, "Connection editor must reject machine-label line styling.");
 

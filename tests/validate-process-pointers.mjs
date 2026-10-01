@@ -74,6 +74,10 @@ assert.ok(flowBody.includes("entriesById.get(connection.sourceId)"), "Today flow
 assert.ok(flowBody.includes("entriesById.get(connection.targetId)"), "Today flow must resolve the exact destination object by instance ID.");
 assert.ok(flowBody.includes("processConnectionEndpointText"), "Route tags must support arbitrary object names as endpoints.");
 assert.ok(flowBody.includes("drawTodayFlowArrow(fromEntry, toEntry, connection)"), "Renderer must pass the edge object into the object-to-object arrow renderer.");
+assert.ok(flowBody.includes("routeTags.forEach"), "Process route tags must render in a second pass after all route lines so later lines cannot cover earlier tags.");
+assert.ok(flowBody.includes("const routeTag = labelsOnly") && flowBody.includes("? processRouteTagDescriptor(fromEntry, toEntry, connection)"), "Today process flow must support route-tag-only rendering for first person.");
+assert.ok(plant.includes("PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -300") && plant.includes("PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 400"), "Process endpoints must support a large outside-object adjustment range.");
+assert.ok(plant.includes('min="-300" max="400"'), "Pointer editor endpoint controls must expose the outside-object range.");
 assert.ok(!flowBody.includes("machine.processPointerAnchorXPercent"), "Object-to-object rendering must no longer read process geometry from the machine record.");
 assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Object-to-object rendering must never read machine-label pointer geometry.");
 assert.ok(!flowBody.includes("machine.labelLineColor"), "Object-to-object rendering must never read machine-label leader styling.");

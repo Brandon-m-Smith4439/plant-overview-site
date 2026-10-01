@@ -1,3 +1,7 @@
+## Version 0.13.33
+
+Version 0.13.33 improves the Necessary production-route overlay. Process route tags now render in a dedicated second pass above every route line, so a later route can no longer cross over and hide an earlier tag. Route tags also use lightweight collision avoidance against other labels. On the Today stage, first-person mode now keeps the Necessary route tags visible while omitting the full route-line overlay for a cleaner walkthrough. Process-pointer start/end anchors are no longer restricted to the 0–100% bounds of their source and destination objects; all six endpoint controls now allow -300% through 400%, making it possible to route a pointer well outside a machine footprint.
+
 ## Version 0.13.32
 
 Version 0.13.32 adds **workspace recovery and editor-browser protection** after a hosted read-only page could replace newer browser-local layout/design data with the older checked-in published workspace when an editor session expired. Once a browser successfully authenticates as an editor, a durable protection marker prevents public reloads from seeding over that browser's machines or custom designs while still requiring the normal password for future editing sessions. Existing automatic layout-backup evidence also protects an older editor browser immediately, before the new marker has been created. The Project panel now exposes recovery controls for the existing automatic layout backup, the new machine-design backup, and a pre-publish rescue snapshot. Full-workspace export no longer performs a save first, so exporting recovery evidence cannot overwrite the previous-layout backup. Machine Design Studio now preserves the previous design-library payload before every design save.
@@ -80,7 +84,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.32**
+Current project version: **0.13.33**
 
 ## Full-production rendering performance
 

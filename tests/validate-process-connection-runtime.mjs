@@ -11,7 +11,7 @@ const end = source.indexOf("\n  function animationGroupMembers", start);
 assert.ok(start >= 0 && end > start, "Runtime connection field mutator must be present in plant-app.js.");
 const helperSource = source.slice(start, end);
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-const applyProcessConnectionField = new Function("clamp", "PROCESS_CONNECTION_ANCHOR_MIN_PERCENT", "PROCESS_CONNECTION_ANCHOR_MAX_PERCENT", `${helperSource}\nreturn applyProcessConnectionField;`)(clamp, -300, 400);
+const applyProcessConnectionField = new Function("clamp", "PROCESS_CONNECTION_ANCHOR_MIN_PERCENT", "PROCESS_CONNECTION_ANCHOR_MAX_PERCENT", `${helperSource}\nreturn applyProcessConnectionField;`)(clamp, -1000, 1100);
 
 const connection = {
   key: "object:cutting-table->kodiak-polisher",
@@ -76,8 +76,8 @@ assert.equal(connection.flowCurvePercent, 82);
 assert.equal(connection.flowSpeed, 74);
 assert.deepEqual(machineLabel, labelBefore, "Editing an object-to-object process pointer must not change any machine-label pointer property.");
 
-assert.equal(applyProcessConnectionField(connection, "startAnchorXPercent", "999"), true);
-assert.equal(connection.startAnchorXPercent, 400, "Connection anchors must support endpoints beyond the object while still clamping to the expanded safety range.");\nassert.equal(applyProcessConnectionField(connection, "endAnchorYPercent", "-999"), true);\nassert.equal(connection.endAnchorYPercent, -300, "Connection anchors must support negative percentages outside the destination object.");
+assert.equal(applyProcessConnectionField(connection, "startAnchorXPercent", "9999"), true);
+assert.equal(connection.startAnchorXPercent, 1100, "Connection anchors must support endpoints far beyond the object while still clamping to the expanded safety range.");\nassert.equal(applyProcessConnectionField(connection, "endAnchorYPercent", "-9999"), true);\nassert.equal(connection.endAnchorYPercent, -1000, "Connection anchors must support large negative percentages outside the destination object.");
 assert.equal(applyProcessConnectionField(connection, "flowTurn2Offset", "900"), true);
 assert.equal(connection.flowTurn2Offset, 500, "Floor-route turn offsets must clamp to the extended routing range.");
 assert.equal(applyProcessConnectionField(connection, "flowFloorHeight", "0"), true);

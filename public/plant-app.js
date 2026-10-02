@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.34";
+  const APP_VERSION = "0.13.35";
 
   function editorProfileProtected() {
     try {
@@ -725,6 +725,17 @@
     { key: "rack", text: "Rack", order: 8 },
   ]);
   const PROCESS_POINTER_FLOW_BY_KEY = new Map(PROCESS_POINTER_FLOW_DEFINITIONS.map((item) => [item.key, item]));
+  const PROCESS_STEP_NUMBER_BY_ROLE = Object.freeze({
+    cutting: 1,
+    polisher: 2,
+    "denver-cnc": 3,
+    waterjet: 3,
+    washer: 4,
+    tempering: 5,
+    wrap: 6,
+    "glass-truck": 7,
+    rack: 7,
+  });
   const DEFAULT_PROCESS_CONNECTION_LINKS = Object.freeze([
     ["cutting", "polisher"],
     ["polisher", "denver-cnc"],
@@ -1244,8 +1255,8 @@
   // destination object. 0..100 is the object itself; the extended range gives
   // enough room to route cleanly around equipment without creating fake helper
   // objects just to hold an endpoint.
-  const PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -300;
-  const PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 400;
+  const PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -1000;
+  const PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 1100;
 
   function defaultProcessConnection(sourceId, targetId, { fromKey = "", toKey = "" } = {}) {
     return {
@@ -4409,21 +4420,21 @@
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>4 · Start point · source object</legend>
-            <p>X and Z place the floor-route start relative to the source object. Values below 0% or above 100% move it outside the object. Y is retained for older saved routes; the flowing route height is controlled below.</p>
+            <p>X and Z place the floor-route start relative to the source object. Values below 0% or above 100% move it outside the object. The range now extends to -1000% / 1100%. You can also drag the S handle directly on the floor. Y is retained for older saved routes; the flowing route height is controlled below.</p>
             <div class="process-pointer-grid">
-              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="-300" max="400" step="5"></label>
-              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="-300" max="400" step="5"></label>
-              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" min="-300" max="400" step="5"></label>
+              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="-1000" max="1100" step="5"></label>
+              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="-1000" max="1100" step="5"></label>
+              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" min="-1000" max="1100" step="5"></label>
             </div>
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-start">Center source point</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>5 · End point · destination object</legend>
-            <p>X and Z place the floor-route end relative to the destination object. Values below 0% or above 100% move it outside the object. Y is retained for older saved routes; the flowing route height is controlled below.</p>
+            <p>X and Z place the floor-route end relative to the destination object. Values below 0% or above 100% move it outside the object. The range now extends to -1000% / 1100%. You can also drag the E handle directly on the floor. Y is retained for older saved routes; the flowing route height is controlled below.</p>
             <div class="process-pointer-grid">
-              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="-300" max="400" step="5"></label>
-              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="-300" max="400" step="5"></label>
-              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" min="-300" max="400" step="5"></label>
+              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="-1000" max="1100" step="5"></label>
+              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="-1000" max="1100" step="5"></label>
+              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" min="-1000" max="1100" step="5"></label>
             </div>
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end">Center destination point</button></div>
           </fieldset>
@@ -4440,7 +4451,7 @@
               <label>Flow speed<input type="number" data-process-connection-field="flowSpeed" min="0" max="180" step="2"></label>
               <label>Glow strength (%)<input type="number" data-process-connection-field="flowGlow" min="0" max="200" step="5"></label>
             </div>
-            <p class="process-route-tag-preview">Turn 1 and Turn 2 are shown as edit handles on the selected route so you can see exactly what each value moves.</p>
+            <p class="process-route-tag-preview">S / E can be dragged anywhere on the floor, including outside the machine footprint. Turn 1 and Turn 2 remain the intermediate bend handles.</p>
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>7 · Flow appearance</legend>
@@ -4456,9 +4467,9 @@
             <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection">Reset selected flow path</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>8 · Optional route tag</legend>
+            <legend>8 · Optional custom route tag</legend>
             <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show route tag on this line</label>
-            <label class="wide process-route-tag-text">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Blank = automatic Source → Destination"></label>
+            <label class="wide process-route-tag-text">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Automatic numbered machine labels are shown by default"></label>
             <p class="process-route-tag-preview" data-process-route-tag-preview>Select a line to edit its route-tag text.</p>
             <p>Type any text you want. Leave it blank to use the automatic source → destination wording.</p>
             <div class="process-pointer-grid">
@@ -6842,6 +6853,61 @@
     return true;
   }
 
+  function processAnchorPercentsFromWorld(machine, worldX, worldZ, time = state.lastFrameTime) {
+    const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
+    if (!rendered) return null;
+    const angle = angleRadians(rendered), cosine = Math.cos(angle), sine = Math.sin(angle);
+    const centerX = rendered.x + rendered.w / 2, centerZ = rendered.z + rendered.d / 2;
+    const deltaX = worldX - centerX, deltaZ = worldZ - centerZ;
+    const centeredX = deltaX * cosine + deltaZ * sine;
+    const centeredZ = -deltaX * sine + deltaZ * cosine;
+    return {
+      x: clamp((centeredX + rendered.w / 2) / Math.max(.01, rendered.w) * 100, PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+      z: clamp((centeredZ + rendered.d / 2) / Math.max(.01, rendered.d) * 100, PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+    };
+  }
+
+  function selectedProcessFlowRoute(time = state.lastFrameTime) {
+    const connection = selectedProcessConnection();
+    if (!connection) return null;
+    const fromEntry = processEndpointEntry(machineById(connection.sourceId), time);
+    const toEntry = processEndpointEntry(machineById(connection.targetId), time);
+    return fromEntry && toEntry ? processRouteTagDescriptor(fromEntry, toEntry, connection) : null;
+  }
+
+  function processFlowEndpointHandleAt(event) {
+    if (!state.editing || state.editorTool !== "machines" || state.objectEditorTab !== "pointers" || state.cameraMode === "walk") return null;
+    const route = selectedProcessFlowRoute();
+    if (!route) return null;
+    const point = canvasPoint(event), rect = canvas.getBoundingClientRect(), pixelScale = canvas.width / Math.max(1, rect.width), hitRadius = 15 * pixelScale;
+    for (const candidate of [{ endpoint: "start", world: route.startWorld }, { endpoint: "end", world: route.endWorld }]) {
+      const screen = project(...candidate.world);
+      if (Number.isFinite(screen[0]) && Number.isFinite(screen[1]) && Math.hypot(point[0] - screen[0], point[1] - screen[1]) <= hitRadius) return candidate.endpoint;
+    }
+    return null;
+  }
+
+  function updateDraggedProcessEndpoint(endpoint, event) {
+    const connection = selectedProcessConnection();
+    if (!connection) return false;
+    const machine = machineById(endpoint === "start" ? connection.sourceId : connection.targetId);
+    if (!machine) return false;
+    const [worldX, worldZ] = worldFromScreen(event), local = processAnchorPercentsFromWorld(machine, worldX, worldZ);
+    if (!local) return false;
+    const xField = endpoint === "start" ? "startAnchorXPercent" : "endAnchorXPercent";
+    const zField = endpoint === "start" ? "startAnchorZPercent" : "endAnchorZPercent";
+    const changed = Math.abs(Number(connection[xField]) - local.x) > .0001 || Math.abs(Number(connection[zField]) - local.z) > .0001;
+    connection[xField] = local.x;
+    connection[zField] = local.z;
+    const panel = document.querySelector(".layout-editor");
+    const xInput = panel?.querySelector(`[data-process-connection-field="${xField}"]`);
+    const zInput = panel?.querySelector(`[data-process-connection-field="${zField}"]`);
+    if (xInput) xInput.value = local.x.toFixed(1);
+    if (zInput) zInput.value = local.z.toFixed(1);
+    renderPerformance.invalidate?.("process-endpoint-drag");
+    return changed;
+  }
+
   function panCamera(deltaX,deltaY) {
     const cy = Math.cos(state.yaw);
     const sy = Math.sin(state.yaw);
@@ -7200,12 +7266,33 @@
     );
   }
 
-  function buildTodayProcessObjectEntries(machineEntries) {
-    return new Map(
+  function processEndpointEntry(machine, time = state.lastFrameTime) {
+    if (!machine || machine.visible === false) return null;
+    const alpha = stageAlpha(machine.reveal, machine.retire);
+    if (alpha <= .01) return null;
+    const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
+    return { machine, rendered, alpha, grow: 1 };
+  }
+
+  function buildTodayProcessObjectEntries(machineEntries, time = state.lastFrameTime) {
+    const entries = new Map(
       (machineEntries || [])
-        .filter((entry) => entry?.alpha > .15 && entry?.machine?.instanceId)
+        .filter((entry) => entry?.alpha > .01 && entry?.machine?.instanceId)
         .map((entry) => [entry.machine.instanceId, entry])
     );
+    // First Person and aggressive overview culling may omit a route endpoint
+    // machine from the render list. The route itself is a navigation aid and
+    // must stay persistent, so rebuild any missing endpoint from the saved
+    // machine record instead of tying route lifetime to camera visibility.
+    Object.values(state.processConnections || {}).forEach((connection) => {
+      if (!connection || connection.visible === false) return;
+      [connection.sourceId, connection.targetId].forEach((instanceId) => {
+        if (!instanceId || entries.has(instanceId)) return;
+        const fallback = processEndpointEntry(machineById(instanceId), time);
+        if (fallback) entries.set(instanceId, fallback);
+      });
+    });
+    return entries;
   }
 
   function processFlowFloorAnchor(entry, connection, endpoint) {
@@ -7235,7 +7322,7 @@
     if(roundness<=.001)return points;
     const result=[points[0]];
     for(let index=1;index<points.length-1;index+=1){
-      const previous=points[index], corner=points[index], next=points[index+1], actualPrevious=points[index-1];
+      const corner=points[index], next=points[index+1], actualPrevious=points[index-1];
       const incomingLength=floorPointDistance(actualPrevious,corner), outgoingLength=floorPointDistance(corner,next);
       if(incomingLength<.01||outgoingLength<.01){result.push(corner);continue;}
       const radius=Math.min(incomingLength,outgoingLength)*.44*roundness;
@@ -7258,26 +7345,12 @@
 
   function traceProjectedProcessFlow(segment){if(!segment?.length)return;ctx.beginPath();ctx.moveTo(segment[0][0],segment[0][1]);for(let index=1;index<segment.length;index+=1)ctx.lineTo(segment[index][0],segment[index][1]);}
 
-  function drawProcessRouteTag(text,worldMidpoint,connection,color){
-    if(!text||!worldMidpoint||connection?.tagVisible!==true)return;
-    const lifted=[worldMidpoint[0],worldMidpoint[1]+clamp(Number(connection.tagLift??4),0,60),worldMidpoint[2]],point=project(...lifted);
-    if(state.cameraMode==="walk"&&point[3]<WALK_NEAR_CLIP)return;
-    const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width);
-    const baseX=point[0]+clamp(Number(connection.tagScreenOffsetX??0),-500,500)*pixelScale,baseY=point[1]+clamp(Number(connection.tagScreenOffsetY??0),-500,500)*pixelScale;
-    const fontSize=(state.cameraMode==="walk"?11.5:compactLabelViewport()?7.2:8.4)*pixelScale;
-    ctx.save();ctx.font=`600 ${fontSize}px "Segoe UI", sans-serif`;const paddingX=6*pixelScale,height=(state.cameraMode==="walk"?23:19)*pixelScale,width=ctx.measureText(text).width+paddingX*2,collisionGap=4*pixelScale;
-    const offsets=[[0,0],[0,-24],[0,24],[30,0],[-30,0],[0,-48],[0,48],[42,-24],[-42,-24],[42,24],[-42,24],[0,-72],[0,72]];let placement=null;
-    for(const[offsetX,offsetY]of offsets){const x=baseX+offsetX*pixelScale,y=baseY+offsetY*pixelScale,box={left:x-width/2,right:x+width/2,top:y-height/2,bottom:y+height/2},onCanvas=box.right>0&&box.left<canvas.width&&box.bottom>0&&box.top<canvas.height,collisionBox=paddedLabelRectangle(box,collisionGap);if(onCanvas&&!labelRects.some((used)=>rectanglesIntersect(collisionBox,used))){placement={x,y,box};break;}}
-    if(!placement){const box={left:baseX-width/2,right:baseX+width/2,top:baseY-height/2,bottom:baseY+height/2};placement={x:baseX,y:baseY,box};}
-    const{x,y,box}=placement;ctx.globalAlpha=.98;ctx.fillStyle="rgba(8,24,22,.96)";ctx.strokeStyle=color;ctx.lineWidth=Math.max(.8,pixelScale);if(typeof ctx.roundRect==="function"){ctx.beginPath();ctx.roundRect(box.left,box.top,width,height,6*pixelScale);ctx.fill();ctx.stroke();}else{ctx.fillRect(box.left,box.top,width,height);ctx.strokeRect(box.left,box.top,width,height);}ctx.fillStyle="#f2faf8";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,x,y+.4*pixelScale);ctx.restore();labelRects.push(paddedLabelRectangle(box,collisionGap));
-  }
-
   function processRouteTagDescriptor(fromEntry,toEntry,connection){
     if(!connection||connection.visible===false)return null;
     const startWorld=processFlowFloorAnchor(fromEntry,connection,"start"),endWorld=processFlowFloorAnchor(toEntry,connection,"end");if(!startWorld||!endWorld)return null;
     const controls=processFlowControlPoints(startWorld,endWorld,connection),worldPath=roundedProcessFlowPath(controls.points,connection),midpoint=worldPath[Math.floor(Math.max(0,worldPath.length-1)/2)]||[(startWorld[0]+endWorld[0])/2,startWorld[1],(startWorld[2]+endWorld[2])/2];
     const color=/^#[0-9a-f]{6}$/i.test(String(connection.color||""))?connection.color:"#52b7aa",automaticRouteText=`${processConnectionEndpointText(connection,"source")} → ${processConnectionEndpointText(connection,"target")}`,text=String(connection.tagText||"").trim()||automaticRouteText;
-    return{text,worldMidpoint:midpoint,connection,color,startWorld,endWorld,controlPoints:controls.points,bendPoints:controls.bendPoints,worldPath};
+    return{text,worldMidpoint:midpoint,connection,color,startWorld,endWorld,controlPoints:controls.points,bendPoints:controls.bendPoints,worldPath,fromEntry,toEntry};
   }
 
   function drawProcessFlowEndMarker(route,projectedSegments,pixelScale){
@@ -7287,9 +7360,18 @@
     ctx.save();ctx.globalAlpha=clamp(Number(connection.opacity)||100,5,100)/100;ctx.fillStyle=route.color;ctx.strokeStyle="#ecffff";if(endStyle==="arrow"){const arrowSize=Math.max(5*pixelScale,markerSize*1.8);ctx.beginPath();ctx.moveTo(end[0],end[1]);ctx.lineTo(end[0]-ux*arrowSize+normalX*arrowSize*.48,end[1]-uy*arrowSize+normalY*arrowSize*.48);ctx.lineTo(end[0]-ux*arrowSize-normalX*arrowSize*.48,end[1]-uy*arrowSize-normalY*arrowSize*.48);ctx.closePath();ctx.fill();}else if(endStyle==="dot"){ctx.beginPath();ctx.arc(end[0],end[1],Math.max(2.5*pixelScale,markerSize),0,Math.PI*2);ctx.fill();}else if(endStyle==="ring"){ctx.beginPath();ctx.arc(end[0],end[1],Math.max(3*pixelScale,markerSize),0,Math.PI*2);ctx.lineWidth=Math.max(1.4*pixelScale,markerSize*.35);ctx.stroke();}ctx.restore();
   }
 
+  function drawProcessFlowHandle(point,label,color,pixelScale,{strong=false}={}){
+    const screen=project(...point);if(state.cameraMode==="walk"&&screen[3]<WALK_NEAR_CLIP)return;
+    if(!Number.isFinite(screen[0])||!Number.isFinite(screen[1]))return;
+    const radius=(strong?8.2:6.5)*pixelScale;
+    ctx.save();ctx.shadowColor=color;ctx.shadowBlur=(strong?14:10)*pixelScale;ctx.fillStyle=strong?"rgba(255,255,255,.99)":"rgba(245,255,255,.98)";ctx.strokeStyle=color;ctx.lineWidth=(strong?2.7:2.2)*pixelScale;ctx.beginPath();ctx.arc(screen[0],screen[1],radius,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle="#092522";ctx.font=`700 ${Math.max(8,(strong?9.5:9)*pixelScale)}px "Segoe UI", sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(label,screen[0],screen[1]+.4*pixelScale);ctx.restore();
+  }
+
   function drawProcessFlowEditHandles(route,pixelScale){
-    if(!route?.bendPoints?.length)return;const editingThisConnection=state.editing&&state.objectEditorTab==="pointers"&&route.connection.key===state.selectedProcessConnectionKey;if(!editingThisConnection)return;
-    route.bendPoints.forEach(({index,point})=>{const screen=project(...point);if(state.cameraMode==="walk"&&screen[3]<WALK_NEAR_CLIP)return;if(!Number.isFinite(screen[0])||!Number.isFinite(screen[1]))return;const radius=6.5*pixelScale;ctx.save();ctx.shadowColor=route.color;ctx.shadowBlur=10*pixelScale;ctx.fillStyle="rgba(245,255,255,.98)";ctx.strokeStyle=route.color;ctx.lineWidth=2.2*pixelScale;ctx.beginPath();ctx.arc(screen[0],screen[1],radius,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle="#092522";ctx.font=`700 ${Math.max(8,9*pixelScale)}px "Segoe UI", sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(index),screen[0],screen[1]+.4*pixelScale);ctx.restore();});
+    const editingThisConnection=state.editing&&state.objectEditorTab==="pointers"&&route?.connection?.key===state.selectedProcessConnectionKey;if(!editingThisConnection)return;
+    drawProcessFlowHandle(route.startWorld,"S",route.color,pixelScale,{strong:true});
+    route.bendPoints?.forEach(({index,point})=>drawProcessFlowHandle(point,String(index),route.color,pixelScale));
+    drawProcessFlowHandle(route.endWorld,"E",route.color,pixelScale,{strong:true});
   }
 
   function drawFloorProcessFlow(fromEntry,toEntry,connection,time){
@@ -7298,12 +7380,85 @@
     ctx.save();ctx.lineCap="round";ctx.lineJoin="round";projectedSegments.forEach((segment)=>{if(editingThisConnection){traceProjectedProcessFlow(segment);ctx.shadowBlur=0;ctx.setLineDash([]);ctx.globalAlpha=.88;ctx.strokeStyle="rgba(255,255,255,.96)";ctx.lineWidth=Math.max(width+9*pixelScale,10*pixelScale);ctx.stroke();}traceProjectedProcessFlow(segment);ctx.setLineDash([]);ctx.globalAlpha=opacity*(.20+glow*.08);ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width+(5+glow*4)*pixelScale,width*2.4);ctx.shadowColor=route.color;ctx.shadowBlur=(10+glow*13)*pixelScale;ctx.stroke();traceProjectedProcessFlow(segment);ctx.shadowBlur=0;ctx.globalAlpha=opacity*.68;ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width+2.3*pixelScale,2.5*pixelScale);ctx.stroke();traceProjectedProcessFlow(segment);ctx.globalAlpha=opacity*.96;ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width,1.4*pixelScale);ctx.stroke();traceProjectedProcessFlow(segment);ctx.setLineDash(dashPattern);ctx.lineDashOffset=-dashTravel;ctx.globalAlpha=opacity*.98;ctx.strokeStyle="#eaffff";ctx.lineWidth=Math.max(1.25*pixelScale,width*.42);ctx.shadowColor="#d8ffff";ctx.shadowBlur=(4+glow*4)*pixelScale;ctx.stroke();});ctx.restore();drawProcessFlowEndMarker(route,projectedSegments,pixelScale);drawProcessFlowEditHandles(route,pixelScale);return route;
   }
 
+  function processStepNumber(role){return PROCESS_STEP_NUMBER_BY_ROLE[String(role||"")]||null;}
+
+  function processStepMachineRect(entry,padding=0){
+    const samples=projectedBoxMetrics(entry?.rendered).visibleSamples||[];
+    if(!samples.length)return null;
+    const xs=samples.map((point)=>point[0]),ys=samples.map((point)=>point[1]);
+    return{left:Math.min(...xs)-padding,right:Math.max(...xs)+padding,top:Math.min(...ys)-padding,bottom:Math.max(...ys)+padding};
+  }
+
+  function processStepLabelText(machine,maxWidth,fontSize){
+    const full=String(machine?.name||machine?.short||"Process step").trim()||"Process step";
+    let text=full;
+    ctx.font=`600 ${fontSize}px "Segoe UI", sans-serif`;
+    if(ctx.measureText(text).width<=maxWidth)return text;
+    while(text.length>6&&ctx.measureText(`${text}…`).width>maxWidth)text=text.slice(0,-1);
+    return `${text.trimEnd()}…`;
+  }
+
+  function collectProcessStepNodes(entriesById,routes){
+    const nodes=new Map();
+    const add=(route,endpoint)=>{
+      const connection=route.connection,id=endpoint==="source"?connection.sourceId:connection.targetId,entry=entriesById.get(id);if(!entry)return;
+      const role=processConnectionEndpointRole(connection,endpoint)||processConnectionRoleForObject(id),number=processStepNumber(role);if(!number)return;
+      const worldPoint=endpoint==="source"?route.startWorld:route.endWorld;
+      const current=nodes.get(id)||{id,entry,role,number,points:[],color:route.color};
+      current.points.push(worldPoint);if(number<current.number)current.number=number;nodes.set(id,current);
+    };
+    routes.forEach((route)=>{add(route,"source");add(route,"target");});
+    return[...nodes.values()].map((node)=>({...node,worldPoint:[node.points.reduce((sum,p)=>sum+p[0],0)/node.points.length,node.points.reduce((sum,p)=>sum+p[1],0)/node.points.length,node.points.reduce((sum,p)=>sum+p[2],0)/node.points.length]})).sort((a,b)=>a.number-b.number||String(a.entry.machine.name).localeCompare(String(b.entry.machine.name)));
+  }
+
+  function drawProcessStepLabel(node){
+    const anchor=project(...node.worldPoint);if(state.cameraMode==="walk"&&anchor[3]<WALK_NEAR_CLIP)return;
+    if(!Number.isFinite(anchor[0])||!Number.isFinite(anchor[1]))return;
+    const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width),spanCss=projectedPixelSpan(node.entry.rendered)/Math.max(.001,pixelScale);
+    const fontCss=state.cameraMode==="walk"?clamp(10+Math.log2(Math.max(1,spanCss)/45)*.55,9.5,12.5):clamp(8.3+Math.log2(Math.max(1,spanCss)/32)*.5,8.3,10.8);
+    const fontSize=fontCss*pixelScale,badgeRadius=clamp(fontCss+3.4,12.5,16.5)*pixelScale,maxWidth=clamp(82+spanCss*.16,86,state.cameraMode==="walk"?142:118)*pixelScale;
+    ctx.save();const text=processStepLabelText(node.entry.machine,maxWidth,fontSize),textWidth=Math.min(maxWidth,ctx.measureText(text).width),paddingX=6*pixelScale,labelWidth=textWidth+paddingX*2,labelHeight=(fontCss+8)*pixelScale;
+    const machineRect=state.cameraMode==="walk"?null:processStepMachineRect(node.entry,3*pixelScale);
+    const naturalY=anchor[1]-badgeRadius-labelHeight/2-4*pixelScale,preferredY=machineRect?Math.min(naturalY,machineRect.top-labelHeight/2-3*pixelScale):naturalY;
+    const candidates=[[0,preferredY-anchor[1]],[24,-(badgeRadius/pixelScale+labelHeight/pixelScale/2+5)],[-24,-(badgeRadius/pixelScale+labelHeight/pixelScale/2+5)],[48,preferredY-anchor[1]],[-48,preferredY-anchor[1]],[0,preferredY-anchor[1]-22],[30,preferredY-anchor[1]-22],[-30,preferredY-anchor[1]-22]];
+    let placement=null;
+    for(const[offsetXCss,offsetYCss]of candidates){const x=anchor[0]+offsetXCss*pixelScale,y=anchor[1]+offsetYCss*pixelScale,box={left:x-labelWidth/2,right:x+labelWidth/2,top:y-labelHeight/2,bottom:y+labelHeight/2},padded=paddedLabelRectangle(box,3*pixelScale),onCanvas=box.right>0&&box.left<canvas.width&&box.bottom>0&&box.top<canvas.height,machineConflict=machineRect&&rectanglesIntersect(padded,machineRect);if(onCanvas&&!machineConflict&&!labelRects.some((used)=>rectanglesIntersect(padded,used))){placement={x,y,box,padded};break;}}
+    if(!placement){const y=preferredY,box={left:anchor[0]-labelWidth/2,right:anchor[0]+labelWidth/2,top:y-labelHeight/2,bottom:y+labelHeight/2};placement={x:anchor[0],y,box,padded:paddedLabelRectangle(box,3*pixelScale)};}
+    const badgeBox={left:anchor[0]-badgeRadius-2*pixelScale,right:anchor[0]+badgeRadius+2*pixelScale,top:anchor[1]-badgeRadius-2*pixelScale,bottom:anchor[1]+badgeRadius+2*pixelScale};
+    if(Math.hypot(placement.x-anchor[0],placement.y-anchor[1])>badgeRadius+8*pixelScale){ctx.beginPath();ctx.moveTo(anchor[0],anchor[1]-badgeRadius*.55);ctx.lineTo(placement.x,placement.y+labelHeight/2);ctx.strokeStyle="rgba(232,255,252,.78)";ctx.lineWidth=Math.max(.75,pixelScale);ctx.stroke();}
+    ctx.shadowColor=node.color;ctx.shadowBlur=8*pixelScale;ctx.fillStyle="rgba(8,34,31,.96)";ctx.strokeStyle="rgba(232,255,252,.96)";ctx.lineWidth=1.6*pixelScale;ctx.beginPath();ctx.arc(anchor[0],anchor[1],badgeRadius,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle="#ffffff";ctx.font=`700 ${Math.max(9.5,fontCss+1.2)*pixelScale}px "Segoe UI", sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(node.number),anchor[0],anchor[1]+.4*pixelScale);
+    ctx.fillStyle="rgba(7,25,23,.94)";ctx.strokeStyle=node.color;ctx.lineWidth=Math.max(.8,pixelScale);if(typeof ctx.roundRect==="function"){ctx.beginPath();ctx.roundRect(placement.box.left,placement.box.top,labelWidth,labelHeight,5*pixelScale);ctx.fill();ctx.stroke();}else{ctx.fillRect(placement.box.left,placement.box.top,labelWidth,labelHeight);ctx.strokeRect(placement.box.left,placement.box.top,labelWidth,labelHeight);}ctx.fillStyle="#f6fffd";ctx.font=`600 ${fontSize}px "Segoe UI", sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,placement.x,placement.y+.2*pixelScale);ctx.restore();
+    labelRects.push(placement.padded);labelRects.push(badgeBox);
+  }
+
+  function drawSelectedCustomRouteTag(route) {
+    if (!state.editing || state.objectEditorTab !== "pointers" || route?.connection?.key !== state.selectedProcessConnectionKey || route.connection.tagVisible !== true) return;
+    const connection = route.connection;
+    const text = String(connection.tagText || "").trim() || `${processConnectionEndpointText(connection,"source")} → ${processConnectionEndpointText(connection,"target")}`;
+    const world = [route.worldMidpoint[0], route.worldMidpoint[1] + clamp(Number(connection.tagLift ?? 4), 0, 60), route.worldMidpoint[2]];
+    const point = project(...world);
+    if (state.cameraMode === "walk" && point[3] < WALK_NEAR_CLIP) return;
+    const rect = canvas.getBoundingClientRect(), pixelScale = canvas.width / Math.max(1, rect.width);
+    const x = point[0] + clamp(Number(connection.tagScreenOffsetX ?? 0), -500, 500) * pixelScale;
+    const y = point[1] + clamp(Number(connection.tagScreenOffsetY ?? 0), -500, 500) * pixelScale;
+    ctx.save();
+    const fontSize = 8.3 * pixelScale;ctx.font=`600 ${fontSize}px "Segoe UI", sans-serif`;
+    const width = ctx.measureText(text).width + 10 * pixelScale, height = 18 * pixelScale;
+    const box = { left:x-width/2, right:x+width/2, top:y-height/2, bottom:y+height/2 };
+    ctx.fillStyle="rgba(30,35,34,.9)";ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(.75,pixelScale);
+    if(typeof ctx.roundRect==="function"){ctx.beginPath();ctx.roundRect(box.left,box.top,width,height,5*pixelScale);ctx.fill();ctx.stroke();}else{ctx.fillRect(box.left,box.top,width,height);ctx.strokeRect(box.left,box.top,width,height);}
+    ctx.fillStyle="#f5fffd";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,x,y+.2*pixelScale);ctx.restore();
+    labelRects.push(paddedLabelRectangle(box,3*pixelScale));
+  }
+
   function processFlowAnimationActive(){if(state.animationsPaused||!isTodayStage()||state.todayLabelMode!=="necessary")return false;return Object.values(state.processConnections||{}).some((connection)=>connection?.visible!==false&&clamp(Number(connection.flowSpeed??42),0,180)>0);}
 
   function drawTodayProductionFlow(machineEntries,time){
-    const entriesById=buildTodayProcessObjectEntries(machineEntries),routeTags=[];
-    Object.values(state.processConnections||{}).sort((first,second)=>processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second))).forEach((connection)=>{if(connection?.visible===false)return;const fromEntry=entriesById.get(connection.sourceId),toEntry=entriesById.get(connection.targetId);if(!fromEntry||!toEntry)return;const routeTag=drawFloorProcessFlow(fromEntry,toEntry,connection,time);if(routeTag)routeTags.push(routeTag);});
-    routeTags.forEach(({text,worldMidpoint,connection,color})=>drawProcessRouteTag(text,worldMidpoint,connection,color));return entriesById;
+    const entriesById=buildTodayProcessObjectEntries(machineEntries,time),routes=[];
+    Object.values(state.processConnections||{}).sort((first,second)=>processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second))).forEach((connection)=>{if(connection?.visible===false)return;const fromEntry=entriesById.get(connection.sourceId),toEntry=entriesById.get(connection.targetId);if(!fromEntry||!toEntry)return;const route=drawFloorProcessFlow(fromEntry,toEntry,connection,time);if(route)routes.push(route);});
+    collectProcessStepNodes(entriesById,routes).forEach(drawProcessStepLabel);
+    routes.forEach(drawSelectedCustomRouteTag);
+    return entriesById;
   }
 
   function rectanglesIntersect(first, second) {
@@ -11086,7 +11241,8 @@
     }
     const wantsOrbit = event.altKey || event.button === 2;
     const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
-    const selectableHit = state.editing && state.editorTool === "machines" && state.editorInteraction !== "navigate"
+    const processEndpointHit = !wantsOrbit && event.button === 0 ? processFlowEndpointHandleAt(event) : null;
+    const selectableHit = !processEndpointHit && state.editing && state.editorTool === "machines" && state.editorInteraction !== "navigate"
       ? machineAt(event)
       : null;
     const wantsPan = event.button === 1 || state.spacePressed || (event.shiftKey && !selectableHit);
@@ -11095,6 +11251,15 @@
 
     if (state.editing) {
       if (state.editorTool === "timeline") return;
+      if (processEndpointHit) {
+        state.dragAction = `process-${processEndpointHit}`;
+        state.dragSnapshot = snapshotLayout();
+        state.dragMoved = false;
+        state.dragging = true;
+        renderPerformance.noteInteraction(300);
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
       if (selectableHit && additiveSelection) {
         toggleMachineSelection(selectableHit.instanceId);
         updateEditorPanel();
@@ -11190,7 +11355,10 @@
     renderPerformance.noteInteraction(140);
     const deltaX = event.clientX-state.pointerX;
     const deltaY = event.clientY-state.pointerY;
-    if (state.dragAction === "column") {
+    if (state.dragAction === "process-start" || state.dragAction === "process-end") {
+      const endpoint = state.dragAction === "process-start" ? "start" : "end";
+      if (updateDraggedProcessEndpoint(endpoint, event)) state.dragMoved = true;
+    } else if (state.dragAction === "column") {
       const column = structuralColumns().find((item) => item.key === state.draggedColumnKey);
       if (column) {
         const [worldX, worldZ] = worldFromScreen(event);
@@ -11247,7 +11415,7 @@
       touchGestureCenter = null;
       touchGestureDistance = 0;
     }
-    if ((state.draggedMachineId || state.draggedColumnKey) && state.dragMoved && state.dragSnapshot) {
+    if ((state.draggedMachineId || state.draggedColumnKey || String(state.dragAction).startsWith("process-")) && state.dragMoved && state.dragSnapshot) {
       pushHistory(state.dragSnapshot);
       persistLayout();
       updateEditorPanel();

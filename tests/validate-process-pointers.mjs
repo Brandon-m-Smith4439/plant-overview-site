@@ -34,10 +34,10 @@ for (const field of [
 }
 assert.ok(plant.includes('data-process-connection-check="tagVisible"'), "Route tags must be independently optional per connection.");
 assert.ok(plant.includes('data-process-connection-field="tagText"'), "Route tags must expose editable per-connection text.");
-assert.ok(plant.includes('<legend>8 · Optional route tag</legend>'), "Route-tag text must live in the dedicated Optional route tag section.");
+assert.ok(plant.includes('<legend>8 · Optional custom route tag</legend>'), "Route-tag text must live in the dedicated Optional route tag section.");
 assert.ok(plant.includes('data-process-route-tag-preview'), "Pointers tab must show a route-tag text preview.");
 assert.ok(plant.includes('routeTagTextInput?.addEventListener("input"'), "Route-tag text must update live while typing.");
-assert.ok(plant.includes('String(connection.tagText || "").trim() || automaticRouteText'), "Blank route-tag text must fall back to the automatic source → destination text.");
+assert.ok(plant.includes('String(connection.tagText||"").trim()||automaticRouteText') || plant.includes('String(connection.tagText || "").trim() || automaticRouteText'), "Blank custom route-tag text must fall back to the automatic source → destination text.");
 
 assert.ok(plant.includes("function defaultProcessConnection"), "Object-to-object pointers need their own connection data model.");
 assert.ok(plant.includes("function normalizeProcessConnections"), "Saved process connections must be normalized independently from machines.");
@@ -71,19 +71,21 @@ const flowBody = plant.slice(flowStart, flowEnd);
 assert.ok(flowBody.includes("connection.startAnchorXPercent") || flowBody.includes('connection[`${prefix}AnchorXPercent`]'), "Renderer must use connection-owned start anchors.");
 assert.ok(flowBody.includes("connection.color"), "Renderer must use connection-owned line color.");
 assert.ok(flowBody.includes("connection.endStyle"), "Renderer must use connection-owned endpoint style.");
-assert.ok(flowBody.includes("Object.values(state.processConnections || {})"), "Today flow must render the saved edge collection rather than a fixed line tied to machine fields.");
+assert.ok(flowBody.includes("Object.values(state.processConnections||{})") || flowBody.includes("Object.values(state.processConnections || {})"), "Today flow must render the saved edge collection rather than a fixed line tied to machine fields.");
 assert.ok(flowBody.includes("entriesById.get(connection.sourceId)"), "Today flow must resolve the exact source object by instance ID.");
 assert.ok(flowBody.includes("entriesById.get(connection.targetId)"), "Today flow must resolve the exact destination object by instance ID.");
 assert.ok(flowBody.includes("processConnectionEndpointText"), "Route tags must support arbitrary object names as endpoints.");
 assert.ok(flowBody.includes("drawFloorProcessFlow(fromEntry,toEntry,connection,time)") || flowBody.includes("drawFloorProcessFlow(fromEntry, toEntry, connection, time)"), "Renderer must pass each saved connection into the animated floor-flow renderer.");
-assert.ok(flowBody.includes("routeTags.forEach"), "Process route tags must render in a second pass after all glowing floor routes so later routes cannot cover earlier tags.");
+assert.ok(flowBody.includes("collectProcessStepNodes(entriesById,routes).forEach(drawProcessStepLabel)"), "Automatic process-step labels must render after the glowing floor routes.");
 assert.ok(flowBody.includes("processFlowControlPoints") && flowBody.includes("roundedProcessFlowPath"), "Floor routes must support editable turn points and rounded arches.");
 assert.ok(flowBody.includes("lineDashOffset=-dashTravel") || flowBody.includes("lineDashOffset = -dashTravel"), "Floor routes must animate directional highlights along the path.");
 assert.ok(flowBody.includes("flowFloorHeight") && flowBody.includes("processFlowFloorAnchor"), "Process routes must be projected from a configurable floor height instead of floating between machine anchors.");
 assert.ok(plant.includes("drawTodayProductionFlow(machineEntries, time)"), "First person and overview must use the same animated Necessary floor routes.");
 assert.ok(plant.includes("processFlowAnimationActive()"), "Flow animation must keep the render loop active while Necessary routes are moving.");
-assert.ok(plant.includes("PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -300") && plant.includes("PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 400"), "Process endpoints must support a large outside-object adjustment range.");
-assert.ok(plant.includes('min="-300" max="400"'), "Pointer editor endpoint controls must expose the outside-object range.");
+assert.ok(plant.includes("PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -1000") && plant.includes("PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 1100"), "Process endpoints must support a very large outside-object adjustment range.");
+assert.ok(plant.includes('min="-1000" max="1100"'), "Pointer editor endpoint controls must expose the extended outside-object range.");
+assert.ok(plant.includes("processFlowEndpointHandleAt") && plant.includes("updateDraggedProcessEndpoint"), "Selected routes must expose draggable S/E endpoint handles.");
+assert.ok(plant.includes("processAnchorPercentsFromWorld"), "Dragging route endpoints must convert unrestricted floor positions back into machine-relative saved anchors.");
 assert.ok(!flowBody.includes("machine.processPointerAnchorXPercent"), "Object-to-object rendering must no longer read process geometry from the machine record.");
 assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Object-to-object rendering must never read machine-label pointer geometry.");
 assert.ok(!flowBody.includes("machine.labelLineColor"), "Object-to-object rendering must never read machine-label leader styling.");

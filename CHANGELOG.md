@@ -1,3 +1,14 @@
+## 0.13.35 - 2026-10-02
+
+- Replaced the single public route-tag presentation with automatic compact process-step badges and machine-name labels for every standard process node.
+- Added shared step numbering: Cutting 1, Polisher 2, Denver CNC / Waterjet 3, Washer 4, Tempering 5, Wrap 6, Glass Truck / Rack 7.
+- Added bounded adaptive label sizing based on projected machine size so overview labels remain readable when zoomed out without becoming oversized.
+- Added collision-aware label placement and machine-avoidance so process-step tags do not stack over one another or unnecessarily cover the equipment they identify.
+- Added explicit S / E endpoint edit handles to selected routes and direct floor dragging for both endpoints.
+- Expanded process endpoint anchor range from -300–400% to -1000–1100% so route starts/ends can move far outside machine footprints.
+- Made process route geometry persistent independently of camera culling by rebuilding missing source/destination endpoint entries from the saved process graph.
+- Kept the old custom route tag available only as an optional editor aid for the selected route.
+
 ## 0.13.34 - 2026-10-02
 
 - Replaced Today/Necessary object-to-object route lines with animated glowing floor-flow paths inspired by the supplied plant-flow reference.

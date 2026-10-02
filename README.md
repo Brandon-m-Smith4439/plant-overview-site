@@ -1,3 +1,7 @@
+## Version 0.13.35
+
+Version 0.13.35 refines the animated Necessary floor routes with compact automatic process-step labels, freer endpoint editing, and camera-independent route persistence. Every standard process machine now receives one numbered badge on its route endpoint plus a small machine-name tag above it (Cutting 1, Polisher 2, Denver/Waterjet 3, Washer 4, Tempering 5, Wrap 6, Truck/Rack 7). The tags use bounded screen-space sizing and collision-aware placement so they remain readable when zoomed out without growing into large machine-covering labels. Labels reserve screen space in a stable pass so they do not stack over one another or flicker between front/back order. Selected routes now show explicit S and E endpoint handles; those handles can be dragged directly across the floor and the saved anchor range is expanded to -1000% through 1100%, allowing endpoints far beyond the source/destination machine footprint. Process routes also rebuild missing endpoint entries from the saved process graph instead of depending on current camera culling, so looking away from a source or destination no longer causes the route to disappear. The older custom route-tag control remains available only while editing a selected route; the automatic numbered machine labels are the normal Necessary-mode presentation.
+
 ## Version 0.13.34
 
 Version 0.13.34 replaces the flat object-to-object process lines with **animated glowing floor-flow routes** for Today → Necessary mode. Each route now runs just above the plant floor, carries a moving highlight from source to destination, and remains visible in both Overview and First Person. Every route has two editable turn controls plus a Curve/Rounding setting, so the path can bend around equipment or form a smooth arch rather than being limited to a straight/elbow screen-space pointer. The Pointers editor also exposes floor height, flow speed, glow strength, core width, pattern, corner style, destination marker, and the existing independent route tag. The selected route shows numbered Turn 1 / Turn 2 handles in the model to make numeric path editing easier. Route tags still render in a second pass above the animated flow so they remain readable.
@@ -88,7 +92,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.34**
+Current project version: **0.13.35**
 
 ## Full-production rendering performance
 

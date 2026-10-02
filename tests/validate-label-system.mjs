@@ -15,7 +15,7 @@ assert.ok(
 assert.ok(!plant.includes('state.todayLabelMode = "necessary";\n      state.labelTextMode'), "Returning to Today must not erase the viewer's selected Today label mode.");
 assert.ok(plant.includes('if (isTodayStage() && state.todayLabelMode === "necessary")'), "Necessary route labels must remain available on the Today stage in both overview and first person.");
 assert.ok(plant.includes('drawTodayProductionFlow(machineEntries, time)'), "First person and overview must render the same Necessary flowing floor routes.");
-assert.ok(plant.includes('if (!isTodayStage() || isTodayOverview())'), "Today must run normal machine-label rendering even when the process overlay is enabled.");
+assert.ok(plant.includes('if (SCREEN_SPACE_LABELS && (!isTodayStage() || isTodayOverview()))'), "Legacy normal machine-label rendering must remain behind the disabled screen-space gate.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
 assert.ok(plant.includes("PROCESS_POINTER_FLOW_DEFINITIONS"), "Necessary production-flow labels must use stable flow definitions.");
 for (const label of ["Cutting", "Polisher", "Denver CNC", "Waterjet", "Washer", "Tempering Line", "Wrap", "Glass Truck", "Rack"]) {

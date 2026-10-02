@@ -1,0 +1,28 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const plant = await readFile(new URL("../public/plant-app.js", import.meta.url), "utf8");
+
+for (const field of [
+  "flowTurn1Progress", "flowTurn1Offset", "flowTurn2Progress", "flowTurn2Offset",
+  "flowCurvePercent", "flowFloorHeight", "flowSpeed", "flowGlow",
+]) {
+  assert.ok(plant.includes(field), `Flow-route field missing: ${field}`);
+  assert.ok(plant.includes(`data-process-connection-field="${field}"`), `Flow-route editor control missing: ${field}`);
+}
+
+assert.ok(plant.includes("function processFlowFloorAnchor"), "Flow routes must lock their visible path to the floor plane.");
+assert.ok(plant.includes("function processFlowControlPoints"), "Flow routes must expose editable intermediate turn geometry.");
+assert.ok(plant.includes("function roundedProcessFlowPath"), "Flow routes must support rounded/arched corners.");
+assert.ok(plant.includes("function drawFloorProcessFlow"), "Necessary process routes must use the animated floor-flow renderer.");
+assert.ok(plant.includes("lineDashOffset=-dashTravel") || plant.includes("lineDashOffset = -dashTravel"), "Floor routes need a moving directional highlight.");
+assert.ok(plant.includes("ctx.shadowColor=route.color") || plant.includes("ctx.shadowColor = route.color"), "Floor routes need a visible glow treatment.");
+assert.ok(plant.includes("drawProcessFlowEditHandles"), "Selected routes must show edit handles for Turn 1 and Turn 2.");
+assert.ok(plant.includes('if (isTodayStage() && state.todayLabelMode === "necessary")'), "Necessary floor routes must run on the Today stage.");
+assert.ok(plant.includes("drawTodayProductionFlow(machineEntries, time)"), "Overview and First Person must render the same floor-flow route system.");
+assert.ok(!plant.includes('labelsOnly: state.cameraMode === "walk"'), "First Person must not suppress the glowing floor paths.");
+assert.ok(plant.includes("processFlowAnimationActive()"), "Moving floor routes must keep the render loop active.");
+assert.ok(plant.includes("effectiveAnimationTime(time)"), "Flow animation must obey the global Pause Motion clock.");
+assert.ok(plant.includes("routeTags.forEach"), "Route tags must remain a second pass above the glowing flow paths.");
+
+console.log("Animated glowing floor-flow route validation passed.");

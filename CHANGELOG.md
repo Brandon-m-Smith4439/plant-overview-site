@@ -1,3 +1,14 @@
+## 0.13.34 - 2026-10-02
+
+- Replaced Today/Necessary object-to-object route lines with animated glowing floor-flow paths inspired by the supplied plant-flow reference.
+- Routes now stay on a configurable floor height and remain visible in both Overview and First Person.
+- Added two editable route-turn controls per connection: progress along the machine-to-machine path plus signed side offset, allowing the line to route around equipment.
+- Added Curve / Rounding control for smooth arched corners; Sharp Turns remains available for deliberate hard corners.
+- Added per-route flow speed and glow-strength controls while preserving color, width, opacity, moving pattern, endpoint marker, and route-tag editing.
+- Selected routes show numbered Turn 1 / Turn 2 handles directly on the floor path for clearer editing feedback.
+- Flow animation now keeps the viewer render loop active even when no machine animation is running and respects the global Pause Motion control.
+- Route tags still render after all floor-flow paths so the glow cannot cover tag text.
+
 ## 0.13.33 - 2026-10-01
 
 - Render process route tags in a second overlay pass after all Necessary route lines so route lines can no longer cover route-tag text.

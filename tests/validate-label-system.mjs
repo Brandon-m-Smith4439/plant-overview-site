@@ -12,7 +12,7 @@ assert.ok(
 );
 assert.ok(!plant.includes('state.todayLabelMode = "necessary";\n      state.labelTextMode'), "Returning to Today must not erase the viewer's selected Today label mode.");
 assert.ok(plant.includes('if (isTodayStage() && state.todayLabelMode === "necessary")'), "Necessary route labels must remain available on the Today stage in both overview and first person.");
-assert.ok(plant.includes('labelsOnly: state.cameraMode === "walk"'), "First person must render Necessary route tags without the full overview route-line overlay.");
+assert.ok(plant.includes('drawTodayProductionFlow(machineEntries, time)'), "First person and overview must render the same Necessary flowing floor routes.");
 assert.ok(plant.includes('if (!isTodayStage() || isTodayOverview())'), "Today must run normal machine-label rendering even when the process overlay is enabled.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
 assert.ok(plant.includes("PROCESS_POINTER_FLOW_DEFINITIONS"), "Necessary production-flow labels must use stable flow definitions.");
@@ -31,12 +31,12 @@ for (const edge of [
   '["wrap", "glass-truck"]',
   '["wrap", "rack"]',
 ]) assert.ok(plant.includes(edge), `Missing flow edge ${edge}`);
-assert.ok(plant.includes("function drawTodayFlowArrow"), "Today flow must render directional connectors.");
-assert.ok(plant.includes("function traceProcessConnection") && plant.includes("arrowSize"), "Flow connectors must include visible styled directional arrows.");
+assert.ok(plant.includes("function drawFloorProcessFlow"), "Today flow must render animated glowing floor routes.");
+assert.ok((plant.includes("lineDashOffset=-dashTravel") || plant.includes("lineDashOffset = -dashTravel")) && plant.includes("ctx.shadowBlur"), "Flow routes must include visible glowing directional motion.");
 assert.ok(plant.includes("function drawTodayProductionFlow"), "Today flow must use its own overlay renderer.");
 assert.ok(plant.includes("function drawProcessRouteTag"), "Process pointers must render a dedicated route tag instead of reusing the normal machine-label renderer.");
 assert.ok(plant.includes("labelRects.push(paddedLabelRectangle(box"), "Process route tags must reserve screen space separately from machine labels.");
-assert.ok(plant.includes("routeTags.forEach"), "Route tags must render after every process line so a later route cannot draw over an earlier tag.");
+assert.ok(plant.includes("routeTags.forEach"), "Route tags must render after every glowing floor route so a later route cannot draw over an earlier tag.");
 assert.ok(plant.includes('if (machine.type === "room") return /office|maintenance/.test(name);'), "Office and Maintenance rooms must be eligible for their construction-stage labels.");
 assert.ok(plant.includes('const roomName = machine?.type === "room"'), "Room-stage labels must use full room names.");
 assert.ok(plant.includes("labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate"), "Construction stages must honor each machine label's independent reveal/retire window.");

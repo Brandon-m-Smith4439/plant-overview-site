@@ -25,6 +25,14 @@ const connection = {
   endAnchorXPercent: 50,
   endAnchorYPercent: 100,
   endAnchorZPercent: 50,
+  flowTurn1Progress: 34,
+  flowTurn1Offset: 0,
+  flowTurn2Progress: 66,
+  flowTurn2Offset: 0,
+  flowCurvePercent: 68,
+  flowFloorHeight: .18,
+  flowSpeed: 42,
+  flowGlow: 100,
   tagText: "",
   color: "#52b7aa",
   width: 1.65,
@@ -52,6 +60,9 @@ assert.equal(applyProcessConnectionField(connection, "width", "4.25"), true);
 assert.equal(applyProcessConnectionField(connection, "shape", "elbow"), true);
 assert.equal(applyProcessConnectionField(connection, "endStyle", "ring"), true);
 assert.equal(applyProcessConnectionField(connection, "tagText", "Cutting to polish inspection"), true);
+assert.equal(applyProcessConnectionField(connection, "flowTurn1Offset", "36"), true);
+assert.equal(applyProcessConnectionField(connection, "flowCurvePercent", "82"), true);
+assert.equal(applyProcessConnectionField(connection, "flowSpeed", "74"), true);
 
 assert.equal(connection.startAnchorXPercent, 18);
 assert.equal(connection.endAnchorZPercent, 82);
@@ -60,10 +71,17 @@ assert.equal(connection.width, 4.25);
 assert.equal(connection.shape, "elbow");
 assert.equal(connection.endStyle, "ring");
 assert.equal(connection.tagText, "Cutting to polish inspection");
+assert.equal(connection.flowTurn1Offset, 36);
+assert.equal(connection.flowCurvePercent, 82);
+assert.equal(connection.flowSpeed, 74);
 assert.deepEqual(machineLabel, labelBefore, "Editing an object-to-object process pointer must not change any machine-label pointer property.");
 
 assert.equal(applyProcessConnectionField(connection, "startAnchorXPercent", "999"), true);
 assert.equal(connection.startAnchorXPercent, 400, "Connection anchors must support endpoints beyond the object while still clamping to the expanded safety range.");\nassert.equal(applyProcessConnectionField(connection, "endAnchorYPercent", "-999"), true);\nassert.equal(connection.endAnchorYPercent, -300, "Connection anchors must support negative percentages outside the destination object.");
+assert.equal(applyProcessConnectionField(connection, "flowTurn2Offset", "900"), true);
+assert.equal(connection.flowTurn2Offset, 500, "Floor-route turn offsets must clamp to the extended routing range.");
+assert.equal(applyProcessConnectionField(connection, "flowFloorHeight", "0"), true);
+assert.equal(connection.flowFloorHeight, 0.02, "Floor routes must remain slightly above the floor plane.");
 assert.equal(applyProcessConnectionField(connection, "labelAnchorXPercent", "5"), false, "Connection editor must reject machine-label fields.");
 assert.equal(applyProcessConnectionField(connection, "labelLineColor", "#000000"), false, "Connection editor must reject machine-label line styling.");
 

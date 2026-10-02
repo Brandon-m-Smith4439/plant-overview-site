@@ -12,7 +12,7 @@ const renderPerformance = fs.readFileSync("public/render-performance.js", "utf8"
 const retainedRenderer = fs.readFileSync("public/three-depth-scene-renderer.js", "utf8");
 
 assert.match(loader, /plantlegacyteardown/, "Route cleanup must notify the outgoing legacy editor.");
-assert.match(loader, /scriptLoads\.delete\(entrySource\)/, "The route bootstrap must be reloadable when returning to a page.");
+assert.match(loader, /scriptLoads\.delete\(`\$\{LEGACY_BUILD_TOKEN\}\\u001f\$\{entrySource\}`\)/, "The release-scoped route bootstrap must be reloadable when returning to a page.");
 assert.match(loader, /if \(event\.persisted\) teardownEntry\(\)/, "Back-forward cached routes must release their outgoing WebGL viewport.");
 assert.match(loader, /if \(event\.persisted\) window\.location\.reload\(\)/, "A released cached route must restart cleanly when revisited.");
 assert.match(plant, /cancelAnimationFrame\(animationFrameId\)/, "Plant teardown must stop its animation loop.");

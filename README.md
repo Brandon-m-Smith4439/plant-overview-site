@@ -1,3 +1,7 @@
+## Version 0.13.34
+
+Version 0.13.34 replaces the flat object-to-object process lines with **animated glowing floor-flow routes** for Today → Necessary mode. Each route now runs just above the plant floor, carries a moving highlight from source to destination, and remains visible in both Overview and First Person. Every route has two editable turn controls plus a Curve/Rounding setting, so the path can bend around equipment or form a smooth arch rather than being limited to a straight/elbow screen-space pointer. The Pointers editor also exposes floor height, flow speed, glow strength, core width, pattern, corner style, destination marker, and the existing independent route tag. The selected route shows numbered Turn 1 / Turn 2 handles in the model to make numeric path editing easier. Route tags still render in a second pass above the animated flow so they remain readable.
+
 ## Version 0.13.33
 
 Version 0.13.33 improves the Necessary production-route overlay. Process route tags now render in a dedicated second pass above every route line, so a later route can no longer cross over and hide an earlier tag. Route tags also use lightweight collision avoidance against other labels. On the Today stage, first-person mode now keeps the Necessary route tags visible while omitting the full route-line overlay for a cleaner walkthrough. Process-pointer start/end anchors are no longer restricted to the 0–100% bounds of their source and destination objects; all six endpoint controls now allow -300% through 400%, making it possible to route a pointer well outside a machine footprint.
@@ -84,7 +88,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.33**
+Current project version: **0.13.34**
 
 ## Full-production rendering performance
 

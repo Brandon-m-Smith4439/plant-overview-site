@@ -18,7 +18,10 @@ assert.ok(plant.includes("function designRollerFrame(component, index, count)"),
 assert.ok(rollerBranch.includes("segments: 6") && rollerBranch.includes("outline: false"), "Overview rollers must use the low-cost dimensional mesh.");
 
 assert.ok(plant.includes("function drawLayoutRulers()"), "Layout editing needs a scale ruler overlay.");
-assert.match(plant, /depthRenderer\.render\(\);\s*drawLayoutRulers\(\);/, "Rulers must render as a readable UI overlay after the 3D scene.");
+const drawLoopStart = plant.indexOf("function draw(time)");
+const drawLoopEnd = plant.indexOf("function escapeHtml", drawLoopStart);
+const drawLoopBody = plant.slice(drawLoopStart, drawLoopEnd);
+assert.ok(drawLoopBody.lastIndexOf("depthRenderer.render();") < drawLoopBody.indexOf("drawLayoutRulers();"), "Rulers must render as a readable UI overlay after the 3D scene.");
 assert.ok(plant.includes('`${Math.round(x - minX)} ft`') && plant.includes('`${Math.round(z - minZ)} ft`'), "Ruler ticks must be labeled in feet from the plant corner.");
 
 for (const source of [studioPage, staticStudioPage]) {

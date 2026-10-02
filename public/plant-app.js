@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.33";
+  const APP_VERSION = "0.13.34";
 
   function editorProfileProtected() {
     try {
@@ -1261,6 +1261,14 @@
       endAnchorXPercent: 50,
       endAnchorYPercent: 100,
       endAnchorZPercent: 50,
+      flowTurn1Progress: 34,
+      flowTurn1Offset: 0,
+      flowTurn2Progress: 66,
+      flowTurn2Offset: 0,
+      flowCurvePercent: 68,
+      flowFloorHeight: 0.18,
+      flowSpeed: 42,
+      flowGlow: 100,
       tagVisible: false,
       tagText: "",
       tagLift: 4,
@@ -1300,6 +1308,14 @@
       endAnchorXPercent: readNumber("endAnchorXPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
       endAnchorYPercent: readNumber("endAnchorYPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
       endAnchorZPercent: readNumber("endAnchorZPercent", PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT),
+      flowTurn1Progress: readNumber("flowTurn1Progress", 0, 100),
+      flowTurn1Offset: readNumber("flowTurn1Offset", -500, 500),
+      flowTurn2Progress: readNumber("flowTurn2Progress", 0, 100),
+      flowTurn2Offset: readNumber("flowTurn2Offset", -500, 500),
+      flowCurvePercent: readNumber("flowCurvePercent", 0, 100),
+      flowFloorHeight: readNumber("flowFloorHeight", 0.02, 6),
+      flowSpeed: readNumber("flowSpeed", 0, 180),
+      flowGlow: readNumber("flowGlow", 0, 200),
       tagVisible: source.tagVisible !== undefined ? source.tagVisible === true : defaults.tagVisible === true,
       tagText: String(source.tagText ?? defaults.tagText ?? "").trim().slice(0, 120),
       tagLift: readNumber("tagLift", 0, 60),
@@ -2049,6 +2065,10 @@
       endAnchorXPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
       endAnchorYPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
       endAnchorZPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
+      flowTurn1Progress: [0, 100], flowTurn1Offset: [-500, 500],
+      flowTurn2Progress: [0, 100], flowTurn2Offset: [-500, 500],
+      flowCurvePercent: [0, 100], flowFloorHeight: [0.02, 6],
+      flowSpeed: [0, 180], flowGlow: [0, 200],
       tagLift: [0, 60], tagScreenOffsetX: [-500, 500], tagScreenOffsetY: [-500, 500],
       width: [.5, 12], opacity: [5, 100], endSize: [1, 14],
     };
@@ -3375,8 +3395,8 @@
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
       processPointerSummary.textContent = activeConnection
-        ? `Editing the long object-to-object line: ${processConnectionDisplayName(activeConnection, { includeMachines: true })}. Both ends can be any placed object. Nothing here edits the machine-label callout or its leader.`
-        : "No process connection exists yet. Choose any source object and destination object below to create one.";
+        ? `Editing the flowing floor route: ${processConnectionDisplayName(activeConnection, { includeMachines: true })}. Move its endpoints or Turn 1 / Turn 2 to route around equipment. Machine-label callouts remain separate.`
+        : "No process route exists yet. Choose any source object and destination object below to create one.";
     }
 
     const editingMotionMember = selectionCount > 1 && selectionItems.some((item) => item.motionParentId || motionChildren(item.instanceId).length);
@@ -4363,9 +4383,9 @@
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
           <div class="process-pointer-intro">
-            <div><strong>Object-to-object process pointer editor</strong><span data-process-pointer-summary>Select the long process line itself here. This tab does not edit the small machine-label callout or its leader.</span></div>
+            <div><strong>Flowing floor-route editor</strong><span data-process-pointer-summary>Select a machine-to-machine floor route here. This tab does not edit the small machine-label callout or its leader.</span></div>
           </div>
-          <div class="process-pointer-note"><strong>What this edits</strong><span>The long Cutting → Polisher line is an object-to-object pointer. Select it below, then either endpoint can be changed to any placed object. Machine-label pointers remain exclusively in the Layout label controls.</span></div>
+          <div class="process-pointer-note"><strong>What this edits</strong><span>The production route is now a glowing animated path on the floor. Select a route below to retarget its machines, move its floor endpoints, bend its two turn controls, change its curve, glow, speed, and route tag.</span></div>
           <fieldset class="process-pointer-controls process-connection-picker">
             <legend>1 · Choose the process line</legend>
             <label class="wide">Line to edit<select data-process-connection-select><option value="">No object-to-object process pointers</option></select></label>
@@ -4389,7 +4409,7 @@
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>4 · Start point · source object</legend>
-            <p>Moves where the selected long process line leaves its source object. Values below 0% or above 100% move the start point outside the object.</p>
+            <p>X and Z place the floor-route start relative to the source object. Values below 0% or above 100% move it outside the object. Y is retained for older saved routes; the flowing route height is controlled below.</p>
             <div class="process-pointer-grid">
               <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="-300" max="400" step="5"></label>
               <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="-300" max="400" step="5"></label>
@@ -4399,7 +4419,7 @@
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>5 · End point · destination object</legend>
-            <p>Moves where the selected long process line lands on its destination object. Values below 0% or above 100% move the end point outside the object.</p>
+            <p>X and Z place the floor-route end relative to the destination object. Values below 0% or above 100% move it outside the object. Y is retained for older saved routes; the flowing route height is controlled below.</p>
             <div class="process-pointer-grid">
               <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="-300" max="400" step="5"></label>
               <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="-300" max="400" step="5"></label>
@@ -4407,21 +4427,36 @@
             </div>
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end">Center destination point</button></div>
           </fieldset>
-          <fieldset class="process-pointer-controls">
-            <legend>6 · Object-to-object line style</legend>
+          <fieldset class="process-pointer-controls process-floor-flow-controls">
+            <legend>6 · Flowing floor path</legend>
+            <p>The route now travels along the plant floor. Move either turn sideways to route around machines, then use Curve to round the corners into a smooth arch. Positive and negative offsets bend to opposite sides of the direct machine-to-machine path.</p>
             <div class="process-pointer-grid">
-              <label>Color<input type="color" data-process-connection-field="color"></label>
-              <label>Width<input type="number" data-process-connection-field="width" min="0.5" max="12" step="0.25"></label>
-              <label>Opacity (%)<input type="number" data-process-connection-field="opacity" min="5" max="100" step="5"></label>
-              <label>Pattern<select data-process-connection-field="style"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
-              <label>Shape<select data-process-connection-field="shape"><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
-              <label>Destination end<select data-process-connection-field="endStyle"><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
-              <label>End size<input type="number" data-process-connection-field="endSize" min="1" max="14" step="0.5"></label>
+              <label>Turn 1 along route (%)<input type="number" data-process-connection-field="flowTurn1Progress" min="0" max="100" step="1"></label>
+              <label>Turn 1 side offset (ft)<input type="number" data-process-connection-field="flowTurn1Offset" min="-500" max="500" step="1"></label>
+              <label>Turn 2 along route (%)<input type="number" data-process-connection-field="flowTurn2Progress" min="0" max="100" step="1"></label>
+              <label>Turn 2 side offset (ft)<input type="number" data-process-connection-field="flowTurn2Offset" min="-500" max="500" step="1"></label>
+              <label>Curve / rounding (%)<input type="number" data-process-connection-field="flowCurvePercent" min="0" max="100" step="5"></label>
+              <label>Floor height (ft)<input type="number" data-process-connection-field="flowFloorHeight" min="0.02" max="6" step="0.02"></label>
+              <label>Flow speed<input type="number" data-process-connection-field="flowSpeed" min="0" max="180" step="2"></label>
+              <label>Glow strength (%)<input type="number" data-process-connection-field="flowGlow" min="0" max="200" step="5"></label>
             </div>
-            <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection">Reset selected process line</button></div>
+            <p class="process-route-tag-preview">Turn 1 and Turn 2 are shown as edit handles on the selected route so you can see exactly what each value moves.</p>
           </fieldset>
           <fieldset class="process-pointer-controls">
-            <legend>7 · Optional route tag</legend>
+            <legend>7 · Flow appearance</legend>
+            <div class="process-pointer-grid">
+              <label>Color<input type="color" data-process-connection-field="color"></label>
+              <label>Core width<input type="number" data-process-connection-field="width" min="0.5" max="12" step="0.25"></label>
+              <label>Opacity (%)<input type="number" data-process-connection-field="opacity" min="5" max="100" step="5"></label>
+              <label>Flow pattern<select data-process-connection-field="style"><option value="solid">Continuous glow</option><option value="dashed">Moving segments</option><option value="dotted">Moving dots</option></select></label>
+              <label>Corner style<select data-process-connection-field="shape"><option value="straight">Rounded / arched</option><option value="elbow">Sharp turns</option></select></label>
+              <label>Destination marker<select data-process-connection-field="endStyle"><option value="arrow">Arrow</option><option value="dot">Dot</option><option value="ring">Ring</option><option value="none">None</option></select></label>
+              <label>Marker size<input type="number" data-process-connection-field="endSize" min="1" max="14" step="0.5"></label>
+            </div>
+            <div class="process-pointer-actions"><button type="button" data-editor-action="reset-process-connection">Reset selected flow path</button></div>
+          </fieldset>
+          <fieldset class="process-pointer-controls">
+            <legend>8 · Optional route tag</legend>
             <label class="process-pointer-toggle"><input type="checkbox" data-process-connection-check="tagVisible"> Show route tag on this line</label>
             <label class="wide process-route-tag-text">Route tag text<input type="text" data-process-connection-field="tagText" maxlength="120" placeholder="Blank = automatic Source → Destination"></label>
             <p class="process-route-tag-preview" data-process-route-tag-preview>Select a line to edit its route-tag text.</p>
@@ -4449,7 +4484,7 @@
             </select></label>
             <div class="process-pointer-actions"><button type="button" data-editor-action="remove-process-node" data-needs-selection>Remove selected machine from process flow</button></div>
           </fieldset>
-          <div class="process-pointer-note"><strong>Machine labels are separate</strong><span>To edit the small “Cutting” label box or the short leader that points from that box to the cutting table, use <b>Objects → Label</b>. Nothing in the process-line controls above changes those label settings.</span></div>
+          <div class="process-pointer-note"><strong>Machine labels are separate</strong><span>To edit a small machine label box or its short leader, use <b>Objects → Label</b>. The glowing floor route and route tag remain independent from those machine-label settings.</span></div>
         </section>
         <section data-object-editor-panel="animation" class="object-editor-panel" hidden>
         <fieldset class="object-animation-controls">
@@ -7173,176 +7208,102 @@
     );
   }
 
-  function traceProcessConnection(sx, sy, ex, ey, shape) {
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    if (shape === "elbow") {
-      const midX = sx + (ex - sx) * .5;
-      ctx.lineTo(midX, sy);
-      ctx.lineTo(midX, ey);
-    }
-    ctx.lineTo(ex, ey);
+  function processFlowFloorAnchor(entry, connection, endpoint) {
+    const anchor = flowEntryWorldAnchor(entry, connection, endpoint);
+    if (!anchor) return null;
+    const floorHeight = clamp(Number(connection?.flowFloorHeight ?? .18), .02, 6);
+    return [anchor[0], floorHeight, anchor[2]];
   }
 
-  function drawProcessRouteTag(text, worldMidpoint, connection, color) {
-    if (!text || !worldMidpoint || connection?.tagVisible !== true) return;
-    const lifted = [worldMidpoint[0], worldMidpoint[1] + clamp(Number(connection.tagLift ?? 4), 0, 60), worldMidpoint[2]];
-    const point = project(...lifted);
-    if (state.cameraMode === "walk" && point[3] < WALK_NEAR_CLIP) return;
-    const rect = canvas.getBoundingClientRect();
-    const pixelScale = canvas.width / Math.max(1, rect.width);
-    const baseX = point[0] + clamp(Number(connection.tagScreenOffsetX ?? 0), -500, 500) * pixelScale;
-    const baseY = point[1] + clamp(Number(connection.tagScreenOffsetY ?? 0), -500, 500) * pixelScale;
-    const fontSize = (state.cameraMode === "walk" ? 11.5 : compactLabelViewport() ? 7.2 : 8.4) * pixelScale;
-    ctx.save();
-    ctx.font = `600 ${fontSize}px "Segoe UI", sans-serif`;
-    const paddingX = 6 * pixelScale;
-    const height = (state.cameraMode === "walk" ? 23 : 19) * pixelScale;
-    const width = ctx.measureText(text).width + paddingX * 2;
-    const collisionGap = 4 * pixelScale;
-    const offsets = [[0,0],[0,-24],[0,24],[30,0],[-30,0],[0,-48],[0,48],[42,-24],[-42,-24],[42,24],[-42,24],[0,-72],[0,72]];
-    let placement = null;
-    for (const [offsetX, offsetY] of offsets) {
-      const x = baseX + offsetX * pixelScale;
-      const y = baseY + offsetY * pixelScale;
-      const box = { left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 };
-      const onCanvas = box.right > 0 && box.left < canvas.width && box.bottom > 0 && box.top < canvas.height;
-      const collisionBox = paddedLabelRectangle(box, collisionGap);
-      if (onCanvas && !labelRects.some((used) => rectanglesIntersect(collisionBox, used))) {
-        placement = { x, y, box };
-        break;
-      }
-    }
-    if (!placement) {
-      const box = { left: baseX - width / 2, right: baseX + width / 2, top: baseY - height / 2, bottom: baseY + height / 2 };
-      placement = { x: baseX, y: baseY, box };
-    }
-    const { x, y, box } = placement;
-    ctx.globalAlpha = .98;
-    ctx.fillStyle = "rgba(8,24,22,.96)";
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(.8, pixelScale);
-    if (typeof ctx.roundRect === "function") {
-      ctx.beginPath(); ctx.roundRect(box.left, box.top, width, height, 6 * pixelScale); ctx.fill(); ctx.stroke();
-    } else { ctx.fillRect(box.left, box.top, width, height); ctx.strokeRect(box.left, box.top, width, height); }
-    ctx.fillStyle = "#f2faf8";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, x, y + .4 * pixelScale);
-    ctx.restore();
-    labelRects.push(paddedLabelRectangle(box, collisionGap));
+  function processFlowControlPoints(startWorld, endWorld, connection) {
+    const dx=endWorld[0]-startWorld[0], dz=endWorld[2]-startWorld[2], routeLength=Math.max(.001,Math.hypot(dx,dz));
+    const normalX=-dz/routeLength, normalZ=dx/routeLength;
+    const turns=[
+      {progress:clamp(Number(connection?.flowTurn1Progress??34),0,100)/100,offset:clamp(Number(connection?.flowTurn1Offset??0),-500,500),index:1},
+      {progress:clamp(Number(connection?.flowTurn2Progress??66),0,100)/100,offset:clamp(Number(connection?.flowTurn2Offset??0),-500,500),index:2},
+    ].sort((a,b)=>a.progress-b.progress||a.index-b.index);
+    const bendPoints=turns.map((turn)=>({index:turn.index,point:[startWorld[0]+dx*turn.progress+normalX*turn.offset,startWorld[1],startWorld[2]+dz*turn.progress+normalZ*turn.offset]}));
+    return {points:[startWorld,...bendPoints.map((item)=>item.point),endWorld],bendPoints};
   }
 
-  function processRouteTagDescriptor(fromEntry, toEntry, connection) {
-    if (!connection || connection.visible === false) return null;
-    const startWorld = flowEntryWorldAnchor(fromEntry, connection, "start");
-    const endWorld = flowEntryWorldAnchor(toEntry, connection, "end");
-    if (!startWorld || !endWorld) return null;
-    const color = /^#[0-9a-f]{6}$/i.test(String(connection.color || "")) ? connection.color : "#52b7aa";
-    const automaticRouteText = `${processConnectionEndpointText(connection, "source")} → ${processConnectionEndpointText(connection, "target")}`;
-    const text = String(connection.tagText || "").trim() || automaticRouteText;
-    return {
-      text,
-      worldMidpoint: [(startWorld[0]+endWorld[0])/2,(startWorld[1]+endWorld[1])/2,(startWorld[2]+endWorld[2])/2],
-      connection, color, startWorld, endWorld,
-    };
+  function floorPointDistance(first,second){return Math.hypot((second?.[0]||0)-(first?.[0]||0),(second?.[2]||0)-(first?.[2]||0));}
+
+  function roundedProcessFlowPath(controlPoints,connection){
+    const points=(controlPoints||[]).filter(Boolean);
+    if(points.length<3)return points;
+    const roundness=connection?.shape!=="elbow"?clamp(Number(connection?.flowCurvePercent??68),0,100)/100:0;
+    if(roundness<=.001)return points;
+    const result=[points[0]];
+    for(let index=1;index<points.length-1;index+=1){
+      const previous=points[index], corner=points[index], next=points[index+1], actualPrevious=points[index-1];
+      const incomingLength=floorPointDistance(actualPrevious,corner), outgoingLength=floorPointDistance(corner,next);
+      if(incomingLength<.01||outgoingLength<.01){result.push(corner);continue;}
+      const radius=Math.min(incomingLength,outgoingLength)*.44*roundness;
+      const incomingX=(corner[0]-actualPrevious[0])/incomingLength,incomingZ=(corner[2]-actualPrevious[2])/incomingLength;
+      const outgoingX=(next[0]-corner[0])/outgoingLength,outgoingZ=(next[2]-corner[2])/outgoingLength;
+      const before=[corner[0]-incomingX*radius,corner[1],corner[2]-incomingZ*radius];
+      const after=[corner[0]+outgoingX*radius,corner[1],corner[2]+outgoingZ*radius];
+      if(floorPointDistance(result[result.length-1],before)>.01)result.push(before);
+      for(let sample=1;sample<=8;sample+=1){const t=sample/8,inv=1-t;result.push([inv*inv*before[0]+2*inv*t*corner[0]+t*t*after[0],corner[1],inv*inv*before[2]+2*inv*t*corner[2]+t*t*after[2]]);}
+    }
+    result.push(points[points.length-1]);return result;
   }
 
-  function drawTodayFlowArrow(fromEntry, toEntry, connection) {
-    const routeTag = processRouteTagDescriptor(fromEntry, toEntry, connection);
-    if (!routeTag) return null;
-    const { startWorld, endWorld, color } = routeTag;
-    const start = project(...startWorld);
-    const end = project(...endWorld);
-    const dx = end[0] - start[0];
-    const dy = end[1] - start[1];
-    const length = Math.hypot(dx, dy);
-    if (!Number.isFinite(length) || length < 8) return routeTag;
-    const rect = canvas.getBoundingClientRect();
-    const pixelScale = canvas.width / Math.max(1, rect.width);
-    const ux = dx / length;
-    const uy = dy / length;
-    const startInset = Math.min(length * .08, 8 * pixelScale);
-    const endInset = Math.min(length * .12, 12 * pixelScale);
-    const sx = start[0] + ux * startInset;
-    const sy = start[1] + uy * startInset;
-    const ex = end[0] - ux * endInset;
-    const ey = end[1] - uy * endInset;
-    const width = clamp(Number(connection.width) || 1.65, .5, 12) * pixelScale;
-    const opacity = clamp(Number(connection.opacity) || 100, 5, 100) / 100;
-    const style = ["solid", "dashed", "dotted"].includes(connection.style) ? connection.style : "solid";
-    const shape = ["straight", "elbow"].includes(connection.shape) ? connection.shape : "straight";
-    const endStyle = ["arrow", "dot", "ring", "none"].includes(connection.endStyle) ? connection.endStyle : "arrow";
-    const endSize = clamp(Number(connection.endSize) || 3.2, 1, 14) * pixelScale;
-    const editingThisConnection = state.editing && state.objectEditorTab === "pointers" && connection.key === state.selectedProcessConnectionKey;
-    ctx.save();
-    if (editingThisConnection) {
-      traceProcessConnection(sx, sy, ex, ey, shape);
-      ctx.strokeStyle = "rgba(255,255,255,.95)";
-      ctx.lineWidth = Math.max(width + 7 * pixelScale, 8 * pixelScale);
-      ctx.stroke();
-    }
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.globalAlpha = opacity;
-    ctx.setLineDash(labelLineDash(style, Math.max(1, width / pixelScale), pixelScale));
-    traceProcessConnection(sx, sy, ex, ey, shape);
-    ctx.strokeStyle = "rgba(7,18,18,.84)";
-    ctx.lineWidth = Math.max(width + 2.4 * pixelScale, 3.5 * pixelScale);
-    ctx.stroke();
-    traceProcessConnection(sx, sy, ex, ey, shape);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(width, 1.2 * pixelScale);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    const normalX = -uy;
-    const normalY = ux;
-    if (endStyle === "arrow") {
-      const arrowSize = Math.max(5 * pixelScale, endSize * 1.8);
-      ctx.beginPath();
-      ctx.moveTo(ex, ey);
-      ctx.lineTo(ex - ux * arrowSize + normalX * arrowSize * .48, ey - uy * arrowSize + normalY * arrowSize * .48);
-      ctx.lineTo(ex - ux * arrowSize - normalX * arrowSize * .48, ey - uy * arrowSize - normalY * arrowSize * .48);
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-    } else if (endStyle === "dot") {
-      ctx.beginPath();
-      ctx.arc(ex, ey, Math.max(2.5 * pixelScale, endSize), 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-    } else if (endStyle === "ring") {
-      ctx.beginPath();
-      ctx.arc(ex, ey, Math.max(3 * pixelScale, endSize), 0, Math.PI * 2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = Math.max(1, width * .8);
-      ctx.stroke();
-    }
-    ctx.restore();
-    return routeTag;
+  function projectedProcessFlowSegments(worldPath){
+    const segments=[];let active=[];
+    const flush=()=>{if(active.length>=2)segments.push(active);active=[];};
+    (worldPath||[]).forEach((worldPoint)=>{const screenPoint=project(...worldPoint);const valid=Number.isFinite(screenPoint[0])&&Number.isFinite(screenPoint[1]);const inFront=state.cameraMode!=="walk"||Number(screenPoint[3])>=WALK_NEAR_CLIP*1.02;if(!valid||!inFront){flush();return;}active.push(screenPoint);});
+    flush();return segments;
   }
 
-  function drawTodayProductionFlow(machineEntries, { labelsOnly = false } = {}) {
-    const entriesById = buildTodayProcessObjectEntries(machineEntries);
-    const routeTags = [];
-    Object.values(state.processConnections || {})
-      .sort((first, second) => processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second)))
-      .forEach((connection) => {
-        if (connection?.visible === false) return;
-        const fromEntry = entriesById.get(connection.sourceId);
-        const toEntry = entriesById.get(connection.targetId);
-        if (!fromEntry || !toEntry) return;
-        const routeTag = labelsOnly
-          ? processRouteTagDescriptor(fromEntry, toEntry, connection)
-          : drawTodayFlowArrow(fromEntry, toEntry, connection);
-        if (routeTag) routeTags.push(routeTag);
-      });
-    // Route tags are deliberately a second pass. No process line rendered later
-    // in the frame can cross over and hide a tag from an earlier connection.
-    routeTags.forEach(({ text, worldMidpoint, connection, color }) => {
-      drawProcessRouteTag(text, worldMidpoint, connection, color);
-    });
-    return entriesById;
+  function traceProjectedProcessFlow(segment){if(!segment?.length)return;ctx.beginPath();ctx.moveTo(segment[0][0],segment[0][1]);for(let index=1;index<segment.length;index+=1)ctx.lineTo(segment[index][0],segment[index][1]);}
+
+  function drawProcessRouteTag(text,worldMidpoint,connection,color){
+    if(!text||!worldMidpoint||connection?.tagVisible!==true)return;
+    const lifted=[worldMidpoint[0],worldMidpoint[1]+clamp(Number(connection.tagLift??4),0,60),worldMidpoint[2]],point=project(...lifted);
+    if(state.cameraMode==="walk"&&point[3]<WALK_NEAR_CLIP)return;
+    const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width);
+    const baseX=point[0]+clamp(Number(connection.tagScreenOffsetX??0),-500,500)*pixelScale,baseY=point[1]+clamp(Number(connection.tagScreenOffsetY??0),-500,500)*pixelScale;
+    const fontSize=(state.cameraMode==="walk"?11.5:compactLabelViewport()?7.2:8.4)*pixelScale;
+    ctx.save();ctx.font=`600 ${fontSize}px "Segoe UI", sans-serif`;const paddingX=6*pixelScale,height=(state.cameraMode==="walk"?23:19)*pixelScale,width=ctx.measureText(text).width+paddingX*2,collisionGap=4*pixelScale;
+    const offsets=[[0,0],[0,-24],[0,24],[30,0],[-30,0],[0,-48],[0,48],[42,-24],[-42,-24],[42,24],[-42,24],[0,-72],[0,72]];let placement=null;
+    for(const[offsetX,offsetY]of offsets){const x=baseX+offsetX*pixelScale,y=baseY+offsetY*pixelScale,box={left:x-width/2,right:x+width/2,top:y-height/2,bottom:y+height/2},onCanvas=box.right>0&&box.left<canvas.width&&box.bottom>0&&box.top<canvas.height,collisionBox=paddedLabelRectangle(box,collisionGap);if(onCanvas&&!labelRects.some((used)=>rectanglesIntersect(collisionBox,used))){placement={x,y,box};break;}}
+    if(!placement){const box={left:baseX-width/2,right:baseX+width/2,top:baseY-height/2,bottom:baseY+height/2};placement={x:baseX,y:baseY,box};}
+    const{x,y,box}=placement;ctx.globalAlpha=.98;ctx.fillStyle="rgba(8,24,22,.96)";ctx.strokeStyle=color;ctx.lineWidth=Math.max(.8,pixelScale);if(typeof ctx.roundRect==="function"){ctx.beginPath();ctx.roundRect(box.left,box.top,width,height,6*pixelScale);ctx.fill();ctx.stroke();}else{ctx.fillRect(box.left,box.top,width,height);ctx.strokeRect(box.left,box.top,width,height);}ctx.fillStyle="#f2faf8";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,x,y+.4*pixelScale);ctx.restore();labelRects.push(paddedLabelRectangle(box,collisionGap));
+  }
+
+  function processRouteTagDescriptor(fromEntry,toEntry,connection){
+    if(!connection||connection.visible===false)return null;
+    const startWorld=processFlowFloorAnchor(fromEntry,connection,"start"),endWorld=processFlowFloorAnchor(toEntry,connection,"end");if(!startWorld||!endWorld)return null;
+    const controls=processFlowControlPoints(startWorld,endWorld,connection),worldPath=roundedProcessFlowPath(controls.points,connection),midpoint=worldPath[Math.floor(Math.max(0,worldPath.length-1)/2)]||[(startWorld[0]+endWorld[0])/2,startWorld[1],(startWorld[2]+endWorld[2])/2];
+    const color=/^#[0-9a-f]{6}$/i.test(String(connection.color||""))?connection.color:"#52b7aa",automaticRouteText=`${processConnectionEndpointText(connection,"source")} → ${processConnectionEndpointText(connection,"target")}`,text=String(connection.tagText||"").trim()||automaticRouteText;
+    return{text,worldMidpoint:midpoint,connection,color,startWorld,endWorld,controlPoints:controls.points,bendPoints:controls.bendPoints,worldPath};
+  }
+
+  function drawProcessFlowEndMarker(route,projectedSegments,pixelScale){
+    const connection=route?.connection,endStyle=["arrow","dot","ring","none"].includes(connection?.endStyle)?connection.endStyle:"none";if(endStyle==="none")return;
+    const endProjection=project(...route.endWorld);if(state.cameraMode==="walk"&&endProjection[3]<WALK_NEAR_CLIP)return;
+    const finalSegment=projectedSegments[projectedSegments.length-1];if(!finalSegment?.length)return;const end=finalSegment[finalSegment.length-1],previous=finalSegment[Math.max(0,finalSegment.length-2)]||end,dx=end[0]-previous[0],dy=end[1]-previous[1],length=Math.max(.001,Math.hypot(dx,dy)),ux=dx/length,uy=dy/length,normalX=-uy,normalY=ux,markerSize=clamp(Number(connection.endSize)||3.2,1,14)*pixelScale;
+    ctx.save();ctx.globalAlpha=clamp(Number(connection.opacity)||100,5,100)/100;ctx.fillStyle=route.color;ctx.strokeStyle="#ecffff";if(endStyle==="arrow"){const arrowSize=Math.max(5*pixelScale,markerSize*1.8);ctx.beginPath();ctx.moveTo(end[0],end[1]);ctx.lineTo(end[0]-ux*arrowSize+normalX*arrowSize*.48,end[1]-uy*arrowSize+normalY*arrowSize*.48);ctx.lineTo(end[0]-ux*arrowSize-normalX*arrowSize*.48,end[1]-uy*arrowSize-normalY*arrowSize*.48);ctx.closePath();ctx.fill();}else if(endStyle==="dot"){ctx.beginPath();ctx.arc(end[0],end[1],Math.max(2.5*pixelScale,markerSize),0,Math.PI*2);ctx.fill();}else if(endStyle==="ring"){ctx.beginPath();ctx.arc(end[0],end[1],Math.max(3*pixelScale,markerSize),0,Math.PI*2);ctx.lineWidth=Math.max(1.4*pixelScale,markerSize*.35);ctx.stroke();}ctx.restore();
+  }
+
+  function drawProcessFlowEditHandles(route,pixelScale){
+    if(!route?.bendPoints?.length)return;const editingThisConnection=state.editing&&state.objectEditorTab==="pointers"&&route.connection.key===state.selectedProcessConnectionKey;if(!editingThisConnection)return;
+    route.bendPoints.forEach(({index,point})=>{const screen=project(...point);if(state.cameraMode==="walk"&&screen[3]<WALK_NEAR_CLIP)return;if(!Number.isFinite(screen[0])||!Number.isFinite(screen[1]))return;const radius=6.5*pixelScale;ctx.save();ctx.shadowColor=route.color;ctx.shadowBlur=10*pixelScale;ctx.fillStyle="rgba(245,255,255,.98)";ctx.strokeStyle=route.color;ctx.lineWidth=2.2*pixelScale;ctx.beginPath();ctx.arc(screen[0],screen[1],radius,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle="#092522";ctx.font=`700 ${Math.max(8,9*pixelScale)}px "Segoe UI", sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(index),screen[0],screen[1]+.4*pixelScale);ctx.restore();});
+  }
+
+  function drawFloorProcessFlow(fromEntry,toEntry,connection,time){
+    const route=processRouteTagDescriptor(fromEntry,toEntry,connection);if(!route)return null;const projectedSegments=projectedProcessFlowSegments(route.worldPath);if(!projectedSegments.length)return route;
+    const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width),opacity=clamp(Number(connection.opacity)||100,5,100)/100,width=clamp(Number(connection.width)||1.65,.5,12)*pixelScale*(state.cameraMode==="walk"?1.15:1),glow=clamp(Number(connection.flowGlow??100),0,200)/100,speed=clamp(Number(connection.flowSpeed??42),0,180),style=["solid","dashed","dotted"].includes(connection.style)?connection.style:"solid",animationTime=effectiveAnimationTime(time),dashPattern=style==="dotted"?[Math.max(1.5*pixelScale,width*.45),13*pixelScale]:style==="dashed"?[18*pixelScale,15*pixelScale]:[13*pixelScale,27*pixelScale],dashTravel=animationTime*speed/1000*pixelScale,editingThisConnection=state.editing&&state.objectEditorTab==="pointers"&&connection.key===state.selectedProcessConnectionKey;
+    ctx.save();ctx.lineCap="round";ctx.lineJoin="round";projectedSegments.forEach((segment)=>{if(editingThisConnection){traceProjectedProcessFlow(segment);ctx.shadowBlur=0;ctx.setLineDash([]);ctx.globalAlpha=.88;ctx.strokeStyle="rgba(255,255,255,.96)";ctx.lineWidth=Math.max(width+9*pixelScale,10*pixelScale);ctx.stroke();}traceProjectedProcessFlow(segment);ctx.setLineDash([]);ctx.globalAlpha=opacity*(.20+glow*.08);ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width+(5+glow*4)*pixelScale,width*2.4);ctx.shadowColor=route.color;ctx.shadowBlur=(10+glow*13)*pixelScale;ctx.stroke();traceProjectedProcessFlow(segment);ctx.shadowBlur=0;ctx.globalAlpha=opacity*.68;ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width+2.3*pixelScale,2.5*pixelScale);ctx.stroke();traceProjectedProcessFlow(segment);ctx.globalAlpha=opacity*.96;ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width,1.4*pixelScale);ctx.stroke();traceProjectedProcessFlow(segment);ctx.setLineDash(dashPattern);ctx.lineDashOffset=-dashTravel;ctx.globalAlpha=opacity*.98;ctx.strokeStyle="#eaffff";ctx.lineWidth=Math.max(1.25*pixelScale,width*.42);ctx.shadowColor="#d8ffff";ctx.shadowBlur=(4+glow*4)*pixelScale;ctx.stroke();});ctx.restore();drawProcessFlowEndMarker(route,projectedSegments,pixelScale);drawProcessFlowEditHandles(route,pixelScale);return route;
+  }
+
+  function processFlowAnimationActive(){if(state.animationsPaused||!isTodayStage()||state.todayLabelMode!=="necessary")return false;return Object.values(state.processConnections||{}).some((connection)=>connection?.visible!==false&&clamp(Number(connection.flowSpeed??42),0,180)>0);}
+
+  function drawTodayProductionFlow(machineEntries,time){
+    const entriesById=buildTodayProcessObjectEntries(machineEntries),routeTags=[];
+    Object.values(state.processConnections||{}).sort((first,second)=>processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second))).forEach((connection)=>{if(connection?.visible===false)return;const fromEntry=entriesById.get(connection.sourceId),toEntry=entriesById.get(connection.targetId);if(!fromEntry||!toEntry)return;const routeTag=drawFloorProcessFlow(fromEntry,toEntry,connection,time);if(routeTag)routeTags.push(routeTag);});
+    routeTags.forEach(({text,worldMidpoint,connection,color})=>drawProcessRouteTag(text,worldMidpoint,connection,color));return entriesById;
   }
 
   function rectanglesIntersect(first, second) {
@@ -10513,7 +10474,7 @@
   function drawSceneObjects(time, presentPhysicalScene = null) {
     const overlappingIds = state.editing ? overlapIds() : new Set();
     const machineEntries = visibleMachineEntries(time);
-    state.visibleAnimationsActive = visibleEntriesHaveActiveAnimations(machineEntries);
+    state.visibleAnimationsActive = visibleEntriesHaveActiveAnimations(machineEntries) || processFlowAnimationActive();
     detailedPartBudgetRemaining = renderPerformance.maxDetailedParts?.() ?? Number.POSITIVE_INFINITY;
     detailedMachineBudgetRemaining = renderPerformance.maxDetailedMachines?.() ?? Number.POSITIVE_INFINITY;
     machineEntries
@@ -10617,7 +10578,7 @@
     });
 
     if (isTodayStage() && state.todayLabelMode === "necessary") {
-      drawTodayProductionFlow(machineEntries, { labelsOnly: state.cameraMode === "walk" });
+      drawTodayProductionFlow(machineEntries, time);
     }
     if (!isTodayStage() || isTodayOverview()) {
       // Construction stages use each machine label's independent reveal/retire

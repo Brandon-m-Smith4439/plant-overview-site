@@ -45,13 +45,13 @@ assert.equal(count(plantSource, 'data-editor-action="done"'), 1, "Plant editor s
 assert.equal(count(plantSource, 'document.querySelectorAll("[data-object-editor-tab]")'), 0, "Plant editor tab lookup should remain panel-scoped");
 assert.ok(count(plantSource, 'panel.querySelectorAll("[data-object-editor-tab]")') >= 2, "Plant editor tabs should update and register through the panel");
 
-const machineTimelineScript = machineHtml.indexOf('<script src="animation-timeline.js"></script>');
-const machineWorkspaceScript = machineHtml.indexOf('<script src="animation-timeline-workspace.js"></script>');
-const machineAppScript = machineHtml.indexOf('<script src="machine-design-studio.js"></script>');
+const machineTimelineScript = machineHtml.indexOf('animation-timeline.js?release=');
+const machineWorkspaceScript = machineHtml.indexOf('animation-timeline-workspace.js?release=');
+const machineAppScript = machineHtml.indexOf('machine-design-studio.js?release=');
 assert.ok(machineTimelineScript >= 0 && machineTimelineScript < machineWorkspaceScript && machineWorkspaceScript < machineAppScript, "Designer timeline modules should load before the Designer application");
-const previewTimelineScript = previewHtml.indexOf('<script src="animation-timeline.js"></script>');
-const previewWorkspaceScript = previewHtml.indexOf('<script src="workspace-transfer.js"></script>');
-const plantAppScript = previewHtml.indexOf('<script src="plant-app.js"></script>');
+const previewTimelineScript = previewHtml.indexOf('animation-timeline.js?release=');
+const previewWorkspaceScript = previewHtml.indexOf('workspace-transfer.js?release=');
+const plantAppScript = previewHtml.indexOf('plant-app.js?release=');
 assert.ok(previewTimelineScript >= 0 && previewTimelineScript < plantAppScript, "Plant timeline engine should load before the Plant application");
 assert.ok(previewWorkspaceScript >= 0 && previewWorkspaceScript < plantAppScript, "Workspace transfer should load before the Plant application");
 assert.ok(machineTsx.includes('"/animation-timeline.js"') && machineTsx.includes('"/animation-timeline-workspace.js"') && machineTsx.indexOf('"/animation-timeline.js"') < machineTsx.indexOf('"/animation-timeline-workspace.js"') && machineTsx.indexOf('"/animation-timeline-workspace.js"') < machineTsx.indexOf('"/machine-design-studio.js"'), "Designer TSX should load both timeline modules first");

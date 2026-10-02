@@ -29,6 +29,8 @@ const connection = {
   flowTurn1Offset: 0,
   flowTurn2Progress: 66,
   flowTurn2Offset: 0,
+  flowPivotMode: "custom",
+  flowPivotPoints: [{ id: "pivot-1", x: 10, z: 20 }],
   flowCurvePercent: 68,
   flowFloorHeight: .18,
   flowSpeed: 42,

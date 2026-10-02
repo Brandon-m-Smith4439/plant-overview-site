@@ -1,3 +1,11 @@
+## 0.13.37 - 2026-10-02
+
+- Replaced the fixed Turn 1 / Turn 2 route editor with an ordered exact-pivot model supporting zero to 24 floor pivot points per process route.
+- Added exact X / Z coordinate inputs for every pivot, plus Add pivot, Remove pivot, Remove all pivots, and direct numbered-handle dragging on the plant floor.
+- Preserved existing route shapes through legacy-to-exact pivot conversion; once edited, the route stores absolute plant coordinates for every turn.
+- Added custom compact process-step labels to any machine with an editable step number and optional label text, while keeping standard process-role labels automatic.
+- Kept v0.13.36 collision-aware label sizing, machine avoidance, S/E endpoint dragging, expanded endpoint range, First Person floor flow, and camera-independent route persistence.
+
 ## 0.13.36 - 2026-10-02
 
 - Strengthened automatic Necessary process-step label placement to avoid projected rectangles for all visible machines, not only each label's own machine.

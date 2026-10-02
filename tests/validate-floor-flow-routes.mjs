@@ -3,16 +3,15 @@ import { readFile } from "node:fs/promises";
 
 const plant = await readFile(new URL("../public/plant-app.js", import.meta.url), "utf8");
 
-for (const field of [
-  "flowTurn1Progress", "flowTurn1Offset", "flowTurn2Progress", "flowTurn2Offset",
-  "flowCurvePercent", "flowFloorHeight", "flowSpeed", "flowGlow",
-]) {
+for (const field of ["flowCurvePercent", "flowFloorHeight", "flowSpeed", "flowGlow"]) {
   assert.ok(plant.includes(field), `Flow-route field missing: ${field}`);
   assert.ok(plant.includes(`data-process-connection-field="${field}"`), `Flow-route editor control missing: ${field}`);
 }
+assert.ok(plant.includes("flowPivotPoints") && plant.includes("flowPivotMode"), "Floor routes must persist an arbitrary exact pivot list.");
+assert.ok(plant.includes('data-process-pivot-field="x"') && plant.includes('data-process-pivot-field="z"'), "Pivot editor must expose exact X/Z coordinate controls.");
 
 assert.ok(plant.includes("function processFlowFloorAnchor"), "Flow routes must lock their visible path to the floor plane.");
-assert.ok(plant.includes("function processFlowControlPoints"), "Flow routes must expose editable intermediate turn geometry.");
+assert.ok(plant.includes("function processFlowControlPoints") && plant.includes("normalizeProcessFlowPivotPoints"), "Flow routes must expose editable arbitrary exact pivot geometry.");
 assert.ok(plant.includes("function roundedProcessFlowPath"), "Flow routes must support rounded/arched corners.");
 assert.ok(plant.includes("function drawFloorProcessFlow"), "Necessary process routes must use the animated floor-flow renderer.");
 assert.ok(plant.includes("lineDashOffset=-dashTravel") || plant.includes("lineDashOffset = -dashTravel"), "Floor routes need a moving directional highlight.");

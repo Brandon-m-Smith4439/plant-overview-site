@@ -1,3 +1,7 @@
+## Version 0.13.37
+
+Version 0.13.37 upgrades the flowing Necessary process routes from the old two-offset turn model to an **exact multi-pivot floor path editor**. Every selected route can now contain zero to 24 ordered pivot points; each pivot has an exact plant X / Z coordinate, can be added or removed independently, can be typed numerically, and can be dragged directly using its numbered floor handle. Existing v0.13.36 routes keep their current shape through a compatibility conversion until edited, then become exact custom pivot paths. Removing every pivot intentionally creates a direct S → E route. The v0.13.36 adaptive process labels are also generalized: any machine can opt into the compact collision-aware process-step label system with a custom step number and optional label text, while the original Cutting / Polisher / CNC / Washer / Tempering / Wrap / Truck/Rack machines continue to label themselves automatically.
+
 ## Version 0.13.36
 
 Version 0.13.36 completes the adaptive Necessary process-label pass by treating projected plant equipment as protected screen space during automatic label placement. The numbered process badges and machine-name tags now search additional above/side positions around their floor-route anchor while avoiding every visible machine rectangle, not only the machine that owns the label. Their font and maximum tag width stay tightly bounded in screen pixels, so zooming the overview out keeps the text readable without allowing tags to scale into large blocks over machinery. This release retains the v0.13.35 direct S/E endpoint dragging, -1000% through 1100% endpoint range, shared step numbering, and camera-culling-independent route persistence.
@@ -96,7 +100,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.36**
+Current project version: **0.13.37**
 
 ## Full-production rendering performance
 

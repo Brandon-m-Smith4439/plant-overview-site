@@ -25,13 +25,14 @@ assert.ok(plant.includes('data-process-connection-check="visible"'), "Each objec
 for (const field of [
   "startAnchorXPercent", "startAnchorYPercent", "startAnchorZPercent",
   "endAnchorXPercent", "endAnchorYPercent", "endAnchorZPercent",
-  "flowTurn1Progress", "flowTurn1Offset", "flowTurn2Progress", "flowTurn2Offset",
   "flowCurvePercent", "flowFloorHeight", "flowSpeed", "flowGlow",
   "tagText", "tagLift", "tagScreenOffsetX", "tagScreenOffsetY",
   "color", "width", "opacity", "style", "shape", "endStyle", "endSize",
 ]) {
   assert.ok(plant.includes(`data-process-connection-field="${field}"`), `Process connection field missing: ${field}`);
 }
+assert.ok(plant.includes('data-process-pivot-field="x"') && plant.includes('data-process-pivot-field="z"'), "Process routes must expose exact X/Z pivot coordinates.");
+assert.ok(plant.includes('data-editor-action="add-process-pivot"') && plant.includes('data-editor-action="clear-process-pivots"'), "Process routes must support adding and removing arbitrary pivot points.");
 assert.ok(plant.includes('data-process-connection-check="tagVisible"'), "Route tags must be independently optional per connection.");
 assert.ok(plant.includes('data-process-connection-field="tagText"'), "Route tags must expose editable per-connection text.");
 assert.ok(plant.includes('<legend>8 · Optional custom route tag</legend>'), "Route-tag text must live in the dedicated Optional route tag section.");
@@ -84,11 +85,14 @@ assert.ok(plant.includes("drawTodayProductionFlow(machineEntries, time)"), "Firs
 assert.ok(plant.includes("processFlowAnimationActive()"), "Flow animation must keep the render loop active while Necessary routes are moving.");
 assert.ok(plant.includes("PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -1000") && plant.includes("PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 1100"), "Process endpoints must support a very large outside-object adjustment range.");
 assert.ok(plant.includes('min="-1000" max="1100"'), "Pointer editor endpoint controls must expose the extended outside-object range.");
-assert.ok(plant.includes("processFlowEndpointHandleAt") && plant.includes("updateDraggedProcessEndpoint"), "Selected routes must expose draggable S/E endpoint handles.");
+assert.ok(plant.includes("processFlowHandleAt") && plant.includes("updateDraggedProcessEndpoint"), "Selected routes must expose draggable S/E endpoint handles plus arbitrary pivot handles.");
 assert.ok(plant.includes("processAnchorPercentsFromWorld"), "Dragging route endpoints must convert unrestricted floor positions back into machine-relative saved anchors.");
 assert.ok(!flowBody.includes("machine.processPointerAnchorXPercent"), "Object-to-object rendering must no longer read process geometry from the machine record.");
 assert.ok(!flowBody.includes("machine.labelAnchorXPercent"), "Object-to-object rendering must never read machine-label pointer geometry.");
-assert.ok(!flowBody.includes("machine.labelLineColor"), "Object-to-object rendering must never read machine-label leader styling.");
+const floorRendererStart = plant.indexOf("function drawFloorProcessFlow");
+const floorRendererEnd = plant.indexOf("function processStepNumber", floorRendererStart);
+const floorRendererBody = plant.slice(floorRendererStart, floorRendererEnd);
+assert.ok(!floorRendererBody.includes("machine.labelLineColor"), "Glowing route geometry must not inherit normal machine-label leader styling.");
 
 const labelControlsStart = plant.indexOf('<section data-object-editor-panel="labels"');
 const labelControlsEnd = plant.indexOf('<section data-object-editor-panel="pointers"', labelControlsStart);

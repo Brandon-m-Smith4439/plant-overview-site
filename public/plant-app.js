@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.36";
+  const APP_VERSION = "0.13.37";
 
   function editorProfileProtected() {
     try {
@@ -823,6 +823,9 @@
       labelLeaderSide: ["auto", "top", "bottom", "left", "right"].includes(machine.labelLeaderSide) ? machine.labelLeaderSide : "auto",
       labelTargetStyle: ["dot", "ring", "arrow", "none"].includes(machine.labelTargetStyle) ? machine.labelTargetStyle : "dot",
       labelTargetSize: clamp(Number.isFinite(Number(machine.labelTargetSize)) ? Number(machine.labelTargetSize) : 3.2, 1, 12),
+      processStepLabelEnabled: machine.processStepLabelEnabled === true,
+      processStepNumber: Number.isFinite(Number(machine.processStepNumber)) ? clamp(Math.round(Number(machine.processStepNumber)), 1, 99) : 0,
+      processStepLabelText: String(machine.processStepLabelText || "").trim().slice(0, 80),
       processPointerVisible: machine.processPointerVisible !== false,
       processPointerText: String(machine.processPointerText || "").trim(),
       processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), 0, 100),
@@ -1257,6 +1260,21 @@
   // objects just to hold an endpoint.
   const PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -1000;
   const PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 1100;
+  const PROCESS_FLOW_MAX_PIVOTS = 24;
+
+  function normalizeProcessFlowPivotPoints(value) {
+    if (!Array.isArray(value)) return [];
+    const used = new Set();
+    return value.slice(0, PROCESS_FLOW_MAX_PIVOTS).map((pivot, index) => {
+      const x = Number(pivot?.x);
+      const z = Number(pivot?.z);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+      let id = String(pivot?.id || `pivot-${index + 1}`).replace(/[^a-z0-9_-]/gi, "-").slice(0, 48) || `pivot-${index + 1}`;
+      while (used.has(id)) id = `${id}-${index + 1}`;
+      used.add(id);
+      return { id, x, z };
+    }).filter(Boolean);
+  }
 
   function defaultProcessConnection(sourceId, targetId, { fromKey = "", toKey = "" } = {}) {
     return {
@@ -1276,6 +1294,8 @@
       flowTurn1Offset: 0,
       flowTurn2Progress: 66,
       flowTurn2Offset: 0,
+      flowPivotMode: "legacy",
+      flowPivotPoints: [],
       flowCurvePercent: 68,
       flowFloorHeight: 0.18,
       flowSpeed: 42,
@@ -1323,6 +1343,8 @@
       flowTurn1Offset: readNumber("flowTurn1Offset", -500, 500),
       flowTurn2Progress: readNumber("flowTurn2Progress", 0, 100),
       flowTurn2Offset: readNumber("flowTurn2Offset", -500, 500),
+      flowPivotMode: source.flowPivotMode === "custom" ? "custom" : (Array.isArray(source.flowPivotPoints) && source.flowPivotPoints.length ? "custom" : "legacy"),
+      flowPivotPoints: normalizeProcessFlowPivotPoints(source.flowPivotPoints),
       flowCurvePercent: readNumber("flowCurvePercent", 0, 100),
       flowFloorHeight: readNumber("flowFloorHeight", 0.02, 6),
       flowSpeed: readNumber("flowSpeed", 0, 180),
@@ -3389,6 +3411,17 @@
       input.disabled = !activeConnection;
       input.checked = Boolean(activeConnection?.[input.dataset.processConnectionCheck]);
     });
+    const processPivotList=panel.querySelector("[data-process-pivot-list]");
+    if(processPivotList){
+      if(!activeConnection){processPivotList.innerHTML='<p class="process-route-tag-preview">Select a process route to edit its exact pivot coordinates.</p>';}
+      else{
+        const pivots=processConnectionExactPivotPoints(activeConnection);
+        processPivotList.innerHTML=pivots.length?pivots.map((pivot,index)=>`<div class="process-pivot-row" data-process-pivot-row="${escapeHtml(pivot.id)}"><span class="process-pivot-index">${index+1}</span><label>X (ft)<input type="number" step="0.1" data-process-pivot-field="x" data-process-pivot-id="${escapeHtml(pivot.id)}" data-process-pivot-index="${index}" value="${Number(pivot.x).toFixed(2)}"></label><label>Z (ft)<input type="number" step="0.1" data-process-pivot-field="z" data-process-pivot-id="${escapeHtml(pivot.id)}" data-process-pivot-index="${index}" value="${Number(pivot.z).toFixed(2)}"></label><button type="button" data-editor-action="remove-process-pivot" data-process-pivot-id="${escapeHtml(pivot.id)}" data-process-pivot-index="${index}" aria-label="Remove pivot ${index+1}">Remove</button></div>`).join(""):'<p class="process-route-tag-preview">No pivots. The route runs directly from S to E. Use Add pivot point to create an exact turn.</p>';
+      }
+    }
+    const addPivotButton=panel.querySelector("[data-editor-action='add-process-pivot']"),clearPivotButton=panel.querySelector("[data-editor-action='clear-process-pivots']");
+    if(addPivotButton)addPivotButton.disabled=!activeConnection||processConnectionExactPivotPoints(activeConnection).length>=PROCESS_FLOW_MAX_PIVOTS;
+    if(clearPivotButton)clearPivotButton.disabled=!activeConnection||processConnectionExactPivotPoints(activeConnection).length===0;
     const processRouteTagPreview = panel.querySelector("[data-process-route-tag-preview]");
     if (processRouteTagPreview) {
       const automaticText = activeConnection
@@ -3406,7 +3439,7 @@
     const processPointerSummary = panel.querySelector("[data-process-pointer-summary]");
     if (processPointerSummary) {
       processPointerSummary.textContent = activeConnection
-        ? `Editing the flowing floor route: ${processConnectionDisplayName(activeConnection, { includeMachines: true })}. Move its endpoints or Turn 1 / Turn 2 to route around equipment. Machine-label callouts remain separate.`
+        ? `Editing the flowing floor route: ${processConnectionDisplayName(activeConnection, { includeMachines: true })}. Move S / E or add, remove, type, and drag exact numbered floor pivots to route around equipment. Machine-label callouts remain separate.`
         : "No process route exists yet. Choose any source object and destination object below to create one.";
     }
 
@@ -4347,6 +4380,16 @@
             <div><strong>Today Overview · Necessary mode</strong><span>Control this normal machine/object label independently. Turning it off does not hide process pointers or route tags.</span></div>
             <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show this machine/object label in Necessary mode</label>
           </div>
+          <fieldset class="label-pointer-controls process-step-label-controls">
+            <legend>Necessary process-step label</legend>
+            <p>Add this machine to the compact numbered process labels even when it is not one of the original Cutting / Polisher / CNC / Washer nodes. Route-connected standard machines are still labeled automatically.</p>
+            <label class="process-pointer-toggle"><input type="checkbox" data-label-check="processStepLabelEnabled" data-needs-selection> Add custom process-step label for this machine</label>
+            <div class="label-format-grid">
+              <label>Step number<input type="number" data-label-field="processStepNumber" data-needs-selection min="1" max="99" step="1" placeholder="1"></label>
+              <label>Process label text<input type="text" data-label-field="processStepLabelText" data-needs-selection maxlength="80" placeholder="Uses machine name"></label>
+            </div>
+            <p class="label-help">The compact process label uses the same collision-aware sizing as the standard numbered route labels. Leave text blank to use the machine name.</p>
+          </fieldset>
           <div class="label-format-grid">
             <label>Text color<input type="color" data-label-field="labelTextColor" data-needs-selection value="#ffffff"></label>
             <label>Background<input type="color" data-label-field="labelBackgroundColor" data-needs-selection value="#141c20"></label>
@@ -4439,19 +4482,20 @@
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end">Center destination point</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls process-floor-flow-controls">
-            <legend>6 · Flowing floor path</legend>
-            <p>The route now travels along the plant floor. Move either turn sideways to route around machines, then use Curve to round the corners into a smooth arch. Positive and negative offsets bend to opposite sides of the direct machine-to-machine path.</p>
-            <div class="process-pointer-grid">
-              <label>Turn 1 along route (%)<input type="number" data-process-connection-field="flowTurn1Progress" min="0" max="100" step="1"></label>
-              <label>Turn 1 side offset (ft)<input type="number" data-process-connection-field="flowTurn1Offset" min="-500" max="500" step="1"></label>
-              <label>Turn 2 along route (%)<input type="number" data-process-connection-field="flowTurn2Progress" min="0" max="100" step="1"></label>
-              <label>Turn 2 side offset (ft)<input type="number" data-process-connection-field="flowTurn2Offset" min="-500" max="500" step="1"></label>
+            <legend>6 · Exact floor path pivots</legend>
+            <p>Each pivot is an exact plant-floor X / Z coordinate. Add as many turn points as needed, remove any point, type exact coordinates, or drag the numbered handles directly on the floor. The route always follows S → pivots in order → E.</p>
+            <div class="process-pivot-list" data-process-pivot-list><p class="process-route-tag-preview">Select a process route to edit its exact pivot coordinates.</p></div>
+            <div class="process-pointer-actions process-pivot-actions">
+              <button type="button" data-editor-action="add-process-pivot">Add pivot point</button>
+              <button type="button" data-editor-action="clear-process-pivots">Remove all pivots</button>
+            </div>
+            <div class="process-pointer-grid process-flow-behavior-grid">
               <label>Curve / rounding (%)<input type="number" data-process-connection-field="flowCurvePercent" min="0" max="100" step="5"></label>
               <label>Floor height (ft)<input type="number" data-process-connection-field="flowFloorHeight" min="0.02" max="6" step="0.02"></label>
               <label>Flow speed<input type="number" data-process-connection-field="flowSpeed" min="0" max="180" step="2"></label>
               <label>Glow strength (%)<input type="number" data-process-connection-field="flowGlow" min="0" max="200" step="5"></label>
             </div>
-            <p class="process-route-tag-preview">S / E can be dragged anywhere on the floor, including outside the machine footprint. Turn 1 and Turn 2 remain the intermediate bend handles.</p>
+            <p class="process-route-tag-preview">S / E can still be dragged far outside the machines. Numbered pivot handles use exact X / Z coordinates and can also be dragged directly.</p>
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>7 · Flow appearance</legend>
@@ -5092,6 +5136,11 @@
           machine.labelText = machine.labelUseMachineName ? "" : value;
         } else if (field === "labelAbbreviation") {
           machine.labelAbbreviation = input.value.trim();
+        } else if (field === "processStepLabelText") {
+          machine.processStepLabelText = input.value.trim().slice(0, 80);
+        } else if (field === "processStepNumber") {
+          const value = Number(input.value);
+          machine.processStepNumber = Number.isFinite(value) ? clamp(Math.round(value), 1, 99) : 0;
         } else if (["labelTextColor", "labelBackgroundColor", "labelLineColor"].includes(field)) {
           if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
         } else if (field === "labelSizePercent") {
@@ -5150,6 +5199,12 @@
           showToast(input.checked
             ? `${machine.name} label enabled in Necessary mode.`
             : `${machine.name} label hidden in Necessary mode. Process pointers stay visible.`);
+        } else if (input.dataset.labelCheck === "processStepLabelEnabled" && input.checked) {
+          if (!(Number(machine.processStepNumber) > 0) && !processStepNumber(processConnectionRoleForObject(machine.instanceId))) {
+            const existingNumbers = machines.map((item) => Number(item.processStepNumber) || processStepNumber(processConnectionRoleForObject(item.instanceId)) || 0);
+            machine.processStepNumber = clamp(Math.max(0, ...existingNumbers) + 1, 1, 99);
+          }
+          showToast(`${machine.name} added to the compact Necessary process labels.`);
         }
         persistLayout();
         renderPerformance.invalidate();
@@ -5288,6 +5343,20 @@
         updateEditorPanel();
       });
     });
+    panel.addEventListener("change",(event)=>{
+      const input=event.target.closest?.("[data-process-pivot-field]");if(!input)return;
+      const connection=selectedProcessConnection();if(!connection)return;
+      const pivots=materializeProcessFlowPivots(connection),pivotId=String(input.dataset.processPivotId||""),pivotIndex=Number(input.dataset.processPivotIndex),found=pivots.findIndex((pivot)=>pivot.id===pivotId),index=found>=0?found:pivotIndex,value=Number(input.value);if(!Number.isFinite(value)||!Number.isFinite(index)||!pivots[index]){updateEditorPanel();return;}
+      pushHistory();pivots[index][input.dataset.processPivotField]=value;connection.flowPivotPoints=pivots;connection.flowPivotMode="custom";persistLayout();renderPerformance.invalidate();updateEditorPanel();
+    });
+    panel.addEventListener("click",(event)=>{
+      const removeButton=event.target.closest?.("[data-editor-action='remove-process-pivot']");if(!removeButton)return;
+      const connection=selectedProcessConnection();if(!connection)return;pushHistory();materializeProcessFlowPivots(connection);const pivotId=String(removeButton.dataset.processPivotId||"");let changed=removeProcessFlowPivot(connection,pivotId);if(!changed){const index=Number(removeButton.dataset.processPivotIndex);if(Number.isFinite(index)&&connection.flowPivotPoints[index]){connection.flowPivotPoints.splice(index,1);changed=true;}}
+      if(changed){persistLayout();renderPerformance.invalidate();updateEditorPanel();showToast("Process pivot removed.");}else{state.history.pop();updateHistoryButtons();}
+    });
+    panel.querySelector("[data-editor-action='add-process-pivot']")?.addEventListener("click",()=>{const connection=selectedProcessConnection();if(!connection)return;pushHistory();const pivot=addProcessFlowPivot(connection);if(!pivot){state.history.pop();updateHistoryButtons();showToast(`A route can contain up to ${PROCESS_FLOW_MAX_PIVOTS} pivot points.`);return;}persistLayout();renderPerformance.invalidate();updateEditorPanel();showToast("Added an exact process pivot. Drag its numbered handle or type X / Z coordinates.");});
+    panel.querySelector("[data-editor-action='clear-process-pivots']")?.addEventListener("click",()=>{const connection=selectedProcessConnection();if(!connection)return;pushHistory();const changed=clearProcessFlowPivots(connection);if(!changed){state.history.pop();updateHistoryButtons();return;}persistLayout();renderPerformance.invalidate();updateEditorPanel();showToast("Removed all route pivots. The flow now runs directly from S to E.");});
+
     const routeTagTextInput = panel.querySelector("[data-process-connection-field='tagText']");
     routeTagTextInput?.addEventListener("focus", () => {
       const connection = selectedProcessConnection();
@@ -6875,16 +6944,12 @@
     return fromEntry && toEntry ? processRouteTagDescriptor(fromEntry, toEntry, connection) : null;
   }
 
-  function processFlowEndpointHandleAt(event) {
-    if (!state.editing || state.editorTool !== "machines" || state.objectEditorTab !== "pointers" || state.cameraMode === "walk") return null;
-    const route = selectedProcessFlowRoute();
-    if (!route) return null;
-    const point = canvasPoint(event), rect = canvas.getBoundingClientRect(), pixelScale = canvas.width / Math.max(1, rect.width), hitRadius = 15 * pixelScale;
-    for (const candidate of [{ endpoint: "start", world: route.startWorld }, { endpoint: "end", world: route.endWorld }]) {
-      const screen = project(...candidate.world);
-      if (Number.isFinite(screen[0]) && Number.isFinite(screen[1]) && Math.hypot(point[0] - screen[0], point[1] - screen[1]) <= hitRadius) return candidate.endpoint;
-    }
-    return null;
+  function processFlowHandleAt(event){
+    if(!state.editing||state.editorTool!=="machines"||state.objectEditorTab!=="pointers"||state.cameraMode==="walk")return null;
+    const route=selectedProcessFlowRoute();if(!route)return null;
+    const point=canvasPoint(event),rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width),hitRadius=16*pixelScale;
+    const candidates=[{kind:"start",world:route.startWorld},{kind:"end",world:route.endWorld},...(route.bendPoints||[]).map((pivot,index)=>({kind:"pivot",pivotId:pivot.id||`pivot-${index+1}`,pivotIndex:index,world:pivot.point}))];
+    return candidates.map((candidate)=>{const screen=project(...candidate.world);return{...candidate,distance:Number.isFinite(screen[0])&&Number.isFinite(screen[1])?Math.hypot(point[0]-screen[0],point[1]-screen[1]):Infinity};}).filter((candidate)=>candidate.distance<=hitRadius).sort((a,b)=>a.distance-b.distance)[0]||null;
   }
 
   function updateDraggedProcessEndpoint(endpoint, event) {
@@ -6906,6 +6971,17 @@
     if (zInput) zInput.value = local.z.toFixed(1);
     renderPerformance.invalidate?.("process-endpoint-drag");
     return changed;
+  }
+
+
+  function updateDraggedProcessPivot(pivotId,pivotIndex,event){
+    const connection=selectedProcessConnection();if(!connection)return false;
+    const pivots=materializeProcessFlowPivots(connection);if(!pivots.length)return false;
+    let index=pivots.findIndex((pivot)=>pivot.id===pivotId);if(index<0&&Number.isFinite(Number(pivotIndex)))index=clamp(Math.round(Number(pivotIndex)),0,pivots.length-1);if(index<0)return false;
+    const[worldX,worldZ]=worldFromScreen(event),snap=Math.max(.01,Number(state.snapSize)||.1),x=Math.round(worldX/snap)*snap,z=Math.round(worldZ/snap)*snap,pivot=pivots[index],changed=Math.abs(pivot.x-x)>.0001||Math.abs(pivot.z-z)>.0001;
+    pivot.x=x;pivot.z=z;connection.flowPivotPoints=pivots;connection.flowPivotMode="custom";
+    const panel=document.querySelector(".layout-editor"),xInput=panel?.querySelector(`[data-process-pivot-field="x"][data-process-pivot-id="${pivot.id}"]`),zInput=panel?.querySelector(`[data-process-pivot-field="z"][data-process-pivot-id="${pivot.id}"]`);
+    if(xInput)xInput.value=x.toFixed(2);if(zInput)zInput.value=z.toFixed(2);renderPerformance.invalidate?.("process-pivot-drag");return changed;
   }
 
   function panCamera(deltaX,deltaY) {
@@ -7292,6 +7368,11 @@
         if (fallback) entries.set(instanceId, fallback);
       });
     });
+    machines.forEach((machine) => {
+      if (machine?.processStepLabelEnabled !== true || entries.has(machine.instanceId)) return;
+      const fallback = processEndpointEntry(machine, time);
+      if (fallback) entries.set(machine.instanceId, fallback);
+    });
     return entries;
   }
 
@@ -7302,15 +7383,72 @@
     return [anchor[0], floorHeight, anchor[2]];
   }
 
-  function processFlowControlPoints(startWorld, endWorld, connection) {
-    const dx=endWorld[0]-startWorld[0], dz=endWorld[2]-startWorld[2], routeLength=Math.max(.001,Math.hypot(dx,dz));
-    const normalX=-dz/routeLength, normalZ=dx/routeLength;
+  function legacyProcessFlowControlPoints(startWorld,endWorld,connection){
+    const dx=endWorld[0]-startWorld[0],dz=endWorld[2]-startWorld[2],routeLength=Math.max(.001,Math.hypot(dx,dz));
+    const normalX=-dz/routeLength,normalZ=dx/routeLength;
     const turns=[
       {progress:clamp(Number(connection?.flowTurn1Progress??34),0,100)/100,offset:clamp(Number(connection?.flowTurn1Offset??0),-500,500),index:1},
       {progress:clamp(Number(connection?.flowTurn2Progress??66),0,100)/100,offset:clamp(Number(connection?.flowTurn2Offset??0),-500,500),index:2},
     ].sort((a,b)=>a.progress-b.progress||a.index-b.index);
-    const bendPoints=turns.map((turn)=>({index:turn.index,point:[startWorld[0]+dx*turn.progress+normalX*turn.offset,startWorld[1],startWorld[2]+dz*turn.progress+normalZ*turn.offset]}));
-    return {points:[startWorld,...bendPoints.map((item)=>item.point),endWorld],bendPoints};
+    const bendPoints=turns.map((turn)=>({id:`legacy-${turn.index}`,index:turn.index,point:[startWorld[0]+dx*turn.progress+normalX*turn.offset,startWorld[1],startWorld[2]+dz*turn.progress+normalZ*turn.offset]}));
+    return{points:[startWorld,...bendPoints.map((item)=>item.point),endWorld],bendPoints};
+  }
+
+  function processFlowControlPoints(startWorld,endWorld,connection){
+    if(connection?.flowPivotMode==="custom"){
+      const pivots=normalizeProcessFlowPivotPoints(connection.flowPivotPoints);
+      const bendPoints=pivots.map((pivot,index)=>({id:pivot.id,index:index+1,point:[pivot.x,startWorld[1],pivot.z]}));
+      return{points:[startWorld,...bendPoints.map((item)=>item.point),endWorld],bendPoints};
+    }
+    return legacyProcessFlowControlPoints(startWorld,endWorld,connection);
+  }
+
+  function processConnectionExactPivotPoints(connection,time=state.lastFrameTime){
+    if(!connection)return[];
+    if(connection.flowPivotMode==="custom")return normalizeProcessFlowPivotPoints(connection.flowPivotPoints);
+    const fromEntry=processEndpointEntry(machineById(connection.sourceId),time),toEntry=processEndpointEntry(machineById(connection.targetId),time);
+    if(!fromEntry||!toEntry)return[];
+    const startWorld=processFlowFloorAnchor(fromEntry,connection,"start"),endWorld=processFlowFloorAnchor(toEntry,connection,"end");
+    if(!startWorld||!endWorld)return[];
+    return legacyProcessFlowControlPoints(startWorld,endWorld,connection).bendPoints.map((item,index)=>({id:`pivot-${index+1}`,x:item.point[0],z:item.point[2]}));
+  }
+
+  function materializeProcessFlowPivots(connection,time=state.lastFrameTime){
+    if(!connection)return[];
+    if(connection.flowPivotMode!=="custom"){
+      connection.flowPivotPoints=processConnectionExactPivotPoints(connection,time);
+      connection.flowPivotMode="custom";
+    }else connection.flowPivotPoints=normalizeProcessFlowPivotPoints(connection.flowPivotPoints);
+    return connection.flowPivotPoints;
+  }
+
+  function createProcessPivotId(connection){
+    const existing=new Set(normalizeProcessFlowPivotPoints(connection?.flowPivotPoints).map((item)=>item.id));
+    let index=existing.size+1,id=`pivot-${index}`;
+    while(existing.has(id)){index+=1;id=`pivot-${index}`;}
+    return id;
+  }
+
+  function addProcessFlowPivot(connection,time=state.lastFrameTime){
+    if(!connection)return null;
+    const pivots=materializeProcessFlowPivots(connection,time);
+    if(pivots.length>=PROCESS_FLOW_MAX_PIVOTS)return null;
+    const route=selectedProcessFlowRoute(time);if(!route)return null;
+    const points=[route.startWorld,...pivots.map((pivot)=>[pivot.x,route.startWorld[1],pivot.z]),route.endWorld];
+    let insertAt=0,maxDistance=-1;
+    for(let index=0;index<points.length-1;index+=1){const distance=floorPointDistance(points[index],points[index+1]);if(distance>maxDistance){maxDistance=distance;insertAt=index;}}
+    const a=points[insertAt],b=points[insertAt+1],pivot={id:createProcessPivotId(connection),x:(a[0]+b[0])/2,z:(a[2]+b[2])/2};
+    pivots.splice(insertAt,0,pivot);connection.flowPivotPoints=pivots;connection.flowPivotMode="custom";return pivot;
+  }
+
+  function removeProcessFlowPivot(connection,pivotId){
+    if(!connection)return false;
+    const pivots=materializeProcessFlowPivots(connection);const before=pivots.length;
+    connection.flowPivotPoints=pivots.filter((pivot)=>pivot.id!==pivotId);connection.flowPivotMode="custom";return connection.flowPivotPoints.length!==before;
+  }
+
+  function clearProcessFlowPivots(connection){
+    if(!connection)return false;materializeProcessFlowPivots(connection);const changed=connection.flowPivotPoints.length>0;connection.flowPivotPoints=[];connection.flowPivotMode="custom";return changed;
   }
 
   function floorPointDistance(first,second){return Math.hypot((second?.[0]||0)-(first?.[0]||0),(second?.[2]||0)-(first?.[2]||0));}
@@ -7390,7 +7528,7 @@
   }
 
   function processStepLabelText(machine,maxWidth,fontSize){
-    const full=String(machine?.name||machine?.short||"Process step").trim()||"Process step";
+    const full=String(machine?.processStepLabelText||machine?.name||machine?.short||"Process step").trim()||"Process step";
     let text=full;
     ctx.font=`600 ${fontSize}px "Segoe UI", sans-serif`;
     if(ctx.measureText(text).width<=maxWidth)return text;
@@ -7400,15 +7538,34 @@
 
   function collectProcessStepNodes(entriesById,routes){
     const nodes=new Map();
-    const add=(route,endpoint)=>{
-      const connection=route.connection,id=endpoint==="source"?connection.sourceId:connection.targetId,entry=entriesById.get(id);if(!entry)return;
-      const role=processConnectionEndpointRole(connection,endpoint)||processConnectionRoleForObject(id),number=processStepNumber(role);if(!number)return;
-      const worldPoint=endpoint==="source"?route.startWorld:route.endWorld;
-      const current=nodes.get(id)||{id,entry,role,number,points:[],color:route.color};
-      current.points.push(worldPoint);if(number<current.number)current.number=number;nodes.set(id,current);
+    const ensureNode=(id,entry,role,routeColor,worldPoint)=>{
+      if(!entry?.machine)return;
+      const customEnabled=entry.machine.processStepLabelEnabled===true;
+      const roleNumber=processStepNumber(role);
+      const customNumber=Number(entry.machine.processStepNumber)||0;
+      const number=customNumber>0?clamp(Math.round(customNumber),1,99):roleNumber;
+      if(!number||(!roleNumber&&!customEnabled))return;
+      const current=nodes.get(id)||{id,entry,role,number,points:[],color:routeColor||entry.machine.labelLineColor||"#52b7aa"};
+      current.entry=entry;current.role=role||current.role;current.number=number;current.color=routeColor||current.color;
+      if(worldPoint)current.points.push(worldPoint);nodes.set(id,current);
     };
-    routes.forEach((route)=>{add(route,"source");add(route,"target");});
-    return[...nodes.values()].map((node)=>({...node,worldPoint:[node.points.reduce((sum,p)=>sum+p[0],0)/node.points.length,node.points.reduce((sum,p)=>sum+p[1],0)/node.points.length,node.points.reduce((sum,p)=>sum+p[2],0)/node.points.length]})).sort((a,b)=>a.number-b.number||String(a.entry.machine.name).localeCompare(String(b.entry.machine.name)));
+    routes.forEach((route)=>{
+      const connection=route.connection;
+      [["source",route.startWorld],["target",route.endWorld]].forEach(([endpoint,worldPoint])=>{
+        const id=endpoint==="source"?connection.sourceId:connection.targetId,entry=entriesById.get(id);if(!entry)return;
+        const role=processConnectionEndpointRole(connection,endpoint)||processConnectionRoleForObject(id);
+        ensureNode(id,entry,role,route.color,worldPoint);
+      });
+    });
+    entriesById.forEach((entry,id)=>{
+      if(entry?.machine?.processStepLabelEnabled!==true||nodes.has(id))return;
+      const role=processConnectionRoleForObject(id),floorHeight=.18,worldPoint=[entry.rendered.x+entry.rendered.w/2,floorHeight,entry.rendered.z+entry.rendered.d/2];
+      ensureNode(id,entry,role,entry.machine.labelLineColor||"#52b7aa",worldPoint);
+    });
+    return[...nodes.values()].map((node)=>{
+      const points=node.points.length?node.points:[[node.entry.rendered.x+node.entry.rendered.w/2,.18,node.entry.rendered.z+node.entry.rendered.d/2]];
+      return{...node,worldPoint:[points.reduce((sum,p)=>sum+p[0],0)/points.length,points.reduce((sum,p)=>sum+p[1],0)/points.length,points.reduce((sum,p)=>sum+p[2],0)/points.length]};
+    }).sort((a,b)=>a.number-b.number||String(a.entry.machine.name).localeCompare(String(b.entry.machine.name)));
   }
 
   function drawProcessStepLabel(node,protectedMachineRects=[]){
@@ -11252,8 +11409,8 @@
     }
     const wantsOrbit = event.altKey || event.button === 2;
     const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
-    const processEndpointHit = !wantsOrbit && event.button === 0 ? processFlowEndpointHandleAt(event) : null;
-    const selectableHit = !processEndpointHit && state.editing && state.editorTool === "machines" && state.editorInteraction !== "navigate"
+    const processHandleHit = !wantsOrbit && event.button === 0 ? processFlowHandleAt(event) : null;
+    const selectableHit = !processHandleHit && state.editing && state.editorTool === "machines" && state.editorInteraction !== "navigate"
       ? machineAt(event)
       : null;
     const wantsPan = event.button === 1 || state.spacePressed || (event.shiftKey && !selectableHit);
@@ -11262,14 +11419,9 @@
 
     if (state.editing) {
       if (state.editorTool === "timeline") return;
-      if (processEndpointHit) {
-        state.dragAction = `process-${processEndpointHit}`;
-        state.dragSnapshot = snapshotLayout();
-        state.dragMoved = false;
-        state.dragging = true;
-        renderPerformance.noteInteraction(300);
-        canvas.setPointerCapture(event.pointerId);
-        return;
+      if(processHandleHit){
+        state.dragAction=processHandleHit.kind==="pivot"?`process-pivot:${processHandleHit.pivotId}:${processHandleHit.pivotIndex}`:`process-${processHandleHit.kind}`;
+        state.dragSnapshot=snapshotLayout();state.dragMoved=false;state.dragging=true;renderPerformance.noteInteraction(300);canvas.setPointerCapture(event.pointerId);return;
       }
       if (selectableHit && additiveSelection) {
         toggleMachineSelection(selectableHit.instanceId);
@@ -11366,9 +11518,10 @@
     renderPerformance.noteInteraction(140);
     const deltaX = event.clientX-state.pointerX;
     const deltaY = event.clientY-state.pointerY;
-    if (state.dragAction === "process-start" || state.dragAction === "process-end") {
-      const endpoint = state.dragAction === "process-start" ? "start" : "end";
-      if (updateDraggedProcessEndpoint(endpoint, event)) state.dragMoved = true;
+    if(state.dragAction==="process-start"||state.dragAction==="process-end"){
+      const endpoint=state.dragAction==="process-start"?"start":"end";if(updateDraggedProcessEndpoint(endpoint,event))state.dragMoved=true;
+    }else if(String(state.dragAction).startsWith("process-pivot:")){
+      const[,pivotId,pivotIndex]=String(state.dragAction).split(":");if(updateDraggedProcessPivot(pivotId,Number(pivotIndex),event))state.dragMoved=true;
     } else if (state.dragAction === "column") {
       const column = structuralColumns().find((item) => item.key === state.draggedColumnKey);
       if (column) {

@@ -4436,6 +4436,7 @@
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
           <div class="label-action-grid">
             <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
+            <button type="button" data-editor-action="reset-label-world-position" data-needs-selection>Reset 3D position</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
@@ -5231,6 +5232,19 @@
       renderPerformance.invalidate();
       updateEditorPanel();
       showToast(`Label reset to ${machine.name}.`);
+    });
+    panel.querySelector("[data-editor-action='reset-label-world-position']")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      if (!machine) return;
+      pushHistory();
+      machine.labelWorldOffsetX = 0;
+      machine.labelWorldOffsetZ = 0;
+      machine.labelHeightOffset = 4;
+      labelVisualStates.delete(String(machine.instanceId));
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(`${machine.name} label position reset above the machine.`);
     });
     panel.querySelector("[data-process-pointer-assignment]")?.addEventListener("change", (event) => {
       const machine = selectedMachine();
@@ -7889,7 +7903,6 @@
     const point = project(labelWorldX, labelWorldY, labelWorldZ);
     const rect = canvas.getBoundingClientRect();
     const pixelScale = canvas.width / Math.max(1, rect.width);
-    const priority = Boolean(options.priority);
     const selected = Boolean(options.selected);
     const current = Boolean(options.current);
     const screenMargin = 28 * pixelScale;
@@ -7908,7 +7921,6 @@
     const paddingX = clamp(6.4 * zoomScale, 4.5, 8) * pixelScale;
     const indicatorSpace = clamp(8 * zoomScale, 5.5, 10) * pixelScale;
     const height = Math.max(13 * pixelScale, (cssFontSize + 7.5 * zoomScale) * pixelScale);
-    const topGap = Math.max(4, 6 * zoomScale) * pixelScale;
     const collisionGap = clamp(3.5 * zoomScale, 2.5, 5.5) * pixelScale * (compactLabelViewport() ? 1.35 : 1);
     ctx.save();
     const fontWeight = options.fontWeight === "bold" ? 750 : options.fontWeight === "regular" ? 450 : 600;
@@ -7934,7 +7946,7 @@
       if (!onCanvas) targetRectangle = null;
     }
     targetVisible = Boolean(targetRectangle);
-    const { visual, elapsed } = updateLabelVisualState(labelKey, targetVisible, labelTime);
+    const { visual } = updateLabelVisualState(labelKey, targetVisible, labelTime);
     if (targetRectangle) {
       // Keep the card locked to its projected 3D location. Opacity still eases,
       // but position updates immediately with the camera and machine transform.

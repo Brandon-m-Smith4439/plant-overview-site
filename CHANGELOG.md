@@ -1,3 +1,12 @@
+## 0.13.38 - 2026-10-02
+
+- Reworked normal machine/object labels into stable world-anchored, camera-facing callouts. Their position is now derived from the owning object's 3D anchor plus saved world offsets instead of collision-driven screen-space slot switching.
+- Added per-label World X / World Z offsets, vertical lift, and an Automatic / Major / Normal / Support importance override in the Labels editor.
+- Added a Reset 3D position action that restores the selected label above its machine without moving the machine itself.
+- Preserved existing label text, abbreviation, colors, sizing, timing, anchors, leader styling, and Today visibility controls while keeping process-route pointers and route tags completely separate.
+- Retained legacy screen-offset fields during normalization for saved-layout compatibility, while new normal machine-label placement no longer depends on those 2D offsets.
+- Removed normal-label screen-slot hopping and positional interpolation so labels remain spatially consistent while the camera orbits, pans, and zooms.
+
 ## 0.13.37 - 2026-10-02
 
 - Replaced the fixed Turn 1 / Turn 2 route editor with an ordered exact-pivot model supporting zero to 24 floor pivot points per process route.

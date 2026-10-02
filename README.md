@@ -1,3 +1,7 @@
+## Version 0.13.40
+
+Version 0.13.40 fixes a production cache-version mismatch in the shared legacy script loader. The visible Next.js shell had reached v0.13.39, but the loader was still requesting the plant renderer with a v0.13.37 release query, allowing the browser/CDN to continue serving the old 2D-label code. The loader now uses the current v0.13.40 release token, and regression coverage verifies that the loader token always matches VERSION. With fresh viewer scripts loaded, the 3D-only review behavior from v0.13.39 is active: old 2D machine labels and process label badges are off, while full world-space machine placards are on.
+
 ## Version 0.13.39
 
 Version 0.13.39 makes the 3D-label experiment visually unambiguous. Normal machine labels are now actual textured planes inside the retained Three.js/WebGL scene rather than cards painted afterward on the 2D overlay canvas. Each placard is positioned in plant-world coordinates, follows the owning machine, faces the active camera, and uses the same depth buffer as the physical equipment so a machine can naturally pass in front of its label. For this review build, the previous 2D machine-label layer, compact process-step badges, and route-tag text are intentionally disabled, while the viewer defaults to All / Full labels so the new 3D labels are easy to inspect. Production-flow lines remain visible.

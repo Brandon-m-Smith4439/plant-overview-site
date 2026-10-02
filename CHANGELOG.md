@@ -1,3 +1,10 @@
+## 0.13.40 - 2026-10-02
+
+- Fixed the production cache-busting bug that kept loading the older v0.13.37 plant viewer scripts even though the Next.js shell had already advanced to v0.13.39.
+- Updated the shared LegacyScriptLoader release token to v0.13.40 so the browser/CDN requests a fresh plant-app.js, Three.js retained renderer, and supporting viewer scripts.
+- This makes the already-implemented 3D-only review mode actually reach the live browser: legacy 2D machine labels, compact process badges, and 2D route-tag text are disabled, while all full world-space machine labels are enabled.
+- Added a regression check that fails whenever the legacy-script release token no longer matches the VERSION file, preventing this stale-script mismatch from silently returning.
+
 ## 0.13.39 - 2026-10-02
 
 - Added a true WebGL world-label renderer using textured Three.js planes positioned in plant coordinates and billboarded toward the active camera.

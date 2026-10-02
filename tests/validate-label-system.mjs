@@ -86,3 +86,15 @@ assert.ok(threeRenderer.includes("depthTest: true") && threeRenderer.includes("u
 assert.ok(plant.includes("drawWorldMachineLabels(machineEntries, time);\n    presentPhysicalScene?.();"), "3D labels must be submitted before the physical WebGL frame is presented.");
 assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS || !state.showLabels"), "Legacy normal machine labels must stay off in comparison mode.");
 assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS) return;"), "Legacy process-step and route-tag canvas labels must stay off in comparison mode.");
+
+
+const legacyLoader = await readFile(new URL("../app/legacy-script-loader.tsx", import.meta.url), "utf8");
+const versionText = (await readFile(new URL("../VERSION", import.meta.url), "utf8")).trim();
+assert.ok(
+  legacyLoader.includes(`const LEGACY_BUILD_TOKEN = "${versionText}";`),
+  "LegacyScriptLoader cache-busting token must match VERSION so production cannot serve an older plant-app.js."
+);
+assert.ok(
+  legacyLoader.includes('scriptUrl.searchParams.set("release", LEGACY_BUILD_TOKEN)'),
+  "LegacyScriptLoader must append the release token to every legacy viewer script URL."
+);

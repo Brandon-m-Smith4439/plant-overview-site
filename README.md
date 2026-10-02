@@ -1,3 +1,7 @@
+## Version 0.13.36
+
+Version 0.13.36 completes the adaptive Necessary process-label pass by treating projected plant equipment as protected screen space during automatic label placement. The numbered process badges and machine-name tags now search additional above/side positions around their floor-route anchor while avoiding every visible machine rectangle, not only the machine that owns the label. Their font and maximum tag width stay tightly bounded in screen pixels, so zooming the overview out keeps the text readable without allowing tags to scale into large blocks over machinery. This release retains the v0.13.35 direct S/E endpoint dragging, -1000% through 1100% endpoint range, shared step numbering, and camera-culling-independent route persistence.
+
 ## Version 0.13.35
 
 Version 0.13.35 refines the animated Necessary floor routes with compact automatic process-step labels, freer endpoint editing, and camera-independent route persistence. Every standard process machine now receives one numbered badge on its route endpoint plus a small machine-name tag above it (Cutting 1, Polisher 2, Denver/Waterjet 3, Washer 4, Tempering 5, Wrap 6, Truck/Rack 7). The tags use bounded screen-space sizing and collision-aware placement so they remain readable when zoomed out without growing into large machine-covering labels. Labels reserve screen space in a stable pass so they do not stack over one another or flicker between front/back order. Selected routes now show explicit S and E endpoint handles; those handles can be dragged directly across the floor and the saved anchor range is expanded to -1000% through 1100%, allowing endpoints far beyond the source/destination machine footprint. Process routes also rebuild missing endpoint entries from the saved process graph instead of depending on current camera culling, so looking away from a source or destination no longer causes the route to disappear. The older custom route-tag control remains available only while editing a selected route; the automatic numbered machine labels are the normal Necessary-mode presentation.
@@ -92,7 +96,7 @@ Version 0.13.13 preserves the v0.13.12 production-flow and mobile-viewer improve
 
 # Monroe Glass Plant Evolution
 
-Current project version: **0.13.35**
+Current project version: **0.13.36**
 
 ## Full-production rendering performance
 

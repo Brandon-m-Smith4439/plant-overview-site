@@ -1,3 +1,10 @@
+## 0.13.36 - 2026-10-02
+
+- Strengthened automatic Necessary process-step label placement to avoid projected rectangles for all visible machines, not only each label's own machine.
+- Expanded the compact label candidate search around each numbered route node so neighboring step labels are less likely to fight for the same screen area.
+- Kept process label font size and maximum width tightly bounded in screen pixels so zoomed-out overview labels remain readable without becoming oversized.
+- Preserved v0.13.35 direct S/E floor dragging, expanded -1000–1100% endpoint anchors, and route persistence independent of camera culling.
+
 ## 0.13.35 - 2026-10-02
 
 - Replaced the single public route-tag presentation with automatic compact process-step badges and machine-name labels for every standard process node.

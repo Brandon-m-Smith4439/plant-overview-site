@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.35";
+  const APP_VERSION = "0.13.36";
 
   function editorProfileProtected() {
     try {
@@ -7411,19 +7411,24 @@
     return[...nodes.values()].map((node)=>({...node,worldPoint:[node.points.reduce((sum,p)=>sum+p[0],0)/node.points.length,node.points.reduce((sum,p)=>sum+p[1],0)/node.points.length,node.points.reduce((sum,p)=>sum+p[2],0)/node.points.length]})).sort((a,b)=>a.number-b.number||String(a.entry.machine.name).localeCompare(String(b.entry.machine.name)));
   }
 
-  function drawProcessStepLabel(node){
+  function drawProcessStepLabel(node,protectedMachineRects=[]){
     const anchor=project(...node.worldPoint);if(state.cameraMode==="walk"&&anchor[3]<WALK_NEAR_CLIP)return;
     if(!Number.isFinite(anchor[0])||!Number.isFinite(anchor[1]))return;
     const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width),spanCss=projectedPixelSpan(node.entry.rendered)/Math.max(.001,pixelScale);
-    const fontCss=state.cameraMode==="walk"?clamp(10+Math.log2(Math.max(1,spanCss)/45)*.55,9.5,12.5):clamp(8.3+Math.log2(Math.max(1,spanCss)/32)*.5,8.3,10.8);
-    const fontSize=fontCss*pixelScale,badgeRadius=clamp(fontCss+3.4,12.5,16.5)*pixelScale,maxWidth=clamp(82+spanCss*.16,86,state.cameraMode==="walk"?142:118)*pixelScale;
+    // Keep labels readable in screen space without letting world zoom turn them
+    // into giant overlays that cover machines.
+    const fontCss=state.cameraMode==="walk"?clamp(10+Math.log2(Math.max(1,spanCss)/45)*.45,9.5,12):clamp(8.1+Math.log2(Math.max(1,spanCss)/34)*.42,8.1,10.4);
+    const fontSize=fontCss*pixelScale,badgeRadius=clamp(fontCss+3.2,12,15.5)*pixelScale,maxWidth=clamp(78+spanCss*.12,82,state.cameraMode==="walk"?132:112)*pixelScale;
     ctx.save();const text=processStepLabelText(node.entry.machine,maxWidth,fontSize),textWidth=Math.min(maxWidth,ctx.measureText(text).width),paddingX=6*pixelScale,labelWidth=textWidth+paddingX*2,labelHeight=(fontCss+8)*pixelScale;
-    const machineRect=state.cameraMode==="walk"?null:processStepMachineRect(node.entry,3*pixelScale);
-    const naturalY=anchor[1]-badgeRadius-labelHeight/2-4*pixelScale,preferredY=machineRect?Math.min(naturalY,machineRect.top-labelHeight/2-3*pixelScale):naturalY;
-    const candidates=[[0,preferredY-anchor[1]],[24,-(badgeRadius/pixelScale+labelHeight/pixelScale/2+5)],[-24,-(badgeRadius/pixelScale+labelHeight/pixelScale/2+5)],[48,preferredY-anchor[1]],[-48,preferredY-anchor[1]],[0,preferredY-anchor[1]-22],[30,preferredY-anchor[1]-22],[-30,preferredY-anchor[1]-22]];
+    const ownMachineRect=state.cameraMode==="walk"?null:processStepMachineRect(node.entry,4*pixelScale);
+    const protectedRects=state.cameraMode==="walk"?[]:protectedMachineRects.filter(Boolean);
+    const naturalTop=ownMachineRect?ownMachineRect.top:anchor[1]-badgeRadius*2;
+    const preferredY=naturalTop-labelHeight/2-4*pixelScale;
+    const verticalCss=(preferredY-anchor[1])/pixelScale;
+    const candidates=[[0,verticalCss],[28,verticalCss],[-28,verticalCss],[56,verticalCss],[-56,verticalCss],[0,verticalCss-24],[32,verticalCss-24],[-32,verticalCss-24],[64,verticalCss-24],[-64,verticalCss-24],[0,verticalCss-48],[40,verticalCss-48],[-40,verticalCss-48]];
     let placement=null;
-    for(const[offsetXCss,offsetYCss]of candidates){const x=anchor[0]+offsetXCss*pixelScale,y=anchor[1]+offsetYCss*pixelScale,box={left:x-labelWidth/2,right:x+labelWidth/2,top:y-labelHeight/2,bottom:y+labelHeight/2},padded=paddedLabelRectangle(box,3*pixelScale),onCanvas=box.right>0&&box.left<canvas.width&&box.bottom>0&&box.top<canvas.height,machineConflict=machineRect&&rectanglesIntersect(padded,machineRect);if(onCanvas&&!machineConflict&&!labelRects.some((used)=>rectanglesIntersect(padded,used))){placement={x,y,box,padded};break;}}
-    if(!placement){const y=preferredY,box={left:anchor[0]-labelWidth/2,right:anchor[0]+labelWidth/2,top:y-labelHeight/2,bottom:y+labelHeight/2};placement={x:anchor[0],y,box,padded:paddedLabelRectangle(box,3*pixelScale)};}
+    for(const[offsetXCss,offsetYCss]of candidates){const x=anchor[0]+offsetXCss*pixelScale,y=anchor[1]+offsetYCss*pixelScale,box={left:x-labelWidth/2,right:x+labelWidth/2,top:y-labelHeight/2,bottom:y+labelHeight/2},padded=paddedLabelRectangle(box,3*pixelScale),onCanvas=box.right>0&&box.left<canvas.width&&box.bottom>0&&box.top<canvas.height,machineConflict=protectedRects.some((machineRect)=>rectanglesIntersect(padded,machineRect)),labelConflict=labelRects.some((used)=>rectanglesIntersect(padded,used));if(onCanvas&&!machineConflict&&!labelConflict){placement={x,y,box,padded};break;}}
+    if(!placement){const y=Math.max(labelHeight/2+2*pixelScale,preferredY),box={left:anchor[0]-labelWidth/2,right:anchor[0]+labelWidth/2,top:y-labelHeight/2,bottom:y+labelHeight/2};placement={x:anchor[0],y,box,padded:paddedLabelRectangle(box,3*pixelScale)};}
     const badgeBox={left:anchor[0]-badgeRadius-2*pixelScale,right:anchor[0]+badgeRadius+2*pixelScale,top:anchor[1]-badgeRadius-2*pixelScale,bottom:anchor[1]+badgeRadius+2*pixelScale};
     if(Math.hypot(placement.x-anchor[0],placement.y-anchor[1])>badgeRadius+8*pixelScale){ctx.beginPath();ctx.moveTo(anchor[0],anchor[1]-badgeRadius*.55);ctx.lineTo(placement.x,placement.y+labelHeight/2);ctx.strokeStyle="rgba(232,255,252,.78)";ctx.lineWidth=Math.max(.75,pixelScale);ctx.stroke();}
     ctx.shadowColor=node.color;ctx.shadowBlur=8*pixelScale;ctx.fillStyle="rgba(8,34,31,.96)";ctx.strokeStyle="rgba(232,255,252,.96)";ctx.lineWidth=1.6*pixelScale;ctx.beginPath();ctx.arc(anchor[0],anchor[1],badgeRadius,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.shadowBlur=0;ctx.fillStyle="#ffffff";ctx.font=`700 ${Math.max(9.5,fontCss+1.2)*pixelScale}px "Segoe UI", sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(node.number),anchor[0],anchor[1]+.4*pixelScale);
@@ -7456,7 +7461,13 @@
   function drawTodayProductionFlow(machineEntries,time){
     const entriesById=buildTodayProcessObjectEntries(machineEntries,time),routes=[];
     Object.values(state.processConnections||{}).sort((first,second)=>processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second))).forEach((connection)=>{if(connection?.visible===false)return;const fromEntry=entriesById.get(connection.sourceId),toEntry=entriesById.get(connection.targetId);if(!fromEntry||!toEntry)return;const route=drawFloorProcessFlow(fromEntry,toEntry,connection,time);if(route)routes.push(route);});
-    collectProcessStepNodes(entriesById,routes).forEach(drawProcessStepLabel);
+    // Protect every currently visible machine plus persistent process endpoints.
+    // This keeps compact process labels off equipment as the camera moves.
+    const protectedMachineRects=state.cameraMode==="walk"?[]:[
+      ...(machineEntries||[]),
+      ...entriesById.values(),
+    ].map((entry)=>processStepMachineRect(entry,3)).filter(Boolean);
+    collectProcessStepNodes(entriesById,routes).forEach((node)=>drawProcessStepLabel(node,protectedMachineRects));
     routes.forEach(drawSelectedCustomRouteTag);
     return entriesById;
   }

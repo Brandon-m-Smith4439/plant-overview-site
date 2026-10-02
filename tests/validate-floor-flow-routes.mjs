@@ -26,6 +26,8 @@ assert.ok(plant.includes("effectiveAnimationTime(time)"), "Flow animation must o
 assert.ok(plant.includes("collectProcessStepNodes(entriesById,routes).forEach(drawProcessStepLabel)"), "Automatic process-step labels must render after the glowing floor paths.");
 assert.ok(plant.includes("PROCESS_STEP_NUMBER_BY_ROLE"), "Standard process roles must map to stable numbered route steps.");
 assert.ok(plant.includes("function drawProcessStepLabel"), "Each process number must receive an adaptive machine-name label.");
+assert.ok(plant.includes("protectedMachineRects") && plant.includes("protectedRects.some((machineRect)=>rectanglesIntersect(padded,machineRect))"), "Process-step labels must avoid projected machine rectangles instead of covering equipment.");
+assert.ok(plant.includes("protectedMachineRects.filter(Boolean)"), "Process-step labels must use the shared protected-machine set during collision placement.");
 assert.ok(plant.includes("projectedPixelSpan(node.entry.rendered)"), "Process-step label sizing must respond to projected overview scale.");
 assert.ok(plant.includes("!labelRects.some((used)=>rectanglesIntersect(padded,used))"), "Process-step labels must avoid one another using the shared label collision map.");
 assert.ok(plant.includes("processStepMachineRect"), "Process-step labels must avoid covering their associated machine in overview mode.");

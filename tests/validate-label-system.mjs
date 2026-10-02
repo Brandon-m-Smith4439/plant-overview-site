@@ -37,7 +37,7 @@ assert.ok(plant.includes("function drawTodayProductionFlow"), "Today flow must u
 assert.ok(plant.includes("function drawProcessStepLabel"), "Necessary flow must render compact automatic numbered machine labels instead of relying on one route tag.");
 assert.ok(plant.includes("PROCESS_STEP_NUMBER_BY_ROLE"), "Automatic process labels must use stable shared route-step numbers.");
 assert.ok(plant.includes("labelRects.push(placement.padded)"), "Automatic process-step labels must reserve collision space separately from normal machine labels.");
-assert.ok(plant.includes("collectProcessStepNodes(entriesById,routes).forEach(drawProcessStepLabel)"), "Process-step labels must render in a stable pass after every glowing floor route.");
+assert.ok(plant.includes("collectProcessStepNodes(entriesById,routes).forEach((node)=>drawProcessStepLabel(node,protectedMachineRects))"), "Process-step labels must render in a stable pass after every glowing floor route.");
 assert.ok(plant.includes('if (machine.type === "room") return /office|maintenance/.test(name);'), "Office and Maintenance rooms must be eligible for their construction-stage labels.");
 assert.ok(plant.includes('const roomName = machine?.type === "room"'), "Room-stage labels must use full room names.");
 assert.ok(plant.includes("labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate"), "Construction stages must honor each machine label's independent reveal/retire window.");

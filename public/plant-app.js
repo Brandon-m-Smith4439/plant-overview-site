@@ -818,6 +818,11 @@
       // but do not use them for normal machine-label placement.
       labelWorldOffsetX: clamp(Number.isFinite(Number(machine.labelWorldOffsetX)) ? Number(machine.labelWorldOffsetX) : 0, -80, 80),
       labelWorldOffsetZ: clamp(Number.isFinite(Number(machine.labelWorldOffsetZ)) ? Number(machine.labelWorldOffsetZ) : 0, -80, 80),
+      labelRotationY: clamp(Number.isFinite(Number(machine.labelRotationY)) ? Number(machine.labelRotationY) : 0, -180, 180),
+      labelDepthFeet: clamp(Number.isFinite(Number(machine.labelDepthFeet)) ? Number(machine.labelDepthFeet) : .35, .1, 2),
+      labelGlowPercent: clamp(Number.isFinite(Number(machine.labelGlowPercent)) ? Number(machine.labelGlowPercent) : 55, 0, 100),
+      labelZoomMinPercent: clamp(Number.isFinite(Number(machine.labelZoomMinPercent)) ? Number(machine.labelZoomMinPercent) : 88, 70, 100),
+      labelZoomMaxPercent: clamp(Number.isFinite(Number(machine.labelZoomMaxPercent)) ? Number(machine.labelZoomMaxPercent) : 112, 100, 140),
       labelPriority: ["automatic", "major", "normal", "support"].includes(machine.labelPriority) ? machine.labelPriority : "automatic",
       labelScreenOffsetX: clamp(Number.isFinite(Number(machine.labelScreenOffsetX)) ? Number(machine.labelScreenOffsetX) : 0, -400, 400),
       labelScreenOffsetY: clamp(Number.isFinite(Number(machine.labelScreenOffsetY)) ? Number(machine.labelScreenOffsetY) : 0, -400, 400),
@@ -4416,7 +4421,7 @@
           <p class="label-help">Label timing controls the construction-stage views independently from when the machine itself appears. Today Overview still follows the selected Today label mode.</p>
           <fieldset class="label-pointer-controls">
             <legend>Machine-label position</legend>
-            <p>These controls place the normal machine label at a stable 3D world offset from its object. Orbiting the plant will not make the label jump to another screen position. Process routes remain completely separate.</p>
+            <p>These controls place a physical double-sided 3D sign at a stable world offset. Its position and rotation stay fixed while the camera orbits; both faces remain readable. Process routes remain completely separate.</p>
             <div class="label-format-grid">
               <label>Anchor X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
               <label>Anchor Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
@@ -4424,6 +4429,11 @@
               <label>Lift Y (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5"></label>
               <label>World X offset (ft)<input type="number" data-label-field="labelWorldOffsetX" data-needs-selection min="-80" max="80" step="0.5"></label>
               <label>World Z offset (ft)<input type="number" data-label-field="labelWorldOffsetZ" data-needs-selection min="-80" max="80" step="0.5"></label>
+              <label>Fixed Y rotation (°)<input type="number" data-label-field="labelRotationY" data-needs-selection min="-180" max="180" step="5"></label>
+              <label>Sign depth (ft)<input type="number" data-label-field="labelDepthFeet" data-needs-selection min="0.1" max="2" step="0.05"></label>
+              <label>Text glow (%)<input type="number" data-label-field="labelGlowPercent" data-needs-selection min="0" max="100" step="5"></label>
+              <label>Zoom min size (%)<input type="number" data-label-field="labelZoomMinPercent" data-needs-selection min="70" max="100" step="1"></label>
+              <label>Zoom max size (%)<input type="number" data-label-field="labelZoomMaxPercent" data-needs-selection min="100" max="140" step="1"></label>
               <label>Importance<select data-label-field="labelPriority" data-needs-selection><option value="automatic">Automatic</option><option value="major">Major equipment</option><option value="normal">Normal machine</option><option value="support">Support / cart / rack</option></select></label>
             </div>
           </fieldset>
@@ -4447,7 +4457,7 @@
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">Machine labels are now world-anchored, camera-facing 3D callouts. Their saved position follows the machine when it moves. Production-flow pointer geometry is edited separately in the Pointers tab.</p>
+          <p class="label-help">Machine labels are physical double-sided 3D signs. They stay fixed in plant space, use a shallow solid edge, glow their text, and only scale gently within the configured zoom limits. Production-flow pointer geometry is edited separately in the Pointers tab.</p>
         </fieldset>
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
@@ -5178,6 +5188,21 @@
         } else if (["labelWorldOffsetX", "labelWorldOffsetZ"].includes(field)) {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine[field] = clamp(value, -80, 80);
+        } else if (field === "labelRotationY") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelRotationY = clamp(value, -180, 180);
+        } else if (field === "labelDepthFeet") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelDepthFeet = clamp(value, .1, 2);
+        } else if (field === "labelGlowPercent") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelGlowPercent = clamp(value, 0, 100);
+        } else if (field === "labelZoomMinPercent") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelZoomMinPercent = clamp(value, 70, 100);
+        } else if (field === "labelZoomMaxPercent") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelZoomMaxPercent = clamp(value, 100, 140);
         } else if (field === "labelPriority") {
           machine.labelPriority = ["automatic", "major", "normal", "support"].includes(input.value) ? input.value : "automatic";
         } else if (field === "labelLineWidth") {
@@ -5247,6 +5272,7 @@
       machine.labelWorldOffsetX = 0;
       machine.labelWorldOffsetZ = 0;
       machine.labelHeightOffset = 4;
+      machine.labelRotationY = 0;
       labelVisualStates.delete(String(machine.instanceId));
       persistLayout();
       renderPerformance.invalidate();
@@ -10808,6 +10834,11 @@
           ? 2.8
           : 3.5;
       const labelHeight = clamp(baseHeight * sizeMultiplier, 1.8, 8);
+      const zoomFactor = Math.max(.05, state.zoom / OVERVIEW_CAMERA.zoom);
+      const zoomMinimum = clamp(Number(machine.labelZoomMinPercent ?? 88) / 100, .7, 1);
+      const zoomMaximum = clamp(Number(machine.labelZoomMaxPercent ?? 112) / 100, 1, 1.4);
+      const adaptiveScale = clamp(Math.pow(zoomFactor, .22), zoomMinimum, zoomMaximum);
+      const displayedLabelHeight = labelHeight * adaptiveScale;
       const borderColor = /^#[0-9a-f]{6}$/i.test(String(machine.labelLineColor || ""))
         ? machine.labelLineColor
         : colors.teal;
@@ -10815,6 +10846,12 @@
         text,
         position: [x, y, z],
         height: labelHeight,
+        depth: clamp(Number(machine.labelDepthFeet ?? .35), .1, 2),
+        rotationY: clamp(Number(machine.labelRotationY ?? 0), -180, 180),
+        glowStrength: clamp(Number(machine.labelGlowPercent ?? 55), 0, 100),
+        zoomFactor,
+        zoomMinPercent: clamp(Number(machine.labelZoomMinPercent ?? 88), 70, 100),
+        zoomMaxPercent: clamp(Number(machine.labelZoomMaxPercent ?? 112), 100, 140),
         opacity: clamp(alpha, .25, 1),
         textColor: machine.labelTextColor || "#ffffff",
         backgroundColor: machine.labelBackgroundColor || "#132126",
@@ -10822,7 +10859,7 @@
       });
       depthRenderer.addLine?.(
         anchor,
-        [x, y - labelHeight * .52, z],
+        [x, y - displayedLabelHeight * .52, z],
         borderColor,
         Math.max(1, Number(machine.labelLineWidth) || 1.25),
         clamp((Number(machine.labelLineOpacity) || 100) / 100, .15, 1),

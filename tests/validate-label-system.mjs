@@ -98,3 +98,15 @@ assert.ok(
   legacyLoader.includes('scriptUrl.searchParams.set("release", LEGACY_BUILD_TOKEN)'),
   "LegacyScriptLoader must append the release token to every legacy viewer script URL."
 );
+
+
+assert.ok(threeRenderer.includes("new THREE.BoxGeometry(1, 1, 1)"), "3D labels must have a real solid sign edge/backing.");
+assert.ok(threeRenderer.includes("group.add(backing, front, back)"), "3D labels must contain distinct front and back readable faces.");
+assert.ok(threeRenderer.includes("back.rotation.y = Math.PI"), "Back-side label text must be oriented for normal reading instead of mirrored.");
+assert.ok(threeRenderer.includes("Orientation is intentionally independent from the camera"), "3D label rotation must be fixed in plant space instead of billboarding with camera yaw/pitch.");
+assert.ok(!threeRenderer.includes("const yaw = Number(currentView?.yaw) || 0;\n      const pitch = Number(currentView?.pitch) || 0;\n      const cy = Math.cos(yaw);"), "World labels must not rotate to follow the camera.");
+assert.ok(threeRenderer.includes("shadowBlur = 4 + glowStrength * .24"), "3D sign text must include configurable glow.");
+assert.ok(threeRenderer.includes("Math.pow(zoomFactor, .22)") && threeRenderer.includes("zoomMinimum") && threeRenderer.includes("zoomMaximum"), "3D labels must scale gently with zoom and clamp that response.");
+assert.ok(plant.includes('data-label-field="labelRotationY"') && plant.includes('data-label-field="labelDepthFeet"'), "Labels editor must expose fixed sign rotation and physical depth.");
+assert.ok(plant.includes('data-label-field="labelGlowPercent"'), "Labels editor must expose text glow.");
+assert.ok(plant.includes('data-label-field="labelZoomMinPercent"') && plant.includes('data-label-field="labelZoomMaxPercent"'), "Labels editor must expose zoom scaling limits.");

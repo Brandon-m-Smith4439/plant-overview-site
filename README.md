@@ -1,3 +1,7 @@
+## Version 0.13.41
+
+Version 0.13.41 turns the experimental world labels into more physical plant signage. Each machine label is now a shallow 3D sign with a solid edge and two independently oriented faces, so text remains readable from either side without mirroring. The sign's world position and Y rotation stay fixed while the camera orbits instead of continuously billboarding toward the viewer. Text receives a configurable glow plus a crisp foreground pass, and zooming changes label size only gently within configurable minimum/maximum limits. The Labels editor exposes fixed rotation, depth, glow, and zoom limits alongside the existing world offsets and vertical lift.
+
 ## Version 0.13.40
 
 Version 0.13.40 fixes a production cache-version mismatch in the shared legacy script loader. The visible Next.js shell had reached v0.13.39, but the loader was still requesting the plant renderer with a v0.13.37 release query, allowing the browser/CDN to continue serving the old 2D-label code. The loader now uses the current v0.13.40 release token, and regression coverage verifies that the loader token always matches VERSION. With fresh viewer scripts loaded, the 3D-only review behavior from v0.13.39 is active: old 2D machine labels and process label badges are off, while full world-space machine placards are on.

@@ -1,3 +1,13 @@
+## 0.13.41 - 2026-10-02
+
+- Reworked the world-space machine labels from camera-facing billboards into fixed-orientation physical 3D signs. Orbiting or moving the plant camera no longer rotates the signs to follow the viewer.
+- Added a shallow solid 3D backing/edge so each label has visible thickness instead of reading as a flat plane.
+- Added separate front and rear sign faces, with the rear face rotated physically so the same text is readable normally from both sides instead of appearing mirrored.
+- Added configurable glowing text while retaining a crisp foreground text pass for readability.
+- Added gentle zoom-responsive sizing with per-label minimum and maximum clamps. Labels still behave like world objects; zoom only nudges their physical scale within the allowed range.
+- Added label-editor controls for fixed Y rotation, sign depth, text glow, zoom minimum size, and zoom maximum size.
+- Preserved the v0.13.40 cache-busting guard and the 3D-only review mode with the old 2D label layer disabled.
+
 ## 0.13.40 - 2026-10-02
 
 - Fixed the production cache-busting bug that kept loading the older v0.13.37 plant viewer scripts even though the Next.js shell had already advanced to v0.13.39.

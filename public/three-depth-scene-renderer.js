@@ -211,6 +211,17 @@
       context.font = `600 ${fontSize}px "Segoe UI", Arial, sans-serif`;
       context.textAlign = "left";
       context.textBaseline = "middle";
+      const glowStrength = clamp(Number(options.glowStrength ?? 55), 0, 100);
+      if (glowStrength > 0) {
+        context.save();
+        context.shadowColor = textColor;
+        context.shadowBlur = 4 + glowStrength * .24;
+        context.globalAlpha = .55 + glowStrength * .004;
+        context.fillText(text, 50, canvas.height / 2 + 1, canvas.width - 72);
+        context.restore();
+      }
+      // Draw one crisp pass over the halo so the letters stay readable even
+      // when the sign is small in the overview.
       context.fillText(text, 50, canvas.height / 2 + 1, canvas.width - 72);
       const texture = new THREE.CanvasTexture(canvas);
       texture.minFilter = THREE.LinearFilter;
@@ -221,9 +232,8 @@
       return texture;
     }
 
-    function createWorldLabelEntry(key, options = {}) {
-      const geometry = new THREE.PlaneGeometry(1, 1);
-      const material = new THREE.ShaderMaterial({
+    function worldLabelFaceMaterial(options = {}) {
+      return new THREE.ShaderMaterial({
         uniforms: {
           u_viewProjection: viewProjection,
           u_map: { value: createWorldLabelTexture(options) },
@@ -250,24 +260,80 @@
         transparent: true,
         depthTest: true,
         depthWrite: false,
+        side: THREE.FrontSide,
+      });
+    }
+
+    function worldLabelEdgeMaterial(options = {}) {
+      const edge = parseColor(options.borderColor || "#52b7aa", 1);
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          u_viewProjection: viewProjection,
+          u_color: { value: new THREE.Vector4(edge[0], edge[1], edge[2], 1) },
+          u_opacity: { value: 1 },
+        },
+        vertexShader: `
+          uniform mat4 u_viewProjection;
+          void main() {
+            gl_Position = u_viewProjection * modelMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec4 u_color;
+          uniform float u_opacity;
+          void main() {
+            gl_FragColor = vec4(u_color.rgb, u_color.a * u_opacity);
+          }
+        `,
+        transparent: true,
+        depthTest: true,
+        depthWrite: true,
         side: THREE.DoubleSide,
       });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.matrixAutoUpdate = false;
-      mesh.frustumCulled = false;
-      mesh.renderOrder = 3;
-      scene.add(mesh);
-      const entry = { key, mesh, geometry, material, revision: "", used: true, lastUsed: frame, lastUsedAt: frameTime };
+    }
+
+    function createWorldLabelEntry(key, options = {}) {
+      const group = new THREE.Group();
+      group.matrixAutoUpdate = false;
+      group.frustumCulled = false;
+
+      const faceGeometry = new THREE.PlaneGeometry(1, 1);
+      const faceMaterial = worldLabelFaceMaterial(options);
+      const front = new THREE.Mesh(faceGeometry, faceMaterial);
+      const back = new THREE.Mesh(faceGeometry, faceMaterial);
+      front.frustumCulled = false;
+      back.frustumCulled = false;
+      front.renderOrder = 4;
+      back.renderOrder = 4;
+      // The second face is physically rotated 180 degrees instead of relying
+      // on DoubleSide, so its texture reads normally rather than mirrored.
+      back.rotation.y = Math.PI;
+
+      const edgeGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const edgeMaterial = worldLabelEdgeMaterial(options);
+      const backing = new THREE.Mesh(edgeGeometry, edgeMaterial);
+      backing.frustumCulled = false;
+      backing.renderOrder = 3;
+
+      group.add(backing, front, back);
+      scene.add(group);
+      const entry = {
+        key, group, front, back, backing, faceGeometry, edgeGeometry,
+        faceMaterial, edgeMaterial, revision: "", used: true,
+        lastUsed: frame, lastUsedAt: frameTime,
+      };
       worldLabels.set(key, entry);
       return entry;
     }
 
     function disposeWorldLabel(entry) {
       if (!entry) return;
-      scene.remove(entry.mesh);
-      entry.material?.uniforms?.u_map?.value?.dispose?.();
-      entry.material?.dispose?.();
-      entry.geometry?.dispose?.();
+      scene.remove(entry.group);
+      entry.faceMaterial?.uniforms?.u_map?.value?.dispose?.();
+      entry.faceMaterial?.dispose?.();
+      entry.edgeMaterial?.dispose?.();
+      entry.faceGeometry?.dispose?.();
+      entry.edgeGeometry?.dispose?.();
     }
 
     function addWorldLabel(key, options = {}) {
@@ -277,44 +343,68 @@
       entry.used = true;
       entry.lastUsed = frame;
       entry.lastUsedAt = frameTime;
-      entry.mesh.visible = true;
+      entry.group.visible = true;
 
       const revision = [
         options.text,
         options.textColor || "",
         options.backgroundColor || "",
         options.borderColor || "",
+        Number(options.glowStrength ?? 55),
       ].join("|");
       if (entry.revision !== revision) {
-        const previous = entry.material.uniforms.u_map.value;
-        entry.material.uniforms.u_map.value = createWorldLabelTexture(options);
+        const previous = entry.faceMaterial.uniforms.u_map.value;
+        entry.faceMaterial.uniforms.u_map.value = createWorldLabelTexture(options);
         previous?.dispose?.();
-        entry.material.needsUpdate = true;
+        const edge = parseColor(options.borderColor || "#52b7aa", 1);
+        entry.edgeMaterial.uniforms.u_color.value.set(edge[0], edge[1], edge[2], 1);
+        entry.faceMaterial.needsUpdate = true;
         entry.revision = revision;
       }
 
-      entry.material.uniforms.u_opacity.value = clamp(Number(options.opacity ?? 1), 0, 1);
-      const texture = entry.material.uniforms.u_map.value;
+      const opacity = clamp(Number(options.opacity ?? 1), 0, 1);
+      entry.faceMaterial.uniforms.u_opacity.value = opacity;
+      entry.edgeMaterial.uniforms.u_opacity.value = opacity;
+
+      const texture = entry.faceMaterial.uniforms.u_map.value;
       const image = texture?.image;
       const aspect = Math.max(.8, Number(image?.width || 512) / Math.max(1, Number(image?.height || 112)));
-      const worldHeight = clamp(Number(options.height) || 3.5, 1.5, 10);
+
+      // Let the sign respond gently to zoom without behaving like a 2D overlay.
+      // At the clamps it is still a physical object in the same world position.
+      const zoomFactor = clamp(Number(options.zoomFactor) || 1, .05, 20);
+      const zoomMinimum = clamp((Number(options.zoomMinPercent) || 88) / 100, .7, 1);
+      const zoomMaximum = clamp((Number(options.zoomMaxPercent) || 112) / 100, 1, 1.4);
+      const adaptiveScale = clamp(Math.pow(zoomFactor, .22), zoomMinimum, zoomMaximum);
+
+      const worldHeight = clamp((Number(options.height) || 3.5) * adaptiveScale, 1.4, 12);
       const worldWidth = worldHeight * aspect;
+      const worldDepth = clamp(Number(options.depth) || .35, .1, 2);
+      const faceOffset = worldDepth / 2 + .012;
       const position = Array.isArray(options.position) ? options.position : [0, 0, 0];
-      const yaw = Number(currentView?.yaw) || 0;
-      const pitch = Number(currentView?.pitch) || 0;
-      const cy = Math.cos(yaw);
-      const sy = Math.sin(yaw);
-      const cp = Math.cos(pitch);
-      const sp = Math.sin(pitch);
-      const right = new THREE.Vector3(cy, 0, -sy);
-      const up = new THREE.Vector3(-sy * sp, cp, -cy * sp);
-      const normal = new THREE.Vector3(sy * cp, sp, cy * cp);
-      const basis = new THREE.Matrix4().makeBasis(right, up, normal);
-      const quaternion = new THREE.Quaternion().setFromRotationMatrix(basis);
-      const labelPosition = new THREE.Vector3(Number(position[0]) || 0, Number(position[1]) || 0, Number(position[2]) || 0);
-      const labelScale = new THREE.Vector3(worldWidth, worldHeight, 1);
-      entry.mesh.matrix.compose(labelPosition, quaternion, labelScale);
-      entry.mesh.matrixWorldNeedsUpdate = true;
+
+      // Orientation is intentionally independent from the camera. The label is
+      // a fixed plant sign now, not a billboard. Front and back are both readable.
+      const radians = Math.PI / 180;
+      const rotationX = (Number(options.rotationX) || 0) * radians;
+      const rotationY = -(Number(options.rotationY) || 0) * radians;
+      const rotationZ = (Number(options.rotationZ) || 0) * radians;
+      scratchEuler.set(rotationX, rotationY, rotationZ, "ZYX");
+      scratchQuaternion.setFromEuler(scratchEuler);
+      scratchPosition.set(Number(position[0]) || 0, Number(position[1]) || 0, Number(position[2]) || 0);
+      scratchScale.set(1, 1, 1);
+      entry.group.matrix.compose(scratchPosition, scratchQuaternion, scratchScale);
+      entry.group.matrixWorldNeedsUpdate = true;
+
+      entry.backing.scale.set(worldWidth, worldHeight, worldDepth);
+      entry.backing.position.set(0, 0, 0);
+      entry.front.scale.set(worldWidth, worldHeight, 1);
+      entry.front.position.set(0, 0, faceOffset);
+      entry.back.scale.set(worldWidth, worldHeight, 1);
+      entry.back.position.set(0, 0, -faceOffset);
+      entry.front.updateMatrix();
+      entry.back.updateMatrix();
+      entry.backing.updateMatrix();
     }
 
     function matrixForView(view = {}) {
@@ -555,9 +645,9 @@
       refreshViewProjection(view);
       retained.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       templates.forEach((entry) => { entry.used = false; });
-      instanceBatches.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });
+      instanceBatches.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       geometryInstanceBatches.forEach((entry) => { entry.used = false; entry.group.visible = false; });
-      worldLabels.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });
+      worldLabels.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       resetRecorder(transient);
       current = transient;
     }

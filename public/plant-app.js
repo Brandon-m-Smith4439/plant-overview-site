@@ -813,6 +813,12 @@
       labelAnchorYPercent: clamp(Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100, 0, 100),
       labelAnchorZPercent: clamp(Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50, 0, 100),
       labelHeightOffset: clamp(Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4, 0, 60),
+      // v0.13.38: machine labels now live at stable world-space offsets.
+      // Keep the legacy screen offsets in saved layouts for backward compatibility,
+      // but do not use them for normal machine-label placement.
+      labelWorldOffsetX: clamp(Number.isFinite(Number(machine.labelWorldOffsetX)) ? Number(machine.labelWorldOffsetX) : 0, -80, 80),
+      labelWorldOffsetZ: clamp(Number.isFinite(Number(machine.labelWorldOffsetZ)) ? Number(machine.labelWorldOffsetZ) : 0, -80, 80),
+      labelPriority: ["automatic", "major", "normal", "support"].includes(machine.labelPriority) ? machine.labelPriority : "automatic",
       labelScreenOffsetX: clamp(Number.isFinite(Number(machine.labelScreenOffsetX)) ? Number(machine.labelScreenOffsetX) : 0, -400, 400),
       labelScreenOffsetY: clamp(Number.isFinite(Number(machine.labelScreenOffsetY)) ? Number(machine.labelScreenOffsetY) : 0, -400, 400),
       labelLineColor: /^#[0-9a-f]{6}$/i.test(String(machine.labelLineColor || "")) ? machine.labelLineColor : "#52b7aa",
@@ -4403,14 +4409,15 @@
           <p class="label-help">Label timing controls the construction-stage views independently from when the machine itself appears. Today Overview still follows the selected Today label mode.</p>
           <fieldset class="label-pointer-controls">
             <legend>Machine-label position</legend>
-            <p>These controls move only the normal machine label. They do not change the process connection.</p>
+            <p>These controls place the normal machine label at a stable 3D world offset from its object. Orbiting the plant will not make the label jump to another screen position. Process routes remain completely separate.</p>
             <div class="label-format-grid">
               <label>Anchor X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
               <label>Anchor Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
               <label>Anchor Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>Lift (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5"></label>
-              <label>Tag X (px)<input type="number" data-label-field="labelScreenOffsetX" data-needs-selection min="-400" max="400" step="2"></label>
-              <label>Tag Y (px)<input type="number" data-label-field="labelScreenOffsetY" data-needs-selection min="-400" max="400" step="2"></label>
+              <label>Lift Y (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5"></label>
+              <label>World X offset (ft)<input type="number" data-label-field="labelWorldOffsetX" data-needs-selection min="-80" max="80" step="0.5"></label>
+              <label>World Z offset (ft)<input type="number" data-label-field="labelWorldOffsetZ" data-needs-selection min="-80" max="80" step="0.5"></label>
+              <label>Importance<select data-label-field="labelPriority" data-needs-selection><option value="automatic">Automatic</option><option value="major">Major equipment</option><option value="normal">Normal machine</option><option value="support">Support / cart / rack</option></select></label>
             </div>
           </fieldset>
           <fieldset class="label-pointer-controls">
@@ -4432,7 +4439,7 @@
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">This section controls the normal machine label text and appearance. Production-flow pointer geometry is edited separately in the Pointers tab.</p>
+          <p class="label-help">Machine labels are now world-anchored, camera-facing 3D callouts. Their saved position follows the machine when it moves. Production-flow pointer geometry is edited separately in the Pointers tab.</p>
         </fieldset>
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
@@ -5160,9 +5167,11 @@
         } else if (field === "labelHeightOffset") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelHeightOffset = clamp(value, 0, 60);
-        } else if (["labelScreenOffsetX", "labelScreenOffsetY"].includes(field)) {
+        } else if (["labelWorldOffsetX", "labelWorldOffsetZ"].includes(field)) {
           const value = Number(input.value);
-          if (Number.isFinite(value)) machine[field] = clamp(value, -400, 400);
+          if (Number.isFinite(value)) machine[field] = clamp(value, -80, 80);
+        } else if (field === "labelPriority") {
+          machine.labelPriority = ["automatic", "major", "normal", "support"].includes(input.value) ? input.value : "automatic";
         } else if (field === "labelLineWidth") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelLineWidth = clamp(value, .5, 10);
@@ -7701,7 +7710,7 @@
   function machineLabelProfile(machine) {
     const type = machine?.type || "generic";
     const area = Math.max(0, Number(machine?.w) || 0) * Math.max(0, Number(machine?.d) || 0);
-    const profile = isFloorFeatureType(type)
+    let profile = isFloorFeatureType(type)
       ? { rank: 0, cssSize: 8.5, maxChars: 12 }
       : PRIMARY_LABEL_TYPES.has(type)
         ? { rank: 4, cssSize: 12, maxChars: 18 }
@@ -7712,6 +7721,9 @@
             : area >= 220
               ? { rank: 3, cssSize: 11, maxChars: 17 }
               : { rank: 2, cssSize: 10, maxChars: 15 };
+    if (machine?.labelPriority === "major") profile = { rank: 4, cssSize: Math.max(profile.cssSize, 12), maxChars: Math.max(profile.maxChars, 18) };
+    else if (machine?.labelPriority === "normal") profile = { rank: 2, cssSize: 10, maxChars: 15 };
+    else if (machine?.labelPriority === "support") profile = { rank: 1, cssSize: 9, maxChars: 13 };
     const sizeScale = clamp(Number(machine?.labelSizePercent) || 100, 50, 250) / 100;
     const compactViewport = compactLabelViewport();
     const zoomCharacterScale = state.cameraMode === "walk"
@@ -7871,7 +7883,10 @@
     const previousVisual = labelVisualStates.get(labelKey);
     let targetVisible = Boolean(options.visibleTarget);
     const anchorPoint = project(x, y, z);
-    const point = project(x, y + Math.max(0, Number(options.labelLiftFeet) || 0), z);
+    const labelWorldX = x + clamp(Number(options.worldOffsetX) || 0, -80, 80);
+    const labelWorldY = y + Math.max(0, Number(options.labelLiftFeet) || 0);
+    const labelWorldZ = z + clamp(Number(options.worldOffsetZ) || 0, -80, 80);
+    const point = project(labelWorldX, labelWorldY, labelWorldZ);
     const rect = canvas.getBoundingClientRect();
     const pixelScale = canvas.width / Math.max(1, rect.width);
     const priority = Boolean(options.priority);
@@ -7899,80 +7914,32 @@
     const fontWeight = options.fontWeight === "bold" ? 750 : options.fontWeight === "regular" ? 450 : 600;
     ctx.font = `${fontWeight} ${fontSize}px "Segoe UI", sans-serif`;
     const width = ctx.measureText(text).width + paddingX * 2 + indicatorSpace;
-    const clampX = (value) => clamp(value, width / 2 + 4 * pixelScale, canvas.width - width / 2 - 4 * pixelScale);
-    const labelX = clampX(point[0] + clamp(Number(options.screenOffsetX) || 0, -400, 400) * pixelScale);
-    const baseY = point[1] - height - topGap + clamp(Number(options.screenOffsetY) || 0, -400, 400) * pixelScale;
-    const step = height + collisionGap;
-    const side = Array.from(labelKey).reduce((sum, character) => sum + character.charCodeAt(0), 0) % 2 ? 1 : -1;
-    const sideOffset = width * .56 + 12 * pixelScale;
-    const placements = [
-      [side * sideOffset, 0],
-      [-side * sideOffset, 0],
-      [side * sideOffset, -step],
-      [-side * sideOffset, -step],
-      [side * sideOffset * .7, -step * 2],
-      [-side * sideOffset * .7, -step * 2],
-      [0, -step * 3],
-      [side * sideOffset * .45, -step * 4],
-      [-side * sideOffset * .45, -step * 4],
-    ];
-    const preferredSlot = clamp(Math.round(Number(previousVisual?.slot) || 0), 0, placements.length - 1);
-    const slotOrder = state.cameraMode === "walk"
-      ? [0]
-      : [preferredSlot, ...placements.map((_, index) => index).filter((index) => index !== preferredSlot)];
+    // World labels do not search for alternate 2D screen slots. Their location is
+    // derived only from the machine anchor plus the saved XYZ-style world offset,
+    // so orbiting and zooming never makes a label jump to another side.
     let targetRectangle = null;
-    let targetSlot = preferredSlot;
     if (targetVisible) {
-      for (const slot of slotOrder) {
-        const [offsetX, offsetY] = placements[slot];
-        const candidateX = clampX(labelX + offsetX);
-        const candidateY = baseY + offsetY;
-        const candidate = {
-          left: candidateX - width / 2,
-          right: candidateX + width / 2,
-          top: candidateY,
-          bottom: candidateY + height,
-        };
-        const onCanvas = candidate.right > 0 && candidate.left < canvas.width && candidate.bottom > 0 && candidate.top < canvas.height;
-        const collisionBox = paddedLabelRectangle(candidate, collisionGap);
-        const collides = labelRects.some((used) => rectanglesIntersect(collisionBox, used));
-        const holdingPreferredSlot = slot === preferredSlot && previousVisual && labelTime < (previousVisual.slotHoldUntil || 0);
-        if (onCanvas && (state.cameraMode === "walk" || !collides || holdingPreferredSlot)) {
-          targetRectangle = candidate;
-          targetSlot = slot;
-          break;
-        }
-      }
-    }
-    if (!targetRectangle && (priority || options.forceVisible) && targetVisible) {
-      const fallbackX = clampX(labelX + side * sideOffset);
+      const candidateX = point[0];
+      const candidateY = point[1] - height / 2;
       targetRectangle = {
-        left: fallbackX - width / 2,
-        right: fallbackX + width / 2,
-        top: baseY,
-        bottom: baseY + height,
+        left: candidateX - width / 2,
+        right: candidateX + width / 2,
+        top: candidateY,
+        bottom: candidateY + height,
       };
-      targetSlot = 0;
+      const onCanvas = targetRectangle.right > -screenMargin &&
+        targetRectangle.left < canvas.width + screenMargin &&
+        targetRectangle.bottom > -screenMargin &&
+        targetRectangle.top < canvas.height + screenMargin;
+      if (!onCanvas) targetRectangle = null;
     }
     targetVisible = Boolean(targetRectangle);
     const { visual, elapsed } = updateLabelVisualState(labelKey, targetVisible, labelTime);
     if (targetRectangle) {
-      const targetX = (targetRectangle.left + targetRectangle.right) / 2;
-      const targetY = targetRectangle.top;
-      if (!Number.isFinite(visual.drawX) || !Number.isFinite(visual.drawY)) {
-        visual.drawX = targetX;
-        visual.drawY = targetY;
-      } else if (state.cameraMode === "walk") {
-        visual.drawX = targetX;
-        visual.drawY = targetY;
-      } else {
-        const positionBlend = 1 - Math.exp(-elapsed / 24);
-        visual.drawX += (targetX - visual.drawX) * positionBlend;
-        visual.drawY += (targetY - visual.drawY) * positionBlend;
-        if (Math.abs(targetX - visual.drawX) > .1 || Math.abs(targetY - visual.drawY) > .1) labelTransitionsActive = true;
-      }
-      if (visual.slot !== targetSlot) visual.slotHoldUntil = labelTime + 180;
-      visual.slot = targetSlot;
+      // Keep the card locked to its projected 3D location. Opacity still eases,
+      // but position updates immediately with the camera and machine transform.
+      visual.drawX = (targetRectangle.left + targetRectangle.right) / 2;
+      visual.drawY = targetRectangle.top;
     }
     if (visual.alpha <= 0 || !Number.isFinite(visual.drawX) || !Number.isFinite(visual.drawY)) {
       ctx.restore();
@@ -10998,8 +10965,8 @@
           cssSize: profile.cssSize,
           textColor: machine.labelTextColor,
           backgroundColor: machine.labelBackgroundColor,
-          screenOffsetX: clamp(Number(machine.labelScreenOffsetX ?? 0), -400, 400),
-          screenOffsetY: clamp(Number(machine.labelScreenOffsetY ?? 0), -400, 400),
+          worldOffsetX: clamp(Number(machine.labelWorldOffsetX ?? 0), -80, 80),
+          worldOffsetZ: clamp(Number(machine.labelWorldOffsetZ ?? 0), -80, 80),
           lineColor: machine.labelLineColor,
           lineWidth: machine.labelLineWidth,
           lineOpacity: machine.labelLineOpacity,

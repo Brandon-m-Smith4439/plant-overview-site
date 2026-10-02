@@ -3,7 +3,9 @@ import { readFile } from "node:fs/promises";
 
 const plant = await readFile(new URL("../public/plant-app.js", import.meta.url), "utf8");
 
-assert.ok(plant.includes('todayLabelMode: "necessary"'), "Today must default to the production-flow overlay.");
+assert.ok(plant.includes('const WORLD_MACHINE_LABELS = true'), "World-space machine labels must be enabled for the v0.13.39 review.");
+assert.ok(plant.includes('const SCREEN_SPACE_LABELS = false'), "Legacy 2D canvas labels must be disabled for the v0.13.39 review.");
+assert.ok(plant.includes('todayLabelMode: "full"'), "Today must default to all full 3D machine labels while the 2D layer is disabled.");
 assert.ok(
   plant.includes('data-label-display="necessary"') &&
   plant.includes('data-label-display="abbreviated"') &&
@@ -76,3 +78,11 @@ assert.ok(sceneDrawBody.indexOf("presentPhysicalScene?.()") < sceneDrawBody.inde
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");
+
+
+const threeRenderer = await readFile(new URL("../public/three-depth-scene-renderer.js", import.meta.url), "utf8");
+assert.ok(threeRenderer.includes("function addWorldLabel"), "Three retained renderer must expose a true world-label primitive.");
+assert.ok(threeRenderer.includes("depthTest: true") && threeRenderer.includes("u_viewProjection * modelMatrix"), "3D labels must participate in scene depth and world transforms.");
+assert.ok(plant.includes("drawWorldMachineLabels(machineEntries, time);\n    presentPhysicalScene?.();"), "3D labels must be submitted before the physical WebGL frame is presented.");
+assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS || !state.showLabels"), "Legacy normal machine labels must stay off in comparison mode.");
+assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS) return;"), "Legacy process-step and route-tag canvas labels must stay off in comparison mode.");

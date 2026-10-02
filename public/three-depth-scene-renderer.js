@@ -84,6 +84,7 @@
     const templates = new Map();
     const instanceBatches = new Map();
     const geometryInstanceBatches = new Map();
+    const worldLabels = new Map();
     let current = null;
     let transient = createRecorder();
     let width = 1;
@@ -104,6 +105,7 @@
     let gpuMs = null;
     let stats = { renderer: "three-retained", calls: 0, triangles: 0, lines: 0, retainedObjects: 0, instances: 0, instanceUploads: 0 };
     let frameTime = 0;
+    let currentView = {};
     const CACHE_RETENTION_FRAMES = 180;
     // Frame-count-only eviction creates a feedback loop on a struggling scene:
     // at 15 FPS an obsolete resource survived four times longer than at 60 FPS.
@@ -163,6 +165,157 @@
       depthWrite: false,
       transparent: true,
     });
+
+
+    function roundedRect(context, x, y, w, h, radius) {
+      const r = Math.min(radius, w / 2, h / 2);
+      context.beginPath();
+      context.moveTo(x + r, y);
+      context.lineTo(x + w - r, y);
+      context.quadraticCurveTo(x + w, y, x + w, y + r);
+      context.lineTo(x + w, y + h - r);
+      context.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      context.lineTo(x + r, y + h);
+      context.quadraticCurveTo(x, y + h, x, y + h - r);
+      context.lineTo(x, y + r);
+      context.quadraticCurveTo(x, y, x + r, y);
+      context.closePath();
+    }
+
+    function createWorldLabelTexture(options = {}) {
+      const text = String(options.text || "Object").trim() || "Object";
+      const textColor = String(options.textColor || "#ffffff");
+      const backgroundColor = String(options.backgroundColor || "#132126");
+      const borderColor = String(options.borderColor || "#52b7aa");
+      const canvas = document.createElement("canvas");
+      const measure = canvas.getContext("2d");
+      const fontSize = 52;
+      measure.font = `600 ${fontSize}px "Segoe UI", Arial, sans-serif`;
+      const measured = Math.ceil(measure.measureText(text).width);
+      canvas.width = clamp(measured + 116, 256, 1400);
+      canvas.height = 112;
+      const context = canvas.getContext("2d");
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      roundedRect(context, 4, 4, canvas.width - 8, canvas.height - 8, 20);
+      context.fillStyle = backgroundColor;
+      context.globalAlpha = .94;
+      context.fill();
+      context.globalAlpha = 1;
+      context.lineWidth = 5;
+      context.strokeStyle = borderColor;
+      context.stroke();
+      context.fillStyle = borderColor;
+      roundedRect(context, 22, 26, 8, canvas.height - 52, 4);
+      context.fill();
+      context.fillStyle = textColor;
+      context.font = `600 ${fontSize}px "Segoe UI", Arial, sans-serif`;
+      context.textAlign = "left";
+      context.textBaseline = "middle";
+      context.fillText(text, 50, canvas.height / 2 + 1, canvas.width - 72);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.generateMipmaps = false;
+      if (THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    function createWorldLabelEntry(key, options = {}) {
+      const geometry = new THREE.PlaneGeometry(1, 1);
+      const material = new THREE.ShaderMaterial({
+        uniforms: {
+          u_viewProjection: viewProjection,
+          u_map: { value: createWorldLabelTexture(options) },
+          u_opacity: { value: 1 },
+        },
+        vertexShader: `
+          uniform mat4 u_viewProjection;
+          varying vec2 v_uv;
+          void main() {
+            v_uv = uv;
+            gl_Position = u_viewProjection * modelMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D u_map;
+          uniform float u_opacity;
+          varying vec2 v_uv;
+          void main() {
+            vec4 texel = texture2D(u_map, v_uv);
+            if (texel.a < 0.02) discard;
+            gl_FragColor = vec4(texel.rgb, texel.a * u_opacity);
+          }
+        `,
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.matrixAutoUpdate = false;
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 3;
+      scene.add(mesh);
+      const entry = { key, mesh, geometry, material, revision: "", used: true, lastUsed: frame, lastUsedAt: frameTime };
+      worldLabels.set(key, entry);
+      return entry;
+    }
+
+    function disposeWorldLabel(entry) {
+      if (!entry) return;
+      scene.remove(entry.mesh);
+      entry.material?.uniforms?.u_map?.value?.dispose?.();
+      entry.material?.dispose?.();
+      entry.geometry?.dispose?.();
+    }
+
+    function addWorldLabel(key, options = {}) {
+      if (!key || !options.text) return;
+      let entry = worldLabels.get(String(key));
+      if (!entry) entry = createWorldLabelEntry(String(key), options);
+      entry.used = true;
+      entry.lastUsed = frame;
+      entry.lastUsedAt = frameTime;
+      entry.mesh.visible = true;
+
+      const revision = [
+        options.text,
+        options.textColor || "",
+        options.backgroundColor || "",
+        options.borderColor || "",
+      ].join("|");
+      if (entry.revision !== revision) {
+        const previous = entry.material.uniforms.u_map.value;
+        entry.material.uniforms.u_map.value = createWorldLabelTexture(options);
+        previous?.dispose?.();
+        entry.material.needsUpdate = true;
+        entry.revision = revision;
+      }
+
+      entry.material.uniforms.u_opacity.value = clamp(Number(options.opacity ?? 1), 0, 1);
+      const texture = entry.material.uniforms.u_map.value;
+      const image = texture?.image;
+      const aspect = Math.max(.8, Number(image?.width || 512) / Math.max(1, Number(image?.height || 112)));
+      const worldHeight = clamp(Number(options.height) || 3.5, 1.5, 10);
+      const worldWidth = worldHeight * aspect;
+      const position = Array.isArray(options.position) ? options.position : [0, 0, 0];
+      const yaw = Number(currentView?.yaw) || 0;
+      const pitch = Number(currentView?.pitch) || 0;
+      const cy = Math.cos(yaw);
+      const sy = Math.sin(yaw);
+      const cp = Math.cos(pitch);
+      const sp = Math.sin(pitch);
+      const right = new THREE.Vector3(cy, 0, -sy);
+      const up = new THREE.Vector3(-sy * sp, cp, -cy * sp);
+      const normal = new THREE.Vector3(sy * cp, sp, cy * cp);
+      const basis = new THREE.Matrix4().makeBasis(right, up, normal);
+      const quaternion = new THREE.Quaternion().setFromRotationMatrix(basis);
+      const labelPosition = new THREE.Vector3(Number(position[0]) || 0, Number(position[1]) || 0, Number(position[2]) || 0);
+      const labelScale = new THREE.Vector3(worldWidth, worldHeight, 1);
+      entry.mesh.matrix.compose(labelPosition, quaternion, labelScale);
+      entry.mesh.matrixWorldNeedsUpdate = true;
+    }
 
     function matrixForView(view = {}) {
       if (Array.isArray(view.matrix) && view.matrix.length === 16) {
@@ -398,11 +551,13 @@
         renderer.setSize(width, height, false);
         resizeCount += 1;
       }
+      currentView = { ...view };
       refreshViewProjection(view);
       retained.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       templates.forEach((entry) => { entry.used = false; });
       instanceBatches.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });
       geometryInstanceBatches.forEach((entry) => { entry.used = false; entry.group.visible = false; });
+      worldLabels.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });
       resetRecorder(transient);
       current = transient;
     }
@@ -728,6 +883,12 @@
           instanceBatches.delete(key);
         }
       });
+      worldLabels.forEach((entry, key) => {
+        if (!entry.used && cacheEntryExpired(entry)) {
+          disposeWorldLabel(entry);
+          worldLabels.delete(key);
+        }
+      });
       try {
         if (timer) {
           const disjoint = gl.getParameter(timer.GPU_DISJOINT_EXT);
@@ -797,6 +958,8 @@
       instanceBatches.clear();
       geometryInstanceBatches.forEach(disposeGeometryInstanceBatch);
       geometryInstanceBatches.clear();
+      worldLabels.forEach(disposeWorldLabel);
+      worldLabels.clear();
       opaqueMaterial.dispose();
       transparentMaterial.dispose();
       lineMaterial.dispose();
@@ -823,6 +986,7 @@
       clearRetained,
       addBoxInstances,
       addGeometryInstances,
+      addWorldLabel,
       addPolygon,
       addLine,
       render,

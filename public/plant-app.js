@@ -1596,6 +1596,13 @@
     panZ: 0,
   });
 
+  // v0.13.39 comparison mode: all normal machine labels are rendered as
+  // depth-tested world-space billboards inside the WebGL scene. The previous
+  // canvas/screen-space label layer is intentionally disabled so the two
+  // systems cannot be mistaken for one another during review.
+  const WORLD_MACHINE_LABELS = true;
+  const SCREEN_SPACE_LABELS = false;
+
   const state = {
     yaw: OVERVIEW_CAMERA.yaw,
     pitch: OVERVIEW_CAMERA.pitch,
@@ -1624,9 +1631,9 @@
     pointerY: 0,
     showCad: false,
     showLabels: true,
-    labelMode: "smart",
-    labelTextMode: "abbreviated",
-    todayLabelMode: "necessary",
+    labelMode: "all",
+    labelTextMode: "full",
+    todayLabelMode: "full",
     processPointers: initialProcessPointers,
     processConnections: initialProcessConnections,
     selectedProcessConnectionKey: "",
@@ -7592,6 +7599,7 @@
   }
 
   function drawProcessStepLabel(node,protectedMachineRects=[]){
+    if (!SCREEN_SPACE_LABELS) return;
     const anchor=project(...node.worldPoint);if(state.cameraMode==="walk"&&anchor[3]<WALK_NEAR_CLIP)return;
     if(!Number.isFinite(anchor[0])||!Number.isFinite(anchor[1]))return;
     const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width),spanCss=projectedPixelSpan(node.entry.rendered)/Math.max(.001,pixelScale);
@@ -7617,6 +7625,7 @@
   }
 
   function drawSelectedCustomRouteTag(route) {
+    if (!SCREEN_SPACE_LABELS) return;
     if (!state.editing || state.objectEditorTab !== "pointers" || route?.connection?.key !== state.selectedProcessConnectionKey || route.connection.tagVisible !== true) return;
     const connection = route.connection;
     const text = String(connection.tagText || "").trim() || `${processConnectionEndpointText(connection,"source")} → ${processConnectionEndpointText(connection,"target")}`;
@@ -7891,7 +7900,7 @@
   }
 
   function label(text, x, y, z, color, options = {}) {
-    if (!state.showLabels || state.labelMode === "off") return { drawn: false, targetVisible: false };
+    if (!SCREEN_SPACE_LABELS || !state.showLabels || state.labelMode === "off") return { drawn: false, targetVisible: false };
     const labelKey = String(options.labelKey || text);
     const labelTime = Number(options.time) || state.lastFrameTime;
     const previousVisual = labelVisualStates.get(labelKey);
@@ -10773,6 +10782,55 @@
   // old outline pass made rear columns show through solid machines. Sorting both
   // object types together gives the expected result: rear columns are covered by
   // machinery and front columns remain visible without any see-through outline.
+  function drawWorldMachineLabels(machineEntries, time) {
+    if (!WORLD_MACHINE_LABELS || !state.showLabels || state.labelMode === "off") return;
+    if (typeof depthRenderer.addWorldLabel !== "function") return;
+    (machineEntries || []).forEach(({ machine, rendered, alpha }) => {
+      if (!machine || !rendered || alpha <= .15 || isFloorFeatureType(machine.type)) return;
+      if (machine.showLabel === false) return;
+      const text = machineLabelText(machine);
+      if (!text) return;
+      const anchor = localPoint(
+        rendered,
+        rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), 0, 100) / 100,
+        rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), 0, 100) / 100,
+        rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), 0, 100) / 100,
+      );
+      const x = anchor[0] + clamp(Number(machine.labelWorldOffsetX ?? 0), -80, 80);
+      const y = anchor[1] + Math.max(2.5, clamp(Number(machine.labelHeightOffset ?? 4), 0, 60));
+      const z = anchor[2] + clamp(Number(machine.labelWorldOffsetZ ?? 0), -80, 80);
+      const importance = machine.labelPriority || "automatic";
+      const profile = machineLabelProfile(machine);
+      const sizeMultiplier = clamp(Number(machine.labelSizePercent) || 100, 50, 250) / 100;
+      const baseHeight = importance === "major" || profile.rank >= 4
+        ? 4.6
+        : importance === "support" || profile.rank <= 1
+          ? 2.8
+          : 3.5;
+      const labelHeight = clamp(baseHeight * sizeMultiplier, 1.8, 8);
+      const borderColor = /^#[0-9a-f]{6}$/i.test(String(machine.labelLineColor || ""))
+        ? machine.labelLineColor
+        : colors.teal;
+      depthRenderer.addWorldLabel(`plant:world-label:${machine.instanceId}`, {
+        text,
+        position: [x, y, z],
+        height: labelHeight,
+        opacity: clamp(alpha, .25, 1),
+        textColor: machine.labelTextColor || "#ffffff",
+        backgroundColor: machine.labelBackgroundColor || "#132126",
+        borderColor,
+      });
+      depthRenderer.addLine?.(
+        anchor,
+        [x, y - labelHeight * .52, z],
+        borderColor,
+        Math.max(1, Number(machine.labelLineWidth) || 1.25),
+        clamp((Number(machine.labelLineOpacity) || 100) / 100, .15, 1),
+        { depthBias: -0.0002 },
+      );
+    });
+  }
+
   function drawSceneObjects(time, presentPhysicalScene = null) {
     const overlappingIds = state.editing ? overlapIds() : new Set();
     const machineEntries = visibleMachineEntries(time);
@@ -10866,11 +10924,10 @@
       });
     });
 
-    // Present the physical WebGL scene before drawing any 2D labels or process
-    // pointers. Necessary-mode overlays intentionally use the same camera
-    // projection but live on a different canvas. If an overlay ever throws or
-    // receives malformed saved data, it must not prevent the updated 3D camera
-    // frame from reaching the screen.
+    // World-space labels are part of the physical WebGL scene and are submitted
+    // before the frame is presented. They use real scene depth, so equipment can
+    // occlude them naturally. The old 2D canvas label layer remains disabled.
+    drawWorldMachineLabels(machineEntries, time);
     presentPhysicalScene?.();
 
     // Editor marks are UI overlays, so draw them after the physical scene.
@@ -10882,7 +10939,7 @@
     if (isTodayStage() && state.todayLabelMode === "necessary") {
       drawTodayProductionFlow(machineEntries, time);
     }
-    if (!isTodayStage() || isTodayOverview()) {
+    if (SCREEN_SPACE_LABELS && (!isTodayStage() || isTodayOverview())) {
       // Construction stages use each machine label's independent reveal/retire
       // window. Legacy layouts default to the original one-stage label behavior.
       const labelBudget = smartLabelBudget();

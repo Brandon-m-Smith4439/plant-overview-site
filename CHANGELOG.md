@@ -1,3 +1,12 @@
+## 0.13.39 - 2026-10-02
+
+- Added a true WebGL world-label renderer using textured Three.js planes positioned in plant coordinates and billboarded toward the active camera.
+- 3D machine labels are now submitted before the physical scene render, participate in the scene depth test, and can be naturally occluded by equipment.
+- Temporarily disabled every legacy 2D canvas machine label, compact process-step badge, and custom route-tag label so the new 3D label system can be reviewed without visual overlap.
+- Temporarily defaults the viewer to All / Full labels so every currently enabled machine label is visible through the new 3D system.
+- Preserved per-machine label text, colors, size percentage, world X/Z offsets, vertical lift, importance, and leader-line styling. A short depth-tested world leader now connects each 3D placard to its machine.
+- Kept the flowing production route lines themselves active; only their 2D text/badges are suppressed during this comparison pass.
+
 ## 0.13.38 - 2026-10-02
 
 - Reworked normal machine/object labels into stable world-anchored, camera-facing callouts. Their position is now derived from the owning object's 3D anchor plus saved world offsets instead of collision-driven screen-space slot switching.

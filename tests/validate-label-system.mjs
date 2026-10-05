@@ -142,3 +142,9 @@ assert.ok(plant.includes('data-label-field="labelTurnSpeedPercent"'), "3D label 
 assert.ok(plant.includes('data-label-check="labelTurnToCamera"'), "3D label settings must expose the slow-follow toggle.");
 assert.ok(threeRenderer.includes("wrapHalfTurn") && threeRenderer.includes("errorRatio") && threeRenderer.includes("maxSpeed"), "3D label yaw must use damped dynamic camera following.");
 assert.ok(threeRenderer.includes('context.createLinearGradient') && threeRenderer.includes('context.shadowColor = borderColor'), "3D billboard face should include polished depth/highlight styling.");
+
+
+assert.ok(plant.includes("for(let start=phase-period;start<metrics.total;start+=period)"), "World-route white highlights must travel from source toward destination.");
+assert.ok(threeRenderer.includes('WORLD_LABEL_FACE_REVISION = "v0.13.45-industrial-plate"'), "3D labels must use the v0.13.45 industrial face revision.");
+assert.ok(threeRenderer.includes('roundedRect(context, 18, 15, width - 36, 9, 4.5)') && threeRenderer.includes('context.arc(46, 67, 15'), "3D labels must include the luminous top rail and equipment beacon.");
+assert.ok(threeRenderer.includes('const edge = parseColor(options.backgroundColor || "#132126", 1);'), "3D label physical sides must use the dark background color instead of the bright accent color.");

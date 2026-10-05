@@ -182,6 +182,8 @@
       context.closePath();
     }
 
+    const WORLD_LABEL_FACE_REVISION = "v0.13.45-industrial-plate";
+
     function createWorldLabelTexture(options = {}) {
       const text = String(options.text || "Object").trim() || "Object";
       const textColor = String(options.textColor || "#ffffff");
@@ -189,57 +191,96 @@
       const borderColor = String(options.borderColor || "#52b7aa");
       const canvas = document.createElement("canvas");
       const measure = canvas.getContext("2d");
-      const fontSize = 52;
-      measure.font = `600 ${fontSize}px "Segoe UI", Arial, sans-serif`;
+      const fontSize = 58;
+      const fontWeight = options.fontWeight === "bold" ? 800 : options.fontWeight === "regular" ? 500 : 700;
+      measure.font = `${fontWeight} ${fontSize}px "Segoe UI", Arial, sans-serif`;
       const measured = Math.ceil(measure.measureText(text).width);
-      canvas.width = clamp(measured + 116, 256, 1400);
-      canvas.height = 112;
+      canvas.width = clamp(measured + 182, 320, 1500);
+      canvas.height = 128;
       const context = canvas.getContext("2d");
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      roundedRect(context, 4, 4, canvas.width - 8, canvas.height - 8, 20);
+      const width = canvas.width;
+      const height = canvas.height;
+      context.clearRect(0, 0, width, height);
+
+      // v0.13.45: an unmistakable industrial identification plate. The label
+      // keeps the user's colors, but gains a deep layered face, luminous top
+      // rail, equipment beacon, inner keyline and strong typography.
+      context.save();
+      context.shadowColor = "rgba(0,0,0,.62)";
+      context.shadowBlur = 18;
+      context.shadowOffsetY = 6;
+      roundedRect(context, 8, 8, width - 16, height - 16, 22);
       context.fillStyle = backgroundColor;
-      context.globalAlpha = .96;
+      context.globalAlpha = .985;
       context.fill();
-      context.globalAlpha = 1;
+      context.restore();
 
-      // v0.13.43: give the physical placard a more intentional industrial
-      // finish without making it look like a floating HUD element.
-      const sheen = context.createLinearGradient(0, 4, 0, canvas.height - 4);
-      sheen.addColorStop(0, "rgba(255,255,255,.16)");
-      sheen.addColorStop(.38, "rgba(255,255,255,.035)");
-      sheen.addColorStop(1, "rgba(0,0,0,.16)");
-      roundedRect(context, 8, 8, canvas.width - 16, canvas.height - 16, 17);
-      context.fillStyle = sheen;
+      const surface = context.createLinearGradient(0, 10, 0, height - 10);
+      surface.addColorStop(0, "rgba(255,255,255,.20)");
+      surface.addColorStop(.18, "rgba(255,255,255,.075)");
+      surface.addColorStop(.55, "rgba(0,0,0,.04)");
+      surface.addColorStop(1, "rgba(0,0,0,.32)");
+      roundedRect(context, 8, 8, width - 16, height - 16, 22);
+      context.fillStyle = surface;
       context.fill();
 
+      // A bright top rail makes the cards readable as one coherent label
+      // system even when the plant is viewed from far away.
       context.save();
       context.shadowColor = borderColor;
-      context.shadowBlur = 14;
-      context.lineWidth = 5;
+      context.shadowBlur = 20;
+      context.fillStyle = borderColor;
+      roundedRect(context, 18, 15, width - 36, 9, 4.5);
+      context.fill();
+      context.restore();
+
+      // Dark left equipment module.
+      roundedRect(context, 17, 31, 58, height - 48, 13);
+      context.fillStyle = "rgba(0,0,0,.30)";
+      context.fill();
+      context.lineWidth = 1.5;
+      context.strokeStyle = "rgba(255,255,255,.13)";
+      context.stroke();
+
+      // Glowing equipment beacon with a crisp white center.
+      context.save();
+      context.shadowColor = borderColor;
+      context.shadowBlur = 18;
       context.strokeStyle = borderColor;
-      roundedRect(context, 5, 5, canvas.width - 10, canvas.height - 10, 19);
+      context.lineWidth = 5;
+      context.beginPath();
+      context.arc(46, 67, 15, 0, Math.PI * 2);
+      context.stroke();
+      context.restore();
+      context.fillStyle = "rgba(255,255,255,.96)";
+      context.beginPath();
+      context.arc(46, 67, 5.5, 0, Math.PI * 2);
+      context.fill();
+
+      // Strong outside frame plus a finer inner keyline.
+      context.save();
+      context.shadowColor = borderColor;
+      context.shadowBlur = 18;
+      context.lineWidth = 6;
+      context.strokeStyle = borderColor;
+      roundedRect(context, 7, 7, width - 14, height - 14, 22);
       context.stroke();
       context.restore();
 
-      context.lineWidth = 4;
-      context.strokeStyle = borderColor;
-      roundedRect(context, 5, 5, canvas.width - 10, canvas.height - 10, 19);
-      context.stroke();
-
       context.lineWidth = 2;
-      context.strokeStyle = "rgba(255,255,255,.18)";
-      roundedRect(context, 14, 14, canvas.width - 28, canvas.height - 28, 13);
+      context.strokeStyle = "rgba(255,255,255,.25)";
+      roundedRect(context, 15, 15, width - 30, height - 30, 16);
       context.stroke();
 
+      // Bottom status rail gives the sign a clear baseline without adding text.
       context.fillStyle = borderColor;
-      roundedRect(context, 22, 23, 8, canvas.height - 46, 4);
+      roundedRect(context, 88, height - 24, 62, 5, 2.5);
       context.fill();
-      context.beginPath();
-      context.arc(39, canvas.height / 2, 5.5, 0, Math.PI * 2);
+      context.fillStyle = "rgba(255,255,255,.16)";
+      roundedRect(context, 157, height - 23, Math.max(18, width - 181), 3, 1.5);
       context.fill();
 
       context.fillStyle = textColor;
-      const fontWeight = options.fontWeight === "bold" ? 750 : options.fontWeight === "regular" ? 450 : 600;
       context.font = `${fontWeight} ${fontSize}px "Segoe UI", Arial, sans-serif`;
       context.textAlign = "left";
       context.textBaseline = "middle";
@@ -247,14 +288,22 @@
       if (glowStrength > 0) {
         context.save();
         context.shadowColor = textColor;
-        context.shadowBlur = 4 + glowStrength * .24;
-        context.globalAlpha = .55 + glowStrength * .004;
-        context.fillText(text, 50, canvas.height / 2 + 1, canvas.width - 72);
+        context.shadowBlur = 5 + glowStrength * .30;
+        context.globalAlpha = .60 + glowStrength * .0035;
+        context.fillText(text, 91, 67, width - 118);
         context.restore();
       }
-      // Draw one crisp pass over the halo so the letters stay readable even
-      // when the sign is small in the overview.
-      context.fillText(text, 50, canvas.height / 2 + 1, canvas.width - 72);
+
+      // A small dark shadow behind the crisp pass keeps white lettering legible
+      // over the highlight band while preserving the configured text color.
+      context.save();
+      context.shadowColor = "rgba(0,0,0,.72)";
+      context.shadowBlur = 5;
+      context.shadowOffsetY = 2;
+      context.fillText(text, 91, 67, width - 118);
+      context.restore();
+      context.fillText(text, 91, 67, width - 118);
+
       const texture = new THREE.CanvasTexture(canvas);
       texture.minFilter = THREE.LinearFilter;
       texture.magFilter = THREE.LinearFilter;
@@ -297,7 +346,9 @@
     }
 
     function worldLabelEdgeMaterial(options = {}) {
-      const edge = parseColor(options.borderColor || "#52b7aa", 1);
+      // Keep the physical side/backing dark so the luminous face frame reads as
+      // an accent rather than turning the entire sign into one bright block.
+      const edge = parseColor(options.backgroundColor || "#132126", 1);
       return new THREE.ShaderMaterial({
         uniforms: {
           u_viewProjection: viewProjection,
@@ -378,6 +429,7 @@
       entry.group.visible = true;
 
       const revision = [
+        WORLD_LABEL_FACE_REVISION,
         options.text,
         options.textColor || "",
         options.backgroundColor || "",
@@ -389,7 +441,7 @@
         const previous = entry.faceMaterial.uniforms.u_map.value;
         entry.faceMaterial.uniforms.u_map.value = createWorldLabelTexture(options);
         previous?.dispose?.();
-        const edge = parseColor(options.borderColor || "#52b7aa", 1);
+        const edge = parseColor(options.backgroundColor || "#132126", 1);
         entry.edgeMaterial.uniforms.u_color.value.set(edge[0], edge[1], edge[2], 1);
         entry.faceMaterial.needsUpdate = true;
         entry.revision = revision;

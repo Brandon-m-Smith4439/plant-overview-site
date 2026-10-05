@@ -1,3 +1,11 @@
+## 0.13.45 - 2026-10-05
+
+- Reversed the moving white highlights on the Today production routes so motion once again travels from each source machine toward its destination. The underlying world-space route geometry, stable physical width, depth occlusion, glow, and speed behavior are unchanged.
+- Gave the physical 3D machine billboards a clear visual overhaul instead of another subtle trim change: deeper layered face shading, a luminous full-width top rail, a dedicated left equipment module, glowing circular equipment beacon, stronger outer frame, crisp inner keyline, bottom status rail, heavier typography, and improved text shadow/glow treatment.
+- Darkened the physical billboard side/backing to the configured label background color so the bright route/label accent color reads as a deliberate frame instead of filling the whole sign edge.
+- Added an explicit billboard-face revision token so the new visual design is rebuilt immediately rather than allowing an existing retained label texture to survive with the prior face appearance.
+- Advanced the app and browser cache token to v0.13.45 and added regressions for both the corrected route direction and the redesigned billboard face.
+
 ## 0.13.44 - 2026-10-05
 
 - Completed the Today production-flow conversion to physical world-space WebGL ribbons. The route is now shown automatically on the Today stage regardless of the selected 3D billboard naming mode.

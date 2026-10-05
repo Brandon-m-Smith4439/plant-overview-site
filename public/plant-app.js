@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.44";
+  const APP_VERSION = "0.13.45";
 
   function editorProfileProtected() {
     try {
@@ -7664,7 +7664,9 @@
       const gapLength=style==="dotted"?5.6:style==="dashed"?6.6:8.8;
       const period=dashLength+gapLength;
       const phase=((animationTime/1000*speedFeetPerSecond)%period+period)%period;
-      for(let start=-phase;start<metrics.total;start+=period){
+      // Move the white highlight from the route source toward its destination.
+      // The previous world-space conversion advanced the pattern backward.
+      for(let start=phase-period;start<metrics.total;start+=period){
         const from=Math.max(0,start),to=Math.min(metrics.total,start+dashLength);if(to<=from)continue;
         const slice=worldRouteSlice(metrics,from,to);
         addWorldRouteRibbon(slice,Math.max(.12,coreWidth*.38),"#eaffff",opacity*.98,.045);

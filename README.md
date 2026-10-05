@@ -1,3 +1,7 @@
+## Version 0.13.45
+
+Version 0.13.45 keeps the new physical Today route system intact while correcting the moving white direction markers so they travel from source to destination again. The 3D machine billboards receive a much more visible industrial identification-plate design: a luminous top rail, left-side equipment beacon, layered dark face, stronger frame and keyline, bottom status rail, heavier text, and more deliberate glow/shadow treatment. The physical sign sides now stay dark so the configured accent color stands out around the face. A dedicated face-revision token forces retained labels to rebuild with the new appearance.
+
 ## Version 0.13.44
 
 Version 0.13.44 completes the stabilized Today route and 3D billboard update. Production-flow routes are now depth-tested world-space floor ribbons that appear automatically on Today, keep a consistent physical width and travel speed while the camera moves, and disappear naturally behind opaque equipment. Machine billboards remain attached to fixed plant coordinates but use damped Y-axis camera following: they turn slowly, accelerate when badly misaligned, and ease into the final readable angle instead of snapping. The billboard face treatment and Labels editor now reflect the physical 3D implementation, and the Standard Add menu again exposes Cutting, Filtration, and the full built-in machine/object set.

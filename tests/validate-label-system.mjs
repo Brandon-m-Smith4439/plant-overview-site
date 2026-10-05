@@ -110,7 +110,7 @@ assert.ok(threeRenderer.includes("back.rotation.y = Math.PI"), "Back-side label 
 assert.ok(threeRenderer.includes("Labels remain planted at one world position"), "3D billboards must keep a stable world position while their yaw follows the camera.");
 assert.ok(threeRenderer.includes("const cameraYaw = Number(currentView?.yaw) || 0;"), "3D billboards must derive their slow yaw target from camera heading.");
 assert.ok(!threeRenderer.includes("const pitch = Number(currentView?.pitch) || 0;\n      const cy = Math.cos(yaw);"), "3D billboards must not snap through full yaw/pitch billboarding.");
-assert.ok(threeRenderer.includes("shadowBlur = 5 + glowStrength * .30"), "3D sign text must include configurable glow.");
+assert.ok(threeRenderer.includes("shadowBlur = 3 + glowStrength * .16"), "3D sign text must include restrained configurable glow.");
 assert.ok(threeRenderer.includes("Math.pow(zoomFactor, .22)") && threeRenderer.includes("zoomMinimum") && threeRenderer.includes("zoomMaximum"), "3D labels must scale gently with zoom and clamp that response.");
 assert.ok(plant.includes('data-label-field="labelRotationY"') && plant.includes('data-label-field="labelDepthFeet"'), "Labels editor must expose fixed sign rotation and physical depth.");
 assert.ok(plant.includes('data-label-field="labelGlowPercent"'), "Labels editor must expose text glow.");
@@ -145,6 +145,6 @@ assert.ok(threeRenderer.includes('context.createLinearGradient') && threeRendere
 
 
 assert.ok(plant.includes("for(let start=phase-period;start<metrics.total;start+=period)"), "World-route white highlights must travel from source toward destination.");
-assert.ok(threeRenderer.includes('WORLD_LABEL_FACE_REVISION = "v0.13.45-industrial-plate"'), "3D labels must use the v0.13.45 industrial face revision.");
-assert.ok(threeRenderer.includes('roundedRect(context, 18, 15, width - 36, 9, 4.5)') && threeRenderer.includes('context.arc(46, 67, 15'), "3D labels must include the luminous top rail and equipment beacon.");
+assert.ok(threeRenderer.includes('WORLD_LABEL_FACE_REVISION = "v0.13.46-clean-industrial"'), "3D labels must use the v0.13.46 clean industrial face revision.");
+assert.ok(threeRenderer.includes('roundedRect(context, 20, 27, 5, height - 54, 2.5)') && !threeRenderer.includes('context.arc(46, 67, 15'), "3D labels must use the restrained single accent rail without the previous busy beacon/status treatment.");
 assert.ok(threeRenderer.includes('const edge = parseColor(options.backgroundColor || "#132126", 1);'), "3D label physical sides must use the dark background color instead of the bright accent color.");

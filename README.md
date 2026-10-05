@@ -1,3 +1,7 @@
+## Version 0.13.44
+
+Version 0.13.44 completes the stabilized Today route and 3D billboard update. Production-flow routes are now depth-tested world-space floor ribbons that appear automatically on Today, keep a consistent physical width and travel speed while the camera moves, and disappear naturally behind opaque equipment. Machine billboards remain attached to fixed plant coordinates but use damped Y-axis camera following: they turn slowly, accelerate when badly misaligned, and ease into the final readable angle instead of snapping. The billboard face treatment and Labels editor now reflect the physical 3D implementation, and the Standard Add menu again exposes Cutting, Filtration, and the full built-in machine/object set.
+
 ## Version 0.13.43
 
 Version 0.13.43 stabilizes the Today production-flow experience and advances the 3D billboard system. Today routes are always visible regardless of billboard text mode and now render as depth-tested world-space floor ribbons, so route thickness and animation speed remain stable while orbiting, zooming, or walking in first person and opaque machines correctly cover routes. Machine billboards keep a fixed world position but smoothly ease their yaw toward the camera using a distance-to-target response instead of snapping. The signs also receive a more polished physical face treatment and the Labels editor now exposes the settings that actually control the 3D implementation. The Standard Add menu once again includes Cutting and Filtration alongside all other built-in plant objects.

@@ -625,6 +625,10 @@
           if (mesh?.material) mesh.material.uniformsNeedUpdate = true;
         });
       });
+      worldLabels.forEach((entry) => {
+        if (entry?.faceMaterial) entry.faceMaterial.uniformsNeedUpdate = true;
+        if (entry?.edgeMaterial) entry.edgeMaterial.uniformsNeedUpdate = true;
+      });
     }
 
     function beginFrame(nextWidth, nextHeight, project, view = {}) {
@@ -645,7 +649,7 @@
       refreshViewProjection(view);
       retained.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       templates.forEach((entry) => { entry.used = false; });
-      instanceBatches.forEach((entry) => { entry.used = false; entry.group.visible = false; });
+      instanceBatches.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });
       geometryInstanceBatches.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       worldLabels.forEach((entry) => { entry.used = false; entry.group.visible = false; });
       resetRecorder(transient);

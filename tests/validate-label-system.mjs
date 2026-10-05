@@ -110,3 +110,18 @@ assert.ok(threeRenderer.includes("Math.pow(zoomFactor, .22)") && threeRenderer.i
 assert.ok(plant.includes('data-label-field="labelRotationY"') && plant.includes('data-label-field="labelDepthFeet"'), "Labels editor must expose fixed sign rotation and physical depth.");
 assert.ok(plant.includes('data-label-field="labelGlowPercent"'), "Labels editor must expose text glow.");
 assert.ok(plant.includes('data-label-field="labelZoomMinPercent"') && plant.includes('data-label-field="labelZoomMaxPercent"'), "Labels editor must expose zoom scaling limits.");
+
+
+assert.ok(
+  threeRenderer.includes("instanceBatches.forEach((entry) => { entry.used = false; entry.mesh.visible = false; });"),
+  "Retained instance batches must hide their mesh at beginFrame; referencing a nonexistent group freezes camera, zoom, and stage redraws."
+);
+assert.ok(
+  !threeRenderer.includes("instanceBatches.forEach((entry) => { entry.used = false; entry.group.visible = false; });"),
+  "Retained instance batches must never reference entry.group because instance batch entries only own entry.mesh."
+);
+assert.ok(
+  threeRenderer.includes("if (entry?.faceMaterial) entry.faceMaterial.uniformsNeedUpdate = true;") &&
+  threeRenderer.includes("if (entry?.edgeMaterial) entry.edgeMaterial.uniformsNeedUpdate = true;"),
+  "World-label shader materials must refresh their shared view-projection uniforms when the camera moves."
+);

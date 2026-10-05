@@ -1,3 +1,11 @@
+## 0.13.42 - 2026-10-05
+
+- Fixed a retained-renderer runtime crash introduced with the physical 3D label update. The frame reset path was incorrectly treating instanced machine/column batches as groups and reading `entry.group.visible`; those entries only own `entry.mesh`. The exception stopped redraws after the initial frame, which made orbiting, panning, wheel zoom, stage changes, and Today appear completely frozen.
+- Restored the correct `entry.mesh.visible` frame-reset path for instanced geometry.
+- Added explicit view-projection uniform refreshes for the new 3D label face and edge shader materials so fixed world signs continue to track camera movement correctly without rotating toward the camera.
+- Added regression checks for the exact instance-batch ownership error so this freeze cannot silently return.
+- Bumped the browser release token with the project version so production loads the repaired renderer immediately.
+
 ## 0.13.41 - 2026-10-02
 
 - Reworked the world-space machine labels from camera-facing billboards into fixed-orientation physical 3D signs. Orbiting or moving the plant camera no longer rotates the signs to follow the viewer.

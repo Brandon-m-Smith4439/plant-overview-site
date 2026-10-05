@@ -1,3 +1,7 @@
+## Version 0.13.42
+
+Version 0.13.42 repairs the plant-view freeze introduced by the v0.13.41 physical-label renderer. A frame-reset line accidentally referenced `entry.group` on instanced geometry entries that only contain `entry.mesh`, causing the render loop to throw after the first visible frame. Camera orbit, pan, zoom, stage navigation, and Today now redraw normally again. The 3D label face/edge shader uniforms are also explicitly refreshed from the shared view-projection matrix so fixed world signs stay visually attached to the moving scene.
+
 ## Version 0.13.41
 
 Version 0.13.41 turns the experimental world labels into more physical plant signage. Each machine label is now a shallow 3D sign with a solid edge and two independently oriented faces, so text remains readable from either side without mirroring. The sign's world position and Y rotation stay fixed while the camera orbits instead of continuously billboarding toward the viewer. Text receives a configurable glow plus a crisp foreground pass, and zooming changes label size only gently within configurable minimum/maximum limits. The Labels editor exposes fixed rotation, depth, glow, and zoom limits alongside the existing world offsets and vertical lift.

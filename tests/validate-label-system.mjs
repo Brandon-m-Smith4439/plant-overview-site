@@ -85,7 +85,9 @@ console.log("Stage-specific and Today production-flow label regression checks pa
 const threeRenderer = await readFile(new URL("../public/three-depth-scene-renderer.js", import.meta.url), "utf8");
 assert.ok(threeRenderer.includes("function addWorldLabel"), "Three retained renderer must expose a true world-label primitive.");
 assert.ok(threeRenderer.includes("depthTest: true") && threeRenderer.includes("u_viewProjection * modelMatrix"), "3D labels must participate in scene depth and world transforms.");
-assert.ok(plant.includes("drawWorldMachineLabels(machineEntries, time);\n    presentPhysicalScene?.();"), "3D labels must be submitted before the physical WebGL frame is presented.");
+const worldLabelSubmit = plant.indexOf("drawWorldMachineLabels(machineEntries, time);");
+const physicalPresent = plant.indexOf("presentPhysicalScene?.();", worldLabelSubmit);
+assert.ok(worldLabelSubmit >= 0 && physicalPresent > worldLabelSubmit, "3D labels must be submitted before the physical WebGL frame is presented.");
 assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS || !state.showLabels"), "Legacy normal machine labels must stay off in comparison mode.");
 assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS) return;"), "Legacy process-step and route-tag canvas labels must stay off in comparison mode.");
 
@@ -105,8 +107,9 @@ assert.ok(
 assert.ok(threeRenderer.includes("new THREE.BoxGeometry(1, 1, 1)"), "3D labels must have a real solid sign edge/backing.");
 assert.ok(threeRenderer.includes("group.add(backing, front, back)"), "3D labels must contain distinct front and back readable faces.");
 assert.ok(threeRenderer.includes("back.rotation.y = Math.PI"), "Back-side label text must be oriented for normal reading instead of mirrored.");
-assert.ok(threeRenderer.includes("Orientation is intentionally independent from the camera"), "3D label rotation must be fixed in plant space instead of billboarding with camera yaw/pitch.");
-assert.ok(!threeRenderer.includes("const yaw = Number(currentView?.yaw) || 0;\n      const pitch = Number(currentView?.pitch) || 0;\n      const cy = Math.cos(yaw);"), "World labels must not rotate to follow the camera.");
+assert.ok(threeRenderer.includes("Labels remain planted at one world position"), "3D billboards must keep a stable world position while their yaw follows the camera.");
+assert.ok(threeRenderer.includes("const cameraYaw = Number(currentView?.yaw) || 0;"), "3D billboards must derive their slow yaw target from camera heading.");
+assert.ok(!threeRenderer.includes("const pitch = Number(currentView?.pitch) || 0;\n      const cy = Math.cos(yaw);"), "3D billboards must not snap through full yaw/pitch billboarding.");
 assert.ok(threeRenderer.includes("shadowBlur = 4 + glowStrength * .24"), "3D sign text must include configurable glow.");
 assert.ok(threeRenderer.includes("Math.pow(zoomFactor, .22)") && threeRenderer.includes("zoomMinimum") && threeRenderer.includes("zoomMaximum"), "3D labels must scale gently with zoom and clamp that response.");
 assert.ok(plant.includes('data-label-field="labelRotationY"') && plant.includes('data-label-field="labelDepthFeet"'), "Labels editor must expose fixed sign rotation and physical depth.");

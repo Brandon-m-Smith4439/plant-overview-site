@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.38";
+  const APP_VERSION = "0.13.44";
 
   function editorProfileProtected() {
     try {
@@ -819,6 +819,8 @@
       labelWorldOffsetX: clamp(Number.isFinite(Number(machine.labelWorldOffsetX)) ? Number(machine.labelWorldOffsetX) : 0, -80, 80),
       labelWorldOffsetZ: clamp(Number.isFinite(Number(machine.labelWorldOffsetZ)) ? Number(machine.labelWorldOffsetZ) : 0, -80, 80),
       labelRotationY: clamp(Number.isFinite(Number(machine.labelRotationY)) ? Number(machine.labelRotationY) : 0, -180, 180),
+      labelTurnToCamera: machine.labelTurnToCamera !== false,
+      labelTurnSpeedPercent: clamp(Number.isFinite(Number(machine.labelTurnSpeedPercent)) ? Number(machine.labelTurnSpeedPercent) : 100, 25, 200),
       labelDepthFeet: clamp(Number.isFinite(Number(machine.labelDepthFeet)) ? Number(machine.labelDepthFeet) : .35, .1, 2),
       labelGlowPercent: clamp(Number.isFinite(Number(machine.labelGlowPercent)) ? Number(machine.labelGlowPercent) : 55, 0, 100),
       labelZoomMinPercent: clamp(Number.isFinite(Number(machine.labelZoomMinPercent)) ? Number(machine.labelZoomMinPercent) : 88, 70, 100),
@@ -4390,12 +4392,12 @@
         </section>
         <section data-object-editor-panel="labels" class="object-editor-panel label-editor-panel" hidden>
         <fieldset class="label-controls">
-          <legend>Layout label</legend>
+          <legend>3D machine billboard</legend>
           <p data-label-source-summary>Select one object to edit its label.</p>
           <label class="wide">Label text<input type="text" data-label-field="labelText" data-needs-selection placeholder="Uses the machine name"></label>
           <label class="wide">Abbreviated label<input type="text" data-label-field="labelAbbreviation" data-needs-selection placeholder="Automatically shortened when left blank"></label>
           <div class="today-label-control">
-            <div><strong>Today Overview · Necessary mode</strong><span>Control this normal machine/object label independently. Turning it off does not hide process pointers or route tags.</span></div>
+            <div><strong>Today Overview · Necessary labels</strong><span>This controls whether this 3D machine billboard is included in Necessary label mode. The glowing production route remains visible automatically on Today.</span></div>
             <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show this machine/object label in Necessary mode</label>
           </div>
           <fieldset class="label-pointer-controls process-step-label-controls">
@@ -4420,8 +4422,8 @@
           </div>
           <p class="label-help">Label timing controls the construction-stage views independently from when the machine itself appears. Today Overview still follows the selected Today label mode.</p>
           <fieldset class="label-pointer-controls">
-            <legend>Machine-label position</legend>
-            <p>These controls place a physical double-sided 3D sign at a stable world offset. Its position and rotation stay fixed while the camera orbits; both faces remain readable. Process routes remain completely separate.</p>
+            <legend>3D billboard placement and behavior</legend>
+            <p>The billboard stays attached to the machine in 3D space. It is double-sided, has physical depth, and slowly eases toward the camera instead of snapping to it. Its world position never jumps around as the camera moves.</p>
             <div class="label-format-grid">
               <label>Anchor X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
               <label>Anchor Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
@@ -4429,25 +4431,23 @@
               <label>Lift Y (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5"></label>
               <label>World X offset (ft)<input type="number" data-label-field="labelWorldOffsetX" data-needs-selection min="-80" max="80" step="0.5"></label>
               <label>World Z offset (ft)<input type="number" data-label-field="labelWorldOffsetZ" data-needs-selection min="-80" max="80" step="0.5"></label>
-              <label>Fixed Y rotation (°)<input type="number" data-label-field="labelRotationY" data-needs-selection min="-180" max="180" step="5"></label>
+              <label>Facing offset (°)<input type="number" data-label-field="labelRotationY" data-needs-selection min="-180" max="180" step="5"></label>
+              <label>Camera follow speed (%)<input type="number" data-label-field="labelTurnSpeedPercent" data-needs-selection min="25" max="200" step="5"></label>
               <label>Sign depth (ft)<input type="number" data-label-field="labelDepthFeet" data-needs-selection min="0.1" max="2" step="0.05"></label>
               <label>Text glow (%)<input type="number" data-label-field="labelGlowPercent" data-needs-selection min="0" max="100" step="5"></label>
               <label>Zoom min size (%)<input type="number" data-label-field="labelZoomMinPercent" data-needs-selection min="70" max="100" step="1"></label>
               <label>Zoom max size (%)<input type="number" data-label-field="labelZoomMaxPercent" data-needs-selection min="100" max="140" step="1"></label>
               <label>Importance<select data-label-field="labelPriority" data-needs-selection><option value="automatic">Automatic</option><option value="major">Major equipment</option><option value="normal">Normal machine</option><option value="support">Support / cart / rack</option></select></label>
             </div>
+            <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelTurnToCamera" data-needs-selection> Slowly turn billboard toward the camera</label>
           </fieldset>
           <fieldset class="label-pointer-controls">
-            <legend>Machine-label leader</legend>
+            <legend>3D leader / frame accent</legend>
             <div class="label-format-grid">
               <label>Color<input type="color" data-label-field="labelLineColor" data-needs-selection></label>
               <label>Width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25"></label>
               <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5"></label>
-              <label>Pattern<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
-              <label>Shape<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Elbow</option></select></label>
-              <label>Tag connection<select data-label-field="labelLeaderSide" data-needs-selection><option value="auto">Auto</option><option value="top">Top</option><option value="bottom">Bottom</option><option value="left">Left</option><option value="right">Right</option></select></label>
-              <label>Machine end<select data-label-field="labelTargetStyle" data-needs-selection><option value="dot">Dot</option><option value="ring">Ring</option><option value="arrow">Arrow</option><option value="none">None</option></select></label>
-              <label>End size<input type="number" data-label-field="labelTargetSize" data-needs-selection min="1" max="12" step="0.5"></label>
+              <span class="label-help">The accent color is shared by the billboard frame and its 3D leader. Width and opacity control the leader only.</span>
             </div>
           </fieldset>
           <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
@@ -4457,7 +4457,7 @@
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">Machine labels are physical double-sided 3D signs. They stay fixed in plant space, use a shallow solid edge, glow their text, and only scale gently within the configured zoom limits. Production-flow pointer geometry is edited separately in the Pointers tab.</p>
+          <p class="label-help">These are physical double-sided 3D billboards, not screen-space tags. Position stays locked to the machine; yaw follows the camera with damped motion, text glow and physical depth are real sign properties, and zoom response is clamped. Process-route geometry is edited separately in Pointers.</p>
         </fieldset>
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
@@ -4517,7 +4517,7 @@
             <div class="process-pointer-grid process-flow-behavior-grid">
               <label>Curve / rounding (%)<input type="number" data-process-connection-field="flowCurvePercent" min="0" max="100" step="5"></label>
               <label>Floor height (ft)<input type="number" data-process-connection-field="flowFloorHeight" min="0.02" max="6" step="0.02"></label>
-              <label>Flow speed<input type="number" data-process-connection-field="flowSpeed" min="0" max="180" step="2"></label>
+              <label>Flow speed (stable world rate)<input type="number" data-process-connection-field="flowSpeed" min="0" max="180" step="2"></label>
               <label>Glow strength (%)<input type="number" data-process-connection-field="flowGlow" min="0" max="200" step="5"></label>
             </div>
             <p class="process-route-tag-preview">S / E can still be dragged far outside the machines. Numbered pivot handles use exact X / Z coordinates and can also be dragged directly.</p>
@@ -4526,7 +4526,7 @@
             <legend>7 · Flow appearance</legend>
             <div class="process-pointer-grid">
               <label>Color<input type="color" data-process-connection-field="color"></label>
-              <label>Core width<input type="number" data-process-connection-field="width" min="0.5" max="12" step="0.25"></label>
+              <label>Core width (world scale)<input type="number" data-process-connection-field="width" min="0.5" max="12" step="0.25"></label>
               <label>Opacity (%)<input type="number" data-process-connection-field="opacity" min="5" max="100" step="5"></label>
               <label>Flow pattern<select data-process-connection-field="style"><option value="solid">Continuous glow</option><option value="dashed">Moving segments</option><option value="dotted">Moving dots</option></select></label>
               <label>Corner style<select data-process-connection-field="shape"><option value="straight">Rounded / arched</option><option value="elbow">Sharp turns</option></select></label>
@@ -4636,8 +4636,10 @@
             <input type="text" id="new-machine-name" placeholder="Optional custom name">
             <div><select id="new-machine-type">
               <optgroup label="Photo-refined machines">
+                <option value="cutting">Barefoot cutting tables</option>
                 <option value="kodiak">KODIAK 10-45 polisher</option>
                 <option value="waterjet">SQ4020 waterjet</option>
+                <option value="filtration">Waterjet pump & filtration</option>
                 <option value="denver">Denver Surface CNC</option>
                 <option value="washer">Zafferani glass washer</option>
                 <option value="furnace">Tempering furnace</option>
@@ -5191,6 +5193,9 @@
         } else if (field === "labelRotationY") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelRotationY = clamp(value, -180, 180);
+        } else if (field === "labelTurnSpeedPercent") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelTurnSpeedPercent = clamp(value, 25, 200);
         } else if (field === "labelDepthFeet") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelDepthFeet = clamp(value, .1, 2);
@@ -6055,13 +6060,13 @@
     labelOptions.className = "label-options-popover";
     labelOptions.hidden = true;
     labelOptions.innerHTML = `
-      <div class="label-options-heading"><strong>Today labels</strong><span>Construction stages keep their stage-specific full labels. Choose how the final Today overview is labeled.</span></div>
+      <div class="label-options-heading"><strong>Today view</strong><span>The glowing glass-flow route is always on for Today. These buttons only choose which 3D machine billboards are shown and how they are named.</span></div>
       <div class="label-mode-options today-label-mode-options" role="group" aria-label="Today overview label style">
         <button type="button" data-label-display="necessary">Necessary</button>
         <button type="button" data-label-display="abbreviated">Abbreviated</button>
         <button type="button" data-label-display="full">Full names</button>
       </div>
-      <span class="label-options-note">Necessary follows the glass flow: Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.</span>
+      <span class="label-options-note">Route: Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack. Route width and motion use plant-world units so overview and first-person movement stay stable.</span>
       <label class="roof-overview-toggle"><input type="checkbox" data-roof-overview> Show roof in overview</label>
       <span class="label-options-note">Roof remains available in first person when enabled in the editor.</span>
     `;
@@ -7568,10 +7573,105 @@
     drawProcessFlowHandle(route.endWorld,"E",route.color,pixelScale,{strong:true});
   }
 
+  function worldRouteSegmentPolygon(start,end,width,yOffset=0){
+    const dx=end[0]-start[0],dz=end[2]-start[2],length=Math.hypot(dx,dz);if(length<.001)return null;
+    const half=Math.max(.02,width)/2,nx=-dz/length*half,nz=dx/length*half;
+    return[
+      [start[0]+nx,start[1]+yOffset,start[2]+nz],
+      [end[0]+nx,end[1]+yOffset,end[2]+nz],
+      [end[0]-nx,end[1]+yOffset,end[2]-nz],
+      [start[0]-nx,start[1]+yOffset,start[2]-nz],
+    ];
+  }
+
+  function addWorldRouteRibbon(path,width,color,alpha,yOffset=0){
+    if(typeof depthRenderer.addPolygon!=="function")return;
+    for(let index=0;index<(path?.length||0)-1;index+=1){
+      const polygon=worldRouteSegmentPolygon(path[index],path[index+1],width,yOffset);
+      if(polygon)depthRenderer.addPolygon(polygon,color,alpha,null,1,{transparent:true});
+    }
+  }
+
+  function worldRouteMetrics(path){
+    const segments=[];let total=0;
+    for(let index=0;index<(path?.length||0)-1;index+=1){
+      const start=path[index],end=path[index+1],length=floorPointDistance(start,end);
+      if(length<.001)continue;
+      segments.push({start,end,length,from:total,to:total+length});total+=length;
+    }
+    return{segments,total};
+  }
+
+  function worldRoutePointAt(metrics,distance){
+    const value=clamp(distance,0,metrics.total);
+    const segment=metrics.segments.find((item)=>value<=item.to+.0001)||metrics.segments[metrics.segments.length-1];
+    if(!segment)return null;
+    const t=clamp((value-segment.from)/Math.max(.001,segment.length),0,1);
+    return[
+      segment.start[0]+(segment.end[0]-segment.start[0])*t,
+      segment.start[1]+(segment.end[1]-segment.start[1])*t,
+      segment.start[2]+(segment.end[2]-segment.start[2])*t,
+    ];
+  }
+
+  function worldRouteSlice(metrics,startDistance,endDistance){
+    if(!metrics?.segments?.length||endDistance<=startDistance)return[];
+    const start=clamp(startDistance,0,metrics.total),end=clamp(endDistance,0,metrics.total);
+    if(end<=start)return[];
+    const points=[worldRoutePointAt(metrics,start)];
+    metrics.segments.forEach((segment)=>{if(segment.to>start+.001&&segment.to<end-.001)points.push(segment.end);});
+    points.push(worldRoutePointAt(metrics,end));
+    return points.filter(Boolean);
+  }
+
+  function drawWorldProcessEndMarker(route,width,opacity){
+    const connection=route?.connection,style=["arrow","dot","ring","none"].includes(connection?.endStyle)?connection.endStyle:"none";if(style==="none")return;
+    const path=route.worldPath||[];if(path.length<2)return;
+    const end=path[path.length-1],previous=path[path.length-2],dx=end[0]-previous[0],dz=end[2]-previous[2],length=Math.hypot(dx,dz);if(length<.001)return;
+    const ux=dx/length,uz=dz/length,nx=-uz,nz=ux,size=Math.max(width*2.4,clamp(Number(connection.endSize)||3.2,1,14)*.22),y=.035;
+    if(style==="arrow"){
+      depthRenderer.addPolygon?.([
+        [end[0],end[1]+y,end[2]],
+        [end[0]-ux*size+nx*size*.55,end[1]+y,end[2]-uz*size+nz*size*.55],
+        [end[0]-ux*size-nx*size*.55,end[1]+y,end[2]-uz*size-nz*size*.55],
+      ],route.color,opacity,null,1,{transparent:true});
+      return;
+    }
+    const radius=style==="dot"?size*.55:size*.7,points=[];
+    for(let index=0;index<16;index+=1){const angle=index/16*Math.PI*2;points.push([end[0]+Math.cos(angle)*radius,end[1]+y,end[2]+Math.sin(angle)*radius]);}
+    depthRenderer.addPolygon?.(points,route.color,style==="ring"?opacity*.55:opacity,null,1,{transparent:true});
+  }
+
   function drawFloorProcessFlow(fromEntry,toEntry,connection,time){
-    const route=processRouteTagDescriptor(fromEntry,toEntry,connection);if(!route)return null;const projectedSegments=projectedProcessFlowSegments(route.worldPath);if(!projectedSegments.length)return route;
-    const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width),opacity=clamp(Number(connection.opacity)||100,5,100)/100,width=clamp(Number(connection.width)||1.65,.5,12)*pixelScale*(state.cameraMode==="walk"?1.15:1),glow=clamp(Number(connection.flowGlow??100),0,200)/100,speed=clamp(Number(connection.flowSpeed??42),0,180),style=["solid","dashed","dotted"].includes(connection.style)?connection.style:"solid",animationTime=effectiveAnimationTime(time),dashPattern=style==="dotted"?[Math.max(1.5*pixelScale,width*.45),13*pixelScale]:style==="dashed"?[18*pixelScale,15*pixelScale]:[13*pixelScale,27*pixelScale],dashTravel=animationTime*speed/1000*pixelScale,editingThisConnection=state.editing&&state.objectEditorTab==="pointers"&&connection.key===state.selectedProcessConnectionKey;
-    ctx.save();ctx.lineCap="round";ctx.lineJoin="round";projectedSegments.forEach((segment)=>{if(editingThisConnection){traceProjectedProcessFlow(segment);ctx.shadowBlur=0;ctx.setLineDash([]);ctx.globalAlpha=.88;ctx.strokeStyle="rgba(255,255,255,.96)";ctx.lineWidth=Math.max(width+9*pixelScale,10*pixelScale);ctx.stroke();}traceProjectedProcessFlow(segment);ctx.setLineDash([]);ctx.globalAlpha=opacity*(.20+glow*.08);ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width+(5+glow*4)*pixelScale,width*2.4);ctx.shadowColor=route.color;ctx.shadowBlur=(10+glow*13)*pixelScale;ctx.stroke();traceProjectedProcessFlow(segment);ctx.shadowBlur=0;ctx.globalAlpha=opacity*.68;ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width+2.3*pixelScale,2.5*pixelScale);ctx.stroke();traceProjectedProcessFlow(segment);ctx.globalAlpha=opacity*.96;ctx.strokeStyle=route.color;ctx.lineWidth=Math.max(width,1.4*pixelScale);ctx.stroke();traceProjectedProcessFlow(segment);ctx.setLineDash(dashPattern);ctx.lineDashOffset=-dashTravel;ctx.globalAlpha=opacity*.98;ctx.strokeStyle="#eaffff";ctx.lineWidth=Math.max(1.25*pixelScale,width*.42);ctx.shadowColor="#d8ffff";ctx.shadowBlur=(4+glow*4)*pixelScale;ctx.stroke();});ctx.restore();drawProcessFlowEndMarker(route,projectedSegments,pixelScale);drawProcessFlowEditHandles(route,pixelScale);return route;
+    const route=processRouteTagDescriptor(fromEntry,toEntry,connection);if(!route?.worldPath?.length)return route;
+    const opacity=clamp(Number(connection.opacity)||100,5,100)/100;
+    const coreWidth=clamp(Number(connection.width)||1.65,.5,12)*.42;
+    const glow=clamp(Number(connection.flowGlow??100),0,200)/100;
+    const animationTime=effectiveAnimationTime(time);
+    const speedFeetPerSecond=clamp(Number(connection.flowSpeed??42),0,180)*.12;
+    const style=["solid","dashed","dotted"].includes(connection.style)?connection.style:"solid";
+
+    // Physical floor ribbons use world units. Camera motion changes only the
+    // view, not route thickness or animation velocity. The depth buffer hides
+    // route sections naturally when opaque machines are in front of them.
+    addWorldRouteRibbon(route.worldPath,coreWidth*(2.5+glow*.9),route.color,opacity*(.08+glow*.055),-.015);
+    addWorldRouteRibbon(route.worldPath,coreWidth*1.55,route.color,opacity*.34,.005);
+    addWorldRouteRibbon(route.worldPath,coreWidth,route.color,opacity*.88,.018);
+
+    const metrics=worldRouteMetrics(route.worldPath);
+    if(metrics.total>.01&&speedFeetPerSecond>0){
+      const dashLength=style==="dotted"?1.35:style==="dashed"?4.5:3.4;
+      const gapLength=style==="dotted"?5.6:style==="dashed"?6.6:8.8;
+      const period=dashLength+gapLength;
+      const phase=((animationTime/1000*speedFeetPerSecond)%period+period)%period;
+      for(let start=-phase;start<metrics.total;start+=period){
+        const from=Math.max(0,start),to=Math.min(metrics.total,start+dashLength);if(to<=from)continue;
+        const slice=worldRouteSlice(metrics,from,to);
+        addWorldRouteRibbon(slice,Math.max(.12,coreWidth*.38),"#eaffff",opacity*.98,.045);
+      }
+    }
+    drawWorldProcessEndMarker(route,coreWidth,opacity);
+    return route;
   }
 
   function processStepNumber(role){return PROCESS_STEP_NUMBER_BY_ROLE[String(role||"")]||null;}
@@ -7671,20 +7771,26 @@
     labelRects.push(paddedLabelRectangle(box,3*pixelScale));
   }
 
-  function processFlowAnimationActive(){if(state.animationsPaused||!isTodayStage()||state.todayLabelMode!=="necessary")return false;return Object.values(state.processConnections||{}).some((connection)=>connection?.visible!==false&&clamp(Number(connection.flowSpeed??42),0,180)>0);}
+  function processFlowAnimationActive(){if(state.animationsPaused||!isTodayStage())return false;return Object.values(state.processConnections||{}).some((connection)=>connection?.visible!==false&&clamp(Number(connection.flowSpeed??42),0,180)>0);}
 
   function drawTodayProductionFlow(machineEntries,time){
     const entriesById=buildTodayProcessObjectEntries(machineEntries,time),routes=[];
     Object.values(state.processConnections||{}).sort((first,second)=>processConnectionDisplayName(first).localeCompare(processConnectionDisplayName(second))).forEach((connection)=>{if(connection?.visible===false)return;const fromEntry=entriesById.get(connection.sourceId),toEntry=entriesById.get(connection.targetId);if(!fromEntry||!toEntry)return;const route=drawFloorProcessFlow(fromEntry,toEntry,connection,time);if(route)routes.push(route);});
-    // Protect every currently visible machine plus persistent process endpoints.
-    // This keeps compact process labels off equipment as the camera moves.
-    const protectedMachineRects=state.cameraMode==="walk"?[]:[
-      ...(machineEntries||[]),
-      ...entriesById.values(),
-    ].map((entry)=>processStepMachineRect(entry,3)).filter(Boolean);
-    collectProcessStepNodes(entriesById,routes).forEach((node)=>drawProcessStepLabel(node,protectedMachineRects));
-    routes.forEach(drawSelectedCustomRouteTag);
-    return entriesById;
+    return{entriesById,routes};
+  }
+
+  function drawTodayProductionFlowOverlay(flow){
+    if(!flow)return;
+    const {entriesById,routes}=flow;
+    if(state.editing&&state.objectEditorTab==="pointers"){
+      const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width);
+      routes.forEach((route)=>drawProcessFlowEditHandles(route,pixelScale));
+    }
+    if(SCREEN_SPACE_LABELS){
+      const protectedMachineRects=state.cameraMode==="walk"?[]:[...entriesById.values()].map((entry)=>processStepMachineRect(entry,3)).filter(Boolean);
+      collectProcessStepNodes(entriesById,routes).forEach((node)=>drawProcessStepLabel(node,protectedMachineRects));
+      routes.forEach(drawSelectedCustomRouteTag);
+    }
   }
 
   function rectanglesIntersect(first, second) {
@@ -10814,7 +10920,9 @@
     (machineEntries || []).forEach(({ machine, rendered, alpha }) => {
       if (!machine || !rendered || alpha <= .15 || isFloorFeatureType(machine.type)) return;
       if (machine.showLabel === false) return;
-      const text = machineLabelText(machine);
+      const profile = machineLabelProfile(machine);
+      if (isTodayStage() && state.todayLabelMode === "necessary" && machine.labelShowToday !== true) return;
+      const text = displayMachineLabel(machine, profile);
       if (!text) return;
       const anchor = localPoint(
         rendered,
@@ -10826,7 +10934,6 @@
       const y = anchor[1] + Math.max(2.5, clamp(Number(machine.labelHeightOffset ?? 4), 0, 60));
       const z = anchor[2] + clamp(Number(machine.labelWorldOffsetZ ?? 0), -80, 80);
       const importance = machine.labelPriority || "automatic";
-      const profile = machineLabelProfile(machine);
       const sizeMultiplier = clamp(Number(machine.labelSizePercent) || 100, 50, 250) / 100;
       const baseHeight = importance === "major" || profile.rank >= 4
         ? 4.6
@@ -10848,7 +10955,10 @@
         height: labelHeight,
         depth: clamp(Number(machine.labelDepthFeet ?? .35), .1, 2),
         rotationY: clamp(Number(machine.labelRotationY ?? 0), -180, 180),
+        turnToCamera: machine.labelTurnToCamera !== false,
+        turnSpeedPercent: clamp(Number(machine.labelTurnSpeedPercent ?? 100), 25, 200),
         glowStrength: clamp(Number(machine.labelGlowPercent ?? 55), 0, 100),
+        fontWeight: machine.labelFontWeight || "semibold",
         zoomFactor,
         zoomMinPercent: clamp(Number(machine.labelZoomMinPercent ?? 88), 70, 100),
         zoomMaxPercent: clamp(Number(machine.labelZoomMaxPercent ?? 112), 100, 140),
@@ -10961,21 +11071,23 @@
       });
     });
 
+    // Today production routes are physical world-space floor geometry. Submit
+    // them before the scene is presented so the depth buffer lets machines hide
+    // route sections correctly.
+    const todayProductionFlow = isTodayStage() ? drawTodayProductionFlow(machineEntries, time) : null;
+
     // World-space labels are part of the physical WebGL scene and are submitted
-    // before the frame is presented. They use real scene depth, so equipment can
-    // occlude them naturally. The old 2D canvas label layer remains disabled.
+    // before the frame is presented.
     drawWorldMachineLabels(machineEntries, time);
+    state.visibleAnimationsActive = state.visibleAnimationsActive || Boolean(depthRenderer.worldLabelsAnimating?.());
     presentPhysicalScene?.();
 
-    // Editor marks are UI overlays, so draw them after the physical scene.
+    // Editor marks and route editing handles are UI overlays.
     machineEntries.forEach(({ machine, rendered }) => {
       drawOverlapIndicator(machine, overlappingIds);
       drawSelection(rendered);
     });
-
-    if (isTodayStage() && state.todayLabelMode === "necessary") {
-      drawTodayProductionFlow(machineEntries, time);
-    }
+    drawTodayProductionFlowOverlay(todayProductionFlow);
     if (SCREEN_SPACE_LABELS && (!isTodayStage() || isTodayOverview())) {
       // Construction stages use each machine label's independent reveal/retire
       // window. Legacy layouts default to the original one-stage label behavior.

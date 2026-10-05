@@ -1,3 +1,15 @@
+## 0.13.44 - 2026-10-05
+
+- Completed the Today production-flow conversion to physical world-space WebGL ribbons. The route is now shown automatically on the Today stage regardless of the selected 3D billboard naming mode.
+- Route width and moving highlight spacing are measured in plant/world units instead of projected pixels, so orbiting, zooming, and first-person movement no longer make the route appear to accelerate, shrink, or expand unpredictably.
+- Production routes now participate in the same depth buffer as plant equipment, so opaque machines cover route sections instead of the glow drawing through them.
+- Kept route pivot/edit handles as a lightweight editor overlay while the actual production route remains depth-tested 3D geometry.
+- Finished the damped 3D billboard camera-follow system: billboard positions stay fixed to their machines while yaw turns gradually, accelerates when far from the desired facing angle, and eases as it approaches the target.
+- Refined the physical billboards with a subtle sheen, glowing frame, inner keyline, accent marker, text glow, font-weight support, and double-sided readable faces.
+- Updated the Labels editor to match the real 3D billboard model, including camera-follow toggle/speed, facing offset, depth, glow, zoom limits, world offsets, size, and importance. Obsolete screen-space leader presentation controls are no longer shown.
+- Restored Barefoot cutting tables and Waterjet pump & filtration to the Standard Add menu and added regression coverage for all built-in equipment/object choices.
+- Advanced the browser release token to v0.13.44 so the completed route/billboard implementation cannot reuse the partial v0.13.43 viewer script cache.
+
 ## 0.13.43 - 2026-10-05
 
 - Today now shows the configured necessary production-flow routes automatically, independent of the Today machine-label mode.

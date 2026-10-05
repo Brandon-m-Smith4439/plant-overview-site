@@ -1,3 +1,7 @@
+## Version 0.13.46
+
+Version 0.13.46 tones the physical 3D machine billboards down without returning to plain labels. The face is now a cleaner dark industrial plate with a subtle surface gradient, restrained glowing perimeter, fine inner edge, one slim accent rail, strong text, and softer glow. The previous beacon, top rail, bottom status rail, and extra decorative modules are removed so the machine name remains the visual focus. Physical depth, double-sided readability, damped camera following, zoom limits, and the corrected production-route direction remain unchanged.
+
 ## Version 0.13.45
 
 Version 0.13.45 keeps the new physical Today route system intact while correcting the moving white direction markers so they travel from source to destination again. The 3D machine billboards receive a much more visible industrial identification-plate design: a luminous top rail, left-side equipment beacon, layered dark face, stronger frame and keyline, bottom status rail, heavier text, and more deliberate glow/shadow treatment. The physical sign sides now stay dark so the configured accent color stands out around the face. A dedicated face-revision token forces retained labels to rebuild with the new appearance.

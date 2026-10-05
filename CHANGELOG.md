@@ -1,3 +1,13 @@
+## 0.13.46 - 2026-10-05
+
+- Simplified the new 3D machine billboard face after the v0.13.45 overhaul felt too busy.
+- Removed the large equipment beacon, full-width luminous top rail, bottom status rail, and extra decorative modules from the label face.
+- Kept the physical double-sided sign, dark layered surface, subtle depth shading, glowing text, dark side/backing, and damped camera-follow behavior.
+- Replaced the decorative treatment with one restrained glowing outer frame, a fine inner keyline, and a slim left accent rail so the labels still stand out without competing with the plant itself.
+- Reduced the text and border glow intensity for a cleaner appearance at overview distance while preserving readability.
+- Kept the corrected source-to-destination white route-line direction from v0.13.45 unchanged.
+- Advanced the app and browser cache token to v0.13.46 and updated label regressions for the cleaner face design.
+
 ## 0.13.45 - 2026-10-05
 
 - Reversed the moving white highlights on the Today production routes so motion once again travels from each source machine toward its destination. The underlying world-space route geometry, stable physical width, depth occlusion, glow, and speed behavior are unchanged.

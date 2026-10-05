@@ -110,7 +110,7 @@ assert.ok(threeRenderer.includes("back.rotation.y = Math.PI"), "Back-side label 
 assert.ok(threeRenderer.includes("Labels remain planted at one world position"), "3D billboards must keep a stable world position while their yaw follows the camera.");
 assert.ok(threeRenderer.includes("const cameraYaw = Number(currentView?.yaw) || 0;"), "3D billboards must derive their slow yaw target from camera heading.");
 assert.ok(!threeRenderer.includes("const pitch = Number(currentView?.pitch) || 0;\n      const cy = Math.cos(yaw);"), "3D billboards must not snap through full yaw/pitch billboarding.");
-assert.ok(threeRenderer.includes("shadowBlur = 4 + glowStrength * .24"), "3D sign text must include configurable glow.");
+assert.ok(threeRenderer.includes("shadowBlur = 5 + glowStrength * .30"), "3D sign text must include configurable glow.");
 assert.ok(threeRenderer.includes("Math.pow(zoomFactor, .22)") && threeRenderer.includes("zoomMinimum") && threeRenderer.includes("zoomMaximum"), "3D labels must scale gently with zoom and clamp that response.");
 assert.ok(plant.includes('data-label-field="labelRotationY"') && plant.includes('data-label-field="labelDepthFeet"'), "Labels editor must expose fixed sign rotation and physical depth.");
 assert.ok(plant.includes('data-label-field="labelGlowPercent"'), "Labels editor must expose text glow.");

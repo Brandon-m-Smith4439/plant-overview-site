@@ -198,17 +198,49 @@
       context.clearRect(0, 0, canvas.width, canvas.height);
       roundedRect(context, 4, 4, canvas.width - 8, canvas.height - 8, 20);
       context.fillStyle = backgroundColor;
-      context.globalAlpha = .94;
+      context.globalAlpha = .96;
       context.fill();
       context.globalAlpha = 1;
+
+      // v0.13.43: give the physical placard a more intentional industrial
+      // finish without making it look like a floating HUD element.
+      const sheen = context.createLinearGradient(0, 4, 0, canvas.height - 4);
+      sheen.addColorStop(0, "rgba(255,255,255,.16)");
+      sheen.addColorStop(.38, "rgba(255,255,255,.035)");
+      sheen.addColorStop(1, "rgba(0,0,0,.16)");
+      roundedRect(context, 8, 8, canvas.width - 16, canvas.height - 16, 17);
+      context.fillStyle = sheen;
+      context.fill();
+
+      context.save();
+      context.shadowColor = borderColor;
+      context.shadowBlur = 14;
       context.lineWidth = 5;
       context.strokeStyle = borderColor;
+      roundedRect(context, 5, 5, canvas.width - 10, canvas.height - 10, 19);
       context.stroke();
+      context.restore();
+
+      context.lineWidth = 4;
+      context.strokeStyle = borderColor;
+      roundedRect(context, 5, 5, canvas.width - 10, canvas.height - 10, 19);
+      context.stroke();
+
+      context.lineWidth = 2;
+      context.strokeStyle = "rgba(255,255,255,.18)";
+      roundedRect(context, 14, 14, canvas.width - 28, canvas.height - 28, 13);
+      context.stroke();
+
       context.fillStyle = borderColor;
-      roundedRect(context, 22, 26, 8, canvas.height - 52, 4);
+      roundedRect(context, 22, 23, 8, canvas.height - 46, 4);
       context.fill();
+      context.beginPath();
+      context.arc(39, canvas.height / 2, 5.5, 0, Math.PI * 2);
+      context.fill();
+
       context.fillStyle = textColor;
-      context.font = `600 ${fontSize}px "Segoe UI", Arial, sans-serif`;
+      const fontWeight = options.fontWeight === "bold" ? 750 : options.fontWeight === "regular" ? 450 : 600;
+      context.font = `${fontWeight} ${fontSize}px "Segoe UI", Arial, sans-serif`;
       context.textAlign = "left";
       context.textBaseline = "middle";
       const glowStrength = clamp(Number(options.glowStrength ?? 55), 0, 100);
@@ -351,6 +383,7 @@
         options.backgroundColor || "",
         options.borderColor || "",
         Number(options.glowStrength ?? 55),
+        options.fontWeight || "semibold",
       ].join("|");
       if (entry.revision !== revision) {
         const previous = entry.faceMaterial.uniforms.u_map.value;
@@ -383,13 +416,38 @@
       const faceOffset = worldDepth / 2 + .012;
       const position = Array.isArray(options.position) ? options.position : [0, 0, 0];
 
-      // Orientation is intentionally independent from the camera. The label is
-      // a fixed plant sign now, not a billboard. Front and back are both readable.
+      // Labels remain planted at one world position, but their yaw eases toward
+      // the camera instead of snapping to it. Because the placard is readable
+      // on both sides, a 180-degree-equivalent target is chosen so it never
+      // spins farther than necessary.
       const radians = Math.PI / 180;
       const rotationX = (Number(options.rotationX) || 0) * radians;
-      const rotationY = -(Number(options.rotationY) || 0) * radians;
       const rotationZ = (Number(options.rotationZ) || 0) * radians;
-      scratchEuler.set(rotationX, rotationY, rotationZ, "ZYX");
+      const userYawOffset = -(Number(options.rotationY) || 0) * radians;
+      const followCamera = options.turnToCamera !== false;
+      const cameraYaw = Number(currentView?.yaw) || 0;
+      const targetYawRaw = followCamera ? cameraYaw + userYawOffset : userYawOffset;
+      const wrapHalfTurn = (angle) => {
+        let wrapped = angle % Math.PI;
+        if (wrapped > Math.PI / 2) wrapped -= Math.PI;
+        if (wrapped < -Math.PI / 2) wrapped += Math.PI;
+        return wrapped;
+      };
+      if (!Number.isFinite(entry.turnYaw)) entry.turnYaw = targetYawRaw;
+      const delta = wrapHalfTurn(targetYawRaw - entry.turnYaw);
+      const dt = clamp((frameTime - Number(entry.lastTurnAt || frameTime)) / 1000, 0, .12);
+      const response = clamp(Number(options.turnSpeedPercent ?? 100) / 100, .25, 2);
+      const errorRatio = clamp(Math.abs(delta) / (Math.PI / 2), 0, 1);
+      const maxSpeed = (.22 + 1.15 * Math.pow(errorRatio, .72)) * response;
+      const easing = 1 - Math.exp(-dt * (1.25 + errorRatio * 3.8) * response);
+      const desiredStep = delta * easing;
+      const maxStep = maxSpeed * dt;
+      const step = clamp(desiredStep, -maxStep, maxStep);
+      entry.turnYaw += step;
+      entry.turning = followCamera && Math.abs(delta) > .0045;
+      entry.lastTurnAt = frameTime;
+
+      scratchEuler.set(rotationX, entry.turnYaw, rotationZ, "ZYX");
       scratchQuaternion.setFromEuler(scratchEuler);
       scratchPosition.set(Number(position[0]) || 0, Number(position[1]) || 0, Number(position[2]) || 0);
       scratchScale.set(1, 1, 1);
@@ -1081,6 +1139,7 @@
       addBoxInstances,
       addGeometryInstances,
       addWorldLabel,
+      worldLabelsAnimating: () => [...worldLabels.values()].some((entry) => entry.used && entry.turning),
       addPolygon,
       addLine,
       render,

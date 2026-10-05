@@ -1,3 +1,7 @@
+## Version 0.13.43
+
+Version 0.13.43 stabilizes the Today production-flow experience and advances the 3D billboard system. Today routes are always visible regardless of billboard text mode and now render as depth-tested world-space floor ribbons, so route thickness and animation speed remain stable while orbiting, zooming, or walking in first person and opaque machines correctly cover routes. Machine billboards keep a fixed world position but smoothly ease their yaw toward the camera using a distance-to-target response instead of snapping. The signs also receive a more polished physical face treatment and the Labels editor now exposes the settings that actually control the 3D implementation. The Standard Add menu once again includes Cutting and Filtration alongside all other built-in plant objects.
+
 ## Version 0.13.42
 
 Version 0.13.42 repairs the plant-view freeze introduced by the v0.13.41 physical-label renderer. A frame-reset line accidentally referenced `entry.group` on instanced geometry entries that only contain `entry.mesh`, causing the render loop to throw after the first visible frame. Camera orbit, pan, zoom, stage navigation, and Today now redraw normally again. The 3D label face/edge shader uniforms are also explicitly refreshed from the shared view-projection matrix so fixed world signs stay visually attached to the moving scene.

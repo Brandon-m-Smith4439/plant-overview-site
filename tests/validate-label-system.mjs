@@ -13,8 +13,8 @@ assert.ok(
   "Today must expose Necessary, Abbreviated, and Full label modes."
 );
 assert.ok(!plant.includes('state.todayLabelMode = "necessary";\n      state.labelTextMode'), "Returning to Today must not erase the viewer's selected Today label mode.");
-assert.ok(plant.includes('if (isTodayStage() && state.todayLabelMode === "necessary")'), "Necessary route labels must remain available on the Today stage in both overview and first person.");
-assert.ok(plant.includes('drawTodayProductionFlow(machineEntries, time)'), "First person and overview must render the same Necessary flowing floor routes.");
+assert.ok(plant.includes('const todayProductionFlow = isTodayStage() ? drawTodayProductionFlow(machineEntries, time) : null;'), "Today must automatically submit the process route regardless of label mode.");
+assert.ok(!plant.includes('if (isTodayStage() && state.todayLabelMode === "necessary") {\n      drawTodayProductionFlow'), "Today route visibility must not depend on Necessary label mode.");
 assert.ok(plant.includes('if (SCREEN_SPACE_LABELS && (!isTodayStage() || isTodayOverview()))'), "Legacy normal machine-label rendering must remain behind the disabled screen-space gate.");
 assert.ok(plant.includes("function necessaryFlowLabel"), "Today needs a dedicated glass-flow classifier.");
 assert.ok(plant.includes("PROCESS_POINTER_FLOW_DEFINITIONS"), "Necessary production-flow labels must use stable flow definitions.");
@@ -34,8 +34,9 @@ for (const edge of [
   '["wrap", "rack"]',
 ]) assert.ok(plant.includes(edge), `Missing flow edge ${edge}`);
 assert.ok(plant.includes("function drawFloorProcessFlow"), "Today flow must render animated glowing floor routes.");
-assert.ok((plant.includes("lineDashOffset=-dashTravel") || plant.includes("lineDashOffset = -dashTravel")) && plant.includes("ctx.shadowBlur"), "Flow routes must include visible glowing directional motion.");
-assert.ok(plant.includes("function drawTodayProductionFlow"), "Today flow must use its own overlay renderer.");
+assert.ok(plant.includes("function addWorldRouteRibbon") && plant.includes("speedFeetPerSecond"), "Flow routes must animate in world space with camera-independent speed.");
+assert.ok(plant.includes('depthRenderer.addPolygon(polygon,color,alpha,null,1,{transparent:true})'), "Flow routes must be submitted to the depth-tested WebGL renderer.");
+assert.ok(plant.includes("function drawTodayProductionFlow") && plant.includes("function drawTodayProductionFlowOverlay"), "Today flow must separate the physical world pass from edit overlays.");
 assert.ok(plant.includes("function drawProcessStepLabel"), "Necessary flow must render compact automatic numbered machine labels instead of relying on one route tag.");
 assert.ok(plant.includes("PROCESS_STEP_NUMBER_BY_ROLE"), "Automatic process labels must use stable shared route-step numbers.");
 assert.ok(plant.includes("labelRects.push(placement.padded)"), "Automatic process-step labels must reserve collision space separately from normal machine labels.");
@@ -74,7 +75,8 @@ assert.ok(!plant.includes("Boolean(flow) || entry.machine.labelShowToday === tru
 assert.ok(!plant.includes("Boolean(flow) || machine.labelShowToday === true"), "Necessary Today mode must not reference an undefined machine variable, which aborts the render loop before the 3D scene is presented.");
 assert.ok(plant.includes("function drawSceneObjects(time, presentPhysicalScene = null)"), "Plant scene drawing must expose a physical-scene presentation boundary before 2D overlays.");
 const sceneDrawBody = plant.slice(plant.indexOf("function drawSceneObjects(time, presentPhysicalScene = null)"), plant.indexOf("function drawDesignTextLabels"));
-assert.ok(sceneDrawBody.indexOf("presentPhysicalScene?.()") < sceneDrawBody.indexOf("drawTodayProductionFlow(machineEntries"), "Necessary-mode pointers and labels must be drawn only after the physical 3D scene is presented.");
+assert.ok(sceneDrawBody.indexOf("drawTodayProductionFlow(machineEntries") < sceneDrawBody.indexOf("presentPhysicalScene?.()"), "Physical Today route geometry must be submitted before the 3D scene is presented.");
+assert.ok(sceneDrawBody.indexOf("presentPhysicalScene?.()") < sceneDrawBody.indexOf("drawTodayProductionFlowOverlay(todayProductionFlow)"), "Only route edit overlays may draw after physical scene presentation.");
 assert.ok(plant.includes('ctx.textAlign = "left"'), "Machine tags must remain easy to scan.");
 
 console.log("Stage-specific and Today production-flow label regression checks passed.");
@@ -125,3 +127,15 @@ assert.ok(
   threeRenderer.includes("if (entry?.edgeMaterial) entry.edgeMaterial.uniformsNeedUpdate = true;"),
   "World-label shader materials must refresh their shared view-projection uniforms when the camera moves."
 );
+
+
+assert.ok(plant.includes('<option value="cutting">Barefoot cutting tables</option>'), "Cutting tables must be addable again from Standard machines.");
+assert.ok(plant.includes('<option value="filtration">Waterjet pump & filtration</option>'), "Waterjet filtration must be addable from Standard machines.");
+for (const type of ["cutting","waterjet","filtration","kodiak","denver","washer","furnace","cube","wrapping","shipping","aFrame","aFrameTruck","craneMachine","bridgeCrane","glassRack","room","person"]) {
+  assert.ok(plant.includes(`<option value="${type}"`), `Standard Add panel is missing built-in type: ${type}`);
+}
+assert.ok(plant.includes('labelTurnToCamera: machine.labelTurnToCamera !== false'), "3D labels must persist slow camera-follow behavior.");
+assert.ok(plant.includes('data-label-field="labelTurnSpeedPercent"'), "3D label settings must expose camera follow speed.");
+assert.ok(plant.includes('data-label-check="labelTurnToCamera"'), "3D label settings must expose the slow-follow toggle.");
+assert.ok(threeRenderer.includes("wrapHalfTurn") && threeRenderer.includes("errorRatio") && threeRenderer.includes("maxSpeed"), "3D label yaw must use damped dynamic camera following.");
+assert.ok(threeRenderer.includes('context.createLinearGradient') && threeRenderer.includes('context.shadowColor = borderColor'), "3D billboard face should include polished depth/highlight styling.");

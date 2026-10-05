@@ -1,3 +1,15 @@
+## 0.13.43 - 2026-10-05
+
+- Today now shows the configured necessary production-flow routes automatically, independent of the Today machine-label mode.
+- Moved production-flow rendering from the post-render 2D canvas overlay into world-space WebGL floor ribbons. Route width and animation phase now use plant/world units, eliminating the apparent speed/size jumps caused by camera projection in overview and first person.
+- World routes participate in the depth buffer, so opaque machines naturally occlude route segments instead of the glowing line appearing through equipment.
+- Preserved route edit handles as a lightweight 2D editor overlay while the actual route itself remains physical 3D geometry.
+- Reworked 3D billboard facing into damped camera following: signs stay attached to one world position, rotate only around Y, speed up when far from the target angle, and ease down smoothly as they approach it. Double-sided faces use the nearest 180-degree-equivalent orientation to avoid unnecessary spins.
+- Polished 3D billboard faces with a subtle vertical sheen, glowing frame, inner keyline, accent marker, configurable text glow, and font-weight support.
+- Updated the Labels editor to describe the actual 3D billboard behavior and added controls for slow camera follow and follow speed. Removed obsolete 2D leader pattern/shape/end controls from the visible 3D label UI while retaining saved data for compatibility.
+- Restored Barefoot cutting tables and Waterjet pump & filtration to the Standard machines Add menu, and added regression coverage ensuring every built-in machine/object type remains addable.
+- Updated the internal application/recovery version and browser cache token to v0.13.43.
+
 ## 0.13.42 - 2026-10-05
 
 - Fixed a retained-renderer runtime crash introduced with the physical 3D label update. The frame reset path was incorrectly treating instanced machine/column batches as groups and reading `entry.group.visible`; those entries only own `entry.mesh`. The exception stopped redraws after the initial frame, which made orbiting, panning, wheel zoom, stage changes, and Today appear completely frozen.

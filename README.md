@@ -1,3 +1,7 @@
+## Version 0.13.47
+
+Version 0.13.47 adds true vertical volume to elevated process routes and subtle physical depth to billboard lettering. Route Y can now be raised as high as 30 ft. Near the floor a route stays a clean ribbon, but increasing Y progressively turns it into a depth-tested 3D rail with visible side and underside faces; the moving white direction highlights ride on its top surface. Machine billboard text now renders on separate front/rear planes that sit slightly in front of the physical sign faces, giving the names real parallax and a small extruded effect while preserving double-sided readability and the cleaner v0.13.46 styling.
+
 ## Version 0.13.46
 
 Version 0.13.46 tones the physical 3D machine billboards down without returning to plain labels. The face is now a cleaner dark industrial plate with a subtle surface gradient, restrained glowing perimeter, fine inner edge, one slim accent rail, strong text, and softer glow. The previous beacon, top rail, bottom status rail, and extra decorative modules are removed so the machine name remains the visual focus. Physical depth, double-sided readability, damped camera following, zoom limits, and the corrected production-route direction remain unchanged.

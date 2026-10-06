@@ -11,6 +11,7 @@
     const getCamera = options.getCamera;
     const setCamera = options.setCamera;
     const canOccupy = options.canOccupy;
+    const canOccupyHard = options.canOccupyHard || (() => true);
     const onLockChange = options.onLockChange || (() => {});
     const onMovement = options.onMovement || (() => {});
     const onExitRequest = options.onExitRequest || (() => {});
@@ -106,9 +107,11 @@
     }
 
     function tryMove(camera, nextX, nextZ, radius, collision) {
-      if (!collision) {
-        return { x: nextX, z: nextZ };
-      }
+      // Pillars are hard safety geometry and remain solid even if optional
+      // machine/wall collision is disabled in the first-person menu.
+      const occupancyCheck = collision
+        ? (x, z) => canOccupy(x, z, radius)
+        : (x, z) => canOccupyHard(x, z, radius);
       // Sweep the entire movement segment. Checking only the final point lets a
       // fast sprint or delayed frame jump completely through a narrow envelope.
       const distance = Math.hypot(nextX - camera.x, nextZ - camera.z);
@@ -122,16 +125,16 @@
         const remainingSteps = steps - step + 1;
         const targetX = xBlocked ? currentX : currentX + (nextX - currentX) / remainingSteps;
         const targetZ = zBlocked ? currentZ : currentZ + (nextZ - currentZ) / remainingSteps;
-        if (canOccupy(targetX, targetZ, radius)) {
+        if (occupancyCheck(targetX, targetZ)) {
           currentX = targetX;
           currentZ = targetZ;
           continue;
         }
         // Sliding collision: attempt each axis independently so the player
         // glides along machine envelopes, walls, and columns.
-        if (!xBlocked && canOccupy(targetX, currentZ, radius)) currentX = targetX;
+        if (!xBlocked && occupancyCheck(targetX, currentZ)) currentX = targetX;
         else xBlocked = true;
-        if (!zBlocked && canOccupy(currentX, targetZ, radius)) currentZ = targetZ;
+        if (!zBlocked && occupancyCheck(currentX, targetZ)) currentZ = targetZ;
         else zBlocked = true;
         if (xBlocked && zBlocked) break;
       }

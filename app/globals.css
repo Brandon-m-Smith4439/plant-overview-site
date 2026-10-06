@@ -8315,3 +8315,19 @@ body.viewer-fullscreen-fallback-active {
 .combat-killer-reveal small { color:rgba(255,255,255,.65); }
 .combat-round-actions.locked { opacity:.55; }
 .combat-round-actions button:disabled { cursor:not-allowed; filter:saturate(.35); }
+
+
+/* Combat death cinematic pass · v0.13.55 */
+.combat-mode-active.combat-death-cinematic .combat-health-panel,
+.combat-mode-active.combat-death-cinematic .combat-weapon-panel,
+.combat-mode-active.combat-death-cinematic .combat-topbar {
+  opacity:.22;
+  transition:opacity .35s ease;
+}
+.combat-round-overlay.killer-reveal {
+  animation:combat-killer-panel-in .38s ease-out both;
+}
+@keyframes combat-killer-panel-in {
+  from { opacity:0; transform:translateY(1.2rem); }
+  to { opacity:1; transform:translateY(0); }
+}

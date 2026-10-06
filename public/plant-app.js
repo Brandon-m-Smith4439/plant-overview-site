@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.54";
+  const APP_VERSION = "0.13.55";
 
   function editorProfileProtected() {
     try {
@@ -2482,6 +2482,14 @@
     });
   }
 
+  function walkCanOccupyHard(worldX, worldZ, radius = state.walkRadius) {
+    const bounds = floorBounds();
+    const margin = Math.max(0.45, Number(radius) || 1.2);
+    if (worldX < bounds[0] + margin || worldX > bounds[2] - margin
+        || worldZ < bounds[1] + margin || worldZ > bounds[3] - margin) return false;
+    return !walkHitsStructuralColumn(worldX, worldZ, margin);
+  }
+
   function walkCanOccupy(worldX, worldZ, radius = state.walkRadius) {
     const bounds = floorBounds();
     const wallMargin = Math.max(0.45, Number(radius) || 1.2);
@@ -2552,14 +2560,15 @@
     const defaultHeight = Math.max(12, Number(state.wallGeometry?.height) || 24);
     structuralColumns().forEach((column) => {
       if (isColumnHidden(column)) return;
+      const pillarHalfSize = 1.35;
       entries.push({
         kind: "pillar",
-        x: Number(column.x) - 1.18,
+        x: Number(column.x) - pillarHalfSize,
         y: 0,
-        z: Number(column.z) - 1.18,
-        w: 2.36,
-        h: Math.max(defaultHeight, Number(column.h) || 0),
-        d: 2.36,
+        z: Number(column.z) - pillarHalfSize,
+        w: pillarHalfSize * 2,
+        h: Math.max(defaultHeight, displayedColumnHeight(column)),
+        d: pillarHalfSize * 2,
       });
     });
     displayedWallSections().forEach((wall) => {
@@ -6539,6 +6548,7 @@
         if (Number.isFinite(next.walkBobOffset)) state.walkBobOffset = next.walkBobOffset;
       },
       canOccupy: walkCanOccupy,
+      canOccupyHard: walkCanOccupyHard,
       onLockChange: updateFirstPersonHud,
       onMovement: () => renderPerformance.noteInteraction(120),
       onExitRequest: () => {
@@ -6687,7 +6697,7 @@
       focusEnemy: (target) => {
         if (!target) return;
         const playerX = modelCenter()[0] + state.panX;
-        const playerY = Math.max(1.5, Number(state.walkEyeHeight) + Number(state.walkVerticalOffset || 0));
+        const playerY = Math.max(.85, Number(state.walkEyeHeight) + Number(state.walkVerticalOffset || 0));
         const playerZ = modelCenter()[1] + state.panZ;
         const dx = Number(target.x) - playerX;
         const dy = Number(target.y) - playerY;
@@ -6696,6 +6706,49 @@
         state.yaw = Math.atan2(dx, dz);
         state.pitch = clamp(Math.atan2(dy, horizontal), -1.12, 1.12);
         renderPerformance.invalidate?.("combat-killer-focus");
+      },
+      playDeathCinematic: ({ target, durationMs = 5000 } = {}) => {
+        const serial = (state.combatDeathCinematicSerial || 0) + 1;
+        state.combatDeathCinematicSerial = serial;
+        const startedAt = performance.now();
+        const startYaw = Number(state.yaw) || 0;
+        const startPitch = Number(state.pitch) || 0;
+        const startVertical = Number(state.walkVerticalOffset) || 0;
+        const playerX = modelCenter()[0] + state.panX;
+        const playerZ = modelCenter()[1] + state.panZ;
+        const finalVertical = Math.min(startVertical, -(Math.max(3.8, Number(state.walkEyeHeight) || 5.6) - .95));
+        const targetYaw = target ? Math.atan2(Number(target.x) - playerX, Number(target.z) - playerZ) : startYaw;
+        const finalEyeY = Math.max(.85, Number(state.walkEyeHeight) + finalVertical);
+        const targetHorizontal = target ? Math.max(.001, Math.hypot(Number(target.x) - playerX, Number(target.z) - playerZ)) : 1;
+        const targetPitch = target ? clamp(Math.atan2(Number(target.y) - finalEyeY, targetHorizontal), -.9, .9) : startPitch;
+        const smooth = (value) => value * value * (3 - 2 * value);
+        const shortestAngle = (from, to) => {
+          let delta = to - from;
+          while (delta > Math.PI) delta -= Math.PI * 2;
+          while (delta < -Math.PI) delta += Math.PI * 2;
+          return delta;
+        };
+        const tick = (now) => {
+          if (state.combatDeathCinematicSerial !== serial || !combatController?.isActive?.()) return;
+          const elapsed = Math.max(0, now - startedAt);
+          const fall = smooth(clamp(elapsed / 1250, 0, 1));
+          const focus = smooth(clamp((elapsed - 900) / 1750, 0, 1));
+          state.walkVerticalOffset = startVertical + (finalVertical - startVertical) * fall;
+          state.walkBobOffset = 0;
+          state.yaw = startYaw + shortestAngle(startYaw, targetYaw) * focus;
+          const fallPitch = startPitch + (-.38 - startPitch) * fall;
+          state.pitch = fallPitch + (targetPitch - fallPitch) * focus;
+          renderPerformance.invalidate?.("combat-death-cinematic");
+          if (elapsed < durationMs) window.requestAnimationFrame(tick);
+        };
+        window.requestAnimationFrame(tick);
+      },
+      resetDeathCinematic: () => {
+        state.combatDeathCinematicSerial = (state.combatDeathCinematicSerial || 0) + 1;
+        state.walkVerticalOffset = 0;
+        state.walkBobOffset = 0;
+        state.pitch = clamp(Number(state.pitch) || 0, -.35, .35);
+        renderPerformance.invalidate?.("combat-death-reset");
       },
       exitCombat: () => setCombatMode(false),
       invalidate: () => renderPerformance.invalidate?.("combat-mode"),
@@ -10168,13 +10221,31 @@
     const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * .14 * movement;
     const recoil = combat.recoil ? .22 : 0;
     const hit = clamp(Number(combat.hitReact) || 0, 0, 1);
-    const bodyColor = machine.color || "#1e7b78";
-    const skin = "#e6b993";
-    const pants = "#26363d";
+    const design = machine.designId ? designLibrary[machine.designId] : null;
+    const designParts = Array.isArray(design?.components) ? design.components : [];
+    const namedPart = (pattern) => designParts.find((part) => pattern.test(String(part?.name || "")));
+    const bodyColor = namedPart(/torso/i)?.color || machine.color || "#1e7b78";
+    const skin = namedPart(/head/i)?.color || "#e6b993";
+    const pants = namedPart(/(?:left|right) leg/i)?.color || "#26363d";
     const boot = "#161d21";
     const weapon = "#20282d";
     const weaponLight = "#4b5960";
-    const vest = "#e3ad28";
+    const vest = namedPart(/hard hat/i)?.color || "#e3ad28";
+
+    // Keep each custom person's torso/head/hair/hat/accessories instead of
+    // replacing every named employee with one generic combat body. Arms and
+    // legs are omitted here because the articulated combat limbs below own them.
+    if (design && String(design.machineType || "").toLowerCase() === "person") {
+      const staticIdentityParts = designParts.filter((part) => !/(?:left|right)\s+(?:arm|leg)/i.test(String(part?.name || "")));
+      if (staticIdentityParts.length) {
+        drawCustomDesign(actor, alpha, grow, time, 3, staticIdentityParts, machineCurveSegments(actor));
+      }
+    } else {
+      box(localBox3d(actor,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
+      box(localBox3d(actor,width*.2,depth*.17,width*.6,depth*.12,height*.18,vest,height*.5),alpha*.96,1);
+      box(localBox3d(actor,width*.32,depth*.3,width*.36,depth*.38,height*.14,skin,height*.75),alpha,1);
+      box(localBox3d(actor,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
+    }
 
     // Two-segment legs create an actual walking gait instead of sliding feet.
     const hipY = height * .43;
@@ -10192,11 +10263,8 @@
     box(localBox3d(actor,leftFoot[0]-.18,leftFoot[2]-.34,.42,.7,.2,boot,leftFoot[1]-.1),alpha,1);
     box(localBox3d(actor,rightFoot[0]-.18,rightFoot[2]-.34,.42,.7,.2,boot,rightFoot[1]-.1),alpha,1);
 
-    // Torso/head move with the same actor transform, so a defeated enemy falls around its feet and lands on the floor.
-    box(localBox3d(actor,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
-    box(localBox3d(actor,width*.2,depth*.17,width*.6,depth*.12,height*.18,vest,height*.5),alpha*.96,1);
-    box(localBox3d(actor,width*.32,depth*.3,width*.36,depth*.38,height*.14,skin,height*.75),alpha,1);
-    box(localBox3d(actor,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
+    // Torso/head identity is rendered above; the articulated combat limbs and
+    // weapon below share the same actor transform so rotation and death stay aligned.
 
     const shoulderY = height*.68;
     const gripY = height*.58 - recoil;
@@ -10292,13 +10360,15 @@
     const recoil = clamp(Number(combat.recoilProgress)||0,0,1);
     const reload = clamp(Number(combat.reloadProgress)||0,0,1);
     const reloadArc = Math.sin(reload * Math.PI);
+    const death = clamp(Number(combat.deathProgress) || 0, 0, 1);
+    const deathDrop = Math.sin(Math.min(1, death * 2) * Math.PI / 2);
     const root = {
-      x: .34 + bobX,
-      y: -.25 - bobY - reloadArc*.12 + recoil*.045,
-      z: 1.15 - recoil*.11 + reloadArc*.08,
-      rotationX: -4 - recoil*6 + reloadArc*18,
+      x: .34 + bobX + deathDrop*.18,
+      y: -.25 - bobY - reloadArc*.12 + recoil*.045 - deathDrop*.72,
+      z: 1.15 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
+      rotationX: -4 - recoil*6 + reloadArc*18 + deathDrop*28,
       rotationY: -6 + bobX*40,
-      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30,
+      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
     };
     const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381";
     const parts = combat.weapon === "handgun" ? [
@@ -11292,6 +11362,7 @@
     const groups = new Map();
     machineEntries.forEach((entry) => {
       const { machine, rendered, alpha, grow } = entry;
+      if (combatController?.isActive?.() && combatEnemyMachine(machine)) return;
       const design = rendered.designId ? designLibrary[rendered.designId] : null;
       const lodLevel = machineLodLevel(rendered);
       if (
@@ -11455,6 +11526,7 @@
       batch.revisions.push(revision);
     };
     for (const { machine, rendered, alpha, grow } of entries) {
+      if (combatController?.isActive?.() && combatEnemyMachine(machine)) continue;
       const design = designLibrary[rendered.designId];
       if (!design || !machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 2
         || state.selectedMachineIds.has(machine.instanceId) || alpha < .9999 || grow < .9999) continue;
@@ -11645,7 +11717,10 @@
       depthRenderer.addBoxInstances("plant:structural-columns", columnBoxes, columnRevision);
     }
     const instancedProxyEntries = typeof depthRenderer.addBoxInstances === "function"
-      ? machineEntries.filter(({ rendered, alpha, grow }) => machineLodLevel(rendered) < 2 && alpha >= .985 && grow >= .999)
+      ? machineEntries.filter(({ machine, rendered, alpha, grow }) => (
+          machineLodLevel(rendered) < 2 && alpha >= .985 && grow >= .999
+          && !(combatController?.isActive?.() && combatEnemyMachine(machine))
+        ))
       : [];
     if (instancedProxyEntries.length) {
       const proxyBoxes = instancedProxyEntries.map(({ rendered }) => ({

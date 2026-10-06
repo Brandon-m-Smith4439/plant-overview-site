@@ -22,7 +22,7 @@ assert.ok(combat.includes("showIncomingDirection") && combat.includes("combat-da
 assert.ok(combat.includes("incomingDirectionName") && combat.includes("combat-direction-callout"), "Readable directional fire callouts are missing.");
 assert.ok(combat.includes("blockedUntil") && combat.includes("aimLockUntil") && combat.includes("lastSeenAt"), "Enemy anti-spin steering and aim-lock state are missing.");
 assert.ok(combat.includes("enemy.rotationY = faceAngle(source, playerTarget)") && combat.includes("aimLockUntil = now + 520"), "Enemy firing must authoritatively face the player.");
-assert.ok(combat.includes("Killed by ") && combat.includes("killerRevealUntil") && combat.includes("Reviewing killer"), "Death killer reveal flow is missing.");
+assert.ok(combat.includes("Killed by ") && combat.includes("killerRevealUntil") && combat.includes("playerDeathDuration = 5000") && combat.includes("roundOverlay.hidden = true"), "Five-second death killer reveal flow is missing.");
 assert.ok(plant.includes("leftKnee") && plant.includes("rightKnee") && plant.includes("leftFoot") && plant.includes("rightFoot"), "Two-segment enemy walking gait is missing.");
 assert.ok(plant.includes("rgba(255,231,151,.98)") && plant.includes("tracerTarget"), "Visible two-layer enemy bullet tracers are missing.");
 assert.ok(combat.includes("hitReactUntil") && combat.includes("defeatedAt") && combat.includes("deathProgress"), "Enemy hit/death animations are incomplete.");
@@ -39,7 +39,7 @@ assert.ok(plant.includes('kind: "pillar"'), "Pillars must be explicit combat lin
 assert.ok(plant.includes("drawCombatEnemy") && plant.includes("combatState"), "The plant renderer is not using live combat animation poses.");
 assert.ok(plant.includes("drawFirstPersonCombatWeapon") && plant.includes("drawViewmodelBox") && plant.includes("viewmodelProject"), "The player weapon must be real canvas-rendered 3D geometry.");
 assert.ok(plant.includes("combatEnemyPoseParent") && plant.includes("deathDirection"), "Enemy death animation must pivot the body down to the floor.");
-assert.ok(plant.includes("focusEnemy") && plant.includes("combat-killer-focus") && plant.includes("releasePointer"), "Death camera must center on the killer before restart.");
+assert.ok(plant.includes("playDeathCinematic") && plant.includes("combat-death-cinematic") && plant.includes("releasePointer"), "Death camera must fall and animate toward the killer before restart.");
 assert.ok(plant.includes("combat.killerReveal"), "Killer world marker is missing.");
 assert.ok(plant.includes("walkHitsStructuralColumn"), "Pillar walking collision must have a direct safety check.");
 assert.ok(plant.includes("window.createPlantCombatMode"), "Plant viewer does not create the combat controller.");
@@ -58,3 +58,28 @@ const controlsMarkup = plant.slice(controlsStart, controlsEnd);
 assert.ok(controlsMarkup.indexOf('data-toggle="walk"') >= 0, "First person control is missing.");
 assert.ok(controlsMarkup.indexOf('data-toggle="combat"') > controlsMarkup.indexOf('data-toggle="walk"'), "Combat mode must render immediately after First person for owners.");
 assert.ok(plant.includes('window.requestAnimationFrame(() => {') && plant.includes('combatController.start();'), "Combat should enter first person before starting the countdown.");
+
+// v0.13.55: every custom person must bypass retained instancing so combat-owned
+// movement/rotation/weapons are actually rendered. Published Helper instances
+// are explicit regression coverage for the person-design path.
+assert.ok(plant.includes('combatController?.isActive?.() && combatEnemyMachine(machine)) return;'), "Shared design instancing must skip combat people.");
+assert.ok(plant.includes('combatController?.isActive?.() && combatEnemyMachine(machine)) continue;'), "Production design instancing must skip combat people.");
+assert.ok(plant.includes('staticIdentityParts'), "Combat people must preserve their custom person appearance while adding articulated limbs/weapons.");
+assert.ok(combat.includes('return 180 - Math.atan2(dx, dz) * 180 / Math.PI;'), "Enemy facing must use the local -Z weapon basis instead of mirrored left/right aiming.");
+assert.ok(combat.includes('playerDeathDuration = 5000'), "Death replay must last five seconds before restart/exit UI appears.");
+assert.ok(plant.includes('playDeathCinematic') && plant.includes('combat-death-cinematic'), "Animated player fall/killer camera replay is missing.");
+assert.ok(plant.includes('canOccupyHard: walkCanOccupyHard'), "Structural pillars must remain hard first-person collision even when optional collision is off.");
+
+const workspaceSource = fs.readFileSync(new URL("../public/published-workspace.js", import.meta.url), "utf8");
+const snapshotMatch = workspaceSource.match(/const snapshot = (\{.*\});\n/s);
+assert.ok(snapshotMatch, "Published workspace snapshot is missing.");
+const snapshot = JSON.parse(snapshotMatch[1]);
+const publishedLayout = JSON.parse(snapshot.items["monroe-glass-plant-layout-v6"]);
+const publishedDesigns = JSON.parse(snapshot.items["monroe-glass-machine-designs-v1"]).designs;
+const publishedPeople = publishedLayout.machines.filter((machine) => {
+  const design = publishedDesigns[machine.designId];
+  return ["person", "animatedperson"].includes(String(machine.type || "").toLowerCase())
+    || String(design?.machineType || "").toLowerCase() === "person";
+});
+assert.ok(publishedPeople.length >= 10, "Published person-machine coverage unexpectedly collapsed.");
+assert.equal(publishedPeople.filter((machine) => machine.name === "Helper").length, 2, "Helper must be included in combat coverage as both published person instances.");

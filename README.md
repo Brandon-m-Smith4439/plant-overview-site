@@ -1,3 +1,7 @@
+## Version 0.13.55
+
+Version 0.13.55 fixes the custom-person Combat Mode path. Named people such as Helper now bypass the retained design batching that previously left many employees visually static/unarmed, while their individual torso/head/hair/hard-hat details remain visible under the articulated combat limbs and 3D rifle. Enemy left/right facing math is corrected so the body and weapon point at the player, yellow structural pillars are permanent collision/LOS cover, and player death now runs a five-second falling-camera/killer reveal before Restart or Exit appears.
+
 ## Version 0.13.54
 
 Version 0.13.54 improves combat readability and enemy aiming. Incoming-fire feedback now combines larger directional arrows with explicit eight-way direction text and shooter names. Enemy movement no longer repeatedly spins blocked people in place; active shooters maintain authoritative facing toward the player and their 3D rifles follow that pose. When the player is eliminated, the camera centers on the killer, highlights that enemy in the plant, names them and their distance in the death overlay, and briefly locks restart so the shooter can be reviewed before the next round.

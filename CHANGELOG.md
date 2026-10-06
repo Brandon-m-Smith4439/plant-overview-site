@@ -1,3 +1,13 @@
+## 0.13.55 - 2026-10-06
+
+- Fixed the root cause behind custom person machines such as Helper not receiving combat weapons/poses: retained shared-design, production-animation, and low-LOD proxy instancing now explicitly bypass every active combat person so the combat renderer owns their live transform.
+- Preserved individual custom person appearance in Combat Mode by rendering each person's non-limb design details (torso/head/hair/hard-hat/accessories) while combat-owned articulated arms/legs and the 3D rifle are layered onto the same transform.
+- Corrected the enemy facing basis. Combat rifles point down local -Z, so left/right aim now uses `180 - heading` instead of the mirrored `heading + 180` formula; roaming facing uses the same corrected basis.
+- Added published-workspace regression coverage for all person designs, including both live Helper instances, so a named custom person can no longer silently drop out of Combat Mode.
+- Added a five-second death cinematic: the first-person camera falls toward floor level, smoothly rotates toward the fatal shooter, holds on the killer marker, and only then reveals Restart/Exit. The player's weapon also drops out of view during the fall.
+- Hardened yellow structural pillars as permanent first-person safety collision even if optional machine/wall collision is disabled, and enlarged pillar combat occluders to match the visible structure through full roof height.
+- Expanded Combat Mode/collision regression checks for person-instancing bypass, corrected facing math, Helper coverage, five-second death replay, and hard pillar collision.
+
 ## 0.13.54 - 2026-10-06
 
 - Enlarged and clarified incoming-fire direction feedback with bigger radial arrows, glow arcs, longer visibility, and explicit eight-way FRONT / FRONT-RIGHT / RIGHT / BACK-RIGHT / BEHIND / BACK-LEFT / LEFT / FRONT-LEFT callouts that also identify the shooter.

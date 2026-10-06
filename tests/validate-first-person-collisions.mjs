@@ -207,3 +207,8 @@ vm.runInNewContext(`${functionSource(controller, "tryMove")}\nresult = tryMove(c
 assert.ok(sweepContext.result.x < 2, "Swept collision must stop before a hitbox instead of tunneling through it.");
 
 console.log("First-person machine envelope collision checks passed.");
+
+assert.ok(plant.includes("function walkCanOccupyHard"), "A hard pillar collision path is required.");
+assert.ok(plant.includes("canOccupyHard: walkCanOccupyHard"), "The first-person controller must receive hard pillar collision.");
+const firstPersonController = fs.readFileSync(new URL("../public/first-person-controller.js", import.meta.url), "utf8");
+assert.ok(firstPersonController.includes("canOccupyHard") && firstPersonController.includes("occupancyCheck"), "Pillars must still be swept when optional collision is disabled.");

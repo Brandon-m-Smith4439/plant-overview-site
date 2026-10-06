@@ -218,6 +218,8 @@
     let countdownEndsAt = 0;
     let countdownDisplay = 0;
     let transientStatusUntil = 0;
+    let playerDeathStartedAt = 0;
+    let playerDeathDuration = 5000;
     let directionCalloutTimer = 0;
     let roundRevealSerial = 0;
 
@@ -390,7 +392,9 @@
     function faceAngle(from, to) {
       const dx = to.x - from.x;
       const dz = to.z - from.z;
-      return Math.atan2(dx, dz) * 180 / Math.PI + 180;
+      // Combat actors and their rifles point down local -Z. Mirror the camera
+      // heading into that local basis so left/right aiming is not reversed.
+      return 180 - Math.atan2(dx, dz) * 180 / Math.PI;
     }
 
     function updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, lineOfSight) {
@@ -459,7 +463,7 @@
         }
         moveX = Math.sin(enemy.heading);
         moveZ = Math.cos(enemy.heading);
-        desiredRotation = enemy.heading * 180 / Math.PI + 180;
+        desiredRotation = 180 - enemy.heading * 180 / Math.PI;
         speed = 2.35 * enemy.speedBias;
       }
 
@@ -574,6 +578,9 @@
       const recoilProgress = recoilRemaining > 0 ? clamp(recoilRemaining / Math.max(1, weapon.fireInterval * .95), 0, 1) : 0;
       const reloadDuration = Math.max(1, reloadEndsAt - reloadStartedAt);
       const reloadProgress = reloading ? clamp((now - reloadStartedAt) / reloadDuration, 0, 1) : 0;
+      const deathProgress = playerDeathStartedAt > 0
+        ? clamp((now - playerDeathStartedAt) / Math.max(1, playerDeathDuration), 0, 1)
+        : 0;
       return {
         weapon: selectedWeapon,
         firing: now < playerRecoilUntil,
@@ -584,6 +591,8 @@
         moving: Boolean(player.moving),
         sprinting: Boolean(player.sprinting),
         engaged: Boolean(player.engaged),
+        defeated: roundState === "lost",
+        deathProgress,
       };
     }
 
@@ -632,14 +641,17 @@
       syncHud();
       if (!roundOverlay) return;
       const revealSerial = ++roundRevealSerial;
-      roundOverlay.hidden = false;
-      roundOverlay.classList.toggle("killer-reveal", kind === "lost");
-      if (roundActions) roundActions.classList.toggle("locked", kind === "lost");
-      if (restartButton) {
-        restartButton.disabled = kind === "lost";
-        restartButton.textContent = kind === "lost" ? "Reviewing killer..." : "Restart combat";
-      }
       if (kind === "won") {
+        playerDeathStartedAt = 0;
+        frame.classList.remove("combat-death-cinematic");
+        options.resetDeathCinematic?.();
+        roundOverlay.hidden = false;
+        roundOverlay.classList.remove("killer-reveal");
+        roundActions?.classList.remove("locked");
+        if (restartButton) {
+          restartButton.disabled = false;
+          restartButton.textContent = "Restart combat";
+        }
         if (killerReveal) killerReveal.hidden = true;
         if (roundKicker) roundKicker.textContent = "ROUND COMPLETE";
         if (roundTitle) roundTitle.textContent = "Plant secured";
@@ -650,23 +662,35 @@
         const distance = source && player
           ? Math.hypot(source.x - number(player.x), source.z - number(player.z))
           : 0;
-        if (killer) killer.killerRevealUntil = performance.now() + 5000;
+        playerDeathStartedAt = performance.now();
+        playerDeathDuration = 5000;
+        frame.classList.add("combat-death-cinematic");
+        if (killer) killer.killerRevealUntil = playerDeathStartedAt + 6500;
         if (killerReveal) killerReveal.hidden = false;
         if (killerName) killerName.textContent = killerLabel;
         if (killerDetail) killerDetail.textContent = distance > 0 ? Math.round(distance) + " ft away" : "Last attacker";
         if (roundKicker) roundKicker.textContent = "PLAYER DOWN";
         if (roundTitle) roundTitle.textContent = "Killed by " + killerLabel;
-        if (roundCopy) roundCopy.textContent = "Camera centered on your killer. Review the shooter before restarting.";
-        if (source) options.focusEnemy?.(source);
-        window.setTimeout(() => options.releasePointer?.(), 80);
+        if (roundCopy) roundCopy.textContent = "Death replay complete. Restart when ready.";
+        if (restartButton) {
+          restartButton.disabled = false;
+          restartButton.textContent = "Restart combat";
+        }
+        roundActions?.classList.remove("locked");
+        roundOverlay.hidden = true;
+        roundOverlay.classList.add("killer-reveal");
+        window.setTimeout(() => options.releasePointer?.(), 35);
+        options.playDeathCinematic?.({
+          target: source,
+          killerId: killer?.id || null,
+          killerName: killerLabel,
+          durationMs: playerDeathDuration,
+        });
         window.setTimeout(() => {
           if (!active || revealSerial !== roundRevealSerial || roundState !== "lost") return;
-          if (restartButton) {
-            restartButton.disabled = false;
-            restartButton.textContent = "Restart combat";
-          }
-          roundActions?.classList.remove("locked");
-        }, 2200);
+          roundOverlay.hidden = false;
+          options.invalidate?.();
+        }, playerDeathDuration);
       }
       options.onRoundEnd?.(kind, killer?.id || null);
       options.invalidate?.();
@@ -846,6 +870,9 @@
       mouseHeld = false;
       lastThreatCount = 0;
       lastFrameAt = 0;
+      playerDeathStartedAt = 0;
+      frame.classList.remove("combat-death-cinematic");
+      options.resetDeathCinematic?.();
       ammunition.rifle.magazine = WEAPONS.rifle.magazine;
       ammunition.rifle.reserve = WEAPONS.rifle.reserve;
       ammunition.handgun.magazine = WEAPONS.handgun.magazine;
@@ -939,7 +966,9 @@
       countdownDisplay = 0;
       lastFrameAt = 0;
       hud.hidden = true;
-      frame.classList.remove("combat-mode-active", "combat-under-fire");
+      frame.classList.remove("combat-mode-active", "combat-under-fire", "combat-death-cinematic");
+      playerDeathStartedAt = 0;
+      options.resetDeathCinematic?.();
       if (countdownOverlay) countdownOverlay.hidden = true;
       if (roundOverlay) {
         roundOverlay.hidden = true;

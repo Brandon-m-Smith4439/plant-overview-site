@@ -183,10 +183,17 @@
         '<div class="combat-controls">Mouse 1 fire - <b>Right click</b> aim - <b>1/2</b> switch - <b>R</b> reload</div>',
       '</div>',
       '<div class="combat-round-overlay" data-combat-round hidden>',
-        '<div>',
+        '<div class="combat-round-card">',
+          '<div class="combat-victory-confetti" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>',
+          '<div class="combat-victory-seal" aria-hidden="true"><span>✓</span><small>SECURE</small></div>',
           '<p data-combat-round-kicker>ROUND COMPLETE</p>',
           '<h2 data-combat-round-title>Plant secured</h2>',
           '<span data-combat-round-copy>All enemy AI has been defeated.</span>',
+          '<div class="combat-victory-stats" data-combat-victory-stats>',
+            '<div><span>CLEAR TIME</span><strong data-combat-victory-time>00:00</strong></div>',
+            '<div><span>HEALTH</span><strong data-combat-victory-health>100</strong></div>',
+            '<div><span>SHIELD</span><strong data-combat-victory-shield>22</strong></div>',
+          '</div>',
           '<div class="combat-killer-reveal" data-combat-killer hidden>',
             '<span>ELIMINATED BY</span>',
             '<strong data-combat-killer-name>Enemy</strong>',
@@ -230,6 +237,9 @@
     const roundActions = hud.querySelector("[data-combat-round-actions]");
     const restartButton = hud.querySelector("[data-combat-restart]");
     const pauseOverlay = hud.querySelector("[data-combat-pause]");
+    const victoryTime = hud.querySelector("[data-combat-victory-time]");
+    const victoryHealth = hud.querySelector("[data-combat-victory-health]");
+    const victoryShield = hud.querySelector("[data-combat-victory-shield]");
 
     const enemies = new Map();
     const ammunition = {
@@ -266,6 +276,7 @@
     let playerDeathDuration = 5000;
     let directionCalloutTimer = 0;
     let roundRevealSerial = 0;
+    let roundStartedAt = 0;
 
     function currentWeapon() {
       return WEAPONS[selectedWeapon];
@@ -926,6 +937,7 @@
     }
 
     function finishRound(kind, killer = null, player = null) {
+      const endedAt = performance.now();
       roundState = kind;
       paused = false;
       setAiming(false);
@@ -938,6 +950,7 @@
       options.setMovementLocked?.(true);
       syncHud();
       if (!roundOverlay) return;
+      roundOverlay.classList.toggle("victory", kind === "won");
       const revealSerial = ++roundRevealSerial;
       if (kind === "won") {
         playerDeathStartedAt = 0;
@@ -952,9 +965,15 @@
           restartButton.textContent = "Restart combat";
         }
         if (killerReveal) killerReveal.hidden = true;
-        if (roundKicker) roundKicker.textContent = "ROUND COMPLETE";
-        if (roundTitle) roundTitle.textContent = "Plant secured";
-        if (roundCopy) roundCopy.textContent = "All enemy AI has been defeated.";
+        const clearSeconds = Math.max(0, Math.round((endedAt - (roundStartedAt || endedAt)) / 1000));
+        const clearMinutes = Math.floor(clearSeconds / 60);
+        const clearRemainder = clearSeconds % 60;
+        if (victoryTime) victoryTime.textContent = String(clearMinutes).padStart(2, "0") + ":" + String(clearRemainder).padStart(2, "0");
+        if (victoryHealth) victoryHealth.textContent = String(Math.round(playerHealth));
+        if (victoryShield) victoryShield.textContent = String(Math.round(playerShield));
+        if (roundKicker) roundKicker.textContent = "VICTORY";
+        if (roundTitle) roundTitle.textContent = "PLANT SECURED";
+        if (roundCopy) roundCopy.textContent = "All hostiles neutralized. The production floor is secure.";
       } else {
         const source = killer ? enemyCenter(killer) : null;
         const killerLabel = String(killer?.machine?.name || "Enemy");
@@ -1252,6 +1271,7 @@
       lastThreatCount = 0;
       lastFrameAt = 0;
       playerDeathStartedAt = 0;
+      roundStartedAt = 0;
       frame.classList.remove("combat-death-cinematic", "combat-paused");
       if (pauseOverlay) pauseOverlay.hidden = true;
       options.setMovementLocked?.(false);
@@ -1264,7 +1284,7 @@
       syncEnemies(true);
       if (roundOverlay) {
         roundOverlay.hidden = true;
-        roundOverlay.classList.remove("killer-reveal");
+        roundOverlay.classList.remove("killer-reveal", "victory");
       }
       if (killerReveal) killerReveal.hidden = true;
       if (roundActions) roundActions.classList.remove("locked");
@@ -1283,6 +1303,7 @@
         setTransientStatus("Get ready", 2200);
       } else {
         roundState = "playing";
+        roundStartedAt = performance.now();
         countdownEndsAt = 0;
         countdownDisplay = 0;
         if (countdownOverlay) countdownOverlay.hidden = true;
@@ -1298,6 +1319,7 @@
       const remaining = Math.max(0, countdownEndsAt - now);
       if (remaining <= 0) {
         roundState = "playing";
+        roundStartedAt = now;
         countdownEndsAt = 0;
         countdownDisplay = 0;
         if (countdownValue) countdownValue.textContent = "FIGHT";
@@ -1364,6 +1386,7 @@
       countdownEndsAt = 0;
       countdownDisplay = 0;
       lastFrameAt = 0;
+      roundStartedAt = 0;
       hud.hidden = true;
       frame.classList.remove("combat-mode-active", "combat-under-fire", "combat-death-cinematic", "combat-paused");
       options.setMovementLocked?.(false);
@@ -1416,6 +1439,17 @@
       event.preventDefault();
     }
 
+    function setTriggerHeld(held) {
+      const next = Boolean(held);
+      if (!next) {
+        mouseHeld = false;
+        return;
+      }
+      if (!active || paused || ["lost", "won"].includes(roundState)) return;
+      if (currentWeapon().automatic) mouseHeld = true;
+      fire();
+    }
+
     function handleBlur() {
       mouseHeld = false;
       setAiming(false);
@@ -1448,6 +1482,8 @@
       switchWeapon,
       reload: startReload,
       fire,
+      setAiming: (enabled) => setAiming(Boolean(enabled)),
+      setTriggerHeld,
       handleEscape,
       pause: () => setPaused(true),
       resume: () => setPaused(false),

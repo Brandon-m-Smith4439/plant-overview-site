@@ -32,6 +32,11 @@ export default function PlantOwnerDashboard() {
               <p>Open the existing Machine Design Studio to build or edit reusable machines, nested assemblies, transforms, materials, and animation timelines.</p>
               <ProtectedEditorLink href="/machine-studio">Open Machine Design Studio</ProtectedEditorLink>
             </article>
+            <article className="owner-dashboard-card owner-combat-card">
+              <h2>Combat Mode</h2>
+              <p>Turn the finished plant into an owner-only first-person game. Person and team-member machines become line-of-sight enemy AI while the normal public layout stays unchanged.</p>
+              <Link href="/?owner=combat">Open Combat Mode</Link>
+            </article>
           </section>
           <aside className="owner-dashboard-note">
             <strong>Publishing note:</strong> saves in the hosted editor stay in this browser workspace. Use the Project export/publish workflow when you want an approved owner edit to become the public portfolio/company snapshot.

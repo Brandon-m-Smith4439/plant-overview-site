@@ -1,7 +1,7 @@
 "use client";
 
-export const EDITOR_ACCESS_SESSION_KEY = "monroe-glass-editor-access-v1";
-export const OWNER_ACCESS_SESSION_KEY = "monroe-glass-owner-session-v1";
+export const EDITOR_ACCESS_SESSION_KEY = "monroe-glass-editor-access-v2";
+export const OWNER_ACCESS_SESSION_KEY = "monroe-glass-owner-session-v2";
 export const EDITOR_PROFILE_KEY = "monroe-glass-editor-profile-v1";
 export const OWNER_ACCESS_PATH = "/plant-owner-7f3a9c";
 const SALT = "monroe-glass-editor-v1";
@@ -67,7 +67,20 @@ export function grantEditorAccess() {
 }
 
 export async function verifyEditorPassword(password: string) {
-  if (!isEditorEnvironment() || !window.crypto?.subtle || !password) return false;
+  if (!isEditorEnvironment() || !password) return false;
+  try {
+    const response = await fetch("/api/editor-session", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (response.ok) return true;
+    if (response.status === 401) return false;
+  } catch {
+    // Standalone/local preview can still use the retained browser-side verifier.
+  }
+  if (!window.crypto?.subtle) return false;
   const encoder = new TextEncoder();
   const material = await window.crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await window.crypto.subtle.deriveBits({ name: "PBKDF2", salt: encoder.encode(SALT), iterations: ITERATIONS, hash: "SHA-256" }, material, 256);

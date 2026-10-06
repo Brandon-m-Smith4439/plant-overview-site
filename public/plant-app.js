@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.58";
+  const APP_VERSION = "0.13.60";
 
   function editorProfileProtected() {
     try {
@@ -245,6 +245,7 @@
     // workspace permanently. Session expiry may lock editing again, but a
     // public page load must never replace that browser's machines/designs.
     if (!publishedWorkspace || !workspaceTransfer) return;
+    if (window.PLANT_SHARED_WORKSPACE_APPLIED === true) return;
     if (window.monroeEditorAccess?.editingAllowed?.() !== false || editorProfileProtected()) return;
     try {
       capturePublishedWorkspaceRecovery(publishedWorkspace);
@@ -1932,6 +1933,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         version: 6,
         appVersion: APP_VERSION,
+        updatedAt: new Date().toISOString(),
         sceneAnimationsInitialized: true,
         floorFeaturesInitialized: true,
         machines,
@@ -1953,6 +1955,7 @@
         stageDurationSeconds: state.stageDurationSeconds,
       }));
       try { syncChannel?.postMessage({ source: "plant-layout", type: "layout-updated", at: Date.now() }); } catch (error) { console.warn("Layout update could not be broadcast.", error); }
+      window.PLANT_WORKSPACE_SYNC?.schedulePush?.();
     } catch (error) {
       console.warn("Layout changes could not be saved to browser storage.", error);
     }
@@ -10359,95 +10362,101 @@
     const gripY = height*.58 - recoil;
     const gripZ = depth*.12;
     const muzzleZ = -1.62 - recoil;
+    const weaponShiftX = width*.17;
+    const weaponX = width*.55 + weaponShiftX;
+    const wx = (value) => value + weaponShiftX;
     const leftShoulder = [width*.28,shoulderY,depth*.48];
     const rightShoulder = [width*.72,shoulderY,depth*.48];
-    const leftGrip = [width*.43 - hit*.08,gripY,gripZ];
-    const rightGrip = [width*.62 + hit*.08,gripY+.04,gripZ-.12];
+    // The weapon is intentionally right-hand dominant instead of centered in
+    // the torso. The left hand reaches across to support the fore-end.
+    const leftGrip = [weaponX - width*.18 - hit*.06,gripY+.01,gripZ-.1];
+    const rightGrip = [weaponX + width*.07 + hit*.06,gripY+.04,gripZ-.2];
 
-    localLine3d(actor,leftShoulder,leftGrip,bodyColor,3.2,alpha);
-    localLine3d(actor,rightShoulder,rightGrip,bodyColor,3.2,alpha);
+    localLine3d(actor,leftShoulder,leftGrip,bodyColor,3.4,alpha);
+    localLine3d(actor,rightShoulder,rightGrip,bodyColor,3.5,alpha);
 
     const enemyWeapon = String(combat.weaponKey || "rifle");
     let weaponMuzzleZ = muzzleZ;
     if (enemyWeapon === "chainsaw") {
-      // Right-hand chainsaw: engine housing, wrap handle, long guide bar and visible chain.
-      box(localBox3d(actor,width*.38,-.46,width*.48,.72,.52,"#d54b31",gripY-.29),alpha,1);
-      box(localBox3d(actor,width*.43,-.5,width*.38,.22,.22,"#222a2d",gripY+.17),alpha,1);
-      box(localBox3d(actor,width*.42,-1.58,width*.28,1.48,.19,"#c5cbca",gripY-.16),alpha,1);
-      box(localBox3d(actor,width*.455,-1.62,width*.21,1.53,.09,"#596164",gripY-.105),alpha,1);
-      localLine3d(actor,[width*.42,gripY+.28,-.26],[width*.7,gripY+.48,-.46],"#1b2326",5.4,alpha);
-      localLine3d(actor,[width*.7,gripY+.48,-.46],[width*.72,gripY+.12,-.72],"#1b2326",5.4,alpha);
-      localLine3d(actor,[width*.64,gripY-.06,-.34],[width*.72,gripY-.08,-.9],"#171d20",4.4,alpha);
-      for (let tooth = 0; tooth < 6; tooth += 1) {
-        const z = -1.52 - tooth*.22;
-        localLine3d(actor,[width*.43,gripY-.05,z],[width*.39,gripY-.12,z-.08],"#f0c75c",2.1,alpha);
+      // Right-hand chainsaw: thick engine block, wrap handle, guide bar and visible chain teeth.
+      box(localBox3d(actor,wx(width*.36),-.54,width*.52,.82,.58,"#d54b31",gripY-.3),alpha,1);
+      box(localBox3d(actor,wx(width*.43),-.58,width*.4,.26,.25,"#222a2d",gripY+.18),alpha,1);
+      box(localBox3d(actor,wx(width*.41),-1.72,width*.3,1.66,.22,"#c5cbca",gripY-.16),alpha,1);
+      box(localBox3d(actor,wx(width*.445),-1.77,width*.22,1.72,.11,"#596164",gripY-.1),alpha,1);
+      localLine3d(actor,[wx(width*.41),gripY+.3,-.3],[wx(width*.7),gripY+.5,-.5],"#1b2326",6.3,alpha);
+      localLine3d(actor,[wx(width*.7),gripY+.5,-.5],[wx(width*.72),gripY+.12,-.8],"#1b2326",6.3,alpha);
+      localLine3d(actor,[wx(width*.62),gripY-.04,-.38],[wx(width*.72),gripY-.08,-.98],"#171d20",5.2,alpha);
+      for (let tooth = 0; tooth < 7; tooth += 1) {
+        const z = -1.64 - tooth*.22;
+        localLine3d(actor,[wx(width*.43),gripY-.05,z],[wx(width*.385),gripY-.12,z-.09],"#f0c75c",2.3,alpha);
       }
-      weaponMuzzleZ = -2.9;
+      weaponMuzzleZ = -3.15;
     } else if (enemyWeapon === "bazooka") {
-      box(localBox3d(actor,width*.39,-.56,width*.3,1.65,.38,"#566d55",gripY-.08),alpha,1);
-      localLine3d(actor,[width*.54,gripY+.08,-.3],[width*.54,gripY+.08,-2.35],"#314436",9.5,alpha);
-      localLine3d(actor,[width*.54,gripY+.08,-2.05],[width*.54,gripY+.08,-2.55],"#b7c1b6",11,alpha);
-      weaponMuzzleZ = -2.55;
+      // Compact launcher still reads as a real tube instead of a thin center line.
+      box(localBox3d(actor,weaponX-.18,-2.58,.36,2.36,.42,"#314436",gripY-.12),alpha,1);
+      box(localBox3d(actor,weaponX-.24,-.62,.48,.62,.55,"#566d55",gripY-.19),alpha,1);
+      box(localBox3d(actor,weaponX-.25,-2.72,.5,.28,.52,"#b7c1b6",gripY-.17),alpha,1);
+      box(localBox3d(actor,weaponX-.11,-.44,.22,.34,.56,"#202924",gripY-.62),alpha,1);
+      weaponMuzzleZ = -2.76;
     } else if (enemyWeapon === "rocket") {
-      // Oversized shoulder-fired rocket launcher with a broad tube, rear exhaust and front warhead collar.
-      box(localBox3d(actor,width*.28,-1.02,width*.58,2.72,.66,"#405747",gripY-.2),alpha,1);
-      box(localBox3d(actor,width*.24,-.06,width*.66,.5,.78,"#263a2d",gripY-.26),alpha,1);
-      box(localBox3d(actor,width*.31,-2.98,width*.52,.5,.62,"#657869",gripY-.18),alpha,1);
-      box(localBox3d(actor,width*.38,-3.28,width*.38,.38,.46,"#b7c5b6",gripY-.1),alpha,1);
-      box(localBox3d(actor,width*.43,-.42,width*.24,.46,.24,"#121b16",gripY+.34),alpha,1);
-      box(localBox3d(actor,width*.5,-.12,width*.18,.34,.65,"#202c24",gripY-.64),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.12,.2],[width*.55,gripY+.12,-3.45],"#17241c",15.5,alpha);
-      localLine3d(actor,[width*.3,gripY+.06,.08],[width*.18,gripY+.06,.55],"#d49b48",5.8,alpha);
-      weaponMuzzleZ = -3.48;
+      // Oversized shoulder-fired launcher, offset hard to the right shoulder.
+      box(localBox3d(actor,weaponX-.34,-3.18,.68,3.34,.74,"#405747",gripY-.25),alpha,1);
+      box(localBox3d(actor,weaponX-.39,-.1,.78,.58,.84,"#263a2d",gripY-.3),alpha,1);
+      box(localBox3d(actor,weaponX-.31,-3.42,.62,.46,.68,"#657869",gripY-.22),alpha,1);
+      box(localBox3d(actor,weaponX-.23,-3.7,.46,.34,.5,"#b7c5b6",gripY-.13),alpha,1);
+      box(localBox3d(actor,weaponX-.14,-.5,.28,.48,.28,"#121b16",gripY+.34),alpha,1);
+      box(localBox3d(actor,weaponX-.11,-.18,.22,.38,.7,"#202c24",gripY-.68),alpha,1);
+      box(localBox3d(actor,weaponX-.18,.22,.36,.45,.45,"#25352b",gripY-.18),alpha,1);
+      weaponMuzzleZ = -3.76;
     } else if (enemyWeapon === "sniper") {
-      // Long precision rifle: shoulder stock, receiver, magazine, handguard, heavy barrel and scope.
-      box(localBox3d(actor,width*.12,depth*.2,width*.3,.62,.42,"#2d373c",gripY-.22),alpha,1);
-      box(localBox3d(actor,width*.3,-.26,width*.5,.72,.38,weapon,gripY-.2),alpha,1);
-      box(localBox3d(actor,width*.39,-.9,width*.34,.78,.28,"#46545a",gripY-.16),alpha,1);
-      box(localBox3d(actor,width*.47,-.16,width*.18,.3,.72,"#151c20",gripY-.72),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.03,-.72],[width*.55,gripY+.03,-2.92],weapon,5.2,alpha);
-      localLine3d(actor,[width*.55,gripY+.03,-2.72],[width*.55,gripY+.03,-3.08],"#171e22",7,alpha);
-      box(localBox3d(actor,width*.43,-.35,width*.25,.78,.23,"#11181c",gripY+.2),alpha,1);
-      box(localBox3d(actor,width*.47,-.44,width*.17,.94,.18,"#718089",gripY+.23),alpha,1);
-      box(localBox3d(actor,width*.5,-.52,width*.11,1.02,.12,"#a9b3b7",gripY+.25),alpha,1);
-      weaponMuzzleZ = -3.08;
+      // Long precision rifle with substantial stock, receiver, handguard, heavy barrel and optic.
+      box(localBox3d(actor,wx(width*.09),depth*.16,width*.34,.82,.48,"#2d373c",gripY-.25),alpha,1);
+      box(localBox3d(actor,wx(width*.27),-.34,width*.56,.84,.44,weapon,gripY-.22),alpha,1);
+      box(localBox3d(actor,weaponX-.2,-1.18,.4,.95,.34,"#46545a",gripY-.18),alpha,1);
+      box(localBox3d(actor,weaponX-.105,-.18,.21,.34,.78,"#151c20",gripY-.75),alpha,1);
+      box(localBox3d(actor,weaponX-.105,-3.16,.21,2.1,.2,"#20282d",gripY-.08),alpha,1);
+      box(localBox3d(actor,weaponX-.14,-.46,.28,.9,.27,"#11181c",gripY+.2),alpha,1);
+      box(localBox3d(actor,weaponX-.105,-.55,.21,1.08,.21,"#718089",gripY+.25),alpha,1);
+      box(localBox3d(actor,weaponX-.07,-.6,.14,1.18,.14,"#a9b3b7",gripY+.27),alpha,1);
+      weaponMuzzleZ = -3.2;
     } else if (enemyWeapon === "shotgun") {
-      box(localBox3d(actor,width*.28,depth*.01,width*.52,.42,.32,weapon,gripY-.18),alpha,1);
-      box(localBox3d(actor,width*.36,-.72,width*.38,.76,.28,"#6b4a2e",gripY-.16),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.03,-.55],[width*.55,gripY+.03,-2.08],"#20282d",6.2,alpha);
-      weaponMuzzleZ = -2.08;
-    } else if (enemyWeapon === "smg") {
-      box(localBox3d(actor,width*.32,depth*.01,width*.46,.36,.34,weapon,gripY-.18),alpha,1);
-      box(localBox3d(actor,width*.46,-.14,width*.17,.28,.62,"#151c20",gripY-.62),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.03,-.45],[width*.55,gripY+.03,-1.36],weapon,5,alpha);
-      weaponMuzzleZ = -1.36;
-    } else if (enemyWeapon === "pistol") {
-      box(localBox3d(actor,width*.42,-.16,width*.28,.58,.24,weapon,gripY-.12),alpha,1);
-      box(localBox3d(actor,width*.48,-.02,width*.16,.22,.5,"#171f22",gripY-.54),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.02,-.48],[width*.55,gripY+.02,-1.18],weapon,4.2,alpha);
-      weaponMuzzleZ = -1.18;
-    } else {
-      // Full 3D right-hand service rifle with shoulder stock, receiver, handguard, curved magazine, grip, rail and optic.
-      box(localBox3d(actor,width*.1,depth*.18,width*.32,.72,.46,"#2a3439",gripY-.24),alpha,1);
-      box(localBox3d(actor,width*.29,-.28,width*.54,.78,.42,weapon,gripY-.21),alpha,1);
-      box(localBox3d(actor,width*.36,-.92,width*.4,.8,.32,weaponLight,gripY-.17),alpha,1);
-      box(localBox3d(actor,width*.44,-.16,width*.2,.3,.76,"#151d21",gripY-.73),alpha,1);
-      box(localBox3d(actor,width*.49,-.06,width*.17,.28,.94,"#1a2226",gripY-.93),alpha,1);
-      box(localBox3d(actor,width*.49,depth*.02,width*.15,.26,.62,"#20282c",gripY-.64),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.03,-.78],[width*.55,gripY+.03,-2.18],weapon,6.1,alpha);
-      localLine3d(actor,[width*.55,gripY+.03,-2.02],[width*.55,gripY+.03,-2.34],"#151c20",7.4,alpha);
-      box(localBox3d(actor,width*.42,-.24,width*.28,.68,.12,"#11181c",gripY+.2),alpha,1);
-      box(localBox3d(actor,width*.47,-.18,width*.18,.32,.25,"#27343a",gripY+.31),alpha,1);
-      box(localBox3d(actor,width*.5,-.24,width*.12,.44,.18,"#7d8b91",gripY+.34),alpha,1);
+      box(localBox3d(actor,wx(width*.12),depth*.12,width*.34,.7,.42,"#313b3f",gripY-.23),alpha,1);
+      box(localBox3d(actor,wx(width*.28),-.28,width*.52,.58,.38,weapon,gripY-.2),alpha,1);
+      box(localBox3d(actor,weaponX-.21,-1.18,.42,.94,.34,"#6b4a2e",gripY-.18),alpha,1);
+      box(localBox3d(actor,weaponX-.12,-2.3,.24,1.25,.24,"#20282d",gripY-.09),alpha,1);
       weaponMuzzleZ = -2.34;
+    } else if (enemyWeapon === "smg") {
+      box(localBox3d(actor,wx(width*.22),-.2,width*.5,.54,.42,weapon,gripY-.2),alpha,1);
+      box(localBox3d(actor,weaponX-.1,-.17,.2,.3,.68,"#151c20",gripY-.65),alpha,1);
+      box(localBox3d(actor,weaponX-.11,-1.62,.22,1.25,.22,"#303b40",gripY-.1),alpha,1);
+      box(localBox3d(actor,wx(width*.12),depth*.12,width*.22,.55,.28,"#2b3539",gripY-.18),alpha,1);
+      weaponMuzzleZ = -1.66;
+    } else if (enemyWeapon === "pistol") {
+      box(localBox3d(actor,weaponX-.17,-.34,.34,.72,.28,weapon,gripY-.13),alpha,1);
+      box(localBox3d(actor,weaponX-.1,-.02,.2,.25,.58,"#171f22",gripY-.58),alpha,1);
+      box(localBox3d(actor,weaponX-.09,-1.16,.18,.78,.18,"#242d31",gripY-.08),alpha,1);
+      weaponMuzzleZ = -1.2;
+    } else {
+      // Full 3D right-hand service rifle with visibly thick receiver/barrel and an offset shoulder stock.
+      box(localBox3d(actor,wx(width*.06),depth*.14,width*.36,.82,.48,"#2a3439",gripY-.26),alpha,1);
+      box(localBox3d(actor,wx(width*.25),-.34,width*.58,.9,.46,weapon,gripY-.23),alpha,1);
+      box(localBox3d(actor,weaponX-.22,-1.18,.44,.98,.36,weaponLight,gripY-.19),alpha,1);
+      box(localBox3d(actor,weaponX-.11,-.19,.22,.34,.82,"#151d21",gripY-.78),alpha,1);
+      box(localBox3d(actor,weaponX-.09,-.08,.18,.3,.98,"#1a2226",gripY-.98),alpha,1);
+      box(localBox3d(actor,weaponX-.085,depth*.02,.17,.28,.66,"#20282c",gripY-.68),alpha,1);
+      box(localBox3d(actor,weaponX-.12,-2.5,.24,1.42,.23,"#20282d",gripY-.1),alpha,1);
+      box(localBox3d(actor,weaponX-.15,-.42,.3,.74,.14,"#11181c",gripY+.21),alpha,1);
+      box(localBox3d(actor,weaponX-.11,-.3,.22,.42,.28,"#27343a",gripY+.34),alpha,1);
+      box(localBox3d(actor,weaponX-.07,-.37,.14,.56,.2,"#7d8b91",gripY+.38),alpha,1);
+      weaponMuzzleZ = -2.56;
     }
 
-    const muzzle = localPoint3d(actor,width*.55,gripY+.03,weaponMuzzleZ);
+    const muzzle = localPoint3d(actor,weaponX,gripY+.03,weaponMuzzleZ);
     if (combat.muzzleFlash && enemyWeapon !== "chainsaw") {
       const flashLength = (enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? 1.55 : 1.05;
-      localLine3d(actor,[width*.55,gripY+.03,weaponMuzzleZ],[width*.55,gripY+.03,weaponMuzzleZ-flashLength],(enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? "#ff7c32" : "#ffd26c",(enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? 13 : 9,alpha);
-      localLine3d(actor,[width*.55-.28,gripY+.03,weaponMuzzleZ-.48],[width*.55+.28,gripY+.03,weaponMuzzleZ-.48],"#fff3bc",6,alpha);
-      localLine3d(actor,[width*.55,gripY-.28,weaponMuzzleZ-.48],[width*.55,gripY+.32,weaponMuzzleZ-.48],"#ff9140",6,alpha);
+      localLine3d(actor,[weaponX,gripY+.03,weaponMuzzleZ],[weaponX,gripY+.03,weaponMuzzleZ-flashLength],(enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? "#ff7c32" : "#ffd26c",(enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? 13 : 9,alpha);
+      localLine3d(actor,[weaponX-.28,gripY+.03,weaponMuzzleZ-.48],[weaponX+.28,gripY+.03,weaponMuzzleZ-.48],"#fff3bc",6,alpha);
+      localLine3d(actor,[weaponX,gripY-.28,weaponMuzzleZ-.48],[weaponX,gripY+.32,weaponMuzzleZ-.48],"#ff9140",6,alpha);
     }
     if (combat.tracerTarget) {
       const target = [Number(combat.tracerTarget.x), Number(combat.tracerTarget.y), Number(combat.tracerTarget.z)];
@@ -10735,13 +10744,15 @@
     const aim = combat.aiming ? 1 : 0;
     const death = clamp(Number(combat.deathProgress) || 0, 0, 1);
     const deathDrop = Math.sin(Math.min(1, death * 2) * Math.PI / 2);
+    // ADS centers the open holographic window while dropping the receiver below the sight line.
+    // Hip-fire keeps the rifle naturally right-biased so the weapon never masks the reticle.
     const root = {
-      x: .34 + bobX*(1-aim*.78) - aim*.27 + deathDrop*.18,
-      y: -.25 - bobY*(1-aim*.8) - aim*.045 - reloadArc*.12 + recoil*.045 - deathDrop*.72,
-      z: 1.15 - aim*.22 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
+      x: .36 + bobX*(1-aim*.78) - aim*.355 + deathDrop*.18,
+      y: -.27 - bobY*(1-aim*.8) - aim*.145 - reloadArc*.12 + recoil*.045 - deathDrop*.72,
+      z: 1.14 - aim*.12 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
       rotationX: -4 - recoil*6 + reloadArc*18 + deathDrop*28,
-      rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
-      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
+      rotationY: -6 + aim*5.85 + bobX*40*(1-aim*.8),
+      rotationZ: -2 + (1-aim*.92)*Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
     };
     const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381", steel="#77858b", accent="#202a2f";
     const parts = combat.weapon === "handgun" ? [
@@ -10756,29 +10767,40 @@
       {x:.0,y:-.22,z:.12,w:.22,h:.17,d:.26,color:skin,rotationX:-8},
       {x:-.18,y:-.16,z:.12,w:.17,h:.15,d:.24,color:skin,rotationZ:-12},
     ] : [
-      {x:0,y:0,z:.02,w:.36,h:.23,d:.75,color:metal},
-      {x:0,y:.155,z:-.02,w:.3,h:.055,d:.72,color:steel},
-      {x:0,y:.2,z:-.18,w:.21,h:.06,d:.22,color:dark},
-      {x:0,y:.265,z:-.18,w:.22,h:.13,d:.08,color:"#171f23"},
-      {x:-.09,y:.275,z:-.18,w:.045,h:.24,d:.09,color:mid},
-      {x:.09,y:.275,z:-.18,w:.045,h:.24,d:.09,color:mid},
-      {x:0,y:.34,z:-.18,w:.19,h:.035,d:.09,color:"#29363c"},
-      {x:0,y:-.21,z:.12,w:.18,h:.43,d:.2,color:dark,rotationX:-13},
-      {x:0,y:-.21,z:-.09,w:.18,h:.4,d:.2,color:dark,rotationX:8},
-      {x:0,y:.01,z:-.55,w:.24,h:.18,d:.56,color:mid},
-      {x:0,y:.07,z:-.58,w:.28,h:.05,d:.42,color:steel},
-      {x:0,y:.0,z:-1.03,w:.09,h:.09,d:.52,color:dark},
-      {x:0,y:.0,z:-1.32,w:.13,h:.12,d:.09,color:"#252f33"},
-      {x:0,y:.0,z:.64,w:.3,h:.23,d:.5,color:dark},
-      {x:0,y:.0,z:.91,w:.25,h:.19,d:.16,color:"#252f33"},
-      {x:.03,y:-.3,z:.11,w:.25,h:.19,d:.3,color:skin,rotationX:-8},
-      {x:-.21,y:-.13,z:-.29,w:.2,h:.18,d:.34,color:skin,rotationZ:-14},
+      // Substantial receiver and lower assembly. The receiver stays below the optic window in ADS.
+      {x:0,y:-.035,z:.02,w:.42,h:.24,d:.76,color:metal},
+      {x:0,y:.105,z:-.05,w:.35,h:.055,d:.73,color:steel},
+      {x:0,y:-.245,z:.11,w:.2,h:.45,d:.22,color:dark,rotationX:-13},
+      {x:0,y:-.24,z:-.08,w:.19,h:.43,d:.22,color:dark,rotationX:8,magazine:true},
+      // Thick fore-end, barrel and muzzle brake.
+      {x:0,y:-.01,z:-.58,w:.3,h:.2,d:.6,color:mid},
+      {x:0,y:.07,z:-.62,w:.32,h:.05,d:.48,color:steel},
+      {x:0,y:-.005,z:-1.08,w:.105,h:.105,d:.56,color:dark},
+      {x:0,y:-.005,z:-1.39,w:.16,h:.135,d:.12,color:"#252f33"},
+      // Stock and cheek support.
+      {x:0,y:-.025,z:.66,w:.34,h:.25,d:.52,color:dark},
+      {x:0,y:.055,z:.89,w:.29,h:.12,d:.25,color:"#38444a"},
+      {x:0,y:-.025,z:.96,w:.27,h:.2,d:.17,color:"#252f33"},
+      // Open-window holographic optic. There is deliberately no center box to block the sight picture.
+      {x:0,y:.17,z:-.16,w:.25,h:.045,d:.2,color:dark},
+      {x:-.105,y:.275,z:-.16,w:.038,h:.215,d:.085,color:mid},
+      {x:.105,y:.275,z:-.16,w:.038,h:.215,d:.085,color:mid},
+      {x:0,y:.38,z:-.16,w:.25,h:.035,d:.085,color:"#38474d"},
+      {x:-.105,y:.175,z:-.16,w:.038,h:.045,d:.085,color:"#222c31"},
+      {x:.105,y:.175,z:-.16,w:.038,h:.045,d:.085,color:"#222c31"},
+      // Small side/ejection details reinforce the rifle silhouette without occupying the optic window.
+      {x:.19,y:.035,z:.04,w:.055,h:.075,d:.22,color:"#11181b"},
+      {x:-.19,y:.055,z:-.2,w:.05,h:.09,d:.18,color:"#627078"},
+      // Hands stay lower than the holographic sight.
+      {x:.04,y:-.33,z:.1,w:.27,h:.2,d:.31,color:skin,rotationX:-8},
+      {x:-.22,y:-.16,z:-.34,w:.21,h:.19,d:.38,color:skin,rotationZ:-14},
     ];
-    // During reload the magazine visibly drops and returns instead of the whole gun merely rotating.
-    parts.forEach((part,index) => {
-      const magazineIndex = combat.weapon === "rifle" ? 4 : -1;
+    // During reload the marked magazine drops and returns; this stays stable when rifle geometry changes.
+    parts.forEach((part) => {
       const spec = {...part};
-      if (index === magazineIndex && reload > .05) {
+      const magazine = Boolean(spec.magazine);
+      delete spec.magazine;
+      if (magazine && reload > .05) {
         const eject = reload < .5 ? reload*2 : (1-reload)*2;
         spec.y -= .42 * clamp(eject,0,1);
         spec.rotationZ = (spec.rotationZ||0) + 18*clamp(eject,0,1);
@@ -10786,7 +10808,7 @@
       drawViewmodelBox(spec,root,1);
     });
     if (combat.muzzleFlash) {
-      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78] : [0,.01,-1.31];
+      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78] : [0,-.005,-1.46];
       const muzzle = viewmodelPoint(muzzleLocal,root);
       const p=viewmodelProject(muzzle);
       const radius=Math.max(16,42*pixelRatio);
@@ -12457,7 +12479,7 @@
     animationFrameId = requestAnimationFrame(draw);
     const firstPersonMoving = firstPersonController?.update(time) || false;
     const stageMoving = Math.abs(state.stage - state.stageFloat) > .001;
-    const animating = state.playing || stageMoving || state.visibleAnimationsActive || firstPersonMoving || labelTransitionsActive;
+    const animating = state.playing || stageMoving || state.visibleAnimationsActive || firstPersonMoving || labelTransitionsActive || combatController?.isActive?.();
     if (!renderPerformance.shouldRender(time, {
       interacting: state.dragging || firstPersonController?.isMoving(),
       animating,

@@ -277,6 +277,7 @@
     let directionCalloutTimer = 0;
     let roundRevealSerial = 0;
     let roundStartedAt = 0;
+    let victoryTimer = 0;
 
     function currentWeapon() {
       return WEAPONS[selectedWeapon];
@@ -331,6 +332,8 @@
       record.recoilUntil = 0;
       record.hitReactUntil = 0;
       record.defeatedAt = 0;
+      record.deathAnimationStartedAt = 0;
+      record.deathAnimationDuration = 1120 + unit * 280;
       record.deathDirection = unit > .5 ? 1 : -1;
       record.weaponKey = ENEMY_WEAPON_KEYS[Math.floor(Math.random() * ENEMY_WEAPON_KEYS.length)] || "rifle";
       record.weaponLabel = ENEMY_WEAPONS[record.weaponKey]?.label || "Rifle";
@@ -430,6 +433,7 @@
       if (!enemy || enemy.defeatedAt > 0) return;
       enemy.health = 0;
       enemy.defeatedAt = now;
+      enemy.deathAnimationStartedAt = 0;
       enemy.movementBlend = 0;
       enemy.rollUntil = 0;
       enemy.rollStartedAt = 0;
@@ -713,7 +717,10 @@
       if (!enemy) return null;
       const defeated = enemy.health <= 0;
       if (defeated && !enemy.defeatedAt) enemy.defeatedAt = now;
-      const deathProgress = defeated ? clamp((now - enemy.defeatedAt) / 720, 0, 1) : 0;
+      if (defeated && !enemy.deathAnimationStartedAt) enemy.deathAnimationStartedAt = now;
+      const deathProgress = defeated
+        ? clamp((now - enemy.deathAnimationStartedAt) / Math.max(900, enemy.deathAnimationDuration || 1200), 0, 1)
+        : 0;
       const rollProgress = !defeated && enemy.rollStartedAt > 0 && now < enemy.rollUntil
         ? clamp((now-enemy.rollStartedAt)/Math.max(1,enemy.rollUntil-enemy.rollStartedAt),0,1)
         : 0;
@@ -936,7 +943,18 @@
       return setPaused(!paused);
     }
 
+    function scheduleVictory() {
+      if (victoryTimer || !active || roundState !== "playing" || aliveEnemies().length > 0 || enemies.size === 0) return;
+      victoryTimer = window.setTimeout(() => {
+        victoryTimer = 0;
+        if (!active || roundState !== "playing" || aliveEnemies().length > 0 || enemies.size === 0) return;
+        finishRound("won");
+      }, 1250);
+    }
+
     function finishRound(kind, killer = null, player = null) {
+      if (victoryTimer) window.clearTimeout(victoryTimer);
+      victoryTimer = 0;
       const endedAt = performance.now();
       roundState = kind;
       paused = false;
@@ -1099,7 +1117,7 @@
         pushBloodBurst(target.enemy, finalPoint, now, defeated);
         showHitmarker(defeated);
         setTransientStatus(defeated ? "Enemy down" : "Hit", defeated ? 950 : 420);
-        if (defeated && aliveEnemies().length === 0 && enemies.size > 0) finishRound("won");
+        if (defeated && aliveEnemies().length === 0 && enemies.size > 0) scheduleVictory();
       } else {
         if (worldImpact.landed) pushImpact(worldImpact.point, now, worldImpact.kind, worldImpact.normal);
         const dodge = nearMissEnemy(origin,direction,weapon.range,null);
@@ -1238,6 +1256,8 @@
     }
 
     function resetRound({ countdown = false } = {}) {
+      if (victoryTimer) window.clearTimeout(victoryTimer);
+      victoryTimer = 0;
       playerHealth = 100;
       playerShield = SHIELD_MAX;
       aiming = false;
@@ -1375,6 +1395,8 @@
 
     function stop() {
       if (!active) return;
+      if (victoryTimer) window.clearTimeout(victoryTimer);
+      victoryTimer = 0;
       active = false;
       paused = false;
       pausedAt = 0;

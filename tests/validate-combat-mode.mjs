@@ -129,6 +129,13 @@ assert.ok(plant.includes('data-touch-combat="fire"') && plant.includes('data-tou
 assert.ok(plant.includes("navigator.maxTouchPoints") && combat.includes("setTriggerHeld") && combat.includes("setAiming: (enabled)"), "Touch players must be combat-engaged without desktop pointer lock and expose fire/aim APIs.");
 assert.ok(css.includes(".combat-mode-active .touch-combat-actions") && css.includes(".touch-combat-fire"), "Mobile Combat Mode controls are not styled for touch screens.");
 assert.ok(plant.includes("const eyeY = height*.865") && plant.includes("const eyeZ = depth*.035"), "Combat eyes must be moved higher and recessed into the face.");
-assert.ok(plant.includes("Oversized shoulder-fired rocket launcher") && plant.includes("weaponMuzzleZ = -3.48"), "Enemy Rocket Launcher must render as a large shoulder-fired 3D weapon.");
+assert.ok((plant.includes("Oversized shoulder-fired rocket launcher") || plant.includes("Oversized shoulder-fired launcher")) && plant.includes("weaponMuzzleZ = -3.76"), "Enemy Rocket Launcher must render as a large shoulder-fired 3D weapon.");
 assert.ok(plant.includes("Long precision rifle") && plant.includes("Full 3D right-hand service rifle") && plant.includes("Right-hand chainsaw"), "AI rifle, sniper, and chainsaw models must have distinct detailed right-hand 3D geometry.");
+// v0.13.60: deterministic death animation and rebuilt right-hand/ADS weapon geometry.
+assert.ok(combat.includes("deathAnimationStartedAt") && combat.includes("deathAnimationDuration") && combat.includes("scheduleVictory"), "Enemy death animation must start on its first rendered frame and delay final victory long enough to show the fall.");
+assert.ok(combat.includes('}, 1250);') && plant.includes("combatController?.isActive?.()"), "Combat rendering must stay animated through death and the final kill delay.");
+assert.ok(plant.includes("const weaponShiftX = width*.17") && plant.includes("right-hand dominant"), "Enemy weapons must be offset into a right-hand pose instead of centered through the torso.");
+assert.ok(plant.includes("Oversized shoulder-fired launcher") && plant.includes("Full 3D right-hand service rifle"), "Enemy launcher/rifle geometry must remain thick, distinct 3D models.");
+assert.ok(plant.includes("Open-window holographic optic") && plant.includes("magazine:true") && plant.includes("no center box to block the sight picture"), "Player rifle must use a clear open holographic sight window and stable magazine animation tagging.");
+assert.ok(plant.includes("aim*.145") && plant.includes("aim*.355"), "ADS must lower/center the player rifle so the holographic sight remains unobstructed.");
 

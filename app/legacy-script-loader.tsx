@@ -7,10 +7,11 @@ declare global {
   interface Window {
     THREE?: typeof ThreeNamespace;
     monroeEditorAccess?: { editingAllowed(): boolean; hasAccess(): boolean; requestAccess(): Promise<boolean>; isOwner?(): boolean };
+    PLANT_SHARED_WORKSPACE_READY?: Promise<unknown>;
   }
 }
 
-const LEGACY_BUILD_TOKEN = "0.13.59";
+const LEGACY_BUILD_TOKEN = "0.13.60";
 const scriptLoads = new Map<string, Promise<void>>();
 
 function loadScript(source: string) {
@@ -91,6 +92,9 @@ export default function LegacyScriptLoader({ sources }: { sources: string[] }) {
       for (const source of sourceKey.split("\u001f")) {
         if (!active || !source) return;
         await loadScript(source);
+        if (source.endsWith("/workspace-sync.js") && window.PLANT_SHARED_WORKSPACE_READY) {
+          await window.PLANT_SHARED_WORKSPACE_READY;
+        }
       }
     }
 

@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.32";
+  const APP_VERSION = "0.13.60";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -755,6 +755,7 @@
       localStorage.setItem(DESIGN_BACKUP_KEY, previousLibrary);
     }
     localStorage.setItem(DESIGN_KEY, serializedLibrary);
+    window.PLANT_WORKSPACE_SYNC?.schedulePush?.();
     broadcastProjectUpdate("design-library-updated", { designId: state?.designId || null });
     if (saveState) window.setTimeout(() => { saveState.textContent = "Auto-saved"; }, 180);
   }
@@ -773,8 +774,10 @@
   function saveLayout() {
     plantLayout.version = 6;
     plantLayout.appVersion = APP_VERSION;
+    plantLayout.updatedAt = new Date().toISOString();
     delete plantLayout.sourceKey;
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(plantLayout));
+    window.PLANT_WORKSPACE_SYNC?.schedulePush?.();
     broadcastProjectUpdate("layout-updated", { machineId: state?.linkedMachineId || null });
   }
 

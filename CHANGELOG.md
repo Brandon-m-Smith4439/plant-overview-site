@@ -1,3 +1,11 @@
+## 0.13.60 - 2026-10-06
+
+- Replaced device-only Machine Studio envelope persistence with a shared workspace sync API. Owner-authenticated design/layout edits now publish to a durable shared workspace so desktop and mobile render the same collision envelopes and linked machine designs. A Railway persistent volume stores the shared workspace across deployments.
+- The shared workspace is hydrated before the plant or Machine Studio renderer boots, reconciles local/remote revisions, preserves protected editor data while signed out, and automatically publishes later envelope/layout edits after owner authentication.
+- Rebuilt enemy weapons around a right-hand-dominant pose instead of the center of the body, thickening rifle, sniper, shotgun, SMG, pistol, chainsaw, bazooka, and large rocket-launcher geometry so each reads as a physical weapon.
+- Redesigned the first-person rifle around an open-window holographic optic, lowered and centered the rifle during ADS, strengthened receiver/fore-end/barrel/stock geometry, and made reload animation target the magazine explicitly rather than relying on a fragile array index.
+- Enemy death animation now begins on the first rendered defeated frame, lasts longer, keeps Combat Mode in the active render loop, and delays the victory overlay after the final kill so the last enemy visibly completes the fall.
+
 ## 0.13.59 - 2026-10-06
 
 - Rebuilt the Combat Mode success state into a celebratory **VICTORY / PLANT SECURED** presentation with an animated secure seal, confetti, victory rings, clear-time/health/shield stats, and stronger restart/exit emphasis.

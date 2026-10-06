@@ -1,3 +1,7 @@
+## Version 0.13.60
+
+Machine envelopes and reusable Machine Studio designs now use a shared cross-device workspace rather than remaining trapped in one browser's local storage. Once an owner-authenticated desktop with the newest edits opens the site, those definitions publish to the shared workspace and mobile/public viewers hydrate the same layout before rendering. Combat also receives thicker right-hand enemy weapons, a rebuilt player rifle with an unobstructed open holographic sight, and deterministic enemy fall animations before victory.
+
 ## Version 0.13.59
 
 Owner Combat Mode now has a much more celebratory **PLANT SECURED** victory sequence and is playable from touch phones using dedicated FIRE, AIM, RELOAD, SWAP, and MENU controls alongside the existing mobile movement/look controls. Combat people also have corrected eye placement and more detailed weapon-specific 3D models, including a large shoulder-fired Rocket Launcher.

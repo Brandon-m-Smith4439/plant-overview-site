@@ -7473,3 +7473,201 @@ body.viewer-fullscreen-fallback-active {
 
 /* v0.13.37 — exact process pivot editor */
 .process-pivot-list{display:grid;gap:7px;margin:8px 0 10px}.process-pivot-row{display:grid;grid-template-columns:26px minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:6px;padding:7px;border:1px solid #d5e1dc;border-radius:8px;background:#f7faf8}.process-pivot-index{display:grid;place-items:center;align-self:center;width:23px;height:23px;border-radius:50%;background:#176f66;color:#fff;font-size:10px;font-weight:900}.process-pivot-row label{display:grid;gap:3px;color:#5e6d67;font-size:8px;font-weight:800;letter-spacing:.035em;text-transform:uppercase}.process-pivot-row input{width:100%;min-width:0}.process-pivot-row button{min-height:30px;padding:0 8px}.process-pivot-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.process-flow-behavior-grid{margin-top:10px}@media(max-width:560px){.process-pivot-row{grid-template-columns:24px 1fr 1fr}.process-pivot-row button{grid-column:2/4}.process-pivot-actions{grid-template-columns:1fr}}
+
+
+/* v0.13.49 — simplified physical 3D machine-label editor */
+.label-controls-revamp {
+  display: grid;
+  gap: 10px;
+}
+.label-settings-section,
+.label-advanced-settings {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d8e0dc;
+  border-radius: 10px;
+  background: rgba(248, 251, 250, .9);
+}
+.label-settings-heading {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 9px;
+}
+.label-settings-heading strong {
+  color: #33423d;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.label-settings-heading span,
+.label-cleanup-note {
+  color: #6b7873;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.label-settings-section > label.wide {
+  display: grid;
+  gap: 4px;
+  margin-top: 7px;
+}
+.label-toggle-stack {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+}
+.label-color-picker {
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+}
+.label-color-trigger {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 46px;
+  padding: 7px 9px;
+  border: 1px solid #c6d2cd;
+  border-radius: 9px;
+  background: #fff;
+  color: #34423d;
+  text-align: left;
+  cursor: pointer;
+}
+.label-color-trigger:hover:not(:disabled) { border-color: #8fb6ad; }
+.label-color-trigger:disabled { cursor: default; opacity: .55; }
+.label-color-preview {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 28px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.28);
+}
+.label-color-preview i { position: absolute; display: block; }
+.label-color-preview [data-label-color-preview-background] { inset: 0; }
+.label-color-preview [data-label-color-preview-accent] { left: 0; right: 0; bottom: 0; height: 5px; }
+.label-color-preview [data-label-color-preview-text] {
+  width: 10px;
+  height: 10px;
+  left: 12px;
+  top: 7px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.18);
+}
+.label-color-trigger-copy { display: grid; gap: 2px; min-width: 0; }
+.label-color-trigger-copy strong { font-size: 10px; font-weight: 800; }
+.label-color-trigger-copy small { color: #75817c; font-size: 8.5px; line-height: 1.3; }
+.label-color-chevron { color: #70807a; font-size: 15px; transition: transform .15s ease; }
+.label-color-trigger[aria-expanded="true"] .label-color-chevron { transform: rotate(180deg); }
+.label-color-popover {
+  display: grid;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid #cbd7d2;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(33, 51, 45, .10);
+}
+.label-color-popover[hidden] { display: none; }
+.label-custom-color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.label-custom-color-grid label {
+  display: grid;
+  gap: 4px;
+  color: #63706b;
+  font-size: 8.5px;
+  font-weight: 750;
+}
+.label-custom-color-grid input[type="color"] {
+  width: 100%;
+  min-height: 32px;
+  padding: 2px;
+  border-radius: 7px;
+}
+.label-preset-footer {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #e0e6e3;
+}
+.label-preset-footer > span {
+  color: #6a7772;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.label-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.label-color-swatches button {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 3px;
+  border: 1px solid #cbd5d1;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+.label-color-swatches button:hover:not(:disabled),
+.label-color-swatches button.active {
+  border-color: #277d78;
+  box-shadow: 0 0 0 1px rgba(39,125,120,.18);
+}
+.label-color-swatches button.active { background: #edf7f5; }
+.label-color-swatches i {
+  display: block;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.10);
+}
+.label-position-grid input[type="number"] { font-variant-numeric: tabular-nums; }
+.label-camera-toggle { margin-top: 9px; }
+.label-advanced-settings { padding: 0; overflow: hidden; }
+.label-advanced-settings > summary {
+  padding: 10px;
+  color: #485650;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+.label-advanced-settings > summary::-webkit-details-marker { display: none; }
+.label-advanced-settings > summary::after {
+  content: "+";
+  float: right;
+  color: #76837e;
+  font-size: 13px;
+  line-height: 1;
+}
+.label-advanced-settings[open] > summary::after { content: "−"; }
+.label-advanced-settings[open] > summary { border-bottom: 1px solid #dde4e1; }
+.label-advanced-settings > .label-format-grid,
+.label-advanced-settings > .process-pointer-toggle,
+.label-advanced-settings > p {
+  margin-left: 10px;
+  margin-right: 10px;
+}
+.label-advanced-settings > .label-format-grid:last-child,
+.label-advanced-settings > .process-pointer-toggle:last-child,
+.label-advanced-settings > p:last-child { margin-bottom: 10px; }
+.label-advanced-settings > p { color: #6d7a75; font-size: 9px; line-height: 1.4; }
+@media (max-width: 720px) {
+  .label-custom-color-grid { grid-template-columns: 1fr; }
+}

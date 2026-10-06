@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.48";
+  const APP_VERSION = "0.13.49";
 
   function editorProfileProtected() {
     try {
@@ -806,13 +806,13 @@
       labelAbbreviation: String(machine.labelAbbreviation || "").trim(),
       labelTextColor: /^#[0-9a-f]{6}$/i.test(String(machine.labelTextColor || "")) ? machine.labelTextColor : "#ffffff",
       labelBackgroundColor: /^#[0-9a-f]{6}$/i.test(String(machine.labelBackgroundColor || "")) ? machine.labelBackgroundColor : "#141c20",
-      labelSizePercent: clamp(Number(machine.labelSizePercent) || 100, 50, 250),
+      labelSizePercent: Math.max(5, Number(machine.labelSizePercent) || 100),
       labelFontWeight: ["regular", "semibold", "bold"].includes(machine.labelFontWeight) ? machine.labelFontWeight : "semibold",
       labelUppercase: machine.labelUppercase === true,
-      labelAnchorXPercent: clamp(Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50, 0, 100),
-      labelAnchorYPercent: clamp(Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100, 0, 100),
-      labelAnchorZPercent: clamp(Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50, 0, 100),
-      labelHeightOffset: clamp(Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4, 0, 60),
+      labelAnchorXPercent: clamp(Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50, -1000, 1100),
+      labelAnchorYPercent: clamp(Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100, -1000, 1100),
+      labelAnchorZPercent: clamp(Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50, -1000, 1100),
+      labelHeightOffset: clamp(Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4, 0, 200),
       // v0.13.38: machine labels now live at stable world-space offsets.
       // Keep the legacy screen offsets in saved layouts for backward compatibility,
       // but do not use them for normal machine-label placement.
@@ -3387,10 +3387,24 @@
       input.disabled = !machine;
       input.checked = Boolean(machine?.[input.dataset.labelCheck]);
     });
-    const labelColorPreset = panel.querySelector("[data-label-color-preset]");
-    if (labelColorPreset) {
-      labelColorPreset.disabled = !machine;
-      labelColorPreset.value = machine ? matchingLabelColorPreset(machine) : "custom";
+    const labelColorPicker = panel.querySelector("[data-label-color-picker]");
+    if (labelColorPicker) {
+      const presetKey = machine ? matchingLabelColorPreset(machine) : "custom";
+      const preset = VISUAL_COLOR_PRESETS[presetKey];
+      const background = machine?.labelBackgroundColor || "#141c20";
+      const accent = machine?.labelLineColor || "#52b7aa";
+      const textColor = machine?.labelTextColor || "#ffffff";
+      const colorName = labelColorPicker.querySelector("[data-label-color-name]");
+      const backgroundPreview = labelColorPicker.querySelector("[data-label-color-preview-background]");
+      const accentPreview = labelColorPicker.querySelector("[data-label-color-preview-accent]");
+      const textPreview = labelColorPicker.querySelector("[data-label-color-preview-text]");
+      if (colorName) colorName.textContent = preset?.name || "Custom colors";
+      if (backgroundPreview) backgroundPreview.style.background = background;
+      if (accentPreview) accentPreview.style.background = accent;
+      if (textPreview) textPreview.style.background = textColor;
+      labelColorPicker.querySelectorAll("[data-label-color-swatch]").forEach((button) => {
+        button.classList.toggle("active", Boolean(machine) && button.dataset.labelColorSwatch === presetKey);
+      });
     }
     const labelSourceSummary = panel.querySelector("[data-label-source-summary]");
     if (labelSourceSummary) {
@@ -4434,86 +4448,102 @@
         </fieldset>
         </section>
         <section data-object-editor-panel="labels" class="object-editor-panel label-editor-panel" hidden>
-        <fieldset class="label-controls">
-          <legend>3D machine billboard</legend>
+        <fieldset class="label-controls label-controls-revamp">
+          <legend>3D machine label</legend>
           <p data-label-source-summary>Select one object to edit its label.</p>
-          <label class="wide">Label text<input type="text" data-label-field="labelText" data-needs-selection placeholder="Uses the machine name"></label>
-          <label class="wide">Abbreviated label<input type="text" data-label-field="labelAbbreviation" data-needs-selection placeholder="Automatically shortened when left blank"></label>
-          <div class="today-label-control">
-            <div><strong>Today Overview · Necessary labels</strong><span>This controls whether this 3D machine billboard is included in Necessary label mode. The glowing production route remains visible automatically on Today.</span></div>
-            <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show this machine/object label in Necessary mode</label>
+
+          <div class="label-settings-section">
+            <div class="label-settings-heading"><strong>Content</strong><span>What the physical billboard says and where it is used.</span></div>
+            <label class="wide">Main label<input type="text" data-label-field="labelText" data-needs-selection placeholder="Uses the machine name"></label>
+            <label class="wide">Abbreviated label<input type="text" data-label-field="labelAbbreviation" data-needs-selection placeholder="Automatically shortened when left blank"></label>
+            <div class="label-toggle-stack">
+              <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
+              <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelShowToday" data-needs-selection> Show in Today Overview · Necessary labels</label>
+            </div>
           </div>
-          <fieldset class="label-pointer-controls process-step-label-controls">
-            <legend>Necessary process-step label</legend>
-            <p>Add this machine to the compact numbered process labels even when it is not one of the original Cutting / Polisher / CNC / Washer nodes. Route-connected standard machines are still labeled automatically.</p>
-            <label class="process-pointer-toggle"><input type="checkbox" data-label-check="processStepLabelEnabled" data-needs-selection> Add custom process-step label for this machine</label>
+
+          <div class="label-settings-section">
+            <div class="label-settings-heading"><strong>Appearance</strong><span>Size, type and physical sign treatment.</span></div>
+            <div class="label-color-picker" data-label-color-picker>
+              <button type="button" class="label-color-trigger" data-label-color-trigger data-needs-selection aria-expanded="false">
+                <span class="label-color-preview" aria-hidden="true">
+                  <i data-label-color-preview-background></i><i data-label-color-preview-accent></i><i data-label-color-preview-text></i>
+                </span>
+                <span class="label-color-trigger-copy"><strong data-label-color-name>Custom colors</strong><small>Click to choose a preset or make a custom palette</small></span>
+                <span class="label-color-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div class="label-color-popover" data-label-color-popover hidden>
+                <div class="label-custom-color-grid">
+                  <label>Background<input type="color" data-label-field="labelBackgroundColor" data-needs-selection value="#141c20"></label>
+                  <label>Text<input type="color" data-label-field="labelTextColor" data-needs-selection value="#ffffff"></label>
+                  <label>Accent / leader<input type="color" data-label-field="labelLineColor" data-needs-selection value="#52b7aa"></label>
+                </div>
+                <div class="label-preset-footer">
+                  <span>Preset colors</span>
+                  <div class="label-color-swatches" role="group" aria-label="Label color presets">
+                    <button type="button" data-label-color-swatch="plant-teal" data-needs-selection title="Plant teal" aria-label="Plant teal"><i style="--swatch:#52b7aa"></i></button>
+                    <button type="button" data-label-color-swatch="glass-blue" data-needs-selection title="Glass blue" aria-label="Glass blue"><i style="--swatch:#65b8d4"></i></button>
+                    <button type="button" data-label-color-swatch="process-blue" data-needs-selection title="Process blue" aria-label="Process blue"><i style="--swatch:#5b8def"></i></button>
+                    <button type="button" data-label-color-swatch="process-green" data-needs-selection title="Process green" aria-label="Process green"><i style="--swatch:#62c782"></i></button>
+                    <button type="button" data-label-color-swatch="amber" data-needs-selection title="Amber" aria-label="Amber"><i style="--swatch:#e6b84a"></i></button>
+                    <button type="button" data-label-color-swatch="orange" data-needs-selection title="Orange" aria-label="Orange"><i style="--swatch:#e8864c"></i></button>
+                    <button type="button" data-label-color-swatch="red" data-needs-selection title="Alert red" aria-label="Alert red"><i style="--swatch:#e66a73"></i></button>
+                    <button type="button" data-label-color-swatch="purple" data-needs-selection title="Purple" aria-label="Purple"><i style="--swatch:#9b82df"></i></button>
+                    <button type="button" data-label-color-swatch="steel" data-needs-selection title="Steel" aria-label="Steel"><i style="--swatch:#9aa7ad"></i></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="label-format-grid label-appearance-grid">
+              <label>Size (%)<input type="number" data-label-field="labelSizePercent" data-needs-selection min="5" step="5" value="100"></label>
+              <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
+              <label>Text glow (%)<input type="number" data-label-field="labelGlowPercent" data-needs-selection min="0" max="100" step="5"></label>
+              <label>Sign depth (ft)<input type="number" data-label-field="labelDepthFeet" data-needs-selection min="0.1" max="2" step="0.05"></label>
+              <label>Raised text (ft)<input type="number" data-label-field="labelTextExtrudeFeet" data-needs-selection min="0.02" max="0.3" step="0.005"></label>
+            </div>
+            <p class="label-help">Size has no upper limit. Enter any percentage you need for unusually small or large signs.</p>
+          </div>
+
+          <div class="label-settings-section">
+            <div class="label-settings-heading"><strong>Position</strong><span>0–100% is inside the machine. Values below 0 or above 100 move the label outside its bounds, just like process-route endpoints.</span></div>
+            <div class="label-format-grid label-position-grid">
+              <label>Label X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="-1000" max="1100" step="5"></label>
+              <label>Label Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="-1000" max="1100" step="5"></label>
+              <label>Label Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="-1000" max="1100" step="5"></label>
+              <label>Extra lift Y (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="200" step="0.5"></label>
+              <label>Facing offset (°)<input type="number" data-label-field="labelRotationY" data-needs-selection min="-180" max="180" step="5"></label>
+            </div>
+            <label class="process-pointer-toggle label-camera-toggle"><input type="checkbox" data-label-check="labelTurnToCamera" data-needs-selection> Gently turn the label toward the camera</label>
+          </div>
+
+          <details class="label-advanced-settings">
+            <summary>Advanced motion & leader</summary>
+            <div class="label-format-grid">
+              <label>Camera follow speed (%)<input type="number" data-label-field="labelTurnSpeedPercent" data-needs-selection min="25" max="200" step="5"></label>
+              <label>Zoom min size (%)<input type="number" data-label-field="labelZoomMinPercent" data-needs-selection min="70" max="100" step="1"></label>
+              <label>Zoom max size (%)<input type="number" data-label-field="labelZoomMaxPercent" data-needs-selection min="100" max="140" step="1"></label>
+              <label>Leader width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25"></label>
+              <label>Leader opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5"></label>
+            </div>
+          </details>
+
+          <details class="label-advanced-settings process-step-label-controls">
+            <summary>Necessary process-step label</summary>
+            <p>Add a compact numbered process label for this machine when needed.</p>
+            <label class="process-pointer-toggle"><input type="checkbox" data-label-check="processStepLabelEnabled" data-needs-selection> Add custom process-step label</label>
             <div class="label-format-grid">
               <label>Step number<input type="number" data-label-field="processStepNumber" data-needs-selection min="1" max="99" step="1" placeholder="1"></label>
               <label>Process label text<input type="text" data-label-field="processStepLabelText" data-needs-selection maxlength="80" placeholder="Uses machine name"></label>
             </div>
-            <p class="label-help">The compact process label uses the same collision-aware sizing as the standard numbered route labels. Leave text blank to use the machine name.</p>
-          </fieldset>
-          <div class="label-format-grid">
-            <label>Color preset<select data-label-color-preset data-needs-selection>
-              <option value="custom">Custom</option>
-              <option value="plant-teal">Plant teal</option>
-              <option value="glass-blue">Glass blue</option>
-              <option value="process-blue">Process blue</option>
-              <option value="process-green">Process green</option>
-              <option value="amber">Amber</option>
-              <option value="orange">Orange</option>
-              <option value="red">Alert red</option>
-              <option value="purple">Purple</option>
-              <option value="steel">Steel</option>
-            </select></label>
-            <label>Text color<input type="color" data-label-field="labelTextColor" data-needs-selection value="#ffffff"></label>
-            <label>Background<input type="color" data-label-field="labelBackgroundColor" data-needs-selection value="#141c20"></label>
-            <label>Size (%)<input type="number" data-label-field="labelSizePercent" data-needs-selection min="50" max="250" step="5" value="100"></label>
-            <label>Weight<select data-label-field="labelFontWeight" data-needs-selection><option value="regular">Regular</option><option value="semibold">Semibold</option><option value="bold">Bold</option></select></label>
-          </div>
-          <div class="label-format-grid">
-            <label>Label appears at<select data-label-field="labelReveal" data-stage-select data-needs-selection></select></label>
-            <label>Label disappears after<select data-label-field="labelRetire" data-stage-select data-allow-never data-needs-selection></select></label>
-          </div>
-          <p class="label-help">Label timing controls the construction-stage views independently from when the machine itself appears. Today Overview still follows the selected Today label mode.</p>
-          <fieldset class="label-pointer-controls">
-            <legend>3D billboard placement and behavior</legend>
-            <p>The billboard stays attached to the machine in 3D space. It is double-sided, has physical depth, and slowly eases toward the camera instead of snapping to it. Its world position never jumps around as the camera moves.</p>
-            <div class="label-format-grid">
-              <label>Anchor X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>Anchor Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>Anchor Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="0" max="100" step="1"></label>
-              <label>Lift Y (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="60" step="0.5"></label>
-              <label>World X offset (ft)<input type="number" data-label-field="labelWorldOffsetX" data-needs-selection min="-80" max="80" step="0.5"></label>
-              <label>World Z offset (ft)<input type="number" data-label-field="labelWorldOffsetZ" data-needs-selection min="-80" max="80" step="0.5"></label>
-              <label>Facing offset (°)<input type="number" data-label-field="labelRotationY" data-needs-selection min="-180" max="180" step="5"></label>
-              <label>Camera follow speed (%)<input type="number" data-label-field="labelTurnSpeedPercent" data-needs-selection min="25" max="200" step="5"></label>
-              <label>Sign depth (ft)<input type="number" data-label-field="labelDepthFeet" data-needs-selection min="0.1" max="2" step="0.05"></label>
-              <label>Raised text depth (ft)<input type="number" data-label-field="labelTextExtrudeFeet" data-needs-selection min="0.02" max="0.3" step="0.005"></label>
-              <label>Text glow (%)<input type="number" data-label-field="labelGlowPercent" data-needs-selection min="0" max="100" step="5"></label>
-              <label>Zoom min size (%)<input type="number" data-label-field="labelZoomMinPercent" data-needs-selection min="70" max="100" step="1"></label>
-              <label>Zoom max size (%)<input type="number" data-label-field="labelZoomMaxPercent" data-needs-selection min="100" max="140" step="1"></label>
-              <label>Importance<select data-label-field="labelPriority" data-needs-selection><option value="automatic">Automatic</option><option value="major">Major equipment</option><option value="normal">Normal machine</option><option value="support">Support / cart / rack</option></select></label>
-            </div>
-            <label class="process-pointer-toggle"><input type="checkbox" data-label-check="labelTurnToCamera" data-needs-selection> Slowly turn billboard toward the camera</label>
-          </fieldset>
-          <fieldset class="label-pointer-controls">
-            <legend>3D leader / frame accent</legend>
-            <div class="label-format-grid">
-              <label>Color<input type="color" data-label-field="labelLineColor" data-needs-selection></label>
-              <label>Width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25"></label>
-              <label>Opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5"></label>
-              <span class="label-help">The accent color is shared by the billboard frame and its 3D leader. Width and opacity control the leader only.</span>
-            </div>
-          </fieldset>
-          <label class="label-uppercase"><input type="checkbox" data-label-check="labelUppercase" data-needs-selection> Uppercase label</label>
+          </details>
+
           <div class="label-action-grid">
-            <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset this label to machine name</button>
-            <button type="button" data-editor-action="reset-label-world-position" data-needs-selection>Reset 3D position</button>
+            <button type="button" data-editor-action="reset-selected-label" data-needs-selection>Reset label text</button>
+            <button type="button" data-editor-action="reset-label-world-position" data-needs-selection>Reset label position</button>
             <button type="button" data-editor-action="refresh-labels">Update linked labels</button>
             <button type="button" data-editor-action="reset-all-labels">Reset all labels to machine names</button>
           </div>
-          <p class="label-help">These are physical double-sided 3D billboards, not screen-space tags. Position stays locked to the machine; yaw follows the camera with damped motion, text glow and physical depth are real sign properties, and zoom response is clamped. Process-route geometry is edited separately in Pointers.</p>
+          <p class="label-help label-cleanup-note">Legacy screen-space timing, importance and duplicate X/Z offset controls were removed from this panel because the active labels are physical 3D billboards. Existing saved values remain readable for backward compatibility.</p>
         </fieldset>
         </section>
         <section data-object-editor-panel="pointers" class="object-editor-panel process-pointer-panel" hidden>
@@ -5239,7 +5269,7 @@
         } else if (["labelTextColor", "labelBackgroundColor", "labelLineColor"].includes(field)) {
           if (/^#[0-9a-f]{6}$/i.test(input.value)) machine[field] = input.value;
         } else if (field === "labelSizePercent") {
-          machine.labelSizePercent = clamp(Number(input.value) || 100, 50, 250);
+          machine.labelSizePercent = Math.max(5, Number(input.value) || 100);
         } else if (field === "labelReveal") {
           const value = Number(input.value);
           if (Number.isFinite(value)) {
@@ -5251,10 +5281,16 @@
           if (Number.isFinite(value)) machine.labelRetire = value >= 99 ? 99 : clamp(Math.round(value), machine.labelReveal, stages.length - 1);
         } else if (["labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent"].includes(field)) {
           const value = Number(input.value);
-          if (Number.isFinite(value)) machine[field] = clamp(value, 0, 100);
+          if (Number.isFinite(value)) {
+            machine[field] = clamp(value, -1000, 1100);
+            // Extended anchors replace the old world X/Z offset controls. Once
+            // the user moves an anchor, clear legacy offsets so placement is exact.
+            machine.labelWorldOffsetX = 0;
+            machine.labelWorldOffsetZ = 0;
+          }
         } else if (field === "labelHeightOffset") {
           const value = Number(input.value);
-          if (Number.isFinite(value)) machine.labelHeightOffset = clamp(value, 0, 60);
+          if (Number.isFinite(value)) machine.labelHeightOffset = clamp(value, 0, 200);
         } else if (["labelWorldOffsetX", "labelWorldOffsetZ"].includes(field)) {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine[field] = clamp(value, -80, 80);
@@ -5306,23 +5342,46 @@
         updateEditorPanel();
       });
     });
-    panel.querySelector("[data-label-color-preset]")?.addEventListener("change", (event) => {
-      const preset = VISUAL_COLOR_PRESETS[event.target.value];
-      if (!preset) return;
-      const machine = selectedMachine();
-      if (!machine) return;
-      const selection = selectedMachines();
-      const targets = selection.length ? selection : [machine];
-      pushHistory();
-      targets.forEach((item) => {
-        item.labelTextColor = preset.text;
-        item.labelBackgroundColor = preset.background;
-        item.labelLineColor = preset.accent;
+    const labelColorTrigger = panel.querySelector("[data-label-color-trigger]");
+    const labelColorPopover = panel.querySelector("[data-label-color-popover]");
+    const closeLabelColorPopover = () => {
+      if (!labelColorPopover || !labelColorTrigger) return;
+      labelColorPopover.hidden = true;
+      labelColorTrigger.setAttribute("aria-expanded", "false");
+    };
+    labelColorTrigger?.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!labelColorPopover) return;
+      labelColorPopover.hidden = !labelColorPopover.hidden;
+      labelColorTrigger.setAttribute("aria-expanded", String(!labelColorPopover.hidden));
+    });
+    panel.querySelectorAll("[data-label-color-swatch]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const preset = VISUAL_COLOR_PRESETS[button.dataset.labelColorSwatch];
+        if (!preset) return;
+        const machine = selectedMachine();
+        if (!machine) return;
+        const selection = selectedMachines();
+        const targets = selection.length ? selection : [machine];
+        pushHistory();
+        targets.forEach((item) => {
+          item.labelTextColor = preset.text;
+          item.labelBackgroundColor = preset.background;
+          item.labelLineColor = preset.accent;
+        });
+        persistLayout();
+        renderPerformance.invalidate();
+        updateEditorPanel();
+        showToast(preset.name + " applied to " + targets.length + " 3D label" + (targets.length === 1 ? "." : "s."));
       });
-      persistLayout();
-      renderPerformance.invalidate();
-      updateEditorPanel();
-      showToast(preset.name + " applied to " + targets.length + " 3D label" + (targets.length === 1 ? "." : "s."));
+    });
+    document.addEventListener("pointerdown", (event) => {
+      const picker = panel.querySelector("[data-label-color-picker]");
+      if (!picker || picker.contains(event.target)) return;
+      closeLabelColorPopover();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeLabelColorPopover();
     });
 
     panel.querySelectorAll("[data-label-check]").forEach((input) => {
@@ -8027,7 +8086,7 @@
     if (machine?.labelPriority === "major") profile = { rank: 4, cssSize: Math.max(profile.cssSize, 12), maxChars: Math.max(profile.maxChars, 18) };
     else if (machine?.labelPriority === "normal") profile = { rank: 2, cssSize: 10, maxChars: 15 };
     else if (machine?.labelPriority === "support") profile = { rank: 1, cssSize: 9, maxChars: 13 };
-    const sizeScale = clamp(Number(machine?.labelSizePercent) || 100, 50, 250) / 100;
+    const sizeScale = Math.max(5, Number(machine?.labelSizePercent) || 100) / 100;
     const compactViewport = compactLabelViewport();
     const zoomCharacterScale = state.cameraMode === "walk"
       ? 1
@@ -11072,23 +11131,29 @@
       if (isTodayStage() && state.todayLabelMode === "necessary" && machine.labelShowToday !== true) return;
       const text = displayMachineLabel(machine, profile);
       if (!text) return;
+      const labelAnchorX = clamp(Number(machine.labelAnchorXPercent ?? 50), -1000, 1100);
+      const labelAnchorY = clamp(Number(machine.labelAnchorYPercent ?? 100), -1000, 1100);
+      const labelAnchorZ = clamp(Number(machine.labelAnchorZPercent ?? 50), -1000, 1100);
       const anchor = localPoint(
         rendered,
-        rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), 0, 100) / 100,
-        rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), 0, 100) / 100,
-        rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), 0, 100) / 100,
+        rendered.w * labelAnchorX / 100,
+        rendered.h * labelAnchorY / 100,
+        rendered.d * labelAnchorZ / 100,
+      );
+      // Keep the leader attached to the nearest point on the machine even when
+      // the billboard itself is intentionally moved beyond the machine bounds.
+      const leaderAnchor = localPoint(
+        rendered,
+        rendered.w * clamp(labelAnchorX, 0, 100) / 100,
+        rendered.h * clamp(labelAnchorY, 0, 100) / 100,
+        rendered.d * clamp(labelAnchorZ, 0, 100) / 100,
       );
       const x = anchor[0] + clamp(Number(machine.labelWorldOffsetX ?? 0), -80, 80);
-      const y = anchor[1] + Math.max(2.5, clamp(Number(machine.labelHeightOffset ?? 4), 0, 60));
+      const y = anchor[1] + Math.max(0, clamp(Number(machine.labelHeightOffset ?? 4), 0, 200));
       const z = anchor[2] + clamp(Number(machine.labelWorldOffsetZ ?? 0), -80, 80);
-      const importance = machine.labelPriority || "automatic";
-      const sizeMultiplier = clamp(Number(machine.labelSizePercent) || 100, 50, 250) / 100;
-      const baseHeight = importance === "major" || profile.rank >= 4
-        ? 4.6
-        : importance === "support" || profile.rank <= 1
-          ? 2.8
-          : 3.5;
-      const labelHeight = clamp(baseHeight * sizeMultiplier, 1.8, 8);
+      const sizeMultiplier = Math.max(5, Number(machine.labelSizePercent) || 100) / 100;
+      const baseHeight = profile.rank >= 4 ? 4.6 : profile.rank <= 1 ? 2.8 : 3.5;
+      const labelHeight = Math.max(.25, baseHeight * sizeMultiplier);
       const zoomFactor = Math.max(.05, state.zoom / OVERVIEW_CAMERA.zoom);
       const zoomMinimum = clamp(Number(machine.labelZoomMinPercent ?? 88) / 100, .7, 1);
       const zoomMaximum = clamp(Number(machine.labelZoomMaxPercent ?? 112) / 100, 1, 1.4);
@@ -11117,7 +11182,7 @@
         borderColor,
       });
       depthRenderer.addLine?.(
-        anchor,
+        leaderAnchor,
         [x, y - displayedLabelHeight * .52, z],
         borderColor,
         Math.max(1, Number(machine.labelLineWidth) || 1.25),
@@ -11309,9 +11374,9 @@
       const visibleTarget = Boolean(text) && eligible && withinBudget && withinRepeatLimit;
       const pointerAnchor = localPoint(
         rendered,
-        rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), 0, 100) / 100,
-        rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), 0, 100) / 100,
-        rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), 0, 100) / 100,
+        rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), -1000, 1100) / 100,
+        rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), -1000, 1100) / 100,
+        rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), -1000, 1100) / 100,
       );
       const result = label(
         text,
@@ -11321,7 +11386,7 @@
           labelKey,
           time,
           visibleTarget,
-          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 60),
+          labelLiftFeet: clamp(Number(machine.labelHeightOffset ?? 4), 0, 200),
           forceVisible: stageSpecificLabels || necessaryTodayLabels || (
             isTodayOverview() &&
             ["full", "abbreviated"].includes(state.todayLabelMode)

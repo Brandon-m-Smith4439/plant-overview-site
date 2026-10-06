@@ -1,3 +1,12 @@
+## 0.13.49 - 2026-10-06
+
+- Rebuilt the machine-label settings panel around the active physical 3D billboard system, grouping Content, Appearance, Position, Advanced motion/leader, and Necessary process-step controls into a cleaner hierarchy.
+- Removed obsolete screen-space label timing and importance controls plus duplicate world X/Z offset controls from the visible editor while keeping their saved fields readable for backward compatibility.
+- Replaced the separate label color-preset dropdown with one integrated color control. Clicking it opens custom Background/Text/Accent color inputs with compact preset-color squares at the bottom.
+- Extended machine-label X/Y/Z placement to -1000%..1100%, matching process-route endpoint freedom. Labels can now be positioned well outside machine bounds while the leader remains attached to the nearest machine surface.
+- Removed the 250% label-size ceiling. Label size accepts any value from 5% upward, and the world-space renderer no longer caps large labels at 8 ft.
+- Advanced browser/cache version tokens to v0.13.49 and added label-editor regression coverage.
+
 ## 0.13.48 - 2026-10-06
 
 - Added consistent named color presets shared by 3D machine billboards and process routes: Plant teal, Glass blue, Process blue, Process green, Amber, Orange, Alert red, Purple, and Steel. Custom color pickers remain available.

@@ -44,7 +44,7 @@ assert.ok(plant.includes("collectProcessStepNodes(entriesById,routes).forEach((n
 assert.ok(plant.includes('if (machine.type === "room") return /office|maintenance/.test(name);'), "Office and Maintenance rooms must be eligible for their construction-stage labels.");
 assert.ok(plant.includes('const roomName = machine?.type === "room"'), "Room-stage labels must use full room names.");
 assert.ok(plant.includes("labelTimelineAlpha > .15 && isStageEquipmentLabelCandidate"), "Construction stages must honor each machine label's independent reveal/retire window.");
-assert.ok(plant.includes('data-label-field="labelReveal"') && plant.includes('data-label-field="labelRetire"'), "Layout label controls must expose independent appear/disappear stages.");
+assert.ok(!plant.includes('Label appears at<select data-label-field="labelReveal"') && !plant.includes('Label disappears after<select data-label-field="labelRetire"'), "The active 3D label panel must not expose retired screen-space timing controls.");
 assert.ok(plant.includes("labelReveal: Number.isFinite") && plant.includes("labelRetire: Number.isFinite"), "Saved machines must normalize independent label timing.");
 assert.ok(plant.includes('["reveal", "retire", "labelReveal", "labelRetire"]'), "Timeline stage reordering must keep label timing references aligned.");
 assert.ok(plant.includes('return roomName || machineLabelText(machine);'), "Construction-stage labels must use complete machine/room names without truncation.");
@@ -58,8 +58,8 @@ assert.ok(plant.includes("labelAnchorXPercent") && plant.includes("labelAnchorYP
 assert.ok(plant.includes("labelLineColor") && plant.includes("labelLineWidth") && plant.includes("labelLineOpacity"), "Each label leader needs independent color, width, and opacity.");
 assert.ok(plant.includes("labelLineStyle") && plant.includes("labelLineShape") && plant.includes("labelLeaderSide"), "Each label leader needs independent line style, shape, and connection edge.");
 assert.ok(plant.includes("labelTargetStyle") && plant.includes("labelTargetSize"), "Label pointer endpoint styling must remain independently adjustable.");
-assert.ok(plant.includes('data-label-field="labelWorldOffsetX"') && plant.includes('data-label-field="labelWorldOffsetZ"'), "Labels editor must expose world-space X/Z positioning.");
-assert.ok(plant.includes('data-label-field="labelPriority"') && plant.includes("Major equipment") && plant.includes("Support / cart / rack"), "Labels editor must expose label importance hierarchy.");
+assert.ok(!plant.includes('World X offset (ft)') && !plant.includes('World Z offset (ft)'), "The active label panel must not duplicate position with legacy world-offset controls.");
+assert.ok(!plant.includes('Importance<select data-label-field="labelPriority"'), "The active physical label editor must not expose the legacy importance control.");
 assert.ok(plant.includes("reset-label-world-position"), "Labels editor must provide a 3D position reset.");
 assert.ok(plant.includes("labelScreenOffsetX") && plant.includes("labelScreenOffsetY"), "Legacy screen offsets must remain normalized for saved-layout compatibility.");
 assert.ok(plant.includes("function labelLeaderConnection") && plant.includes("function traceLabelLeader"), "The label renderer must support editable connection geometry.");
@@ -68,7 +68,7 @@ assert.ok(plant.includes("const text = displayMachineLabel(entry.machine, profil
 assert.ok(plant.includes("const flow = necessaryTodayLabels ? assignedProcessFlowForMachine(entry.machine) : null"), "Necessary Today machine-label filtering must use explicit process assignments without replacing machine label text.");
 assert.ok(plant.includes('data-object-editor-tab="labels"') && plant.includes('data-object-editor-panel="labels"'), "Plant editor must expose a dedicated Labels tab.");
 assert.ok(plant.includes('data-label-check="labelShowToday"'), "Labels tab must expose a normal Today Overview visibility checkbox.");
-assert.ok(plant.includes("Show this machine/object label in Necessary mode"), "Today Necessary-mode label visibility must be clearly labeled near the top of the Labels tab.");
+assert.ok(plant.includes("Show in Today Overview · Necessary labels"), "Today Necessary-mode label visibility must remain clear in the simplified Labels tab.");
 assert.ok(plant.includes("labelShowToday: machine.labelShowToday === true"), "Saved machines must normalize explicit Today label visibility.");
 assert.ok(plant.includes("eligible = entry.machine.labelShowToday === true;"), "Necessary Today normal machine labels must obey only their explicit Today visibility toggle.");
 assert.ok(!plant.includes("Boolean(flow) || entry.machine.labelShowToday === true"), "A process-flow assignment must not force a normal machine label visible in Necessary mode.");
@@ -167,5 +167,15 @@ assert.ok(plant.includes('data-label-field="labelTextExtrudeFeet"'), "Labels edi
 assert.ok(plant.includes("textExtrudeFeet: clamp(Number(machine.labelTextExtrudeFeet"), "Raised text depth must reach the WebGL billboard renderer.");
 assert.ok(threeRenderer.includes("const textExtrude = clamp(Number(options.textExtrudeFeet) || .065, .02, .3);"), "Billboard text must have configurable physical offset from the sign face.");
 assert.ok(plant.includes("const VISUAL_COLOR_PRESETS = {") && plant.includes('"plant-teal"') && plant.includes('"glass-blue"') && plant.includes('"process-green"'), "Shared color presets must include a consistent plant palette.");
-assert.ok(plant.includes("data-label-color-preset") && plant.includes("data-process-color-preset"), "Both 3D labels and process routes must expose preset color selectors.");
-assert.ok(plant.includes("matchingLabelColorPreset") && plant.includes("matchingProcessColorPreset"), "Preset selectors must reflect the current custom/preset color state.");
+assert.ok(plant.includes("data-label-color-picker") && plant.includes("data-process-color-preset"), "3D labels must use the integrated palette while process routes keep their preset selector.");
+assert.ok(plant.includes("matchingLabelColorPreset") && plant.includes("matchingProcessColorPreset"), "Preset controls must reflect the current custom/preset color state.");
+
+
+assert.ok(plant.includes('data-label-color-picker') && plant.includes('data-label-color-swatch="plant-teal"'), "Machine label colors must use the integrated custom/preset picker.");
+assert.ok(!plant.includes('data-label-color-preset data-needs-selection'), "Machine labels must not use a separate color preset dropdown.");
+assert.ok(plant.includes('data-label-field="labelAnchorXPercent" data-needs-selection min="-1000" max="1100"'), "Machine label X placement must extend outside machine bounds.");
+assert.ok(plant.includes('machine[field] = clamp(value, -1000, 1100)'), "Machine label anchor edits must persist the extended range.");
+assert.ok(plant.includes('const leaderAnchor = localPoint('), "Out-of-bounds labels must keep their leader attached to the machine surface.");
+assert.ok(plant.includes('machine.labelSizePercent = Math.max(5, Number(input.value) || 100);'), "Machine label size must no longer have a 250 percent ceiling.");
+assert.ok(plant.includes('const labelHeight = Math.max(.25, baseHeight * sizeMultiplier);'), "World-space billboard size must not retain the old 8 ft cap.");
+assert.ok(!plant.includes('Label appears at<select data-label-field="labelReveal"'), "Obsolete screen-space label timing controls must be removed from the active label panel.");

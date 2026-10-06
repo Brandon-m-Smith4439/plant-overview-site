@@ -1,3 +1,7 @@
+## Version 0.13.49
+
+Version 0.13.49 cleans up the physical 3D machine-label workflow. Label settings are now organized into focused sections, preset colors live directly inside the label color control with custom Background/Text/Accent choices, X/Y/Z placement can move beyond machine bounds using the same -1000%..1100% range as process routes, and label size no longer has an arbitrary upper limit. Legacy screen-space timing/importance and duplicate offset controls are hidden from the active editor but remain compatible with older saved layouts.
+
 ## Version 0.13.48
 
 Version 0.13.48 makes the new physical route/label styling easier to control consistently. Process routes can now use their full 30 ft Route Y range from the editor; as they rise, they progressively become physical 3D rails rather than flat ribbons. The already-raised billboard lettering now has an editable Raised text depth setting, allowing a subtle or stronger physical offset from both sign faces. A shared preset palette was also added for labels and process routes so Plant teal, Glass blue, Process blue/green, Amber, Orange, Alert red, Purple, and Steel can be reused consistently while still allowing custom colors.

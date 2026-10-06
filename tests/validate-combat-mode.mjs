@@ -15,6 +15,11 @@ assert.ok(combat.includes("rifle") && combat.includes("handgun"), "Primary rifle
 assert.ok(combat.includes("Digit1") && combat.includes("Digit2") && combat.includes("KeyR"), "Weapon switching and reload controls are missing.");
 assert.ok(combat.includes("getOccluders") && combat.includes("nearestObstacleDistance"), "Shots and enemy sight must respect plant occluders.");
 assert.ok(combat.includes("playerHealth") && combat.includes("damagePlayer"), "Player health/damage flow is missing.");
+assert.ok(combat.includes("updateEnemyMotion") && combat.includes("tryMoveEnemy"), "Enemy combat movement and obstacle-aware roaming are missing.");
+assert.ok(combat.includes("enemyRenderState") && combat.includes("movementBlend") && combat.includes("walkPhase"), "Enemy animation state is not exposed to the plant renderer.");
+assert.ok(combat.includes("muzzleFlashUntil") && combat.includes("recoilUntil") && combat.includes("tracerUntil"), "Enemy firing animation effects are incomplete.");
+assert.ok(combat.includes("hitReactUntil") && combat.includes("defeatedAt") && combat.includes("deathProgress"), "Enemy hit/death animations are incomplete.");
+assert.ok(combat.includes("combat-first-person-weapon") && combat.includes("fp-weapon-muzzle"), "The player's first-person weapon model is missing.");
 assert.ok(combat.includes("roundState") && combat.includes("Restart combat"), "Win/defeat restart flow is missing.");
 assert.ok(combat.includes("countdownEndsAt") && combat.includes("COMBAT STARTS IN"), "Two-second combat countdown is missing.");
 assert.ok(combat.includes('resetRound({ countdown: true })'), "Combat and restart must enter the countdown state before AI becomes active.");
@@ -23,11 +28,15 @@ assert.ok(access.includes("isOwner"), "Browser editor access must expose owner-s
 assert.ok(plant.includes('dataset.toggle = "combat"') || plant.includes('data-toggle="combat"'), "Owner-only Combat mode button is missing from the plant controls.");
 assert.ok(plant.includes("combatEnemyMachines") && plant.includes("animatedperson"), "Person/team-member machines are not wired as enemy AI.");
 assert.ok(plant.includes("combatOccluders"), "Plant geometry is not wired into combat line of sight.");
+assert.ok(plant.includes('kind: "pillar"'), "Pillars must be explicit combat line-of-sight obstacles.");
+assert.ok(plant.includes("drawCombatEnemy") && plant.includes("combatState"), "The plant renderer is not using live combat animation poses.");
+assert.ok(plant.includes("walkHitsStructuralColumn"), "Pillar walking collision must have a direct safety check.");
 assert.ok(plant.includes("window.createPlantCombatMode"), "Plant viewer does not create the combat controller.");
 assert.ok(page.includes('/plant-combat.js'), "Next plant page does not load the combat controller.");
 assert.ok(preview.includes('plant-combat.js'), "Standalone preview does not load the combat controller.");
 assert.ok(owner.includes('href="/?owner=combat"'), "Owner dashboard does not expose a Combat Mode launcher.");
 assert.ok(css.includes(".combat-hud") && css.includes(".combat-weapon-panel"), "Combat HUD styling is missing.");
+assert.ok(css.includes(".combat-first-person-weapon") && css.includes("combat-weapon-recoil") && css.includes("combat-muzzle-bloom"), "First-person weapon/recoil/muzzle animations are missing.");
 assert.ok(css.includes(".combat-mode-active .first-person-hud"), "Normal first-person HUD must get out of the way during combat.");
 console.log("Owner-only combat mode checks passed.");
 

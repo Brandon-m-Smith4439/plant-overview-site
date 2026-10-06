@@ -5,7 +5,6 @@
   const WEAPONS = Object.freeze({
     rifle: Object.freeze({
       key: "rifle",
-      label: "PRIMARY · RIFLE",
       shortLabel: "Rifle",
       magazine: 30,
       reserve: 120,
@@ -17,7 +16,6 @@
     }),
     handgun: Object.freeze({
       key: "handgun",
-      label: "SECONDARY · HANDGUN",
       shortLabel: "Handgun",
       magazine: 15,
       reserve: 60,
@@ -34,20 +32,18 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   };
 
+  const stableUnit = (value) => {
+    const text = String(value || "");
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return ((hash >>> 0) % 10000) / 10000;
+  };
+
   function enemyId(machine, index = 0) {
     return String(machine?.instanceId || machine?.id || machine?.name || ("enemy-" + index));
-  }
-
-  function enemyCenter(machine) {
-    const width = Math.max(.2, number(machine?.w, 2));
-    const height = Math.max(1, number(machine?.h, 6));
-    const depth = Math.max(.2, number(machine?.d, 2));
-    return {
-      x: number(machine?.x) + width / 2,
-      y: number(machine?.y) + height * .62,
-      z: number(machine?.z) + depth / 2,
-      radius: clamp(Math.max(width, depth) * .55, .9, 2.4),
-    };
   }
 
   function normalizeDirection(direction) {
@@ -96,6 +92,18 @@
     return far >= 0 ? Math.max(0, near) : Infinity;
   }
 
+  function circleHitsAabb(x, z, radius, box) {
+    const minimumX = number(box.x);
+    const maximumX = minimumX + Math.max(.01, number(box.w, .01));
+    const minimumZ = number(box.z);
+    const maximumZ = minimumZ + Math.max(.01, number(box.d, .01));
+    const closestX = clamp(x, minimumX, maximumX);
+    const closestZ = clamp(z, minimumZ, maximumZ);
+    const dx = x - closestX;
+    const dz = z - closestZ;
+    return dx * dx + dz * dz < radius * radius;
+  }
+
   function directionFromCamera(player) {
     const pitch = number(player?.pitch);
     const horizontal = Math.cos(pitch);
@@ -131,23 +139,31 @@
         '<span>COMBAT STARTS IN</span>',
         '<strong data-combat-countdown-value>2</strong>',
       '</div>',
+      '<div class="combat-first-person-weapon rifle" data-combat-first-person-weapon aria-hidden="true">',
+        '<span class="fp-weapon-stock"></span>',
+        '<span class="fp-weapon-body"></span>',
+        '<span class="fp-weapon-rail"></span>',
+        '<span class="fp-weapon-sight"></span>',
+        '<span class="fp-weapon-barrel"></span>',
+        '<span class="fp-weapon-magazine"></span>',
+        '<span class="fp-weapon-grip"></span>',
+        '<span class="fp-weapon-hand"></span>',
+        '<span class="fp-weapon-muzzle"></span>',
+      '</div>',
       '<div class="combat-weapon-panel">',
         '<div class="combat-weapon-copy">',
           '<span data-combat-slot>PRIMARY</span>',
           '<strong data-combat-weapon>RIFLE</strong>',
           '<small data-combat-status>Ready</small>',
         '</div>',
-        '<div class="combat-weapon-visual rifle" data-combat-weapon-visual aria-hidden="true">',
-          '<span class="combat-weapon-body"></span><span class="combat-weapon-grip"></span><span class="combat-weapon-stock"></span><span class="combat-weapon-barrel"></span><span class="combat-muzzle-flash"></span>',
-        '</div>',
         '<div class="combat-ammo"><strong data-combat-mag>30</strong><span>/</span><b data-combat-reserve>120</b></div>',
-        '<div class="combat-controls">Mouse 1 fire · <b>1</b> rifle · <b>2</b> handgun · <b>R</b> reload</div>',
+        '<div class="combat-controls">Mouse 1 fire - <b>1</b> rifle - <b>2</b> handgun - <b>R</b> reload</div>',
       '</div>',
       '<div class="combat-round-overlay" data-combat-round hidden>',
         '<div>',
           '<p data-combat-round-kicker>ROUND COMPLETE</p>',
           '<h2 data-combat-round-title>Plant secured</h2>',
-          '<span data-combat-round-copy>All enemy AI has been neutralized.</span>',
+          '<span data-combat-round-copy>All enemy AI has been defeated.</span>',
           '<div class="combat-round-actions">',
             '<button type="button" data-combat-restart>Restart combat</button>',
             '<button type="button" data-combat-exit>Exit combat</button>',
@@ -166,7 +182,7 @@
     const statusCopy = hud.querySelector("[data-combat-status]");
     const magazineCopy = hud.querySelector("[data-combat-mag]");
     const reserveCopy = hud.querySelector("[data-combat-reserve]");
-    const weaponVisual = hud.querySelector("[data-combat-weapon-visual]");
+    const firstPersonWeapon = hud.querySelector("[data-combat-first-person-weapon]");
     const hitmarker = hud.querySelector("[data-combat-hitmarker]");
     const damageVignette = hud.querySelector("[data-combat-damage]");
     const countdownOverlay = hud.querySelector("[data-combat-countdown]");
@@ -190,6 +206,7 @@
     let nextPlayerShotAt = 0;
     let mouseHeld = false;
     let frameRequest = 0;
+    let lastFrameAt = 0;
     let lastThreatCount = 0;
     let roundState = "playing";
     let countdownEndsAt = 0;
@@ -204,6 +221,52 @@
       return ammunition[selectedWeapon];
     }
 
+    function enemyDimensions(record) {
+      const machine = record.machine || {};
+      return {
+        w: Math.max(.4, number(machine.w, 1.8)),
+        d: Math.max(.4, number(machine.d, 1.8)),
+        h: Math.max(1, number(machine.h, 6.5)),
+      };
+    }
+
+    function enemyCenter(record) {
+      const size = enemyDimensions(record);
+      return {
+        x: number(record.x, number(record.machine?.x)) + size.w / 2,
+        y: number(record.machine?.y) + size.h * .62,
+        z: number(record.z, number(record.machine?.z)) + size.d / 2,
+        radius: clamp(Math.max(size.w, size.d) * .55, .75, 2.2),
+      };
+    }
+
+    function resetEnemyRecord(record, machine, index) {
+      const unit = stableUnit(record.id || enemyId(machine, index));
+      record.machine = machine;
+      record.health = 100;
+      record.x = number(machine?.x);
+      record.z = number(machine?.z);
+      record.anchorX = record.x;
+      record.anchorZ = record.z;
+      record.rotationY = number(machine?.rotationY ?? machine?.rotation);
+      record.heading = unit * Math.PI * 2;
+      record.nextHeadingAt = 0;
+      record.nextShotAt = 0;
+      record.alerted = false;
+      record.movementBlend = .16;
+      record.walkPhase = unit * Math.PI * 2;
+      record.firingUntil = 0;
+      record.muzzleFlashUntil = 0;
+      record.recoilUntil = 0;
+      record.hitReactUntil = 0;
+      record.defeatedAt = 0;
+      record.tracerUntil = 0;
+      record.tracerTarget = null;
+      record.strafeSign = unit > .5 ? 1 : -1;
+      record.speedBias = .86 + unit * .3;
+      return record;
+    }
+
     function syncEnemies(reset = false) {
       const source = Array.isArray(options.getEnemies?.()) ? options.getEnemies() : [];
       const seen = new Set();
@@ -212,15 +275,12 @@
         seen.add(id);
         let record = enemies.get(id);
         if (!record) {
-          record = { id, machine, health: 100, nextShotAt: 0, alerted: false };
+          record = { id };
           enemies.set(id, record);
+          resetEnemyRecord(record, machine, index);
         } else {
           record.machine = machine;
-        }
-        if (reset) {
-          record.health = 100;
-          record.nextShotAt = 0;
-          record.alerted = false;
+          if (reset) resetEnemyRecord(record, machine, index);
         }
       });
       [...enemies.keys()].forEach((id) => {
@@ -256,7 +316,7 @@
       let best = null;
       let bestDistance = range;
       for (const enemy of aliveEnemies()) {
-        const center = enemyCenter(enemy.machine);
+        const center = enemyCenter(enemy);
         const distance = raySphere(origin, direction, center, center.radius);
         if (!Number.isFinite(distance) || distance > bestDistance || distance >= wallDistance - .05) continue;
         best = enemy;
@@ -265,16 +325,158 @@
       return best ? { enemy: best, distance: bestDistance } : null;
     }
 
+    function enemyCanOccupy(record, centerX, centerZ) {
+      const size = enemyDimensions(record);
+      const radius = clamp(Math.max(size.w, size.d) * .42, .55, 1.2);
+      const bounds = options.getBounds?.();
+      if (Array.isArray(bounds) && bounds.length >= 4) {
+        if (
+          centerX < number(bounds[0]) + radius
+          || centerX > number(bounds[2]) - radius
+          || centerZ < number(bounds[1]) + radius
+          || centerZ > number(bounds[3]) - radius
+        ) return false;
+      }
+      const obstacles = Array.isArray(options.getOccluders?.()) ? options.getOccluders() : [];
+      for (const obstacle of obstacles) {
+        const baseY = number(obstacle.y);
+        const height = Math.max(.01, number(obstacle.h, 20));
+        if (baseY > size.h || baseY + height < .15) continue;
+        if (circleHitsAabb(centerX, centerZ, radius, obstacle)) return false;
+      }
+      for (const other of aliveEnemies()) {
+        if (other === record) continue;
+        const otherCenter = enemyCenter(other);
+        const minimum = radius + otherCenter.radius * .65;
+        if (Math.hypot(centerX - otherCenter.x, centerZ - otherCenter.z) < minimum) return false;
+      }
+      return true;
+    }
+
+    function tryMoveEnemy(record, dx, dz) {
+      if (!dx && !dz) return false;
+      const size = enemyDimensions(record);
+      const centerX = number(record.x) + size.w / 2;
+      const centerZ = number(record.z) + size.d / 2;
+      const attempts = [
+        [centerX + dx, centerZ + dz],
+        [centerX + dx, centerZ],
+        [centerX, centerZ + dz],
+      ];
+      for (const [nextX, nextZ] of attempts) {
+        if (!enemyCanOccupy(record, nextX, nextZ)) continue;
+        record.x = nextX - size.w / 2;
+        record.z = nextZ - size.d / 2;
+        return true;
+      }
+      return false;
+    }
+
+    function faceAngle(from, to) {
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      return Math.atan2(dx, dz) * 180 / Math.PI + 180;
+    }
+
+    function updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, lineOfSight) {
+      if (enemy.health <= 0) {
+        enemy.movementBlend = 0;
+        return;
+      }
+      const center = enemyCenter(enemy);
+      const dxToPlayer = playerTarget.x - center.x;
+      const dzToPlayer = playerTarget.z - center.z;
+      const distance = Math.max(.001, Math.hypot(dxToPlayer, dzToPlayer));
+      const towardX = dxToPlayer / distance;
+      const towardZ = dzToPlayer / distance;
+      const strafeX = -towardZ * enemy.strafeSign;
+      const strafeZ = towardX * enemy.strafeSign;
+      let moveX = 0;
+      let moveZ = 0;
+      let speed = 3.2 * enemy.speedBias;
+
+      if (lineOfSight) {
+        enemy.rotationY = faceAngle(center, playerTarget);
+        if (distance > 46) {
+          moveX = towardX * .82 + strafeX * .28;
+          moveZ = towardZ * .82 + strafeZ * .28;
+          speed = 4.7 * enemy.speedBias;
+        } else if (distance < 17) {
+          moveX = -towardX * .72 + strafeX * .58;
+          moveZ = -towardZ * .72 + strafeZ * .58;
+          speed = 4.1 * enemy.speedBias;
+        } else {
+          moveX = strafeX;
+          moveZ = strafeZ;
+          speed = 3.7 * enemy.speedBias;
+        }
+      } else {
+        if (now >= enemy.nextHeadingAt) {
+          const size = enemyDimensions(enemy);
+          const anchorCenterX = number(enemy.anchorX) + size.w / 2;
+          const anchorCenterZ = number(enemy.anchorZ) + size.d / 2;
+          const homeDistance = Math.hypot(center.x - anchorCenterX, center.z - anchorCenterZ);
+          if (homeDistance > 42) {
+            enemy.heading = Math.atan2(anchorCenterX - center.x, anchorCenterZ - center.z);
+          } else {
+            enemy.heading += (stableUnit(enemy.id + ":" + Math.floor(now / 1700)) - .5) * 2.4;
+          }
+          enemy.nextHeadingAt = now + 1250 + stableUnit(enemy.id + ":" + Math.floor(now / 2500)) * 1800;
+        }
+        moveX = Math.sin(enemy.heading);
+        moveZ = Math.cos(enemy.heading);
+        enemy.rotationY = enemy.heading * 180 / Math.PI + 180;
+        speed = 2.4 * enemy.speedBias;
+      }
+
+      const length = Math.hypot(moveX, moveZ) || 1;
+      const step = Math.min(1.1, speed * deltaSeconds);
+      const moved = tryMoveEnemy(enemy, moveX / length * step, moveZ / length * step);
+      if (!moved) {
+        enemy.strafeSign *= -1;
+        enemy.heading += Math.PI * (.55 + stableUnit(enemy.id + ":bounce") * .45);
+        enemy.nextHeadingAt = now + 350;
+      }
+      enemy.movementBlend += ((moved ? 1 : .18) - enemy.movementBlend) * Math.min(1, deltaSeconds * 8);
+      enemy.walkPhase += deltaSeconds * (moved ? 8.5 * enemy.speedBias : 2.2);
+    }
+
+    function enemyRenderState(id, now = performance.now()) {
+      const enemy = enemies.get(String(id || ""));
+      if (!enemy) return null;
+      const defeated = enemy.health <= 0;
+      const deathProgress = defeated ? clamp((now - enemy.defeatedAt) / 650, 0, 1) : 0;
+      const hitReact = !defeated && now < enemy.hitReactUntil
+        ? clamp((enemy.hitReactUntil - now) / 220, 0, 1)
+        : 0;
+      return {
+        id: enemy.id,
+        x: enemy.x,
+        z: enemy.z,
+        rotationY: enemy.rotationY,
+        movementBlend: defeated ? 0 : enemy.movementBlend,
+        walkPhase: enemy.walkPhase,
+        firing: now < enemy.firingUntil,
+        muzzleFlash: now < enemy.muzzleFlashUntil,
+        recoil: now < enemy.recoilUntil,
+        hitReact,
+        defeated,
+        deathProgress,
+        tracerTarget: now < enemy.tracerUntil ? enemy.tracerTarget : null,
+        health: enemy.health,
+      };
+    }
+
     function setTransientStatus(text, duration = 850) {
       if (statusCopy) statusCopy.textContent = text;
       transientStatusUntil = performance.now() + duration;
     }
 
     function pulseWeapon() {
-      weaponVisual?.classList.remove("firing");
-      void weaponVisual?.offsetWidth;
-      weaponVisual?.classList.add("firing");
-      window.setTimeout(() => weaponVisual?.classList.remove("firing"), 80);
+      firstPersonWeapon?.classList.remove("firing");
+      void firstPersonWeapon?.offsetWidth;
+      firstPersonWeapon?.classList.add("firing");
+      window.setTimeout(() => firstPersonWeapon?.classList.remove("firing"), 90);
     }
 
     function showHitmarker(defeated = false) {
@@ -304,11 +506,12 @@
       if (weaponCopy) weaponCopy.textContent = weapon.shortLabel.toUpperCase();
       if (magazineCopy) magazineCopy.textContent = String(ammo.magazine);
       if (reserveCopy) reserveCopy.textContent = String(ammo.reserve);
-      if (weaponVisual) {
-        weaponVisual.classList.toggle("rifle", selectedWeapon === "rifle");
-        weaponVisual.classList.toggle("handgun", selectedWeapon === "handgun");
-        weaponVisual.classList.toggle("reloading", reloading);
+      if (firstPersonWeapon) {
+        firstPersonWeapon.classList.toggle("rifle", selectedWeapon === "rifle");
+        firstPersonWeapon.classList.toggle("handgun", selectedWeapon === "handgun");
+        firstPersonWeapon.classList.toggle("reloading", reloading);
       }
+      frame.classList.toggle("combat-under-fire", lastThreatCount > 0);
       if (threatCopy) {
         threatCopy.textContent = all.length === 0
           ? "No person / team-member machines found"
@@ -322,12 +525,14 @@
     function finishRound(kind) {
       roundState = kind;
       mouseHeld = false;
+      lastThreatCount = 0;
+      syncHud();
       if (!roundOverlay) return;
       roundOverlay.hidden = false;
       if (kind === "won") {
         if (roundKicker) roundKicker.textContent = "ROUND COMPLETE";
         if (roundTitle) roundTitle.textContent = "Plant secured";
-        if (roundCopy) roundCopy.textContent = "All enemy AI has been neutralized.";
+        if (roundCopy) roundCopy.textContent = "All enemy AI has been defeated.";
       } else {
         if (roundKicker) roundKicker.textContent = "PLAYER DOWN";
         if (roundTitle) roundTitle.textContent = "Combat run ended";
@@ -358,7 +563,7 @@
       reloading = true;
       mouseHeld = false;
       const serial = ++reloadSerial;
-      if (statusCopy) statusCopy.textContent = "Reloading…";
+      if (statusCopy) statusCopy.textContent = "Reloading...";
       syncHud();
       window.setTimeout(() => {
         if (!active || serial !== reloadSerial) return;
@@ -393,12 +598,14 @@
       const target = findTarget(origin, direction, weapon.range);
       if (target) {
         target.enemy.health = Math.max(0, target.enemy.health - weapon.damage);
+        target.enemy.hitReactUntil = now + 220;
         const defeated = target.enemy.health <= 0;
+        if (defeated) target.enemy.defeatedAt = now;
         showHitmarker(defeated);
         setTransientStatus(defeated ? "Enemy down" : "Hit", defeated ? 950 : 420);
         if (defeated && aliveEnemies().length === 0 && enemies.size > 0) finishRound("won");
       }
-      if (ammo.magazine <= 0 && ammo.reserve > 0) setTransientStatus("Magazine empty · R to reload", 1300);
+      if (ammo.magazine <= 0 && ammo.reserve > 0) setTransientStatus("Magazine empty - R to reload", 1300);
       syncHud();
       options.invalidate?.();
     }
@@ -407,39 +614,64 @@
       if (!active || roundState !== "playing") return;
       playerHealth = Math.max(0, playerHealth - Math.max(0, number(amount)));
       showDamage();
-      if (sourceName) setTransientStatus("Incoming fire · " + sourceName, 600);
+      if (sourceName) setTransientStatus("Incoming fire - " + sourceName, 600);
       if (playerHealth <= 0) finishRound("lost");
       syncHud();
+    }
+
+    function fireEnemy(enemy, playerTarget, distance, now) {
+      enemy.firingUntil = now + 150;
+      enemy.muzzleFlashUntil = now + 85;
+      enemy.recoilUntil = now + 180;
+      enemy.nextShotAt = now + 720 + stableUnit(enemy.id + ":" + Math.floor(now / 500)) * 820;
+      const hitChance = clamp(.78 - distance / 225, .24, .7);
+      const hit = Math.random() <= hitChance;
+      const missScale = hit ? 0 : 3.5 + Math.random() * 5;
+      enemy.tracerTarget = {
+        x: playerTarget.x + (Math.random() - .5) * missScale,
+        y: playerTarget.y + (Math.random() - .5) * missScale * .32,
+        z: playerTarget.z + (Math.random() - .5) * missScale,
+      };
+      enemy.tracerUntil = now + 105;
+      if (hit) {
+        damagePlayer(6 + Math.random() * 7, String(enemy.machine?.name || "Enemy"));
+      } else {
+        setTransientStatus("Incoming fire", 320);
+      }
     }
 
     function updateEnemyAi(now) {
       const player = options.getPlayer?.();
       syncEnemies(false);
+      const deltaSeconds = lastFrameAt > 0 ? clamp((now - lastFrameAt) / 1000, 0, .06) : 1 / 60;
+      lastFrameAt = now;
       if (!player?.engaged || roundState !== "playing") {
         lastThreatCount = 0;
+        aliveEnemies().forEach((enemy) => {
+          enemy.movementBlend += (.14 - enemy.movementBlend) * Math.min(1, deltaSeconds * 6);
+          enemy.walkPhase += deltaSeconds * 1.4;
+        });
         syncHud();
         return;
       }
-      const target = { x: number(player.x), y: number(player.y, 5.5), z: number(player.z) };
+
+      const playerTarget = { x: number(player.x), y: number(player.y, 5.5), z: number(player.z) };
       let threats = 0;
       for (const enemy of aliveEnemies()) {
-        const source = enemyCenter(enemy.machine);
-        const distance = Math.hypot(target.x - source.x, target.y - source.y, target.z - source.z);
-        if (distance > 125 || !hasLineOfSight(source, target)) {
-          enemy.alerted = false;
-          continue;
-        }
+        let source = enemyCenter(enemy);
+        let distance = Math.hypot(playerTarget.x - source.x, playerTarget.y - source.y, playerTarget.z - source.z);
+        let lineOfSight = distance <= 145 && hasLineOfSight(source, playerTarget);
+        updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, lineOfSight);
+
+        source = enemyCenter(enemy);
+        distance = Math.hypot(playerTarget.x - source.x, playerTarget.y - source.y, playerTarget.z - source.z);
+        lineOfSight = distance <= 125 && hasLineOfSight(source, playerTarget);
+        enemy.alerted = lineOfSight;
+        if (!lineOfSight) continue;
+
         threats += 1;
-        enemy.alerted = true;
-        if (now < enemy.nextShotAt) continue;
-        enemy.nextShotAt = now + 800 + Math.random() * 650;
-        const hitChance = clamp(.76 - distance / 230, .24, .68);
-        if (Math.random() <= hitChance) {
-          const damage = 6 + Math.random() * 7;
-          damagePlayer(damage, String(enemy.machine?.name || "Enemy"));
-        } else {
-          setTransientStatus("Incoming fire", 320);
-        }
+        enemy.rotationY = faceAngle(source, playerTarget);
+        if (now >= enemy.nextShotAt) fireEnemy(enemy, playerTarget, distance, now);
       }
       lastThreatCount = threats;
       syncHud();
@@ -453,6 +685,7 @@
       nextPlayerShotAt = 0;
       mouseHeld = false;
       lastThreatCount = 0;
+      lastFrameAt = 0;
       ammunition.rifle.magazine = WEAPONS.rifle.magazine;
       ammunition.rifle.reserve = WEAPONS.rifle.reserve;
       ammunition.handgun.magazine = WEAPONS.handgun.magazine;
@@ -475,6 +708,7 @@
         setTransientStatus(enemies.size ? "Combat ready" : "No enemy AI found", 1000);
       }
       syncHud();
+      options.invalidate?.();
     }
 
     function updateCountdown(now) {
@@ -505,7 +739,10 @@
       if (!updateCountdown(now)) {
         if (mouseHeld && currentWeapon().automatic) fire();
         updateEnemyAi(now);
+      } else {
+        lastFrameAt = now;
       }
+      options.invalidate?.();
       frameRequest = window.requestAnimationFrame(loop);
     }
 
@@ -530,11 +767,13 @@
       frameRequest = 0;
       countdownEndsAt = 0;
       countdownDisplay = 0;
+      lastFrameAt = 0;
       hud.hidden = true;
-      frame.classList.remove("combat-mode-active");
+      frame.classList.remove("combat-mode-active", "combat-under-fire");
       if (countdownOverlay) countdownOverlay.hidden = true;
       if (roundOverlay) roundOverlay.hidden = true;
       options.onStateChange?.(false);
+      options.invalidate?.();
     }
 
     function handleKeyDown(event) {
@@ -589,6 +828,7 @@
       reload: startReload,
       fire,
       isActive: () => active,
+      enemyRenderState,
       isEnemyDefeated(id) {
         const record = enemies.get(String(id || ""));
         return Boolean(record && record.health <= 0);

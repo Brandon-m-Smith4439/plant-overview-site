@@ -121,7 +121,7 @@ const context = {
   ],
   clamp: (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value)),
   floorBounds: () => [-300, -300, 300, 300],
-  structuralColumns: () => [],
+  structuralColumns: () => [{ key: "test-pillar", x: 25, z: 25 }],
   displayedWallSections: () => [{ id: "interior-test", x: 50, y: 0, z: -10, w: 3, h: 24, d: 20 }],
   isColumnHidden: () => false,
   stageAlpha: () => 1,
@@ -137,6 +137,7 @@ vm.runInNewContext([
   functionSource(plant, "walkHitboxesForMachine"),
   functionSource(plant, "angleRadians"),
   functionSource(plant, "circleIntersectsMachine"),
+  functionSource(plant, "walkHitsStructuralColumn"),
   functionSource(plant, "walkCanOccupy"),
   "results = {",
   "  cuttingCenter: walkCanOccupy(cuttingTable.x + cuttingTable.w / 2, cuttingTable.z + cuttingTable.d / 2, 1.2),",
@@ -151,6 +152,8 @@ vm.runInNewContext([
   "  mixedPartBox: walkCanOccupy(157, 145, 0.4),",
   "  mixedTemperingBaseOnly: walkCanOccupy(153, 149, 0.4),",
   "  wallVolume: walkCanOccupy(51.5, 0, 0.4),",
+  "  pillarCenter: walkCanOccupy(25, 25, 0.4),",
+  "  pillarEdge: walkCanOccupy(28.5, 25, 0.4),",
   "  candidateIds: walkCollisionCandidates().map((machine) => machine.id),",
   "};",
 ].join("\n"), context);
@@ -168,6 +171,8 @@ assert.equal(context.results.mixedMachineBox, false, "A custom machine-level env
 assert.equal(context.results.mixedPartBox, false, "A vertically offset blue part-level envelope on an animated custom machine must remain an active floor-plan hitbox.");
 assert.equal(context.results.mixedTemperingBaseOnly, false, "The tempering line's primary base envelope must remain solid outside its detailed boxes.");
 assert.equal(context.results.wallVolume, false, "A visible exterior wall volume must block first-person walking.");
+assert.equal(context.results.pillarCenter, false, "A structural pillar must block first-person walking through its center.");
+assert.equal(context.results.pillarEdge, true, "Open floor beyond the pillar safety radius must remain walkable.");
 assert.deepEqual(Array.from(context.results.candidateIds), [...productionMachines.map((machine) => machine.id), "rotated-machine", "compound-machine", "mixed-envelope-machine"]);
 
 const refreshDesignLibrarySource = functionSource(plant, "refreshDesignLibrary");

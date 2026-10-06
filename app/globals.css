@@ -8046,3 +8046,114 @@ body.viewer-fullscreen-fallback-active {
   from { opacity: 0; transform: scale(1.28); }
   to { opacity: 1; transform: scale(1); }
 }
+
+
+/* Combat animation and first-person weapon pass - v0.13.52 */
+.combat-first-person-weapon {
+  position: absolute;
+  right: clamp(3rem, 14vw, 15rem);
+  bottom: -1rem;
+  z-index: 4;
+  width: clamp(19rem, 35vw, 34rem);
+  height: clamp(10rem, 24vw, 19rem);
+  transform-origin: 72% 86%;
+  filter: drop-shadow(0 1.1rem 1rem rgba(0,0,0,.38));
+  animation: combat-weapon-breathe 2.1s ease-in-out infinite;
+}
+.combat-first-person-weapon > span {
+  position: absolute;
+  display: block;
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(180deg,#57636a,#222a2f 56%,#151b1f);
+  box-shadow: inset 0 1px rgba(255,255,255,.08);
+}
+.combat-first-person-weapon .fp-weapon-body {
+  right: 5rem; bottom: 5.7rem; width: 14rem; height: 3.05rem;
+  border-radius: .5rem .8rem .45rem .45rem; transform: skewX(-5deg);
+}
+.combat-first-person-weapon .fp-weapon-stock {
+  right: 17.2rem; bottom: 5.45rem; width: 7.8rem; height: 3.75rem;
+  border-radius: 1.35rem .4rem .55rem 1.8rem; transform: skewX(-18deg);
+}
+.combat-first-person-weapon .fp-weapon-barrel {
+  right: .6rem; bottom: 6.72rem; width: 7rem; height: .72rem; border-radius: .2rem;
+}
+.combat-first-person-weapon .fp-weapon-rail {
+  right: 6.2rem; bottom: 8.72rem; width: 10.8rem; height: .42rem;
+  border-radius: .16rem; background: #141a1e;
+}
+.combat-first-person-weapon .fp-weapon-sight {
+  right: 11.8rem; bottom: 9.1rem; width: 1.8rem; height: 1.45rem;
+  border-radius: .25rem .25rem .05rem .05rem; background: linear-gradient(180deg,#313c42,#11171a);
+}
+.combat-first-person-weapon .fp-weapon-magazine {
+  right: 10.3rem; bottom: 2.2rem; width: 2.9rem; height: 4.7rem;
+  border-radius: .3rem .3rem 1rem .8rem; transform: rotate(9deg);
+  background: linear-gradient(100deg,#1a2226,#465157,#171e22);
+}
+.combat-first-person-weapon .fp-weapon-grip {
+  right: 14.4rem; bottom: 2.9rem; width: 2.35rem; height: 4.1rem;
+  border-radius: .28rem .28rem .9rem .8rem; transform: rotate(13deg);
+}
+.combat-first-person-weapon .fp-weapon-hand {
+  right: 14rem; bottom: 1.25rem; width: 4rem; height: 2.25rem;
+  border-radius: 1.2rem 1.4rem .8rem 1rem;
+  background: linear-gradient(180deg,#e0ad89,#b77b5d);
+}
+.combat-first-person-weapon .fp-weapon-muzzle {
+  right: -.4rem; bottom: 5.25rem; width: 4.3rem; height: 4.3rem;
+  border: 0; opacity: 0;
+  background: radial-gradient(circle,#fff 0 7%,#fff2a6 8% 20%,#ffb33f 21% 38%,rgba(255,87,28,.2) 50%,transparent 68%);
+  clip-path: polygon(50% 0,61% 34%,86% 7%,73% 40%,100% 45%,71% 54%,92% 86%,60% 67%,48% 100%,39% 67%,8% 90%,28% 55%,0 45%,30% 39%,13% 10%,39% 34%);
+}
+.combat-first-person-weapon.handgun {
+  width: clamp(14rem, 24vw, 22rem); height: clamp(9rem, 18vw, 14rem);
+  right: clamp(4rem, 16vw, 17rem); bottom: .2rem;
+}
+.combat-first-person-weapon.handgun .fp-weapon-stock,
+.combat-first-person-weapon.handgun .fp-weapon-rail,
+.combat-first-person-weapon.handgun .fp-weapon-magazine { display: none; }
+.combat-first-person-weapon.handgun .fp-weapon-body {
+  right: 3.8rem; bottom: 5rem; width: 10rem; height: 2.35rem; border-radius: .45rem 1rem .35rem .35rem;
+}
+.combat-first-person-weapon.handgun .fp-weapon-barrel {
+  right: .9rem; bottom: 5.72rem; width: 4.7rem; height: .62rem;
+}
+.combat-first-person-weapon.handgun .fp-weapon-sight {
+  right: 8rem; bottom: 7.12rem; width: 1.25rem; height: .65rem;
+}
+.combat-first-person-weapon.handgun .fp-weapon-grip {
+  right: 7.3rem; bottom: 1.15rem; width: 2.65rem; height: 4.5rem; transform: rotate(11deg);
+}
+.combat-first-person-weapon.handgun .fp-weapon-hand { right: 6.6rem; bottom: .15rem; }
+.combat-first-person-weapon.handgun .fp-weapon-muzzle { right: -.65rem; bottom: 4.18rem; }
+.combat-first-person-weapon.firing { animation: combat-weapon-recoil .11s ease-out; }
+.combat-first-person-weapon.firing .fp-weapon-muzzle { opacity: 1; animation: combat-muzzle-bloom .1s ease-out; }
+.combat-first-person-weapon.reloading { animation: combat-weapon-reload 1.15s cubic-bezier(.3,.7,.2,1) infinite; }
+.combat-under-fire .combat-first-person-weapon {
+  filter: drop-shadow(0 1.1rem 1rem rgba(0,0,0,.38)) drop-shadow(0 0 1.2rem rgba(210,62,56,.12));
+}
+@keyframes combat-weapon-breathe {
+  0%,100% { transform: translate3d(0,0,0) rotate(-1.2deg); }
+  50% { transform: translate3d(-.45rem,.32rem,0) rotate(.2deg); }
+}
+@keyframes combat-weapon-recoil {
+  0% { transform: translate3d(0,0,0) rotate(-1deg); }
+  35% { transform: translate3d(-1.6rem,.72rem,0) rotate(-4deg); }
+  100% { transform: translate3d(0,0,0) rotate(-1deg); }
+}
+@keyframes combat-muzzle-bloom {
+  0% { transform: scale(.55) rotate(0); opacity: 1; }
+  100% { transform: scale(1.35) rotate(18deg); opacity: 0; }
+}
+@keyframes combat-weapon-reload {
+  0%,100% { transform: rotate(-1deg) translateY(0); }
+  30% { transform: rotate(17deg) translateY(1.4rem); }
+  65% { transform: rotate(11deg) translateY(.8rem); }
+}
+@media (max-width: 760px) {
+  .combat-first-person-weapon {
+    right: -1rem; bottom: -2rem; width: 18rem; height: 11rem;
+    transform: scale(.78); transform-origin: right bottom;
+  }
+}

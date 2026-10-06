@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.51";
+  const APP_VERSION = "0.13.52";
 
   function editorProfileProtected() {
     try {
@@ -2470,11 +2470,26 @@
     return Math.hypot(localX - closestX, localZ - closestZ) <= radius;
   }
 
+  function walkHitsStructuralColumn(worldX, worldZ, radius = state.walkRadius) {
+    const margin = Math.max(0.45, Number(radius) || 1.2);
+    const columnRadius = margin + 1.18;
+    const columnRadiusSquared = columnRadius * columnRadius;
+    return structuralColumns().some((column) => {
+      if (isColumnHidden(column)) return false;
+      const dx = worldX - Number(column.x);
+      const dz = worldZ - Number(column.z);
+      return dx * dx + dz * dz < columnRadiusSquared;
+    });
+  }
+
   function walkCanOccupy(worldX, worldZ, radius = state.walkRadius) {
     const bounds = floorBounds();
     const wallMargin = Math.max(0.45, Number(radius) || 1.2);
     if (worldX < bounds[0] + wallMargin || worldX > bounds[2] - wallMargin ||
         worldZ < bounds[1] + wallMargin || worldZ > bounds[3] - wallMargin) return false;
+
+    // Pillars remain solid even if the broad-phase spatial index is stale.
+    if (walkHitsStructuralColumn(worldX, worldZ, wallMargin)) return false;
 
     const index = typeof currentWalkSpatialIndex === "function" ? currentWalkSpatialIndex() : null;
     const nearby = index
@@ -2538,6 +2553,7 @@
     structuralColumns().forEach((column) => {
       if (isColumnHidden(column)) return;
       entries.push({
+        kind: "pillar",
         x: Number(column.x) - 1.18,
         y: 0,
         z: Number(column.z) - 1.18,
@@ -6659,6 +6675,7 @@
       }),
       getEnemies: combatEnemyMachines,
       getOccluders: combatOccluders,
+      getBounds: floorBounds,
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
       capture: () => firstPersonController?.capture?.(),
       exitCombat: () => setCombatMode(false),
@@ -10092,8 +10109,74 @@
     return detailed;
   }
 
+  function drawCombatEnemy(machine, alpha, grow, time) {
+    const combat = machine.combatState || {};
+    const width = Math.max(1.4, Number(machine.w) || 1.8);
+    const depth = Math.max(1.2, Number(machine.d) || 1.8);
+    const height = Math.max(5.5, Number(machine.h) || 6.5) * grow;
+    const movement = clamp(Number(combat.movementBlend) || 0, 0, 1);
+    const phase = Number(combat.walkPhase) || time * .008;
+    const swing = Math.sin(phase) * .62 * movement;
+    const oppositeSwing = Math.sin(phase + Math.PI) * .62 * movement;
+    const recoil = combat.recoil ? .24 : 0;
+    const hit = clamp(Number(combat.hitReact) || 0, 0, 1);
+    const bodyColor = machine.color || "#1e7b78";
+    const skin = "#e6b993";
+    const pants = "#26363d";
+    const weapon = "#20282d";
+    const vest = "#e3ad28";
+
+    localLine3d(machine,[width*.38,height*.42,depth*.5],[width*.25 + swing*.12,.08,depth*.5 + swing],pants,3.2,alpha);
+    localLine3d(machine,[width*.62,height*.42,depth*.5],[width*.75 + oppositeSwing*.12,.08,depth*.5 + oppositeSwing],pants,3.2,alpha);
+    box(localBox3d(machine,width*.16,depth*.38,width*.22,depth*.25,.22,pants,.02),alpha,1);
+    box(localBox3d(machine,width*.62,depth*.38,width*.22,depth*.25,.22,pants,.02),alpha,1);
+
+    box(localBox3d(machine,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
+    box(localBox3d(machine,width*.2,depth*.17,width*.6,depth*.12,height*.18,vest,height*.5),alpha*.96,1);
+    box(localBox3d(machine,width*.32,depth*.3,width*.36,depth*.38,height*.14,skin,height*.75),alpha,1);
+    box(localBox3d(machine,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
+
+    const shoulderY = height*.68;
+    const gripY = height*.58 - recoil;
+    const gripZ = depth*.12;
+    const muzzleZ = -1.55 - recoil;
+    const leftShoulder = [width*.28,shoulderY,depth*.48];
+    const rightShoulder = [width*.72,shoulderY,depth*.48];
+    const leftGrip = [width*.43 - hit*.08,gripY,gripZ];
+    const rightGrip = [width*.62 + hit*.08,gripY+.04,gripZ-.12];
+
+    localLine3d(machine,leftShoulder,leftGrip,bodyColor,3.2,alpha);
+    localLine3d(machine,rightShoulder,rightGrip,bodyColor,3.2,alpha);
+
+    box(localBox3d(machine,width*.31,depth*.02,width*.48,.32,.34,weapon,gripY-.16),alpha,1);
+    box(localBox3d(machine,width*.22,depth*.28,width*.2,.44,.3,"#323d42",gripY-.18),alpha,1);
+    box(localBox3d(machine,width*.44,-.18,width*.2,.28,.7,"#161d21",gripY-.68),alpha,1);
+    localLine3d(machine,[width*.55,gripY+.04,depth*.02],[width*.55,gripY+.04,muzzleZ],weapon,5,alpha);
+    localLine3d(machine,[width*.49,gripY+.35,depth*.02],[width*.6,gripY+.35,depth*.02],"#79878d",2,alpha);
+
+    const muzzle = localPoint3d(machine,width*.55,gripY+.04,muzzleZ);
+    if (combat.muzzleFlash) {
+      localLine3d(machine,[width*.55,gripY+.04,muzzleZ],[width*.55,gripY+.04,muzzleZ-.95],"#ffd26c",8,alpha);
+      localLine3d(machine,[width*.55-.22,gripY+.04,muzzleZ-.42],[width*.55+.22,gripY+.04,muzzleZ-.42],"#fff1b0",5,alpha);
+      localLine3d(machine,[width*.55,gripY-.22,muzzleZ-.42],[width*.55,gripY+.28,muzzleZ-.42],"#ff9b43",5,alpha);
+    }
+    if (combat.tracerTarget) {
+      line3d(
+        muzzle,
+        [Number(combat.tracerTarget.x), Number(combat.tracerTarget.y), Number(combat.tracerTarget.z)],
+        combat.firing ? "rgba(255,216,118,.95)" : "rgba(255,187,89,.68)",
+        1.6,
+        alpha*.86,
+      );
+    }
+  }
+
   function drawMachineShape(machine, alpha, grow, time) {
     const customDesign = machine.designId ? designLibrary[machine.designId] : null;
+    if (combatController?.isActive?.() && machine.combatState && combatEnemyMachine(machine)) {
+      drawCombatEnemy(machine, alpha, grow, time);
+      return;
+    }
     const lodLevel = machineLodLevel(machine);
     if (lodLevel < 2) {
       box({
@@ -10726,12 +10809,31 @@
         : machines;
     // Moving machines can enter the view from outside their saved index cell.
     const sourceMachines = new Set(indexedMachines);
-    machines.forEach((machine) => { if (machineHasLayoutMotion(machine)) sourceMachines.add(machine); });
+    machines.forEach((machine) => {
+      if (machineHasLayoutMotion(machine) || (combatController?.isActive?.() && combatEnemyMachine(machine))) sourceMachines.add(machine);
+    });
     for (const machine of sourceMachines) {
       if (machine.visible === false) continue;
       const alpha = stageAlpha(machine.reveal,machine.retire);
       if (alpha <= .01) continue;
-      const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
+      let rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
+      if (combatController?.isActive?.() && combatEnemyMachine(machine)) {
+        const combatState = combatController.enemyRenderState?.(machine.instanceId, time);
+        if (combatState) {
+          rendered = {
+            ...rendered,
+            x: Number(combatState.x),
+            z: Number(combatState.z),
+            rotationY: Number(combatState.rotationY),
+            rotation: Number(combatState.rotationY),
+            rotationZ: (Number(rendered.rotationZ) || 0)
+              + (combatState.defeated ? combatState.deathProgress * 78 : combatState.hitReact * 7),
+            renderY: (Number(rendered.renderY ?? rendered.y) || 0)
+              + (combatState.defeated ? combatState.deathProgress * .15 : Math.abs(Math.sin(combatState.walkPhase || 0)) * .08 * combatState.movementBlend),
+            combatState,
+          };
+        }
+      }
       let walkDistanceAlpha = 1;
       if (state.cameraMode === "walk") {
         const distance = firstPersonDistanceToBox(rendered);

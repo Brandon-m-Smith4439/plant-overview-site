@@ -1,3 +1,13 @@
+## 0.13.52 - 2026-10-06
+
+- Upgraded owner Combat Mode enemies from static targets to live roaming AI. Every person/team-member combat enemy now has runtime position, facing, walk-cycle phase, strafing/chasing/wandering behavior, obstacle-aware movement, and per-enemy movement variation.
+- Added synchronized combat rendering states for enemy aiming, recoil, muzzle flash, shot tracers, hit reactions, and death falls. The AI runtime position is now the position rendered and targeted by weapon raycasts.
+- Added dedicated animated combat-person rendering so team members visibly walk, aim a rifle, fire it, react to hits, and fall when defeated instead of relying on static machine-design poses.
+- Replaced the small HUD weapon silhouette with a larger first-person rifle/handgun view including visible stock/body/barrel/grip/magazine/hand geometry, idle sway, firing recoil, reload motion, and muzzle-flash bloom.
+- Hardened structural-pillar collision by checking pillars directly before the first-person spatial index, preventing stale broad-phase data from ever allowing the player to walk through a pillar.
+- Marked pillars explicitly in combat occluders so they remain authoritative line-of-sight and gunfire blockers for enemy AI.
+- Expanded Combat Mode and first-person collision regressions to cover moving enemy states, world weapon effects, first-person weapon effects, direct pillar collision, and pillar line-of-sight integration.
+
 ## 0.13.51 - 2026-10-06
 
 - Moved the owner-only Combat Mode control directly beside the First person control in the plant viewer.

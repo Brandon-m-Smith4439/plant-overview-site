@@ -1,3 +1,7 @@
+## Version 0.13.52
+
+Version 0.13.52 turns Combat Mode people into fully animated roaming combat actors. Enemy AI now moves around the plant using obstacle-aware wandering, strafing, advancing and retreating while its runtime pose drives both rendering and hit detection. Combat people visibly walk, aim their weapons, recoil, flash at the muzzle, show shot tracers, react to hits, and fall when defeated. The owner also receives a much larger first-person rifle/handgun render with sway, recoil, reload and muzzle-flash animations. Structural pillars now have a direct first-person collision safety check in addition to the spatial index and remain explicit line-of-sight/gunfire blockers for combat AI.
+
 ## Version 0.13.51
 
 Version 0.13.51 tightens the owner-only Combat Mode start flow. The Combat mode button is shown immediately to the right of First person only for authenticated owner sessions. Selecting it automatically enters the first-person plant view, shows a 2-second 2 → 1 → FIGHT countdown, and keeps weapons and enemy AI inactive until the countdown completes. The combat round ends when the final enemy AI is defeated, and restarting a round uses the same countdown.

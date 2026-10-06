@@ -1,3 +1,11 @@
+## 0.13.59 - 2026-10-06
+
+- Rebuilt the Combat Mode success state into a celebratory **VICTORY / PLANT SECURED** presentation with an animated secure seal, confetti, victory rings, clear-time/health/shield stats, and stronger restart/exit emphasis.
+- Combat Mode is now playable on touch phones: coarse-touch players count as engaged without pointer lock, existing movement/look controls remain active, and dedicated FIRE, AIM, RELOAD, SWAP, and MENU controls appear only during combat.
+- Mobile HUD placement now respects phone safe areas and keeps health, enemy count, ammo, movement, look, and combat controls readable in portrait or landscape layouts.
+- Raised and recessed Combat Mode eyes so they sit correctly on the face instead of over the mouth.
+- Reworked enemy 3D weapons around a right-hand combat pose: service rifles and sniper rifles have more complete stocks/receivers/magazines/rails/optics, chainsaws have a distinct engine/handle/bar/chain model, and the Rocket Launcher is now a visibly oversized shoulder-fired launcher.
+
 ## 0.13.58 - 2026-10-06
 
 - Depth-tested combat decals/effects: player tracers, bullet holes, blood bursts, pools, fountains, rockets and explosions are submitted into the physical 3D scene so machines, walls and pillars correctly occlude them. Bullet holes are now constant-size world-space surface decals aligned to the struck face and are never placed on people.

@@ -107,3 +107,5 @@ assert.ok(plant.includes("drawCombatWorldEffects") && plant.includes("bloodBurst
 assert.ok(plant.includes('enemyWeapon === "sniper"') && plant.includes('enemyWeapon === "bazooka"') && plant.includes('enemyWeapon === "chainsaw"'), "Distinct 3D enemy weapon models are missing.");
 assert.ok(plant.includes("state.combatAimFov") && plant.includes("setAimZoom"), "Scoped aiming must narrow the first-person FOV.");
 assert.ok(css.includes(".combat-scope-overlay") && css.includes(".combat-scope-lens"), "Scope overlay styling is missing.");
+assert.ok(plant.includes("function combatLabelsSuppressed()") && plant.includes("combatLabelsSuppressed() || !WORLD_MACHINE_LABELS"), "Machine labels must be suppressed while Combat Mode is active.");
+assert.ok(plant.includes("SCREEN_SPACE_LABELS && !combatLabelsSuppressed()") && plant.includes("combatLabelsSuppressed() || !SCREEN_SPACE_LABELS"), "Process-step and route-tag labels must be suppressed while Combat Mode is active.");

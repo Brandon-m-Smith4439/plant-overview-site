@@ -1,3 +1,7 @@
+## Version 0.13.51
+
+Version 0.13.51 tightens the owner-only Combat Mode start flow. The Combat mode button is shown immediately to the right of First person only for authenticated owner sessions. Selecting it automatically enters the first-person plant view, shows a 2-second 2 → 1 → FIGHT countdown, and keeps weapons and enemy AI inactive until the countdown completes. The combat round ends when the final enemy AI is defeated, and restarting a round uses the same countdown.
+
 ## Version 0.13.50
 
 Version 0.13.50 adds an owner-only Combat Mode on top of the existing first-person plant walkthrough. The private owner dashboard opens a combat-ready plant view, where the owner can start a temporary FPS session. Person/team-member machine objects become line-of-sight enemy AI, while machines, columns, walls, and Designer collision envelopes block shots and enemy vision. The player has a generic primary rifle and secondary handgun, ammo/reload management, health, hit feedback, win/defeat states, and restart controls. None of the combat state is saved into the plant model, and the feature remains unavailable to public or ordinary editor sessions.

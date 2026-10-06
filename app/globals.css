@@ -7671,3 +7671,338 @@ body.viewer-fullscreen-fallback-active {
 @media (max-width: 720px) {
   .label-custom-color-grid { grid-template-columns: 1fr; }
 }
+
+
+/* Owner-only first-person combat layer · v0.13.50 */
+.combat-mode-button { border-color: rgba(229, 94, 94, .54) !important; }
+.combat-mode-button.combat-ready {
+  box-shadow: 0 0 0 2px rgba(229, 94, 94, .25), 0 0 24px rgba(229, 94, 94, .25);
+  animation: combat-ready-pulse 1.25s ease-in-out infinite;
+}
+@keyframes combat-ready-pulse {
+  50% { box-shadow: 0 0 0 5px rgba(229, 94, 94, .12), 0 0 34px rgba(229, 94, 94, .34); }
+}
+.combat-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 46;
+  pointer-events: none;
+  color: #f8fbfc;
+  font-family: inherit;
+}
+.combat-mode-active .first-person-hud { display: none !important; }
+.combat-mode-active .walkthrough-reticle {
+  border-color: rgba(255,255,255,.86);
+  box-shadow: 0 0 14px rgba(255,255,255,.22);
+}
+.combat-topbar {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem .7rem;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: .65rem;
+  background: rgba(8, 13, 16, .78);
+  backdrop-filter: blur(10px);
+  font-size: .72rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.combat-mode-badge {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-weight: 800;
+}
+.combat-mode-badge > span {
+  width: .48rem;
+  height: .48rem;
+  border-radius: 50%;
+  background: #e65f63;
+  box-shadow: 0 0 12px rgba(230,95,99,.75);
+}
+.combat-enemy-counter { color: rgba(255,255,255,.72); }
+.combat-health-panel {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: min(16rem, 38vw);
+  padding: .72rem .8rem;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: .72rem;
+  background: rgba(8, 13, 16, .78);
+  backdrop-filter: blur(10px);
+}
+.combat-health-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+  font-size: .7rem;
+  letter-spacing: .12em;
+}
+.combat-health-heading strong {
+  font-size: 1.2rem;
+  letter-spacing: 0;
+}
+.combat-health-track {
+  height: .42rem;
+  margin: .42rem 0 .5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+}
+.combat-health-track > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #62c782, #8ad8a0);
+  transition: width .16s ease;
+}
+.combat-health-panel small {
+  display: block;
+  overflow: hidden;
+  color: rgba(255,255,255,.66);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.combat-weapon-panel {
+  position: absolute;
+  right: 1.15rem;
+  bottom: 1.15rem;
+  display: grid;
+  grid-template-columns: auto minmax(9rem, 13rem) auto;
+  align-items: end;
+  gap: .7rem;
+  min-width: min(34rem, calc(100% - 2.3rem));
+  padding: .78rem .85rem .65rem;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: .78rem;
+  background: rgba(8, 13, 16, .8);
+  backdrop-filter: blur(11px);
+}
+.combat-weapon-copy {
+  align-self: center;
+  min-width: 7.6rem;
+}
+.combat-weapon-copy span,
+.combat-weapon-copy small {
+  display: block;
+  color: rgba(255,255,255,.58);
+  font-size: .64rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.combat-weapon-copy strong {
+  display: block;
+  margin: .08rem 0;
+  font-size: .98rem;
+  letter-spacing: .07em;
+}
+.combat-weapon-visual {
+  position: relative;
+  width: 12rem;
+  height: 3.8rem;
+  transform-origin: 76% 70%;
+  transition: transform .1s ease;
+}
+.combat-weapon-visual .combat-weapon-body,
+.combat-weapon-visual .combat-weapon-grip,
+.combat-weapon-visual .combat-weapon-stock,
+.combat-weapon-visual .combat-weapon-barrel {
+  position: absolute;
+  display: block;
+  border: 1px solid rgba(255,255,255,.19);
+  background: linear-gradient(180deg, #49545a, #222a2e);
+}
+.combat-weapon-visual.rifle .combat-weapon-body {
+  right: 2.3rem;
+  bottom: 1.15rem;
+  width: 6.2rem;
+  height: 1.22rem;
+  border-radius: .2rem;
+}
+.combat-weapon-visual.rifle .combat-weapon-barrel {
+  right: .15rem;
+  bottom: 1.5rem;
+  width: 3rem;
+  height: .35rem;
+}
+.combat-weapon-visual.rifle .combat-weapon-stock {
+  left: .35rem;
+  bottom: 1.05rem;
+  width: 3.7rem;
+  height: 1.45rem;
+  border-radius: .45rem .1rem .2rem .45rem;
+  transform: skewX(-18deg);
+}
+.combat-weapon-visual.rifle .combat-weapon-grip {
+  right: 4.6rem;
+  bottom: .2rem;
+  width: .72rem;
+  height: 1.45rem;
+  border-radius: .12rem .12rem .28rem .28rem;
+  transform: rotate(12deg);
+}
+.combat-weapon-visual.handgun { width: 8rem; }
+.combat-weapon-visual.handgun .combat-weapon-body {
+  right: .75rem;
+  bottom: 1.55rem;
+  width: 5.6rem;
+  height: 1rem;
+  border-radius: .18rem .38rem .12rem .12rem;
+}
+.combat-weapon-visual.handgun .combat-weapon-barrel {
+  right: .15rem;
+  bottom: 1.77rem;
+  width: 1.35rem;
+  height: .36rem;
+}
+.combat-weapon-visual.handgun .combat-weapon-stock { display: none; }
+.combat-weapon-visual.handgun .combat-weapon-grip {
+  right: 2.9rem;
+  bottom: .05rem;
+  width: 1.05rem;
+  height: 1.75rem;
+  border-radius: .08rem .08rem .3rem .25rem;
+  transform: rotate(12deg);
+}
+.combat-muzzle-flash {
+  position: absolute;
+  right: -.55rem;
+  bottom: 1.42rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  opacity: 0;
+  background: radial-gradient(circle, #fff 0 12%, #ffd77d 13% 38%, rgba(255,126,54,.08) 65%);
+  clip-path: polygon(50% 0, 62% 36%, 100% 22%, 72% 52%, 100% 80%, 62% 66%, 50% 100%, 38% 66%, 0 80%, 28% 52%, 0 22%, 38% 36%);
+}
+.combat-weapon-visual.firing { transform: translate(-.16rem, .08rem) rotate(-1deg); }
+.combat-weapon-visual.firing .combat-muzzle-flash { opacity: 1; }
+.combat-weapon-visual.reloading { transform: rotate(8deg) translateY(.3rem); }
+.combat-ammo {
+  align-self: center;
+  display: flex;
+  align-items: baseline;
+  gap: .3rem;
+  min-width: 6.2rem;
+  justify-content: flex-end;
+}
+.combat-ammo strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+.combat-ammo span,
+.combat-ammo b {
+  color: rgba(255,255,255,.58);
+  font-size: .9rem;
+}
+.combat-controls {
+  grid-column: 1 / -1;
+  color: rgba(255,255,255,.52);
+  font-size: .64rem;
+  text-align: right;
+}
+.combat-hitmarker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2rem;
+  height: 2rem;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.85);
+}
+.combat-hitmarker i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: .55rem;
+  height: 2px;
+  background: #fff;
+  transform-origin: center;
+}
+.combat-hitmarker i:nth-child(1) { transform: translate(-1rem,-.58rem) rotate(45deg); }
+.combat-hitmarker i:nth-child(2) { transform: translate(.45rem,-.58rem) rotate(-45deg); }
+.combat-hitmarker i:nth-child(3) { transform: translate(-1rem,.55rem) rotate(-45deg); }
+.combat-hitmarker i:nth-child(4) { transform: translate(.45rem,.55rem) rotate(45deg); }
+.combat-hitmarker.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.combat-hitmarker.defeated i { background: #e65f63; }
+.combat-damage-vignette {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at center, transparent 38%, rgba(170, 18, 25, .18) 72%, rgba(170, 18, 25, .58) 100%);
+}
+.combat-damage-vignette.visible { animation: combat-damage-flash .2s ease-out; }
+@keyframes combat-damage-flash {
+  0% { opacity: .95; }
+  100% { opacity: 0; }
+}
+.combat-round-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  pointer-events: auto;
+  background: rgba(3, 7, 9, .58);
+  backdrop-filter: blur(3px);
+}
+.combat-round-overlay[hidden] { display: none; }
+.combat-round-overlay > div {
+  width: min(27rem, 100%);
+  padding: 1.35rem;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: .9rem;
+  background: rgba(8, 13, 16, .94);
+  text-align: center;
+}
+.combat-round-overlay p {
+  margin: 0 0 .3rem;
+  color: #e6b84a;
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .15em;
+}
+.combat-round-overlay h2 { margin: 0 0 .45rem; }
+.combat-round-overlay span {
+  display: block;
+  color: rgba(255,255,255,.68);
+}
+.combat-round-actions {
+  display: flex;
+  justify-content: center;
+  gap: .55rem;
+  margin-top: 1rem;
+}
+.combat-round-actions button { min-height: 2.6rem; }
+.owner-combat-card { border-color: rgba(230,95,99,.28); }
+@media (max-width: 760px) {
+  .combat-health-panel {
+    top: .65rem;
+    left: .65rem;
+    width: min(13rem, 47vw);
+  }
+  .combat-topbar {
+    top: .65rem;
+    right: .65rem;
+    left: auto;
+    transform: none;
+  }
+  .combat-weapon-panel {
+    right: .65rem;
+    bottom: .65rem;
+    grid-template-columns: auto auto;
+    min-width: 0;
+  }
+  .combat-weapon-visual,
+  .combat-controls { display: none; }
+}

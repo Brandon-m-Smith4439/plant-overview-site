@@ -11,9 +11,10 @@
     smg: Object.freeze({ key: "smg", label: "SMG", range: 95, preferredMin: 18, preferredMax: 44, moveSpeed: 1.16, fireMin: 280, fireMax: 520, damageMin: 4, damageMax: 7, accuracyNear: .68, accuracyFalloff: 170, tracer: "smg" }),
     shotgun: Object.freeze({ key: "shotgun", label: "Shotgun", range: 58, preferredMin: 11, preferredMax: 28, moveSpeed: 1.08, fireMin: 1050, fireMax: 1550, damageMin: 10, damageMax: 18, accuracyNear: .84, accuracyFalloff: 92, tracer: "shotgun" }),
     sniper: Object.freeze({ key: "sniper", label: "Sniper", range: 180, preferredMin: 72, preferredMax: 125, moveSpeed: .78, fireMin: 2200, fireMax: 3300, damageMin: 18, damageMax: 27, accuracyNear: .9, accuracyFalloff: 360, tracer: "sniper" }),
-    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka" }),
+    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, sightRange: 150, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka", explosive: true, projectileSpeed: 92, explosionRadius: 9 }),
+    rocket: Object.freeze({ key: "rocket", label: "Rocket Launcher", range: 155, sightRange: 170, preferredMin: 58, preferredMax: 108, moveSpeed: .68, fireMin: 3100, fireMax: 4500, damageMin: 22, damageMax: 34, accuracyNear: .78, accuracyFalloff: 285, tracer: "rocket", explosive: true, projectileSpeed: 76, explosionRadius: 11 }),
     pistol: Object.freeze({ key: "pistol", label: "Pistol", range: 88, preferredMin: 18, preferredMax: 42, moveSpeed: 1.08, fireMin: 760, fireMax: 1180, damageMin: 7, damageMax: 11, accuracyNear: .74, accuracyFalloff: 165, tracer: "pistol" }),
-    chainsaw: Object.freeze({ key: "chainsaw", label: "Chainsaw", melee: true, range: 5.4, preferredMin: 0, preferredMax: 4.6, moveSpeed: 1.72, fireMin: 520, fireMax: 760, damageMin: 13, damageMax: 20, accuracyNear: 1, accuracyFalloff: 1, tracer: null }),
+    chainsaw: Object.freeze({ key: "chainsaw", label: "Chainsaw", melee: true, range: 5.4, sightRange: 145, preferredMin: 0, preferredMax: 4.6, moveSpeed: 2, fireMin: 520, fireMax: 760, damageMin: 13, damageMax: 20, accuracyNear: 1, accuracyFalloff: 1, tracer: null }),
   });
   const ENEMY_WEAPON_KEYS = Object.freeze(Object.keys(ENEMY_WEAPONS));
 
@@ -158,8 +159,8 @@
       '</div>',
       '<div class="combat-damage-directions" data-combat-damage-directions aria-hidden="true"></div>',
       '<div class="combat-direction-callout" data-combat-direction-callout hidden><strong></strong><span></span></div>',
-      '<div class="combat-scope-overlay" data-combat-scope hidden aria-hidden="true">',
-        '<div class="combat-scope-lens"><i class="horizontal"></i><i class="vertical"></i><b></b></div>',
+      '<div class="combat-scope-overlay combat-holo-overlay" data-combat-scope hidden aria-hidden="true">',
+        '<div class="combat-holo-sight"><span class="combat-holo-glass"></span><i class="horizontal"></i><i class="vertical"></i><b></b></div>',
       '</div>',
       '<div class="combat-pause-overlay" data-combat-pause hidden>',
         '<div>',
@@ -235,7 +236,7 @@
       rifle: { magazine: WEAPONS.rifle.magazine, reserve: WEAPONS.rifle.reserve },
       handgun: { magazine: WEAPONS.handgun.magazine, reserve: WEAPONS.handgun.reserve },
     };
-    const worldEffects = { tracers: [], impacts: [], bloodBursts: [], bloodPools: [] };
+    const worldEffects = { tracers: [], impacts: [], bloodBursts: [], bloodPools: [], bloodFountains: [], rockets: [], explosions: [] };
 
     let active = false;
     let aiming = false;
@@ -325,6 +326,10 @@
       record.tracerUntil = 0;
       record.tracerTarget = null;
       record.tracerStyle = "rifle";
+      record.rollStartedAt = 0;
+      record.rollUntil = 0;
+      record.nextRollAt = 0;
+      record.rollDirection = unit > .5 ? 1 : -1;
       record.strafeSign = unit > .5 ? 1 : -1;
       record.speedBias = .86 + unit * .3;
       return record;
@@ -375,15 +380,29 @@
       return { x: origin.x + direction.x * distance, y: origin.y + direction.y * distance, z: origin.z + direction.z * distance };
     }
 
+    function impactNormalForBox(point, box) {
+      const minX = number(box.x), maxX = minX + Math.max(.01, number(box.w, .01));
+      const minY = number(box.y), maxY = minY + Math.max(.01, number(box.h, .01));
+      const minZ = number(box.z), maxZ = minZ + Math.max(.01, number(box.d, .01));
+      const candidates = [
+        [Math.abs(point.x-minX), {x:-1,y:0,z:0}], [Math.abs(point.x-maxX), {x:1,y:0,z:0}],
+        [Math.abs(point.y-minY), {x:0,y:-1,z:0}], [Math.abs(point.y-maxY), {x:0,y:1,z:0}],
+        [Math.abs(point.z-minZ), {x:0,y:0,z:-1}], [Math.abs(point.z-maxZ), {x:0,y:0,z:1}],
+      ];
+      candidates.sort((a,b) => a[0]-b[0]);
+      return candidates[0][1];
+    }
+
     function resolveWorldImpact(origin, direction, maximumDistance) {
       const obstacleHit = nearestObstacleHit(origin, direction, maximumDistance);
       let distance = obstacleHit?.distance ?? maximumDistance;
       let kind = obstacleHit ? String(obstacleHit.obstacle?.kind || "surface") : "air";
+      let normal = obstacleHit ? impactNormalForBox(pointAlongRay(origin, direction, distance), obstacleHit.obstacle) : {x:0,y:0,z:0};
       if (direction.y < -.0001) {
         const floorDistance = (origin.y - .04) / -direction.y;
-        if (floorDistance >= 0 && floorDistance < distance && floorDistance <= maximumDistance) { distance = floorDistance; kind = "floor"; }
+        if (floorDistance >= 0 && floorDistance < distance && floorDistance <= maximumDistance) { distance = floorDistance; kind = "floor"; normal = {x:0,y:1,z:0}; }
       }
-      return { distance, kind, point: pointAlongRay(origin, direction, distance), landed: kind !== "air" };
+      return { distance, kind, normal, obstacle: obstacleHit?.obstacle || null, point: pointAlongRay(origin, direction, distance), landed: kind !== "air" };
     }
 
     function pushTracer(origin, target, now, style = "player") {
@@ -391,26 +410,106 @@
       if (worldEffects.tracers.length > 90) worldEffects.tracers.splice(0, worldEffects.tracers.length - 90);
     }
 
-    function pushImpact(point, now, kind = "surface") {
-      worldEffects.impacts.push({ point: { ...point }, startAt: now, expiresAt: now + 90000, kind });
+    function pushImpact(point, now, kind = "surface", normal = {x:0,y:0,z:1}) {
+      worldEffects.impacts.push({ point: { ...point }, normal: { ...normal }, startAt: now, expiresAt: now + 90000, kind, size: .105, seed: Math.random() * 1000 });
       if (worldEffects.impacts.length > 180) worldEffects.impacts.splice(0, worldEffects.impacts.length - 180);
     }
 
+    function markEnemyDefeated(enemy, now) {
+      if (!enemy || enemy.defeatedAt > 0) return;
+      enemy.health = 0;
+      enemy.defeatedAt = now;
+      enemy.movementBlend = 0;
+      enemy.rollUntil = 0;
+      enemy.rollStartedAt = 0;
+      enemy.firingUntil = 0;
+      enemy.muzzleFlashUntil = 0;
+      enemy.aimLockUntil = 0;
+    }
+
+    function triggerCombatRoll(enemy, now, chance = .5) {
+      if (!enemy || enemy.health <= 0 || now < enemy.nextRollAt || Math.random() > chance) return false;
+      enemy.rollDirection = Math.random() > .5 ? 1 : -1;
+      enemy.rollStartedAt = now;
+      enemy.rollUntil = now + 640;
+      enemy.nextRollAt = now + 2400 + Math.random() * 1900;
+      enemy.strafeSign = enemy.rollDirection;
+      return true;
+    }
+
+    function nearMissEnemy(origin, direction, range, excludedEnemy = null) {
+      let best = null;
+      let bestLateral = 3.2;
+      const wallDistance = nearestObstacleDistance(origin, direction, range);
+      for (const enemy of aliveEnemies()) {
+        if (enemy === excludedEnemy) continue;
+        const center = enemyCenter(enemy);
+        const vx = center.x-origin.x, vy=center.y-origin.y, vz=center.z-origin.z;
+        const along = vx*direction.x + vy*direction.y + vz*direction.z;
+        if (along <= 0 || along >= Math.min(range, wallDistance)) continue;
+        const px = origin.x + direction.x*along, py=origin.y + direction.y*along, pz=origin.z + direction.z*along;
+        const lateral = Math.hypot(center.x-px, center.y-py, center.z-pz);
+        if (lateral < bestLateral) { bestLateral = lateral; best = enemy; }
+      }
+      return best;
+    }
+
     function pushBloodBurst(enemy, point, now, defeated = false) {
-      worldEffects.bloodBursts.push({ point: { ...point }, startAt: now, duration: 520, seed: Math.random() * 1000 });
-      if (worldEffects.bloodBursts.length > 60) worldEffects.bloodBursts.splice(0, worldEffects.bloodBursts.length - 60);
+      worldEffects.bloodBursts.push({ point: { ...point }, startAt: now, duration: 680, seed: Math.random() * 1000, intensity: defeated ? 1.35 : 1 });
+      if (worldEffects.bloodBursts.length > 72) worldEffects.bloodBursts.splice(0, worldEffects.bloodBursts.length - 72);
       if (defeated) {
         const center = enemyCenter(enemy);
-        worldEffects.bloodPools.push({ x: center.x, y: .035, z: center.z, startAt: now + 850, expiresAt: now + 120000, seed: Math.random() * 1000 });
+        worldEffects.bloodPools.push({ x: center.x, y: .035, z: center.z, startAt: now + 920, expiresAt: now + 120000, seed: Math.random() * 1000 });
+        if (Math.random() < .28) {
+          worldEffects.bloodFountains.push({ x:center.x, y:number(enemy.machine?.y)+.7, z:center.z, startAt: now + 1250 + Math.random()*650, duration: 1450 + Math.random()*550, seed: Math.random()*1000 });
+        }
         if (worldEffects.bloodPools.length > 40) worldEffects.bloodPools.splice(0, worldEffects.bloodPools.length - 40);
+        if (worldEffects.bloodFountains.length > 18) worldEffects.bloodFountains.splice(0, worldEffects.bloodFountains.length - 18);
+      }
+    }
+
+    function pushExplosiveProjectile(enemy, playerTarget, now, loadout) {
+      const source = enemyCenter(enemy);
+      const muzzle = { x: source.x, y: source.y + .08, z: source.z };
+      const desired = { ...playerTarget };
+      const toTarget = { x: desired.x-muzzle.x, y: desired.y-muzzle.y, z: desired.z-muzzle.z };
+      const distance = Math.max(.01, Math.hypot(toTarget.x,toTarget.y,toTarget.z));
+      const direction = normalizeDirection(toTarget);
+      const impact = resolveWorldImpact(muzzle,direction,Math.min(distance,loadout.range));
+      const finalPoint = impact.landed && impact.distance < distance-.1 ? impact.point : desired;
+      const travelDistance = Math.hypot(finalPoint.x-muzzle.x,finalPoint.y-muzzle.y,finalPoint.z-muzzle.z);
+      const duration = clamp(travelDistance / Math.max(35,loadout.projectileSpeed||80) * 1000, 260, 1250);
+      worldEffects.rockets.push({ origin:muzzle, target:{...finalPoint}, startAt:now, duration, style:loadout.key });
+      worldEffects.explosions.push({ point:{...finalPoint}, startAt:now+duration, duration:900, radius:loadout.explosionRadius||9, sourceEnemyId:enemy.id, damageMin:loadout.damageMin, damageMax:loadout.damageMax, resolved:false, seed:Math.random()*1000 });
+      if (worldEffects.rockets.length > 24) worldEffects.rockets.splice(0,worldEffects.rockets.length-24);
+      if (worldEffects.explosions.length > 28) worldEffects.explosions.splice(0,worldEffects.explosions.length-28);
+    }
+
+    function resolveExplosionDamage(now) {
+      const player = options.getPlayer?.();
+      if (!player) return;
+      for (const explosion of worldEffects.explosions) {
+        if (explosion.resolved || now < explosion.startAt) continue;
+        explosion.resolved = true;
+        const distance = Math.hypot(number(player.x)-explosion.point.x, number(player.y,5.5)-explosion.point.y, number(player.z)-explosion.point.z);
+        if (distance > explosion.radius) continue;
+        const sourceEnemy = enemies.get(String(explosion.sourceEnemyId||""));
+        const playerPoint = {x:number(player.x),y:number(player.y,5.5),z:number(player.z)};
+        if (!hasLineOfSight({x:explosion.point.x,y:explosion.point.y+.2,z:explosion.point.z},playerPoint)) continue;
+        const falloff = clamp(1-distance/Math.max(.1,explosion.radius),.18,1);
+        const base = explosion.damageMin + Math.random()*Math.max(0,explosion.damageMax-explosion.damageMin);
+        damagePlayer(base*falloff, sourceEnemy, player);
       }
     }
 
     function combatEffects(now = performance.now()) {
       worldEffects.tracers = worldEffects.tracers.filter((effect) => now < effect.startAt + effect.duration);
       worldEffects.bloodBursts = worldEffects.bloodBursts.filter((effect) => now < effect.startAt + effect.duration);
+      worldEffects.bloodFountains = worldEffects.bloodFountains.filter((effect) => now < effect.startAt + effect.duration);
       worldEffects.impacts = worldEffects.impacts.filter((effect) => now < effect.expiresAt);
       worldEffects.bloodPools = worldEffects.bloodPools.filter((effect) => now < effect.expiresAt);
+      worldEffects.rockets = worldEffects.rockets.filter((effect) => now < effect.startAt + effect.duration + 80);
+      worldEffects.explosions = worldEffects.explosions.filter((effect) => now < effect.startAt + effect.duration);
       return worldEffects;
     }
 
@@ -507,6 +606,16 @@
       let moveX = 0;
       let moveZ = 0;
       const loadout = ENEMY_WEAPONS[enemy.weaponKey] || ENEMY_WEAPONS.rifle;
+      if (now < enemy.rollUntil) {
+        const sideX = -towardZ * enemy.rollDirection;
+        const sideZ = towardX * enemy.rollDirection;
+        const rollStep = Math.min(1.05, 10.5 * deltaSeconds);
+        tryMoveEnemy(enemy, sideX * rollStep, sideZ * rollStep);
+        enemy.rotationY = faceAngle(enemyCenter(enemy), playerTarget);
+        enemy.movementBlend = 1;
+        enemy.walkPhase += deltaSeconds * 13;
+        return;
+      }
       let speed = 3.2 * enemy.speedBias * loadout.moveSpeed;
       let desiredRotation = enemy.rotationY;
       let aimLocked = false;
@@ -520,7 +629,7 @@
         aimLocked = true;
         if (loadout.melee) {
           if (distance > loadout.preferredMax) {
-            moveX = towardX; moveZ = towardZ; speed = 5.4 * enemy.speedBias * loadout.moveSpeed;
+            moveX = towardX; moveZ = towardZ; speed = 5.8 * enemy.speedBias * loadout.moveSpeed;
           }
         } else if (distance > loadout.preferredMax) {
           moveX = towardX * .88 + strafeX * .22;
@@ -592,7 +701,11 @@
       const enemy = enemies.get(String(id || ""));
       if (!enemy) return null;
       const defeated = enemy.health <= 0;
-      const deathProgress = defeated ? clamp((now - enemy.defeatedAt) / 650, 0, 1) : 0;
+      if (defeated && !enemy.defeatedAt) enemy.defeatedAt = now;
+      const deathProgress = defeated ? clamp((now - enemy.defeatedAt) / 720, 0, 1) : 0;
+      const rollProgress = !defeated && enemy.rollStartedAt > 0 && now < enemy.rollUntil
+        ? clamp((now-enemy.rollStartedAt)/Math.max(1,enemy.rollUntil-enemy.rollStartedAt),0,1)
+        : 0;
       const hitReact = !defeated && now < enemy.hitReactUntil
         ? clamp((enemy.hitReactUntil - now) / 220, 0, 1)
         : 0;
@@ -610,6 +723,8 @@
         defeated,
         deathProgress,
         deathDirection: enemy.deathDirection || 1,
+        rollProgress,
+        rollDirection: enemy.rollDirection || 1,
         tracerTarget: now < enemy.tracerUntil ? enemy.tracerTarget : null,
         tracerStyle: enemy.tracerStyle || enemy.weaponKey || "rifle",
         weaponKey: enemy.weaponKey || "rifle",
@@ -948,9 +1063,9 @@
       const direction = directionFromCamera(player);
       const yaw = number(player.yaw);
       const muzzle = {
-        x: origin.x + direction.x * .72 + Math.cos(yaw) * .28,
-        y: origin.y - .28,
-        z: origin.z + direction.z * .72 - Math.sin(yaw) * .28,
+        x: origin.x + direction.x * .96 + Math.cos(yaw) * .46,
+        y: origin.y - .34,
+        z: origin.z + direction.z * .96 - Math.sin(yaw) * .46,
       };
       const target = findTarget(origin, direction, weapon.range);
       const worldImpact = resolveWorldImpact(origin, direction, weapon.range);
@@ -960,13 +1075,16 @@
         target.enemy.health = Math.max(0, target.enemy.health - weapon.damage);
         target.enemy.hitReactUntil = now + 220;
         const defeated = target.enemy.health <= 0;
-        if (defeated) target.enemy.defeatedAt = now;
+        if (defeated) markEnemyDefeated(target.enemy, now);
+        else triggerCombatRoll(target.enemy, now, .46);
         pushBloodBurst(target.enemy, finalPoint, now, defeated);
         showHitmarker(defeated);
         setTransientStatus(defeated ? "Enemy down" : "Hit", defeated ? 950 : 420);
         if (defeated && aliveEnemies().length === 0 && enemies.size > 0) finishRound("won");
-      } else if (worldImpact.landed) {
-        pushImpact(worldImpact.point, now, worldImpact.kind);
+      } else {
+        if (worldImpact.landed) pushImpact(worldImpact.point, now, worldImpact.kind, worldImpact.normal);
+        const dodge = nearMissEnemy(origin,direction,weapon.range,null);
+        if (dodge) triggerCombatRoll(dodge,now,.62);
       }
       pushTracer(muzzle, finalPoint, now, aiming ? "player-aim" : "player");
       if (ammo.magazine <= 0 && ammo.reserve > 0) setTransientStatus("Magazine empty - R to reload", 1300);
@@ -1023,6 +1141,22 @@
         return;
       }
 
+      if (loadout.explosive) {
+        const hitChance = clamp(loadout.accuracyNear - distance / loadout.accuracyFalloff, .22, .9);
+        const hit = Math.random() <= hitChance;
+        const spread = hit ? 1.4 : 7.5 + Math.random()*6;
+        const rocketTarget = {
+          x: playerTarget.x + (Math.random()-.5)*spread,
+          y: .14 + Math.random()*.22,
+          z: playerTarget.z + (Math.random()-.5)*spread,
+        };
+        enemy.tracerTarget = null;
+        enemy.tracerUntil = 0;
+        pushExplosiveProjectile(enemy,rocketTarget,now,loadout);
+        if (!hit) showIncomingDirection(enemy,player,false);
+        return;
+      }
+
       const hitChance = clamp(loadout.accuracyNear - distance / loadout.accuracyFalloff, .18, .92);
       const hit = Math.random() <= hitChance;
       const missScale = hit ? 0 : (loadout.key === "sniper" ? 2.2 : loadout.key === "bazooka" ? 5.2 : 3.5) + Math.random() * 4.5;
@@ -1062,7 +1196,8 @@
         let source = enemyCenter(enemy);
         let distance = Math.hypot(playerTarget.x - source.x, playerTarget.y - source.y, playerTarget.z - source.z);
         const loadout = ENEMY_WEAPONS[enemy.weaponKey] || ENEMY_WEAPONS.rifle;
-        let lineOfSight = distance <= Math.max(loadout.range + 22, 42) && hasLineOfSight(source, playerTarget);
+        const sightRange = loadout.sightRange || Math.max(loadout.range + 22, 42);
+        let lineOfSight = distance <= sightRange && hasLineOfSight(source, playerTarget);
         updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, lineOfSight);
 
         source = enemyCenter(enemy);
@@ -1094,6 +1229,9 @@
       worldEffects.impacts.length = 0;
       worldEffects.bloodBursts.length = 0;
       worldEffects.bloodPools.length = 0;
+      worldEffects.bloodFountains.length = 0;
+      worldEffects.rockets.length = 0;
+      worldEffects.explosions.length = 0;
       lastDamageAt = 0;
       lastShieldUpdateAt = 0;
       paused = false;
@@ -1188,6 +1326,7 @@
         return;
       }
       updatePlayerShield(now);
+      resolveExplosionDamage(now);
       if (!updateCountdown(now)) {
         if (mouseHeld && currentWeapon().automatic) fire();
         updateEnemyAi(now);

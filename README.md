@@ -1,8 +1,10 @@
-## Version 0.13.57
+## Version 0.13.58
+
+Combat visuals now use depth-tested world-space tracers, surface-aligned bullet holes, blood effects and rocket explosions. Rifle ADS uses a holographic sight, enemy AI can dodge-roll, chainsaw users detect farther and rush faster, combat faces retain visible eyes, and defeated enemies settle consistently before delayed blood-pool/fountain effects.
 
 Combat Mode also hides the normal plant machine/process labels for the duration of a round, then restores the user's existing label configuration when combat ends.
 
-Version 0.13.57 expands owner Combat Mode with visible player tracers, bullet-impact marks, restrained enemy hit/death blood effects, right-click scoped aiming, and randomized enemy weapon classes. Enemy AI now receives rifle, SMG, shotgun, sniper, bazooka, pistol, or chainsaw loadouts with matching 3D models and engagement behavior; chainsaw enemies rush into melee range while sniper and launcher enemies favor distance. The rechargeable shield is reduced from 45 to 22 so it remains useful without absorbing most incoming damage.
+Version 0.13.58 expands owner Combat Mode with visible player tracers, bullet-impact marks, restrained enemy hit/death blood effects, right-click scoped aiming, and randomized enemy weapon classes. Enemy AI now receives rifle, SMG, shotgun, sniper, bazooka, pistol, or chainsaw loadouts with matching 3D models and engagement behavior; chainsaw enemies rush into melee range while sniper and launcher enemies favor distance. The rechargeable shield is reduced from 45 to 22 so it remains useful without absorbing most incoming damage.
 
 ## Version 0.13.56
 

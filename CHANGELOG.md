@@ -1,4 +1,9 @@
-## 0.13.57 - 2026-10-06
+## 0.13.58 - 2026-10-06
+
+- Depth-tested combat decals/effects: player tracers, bullet holes, blood bursts, pools, fountains, rockets and explosions are submitted into the physical 3D scene so machines, walls and pillars correctly occlude them. Bullet holes are now constant-size world-space surface decals aligned to the struck face and are never placed on people.
+- Rifle ADS now uses a compact holographic sight instead of the full-screen scope mask, with a moderate FOV tighten and a red holographic reticle. Rifle/handgun viewmodels received additional receiver, rail, sight, barrel, stock/slide and muzzle geometry.
+- Enemy combat expanded with a Rocket Launcher projectile/explosion loadout, faster long-range chainsaw pursuit, dodge-roll reactions under player fire, consistent floor-settled deaths, restored visible combat eyes, stronger hit blood, delayed pools, and occasional post-death blood fountains.
+- Player tracers now originate farther forward/right at the rendered weapon muzzle so shots visually leave the barrel instead of the player's left side.
 
 - Combat Mode now suppresses normal machine labels, necessary process-step labels, and route-tag labels for a cleaner game view; exiting combat restores the existing label settings without modifying them.
 

@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.57";
+  const APP_VERSION = "0.13.58";
 
   function editorProfileProtected() {
     try {
@@ -6702,7 +6702,7 @@
       capture: () => firstPersonController?.capture?.(),
       setMovementLocked: (locked) => firstPersonController?.setInputLocked?.(locked),
       setAimZoom: (enabled, weapon) => {
-        state.combatAimFov = enabled ? (weapon === "rifle" ? Math.max(24, state.walkFov * .46) : Math.max(42, state.walkFov * .72)) : null;
+        state.combatAimFov = enabled ? (weapon === "rifle" ? Math.max(50, state.walkFov * .76) : Math.max(46, state.walkFov * .78)) : null;
         renderPerformance.invalidate?.("combat-aim-zoom");
       },
       hideWalkMenu: () => setFirstPersonMenu(false),
@@ -10200,7 +10200,19 @@
 
   function combatEnemyPoseParent(machine, combat) {
     const death = clamp(Number(combat?.deathProgress) || 0, 0, 1);
-    if (death <= .001) return machine;
+    const roll = clamp(Number(combat?.rollProgress) || 0, 0, 1);
+    if (death <= .001 && roll <= .001) return machine;
+    if (death <= .001 && roll > .001) {
+      const direction = Number(combat?.rollDirection) < 0 ? -1 : 1;
+      const arc = Math.sin(roll*Math.PI);
+      return {
+        ...machine,
+        renderY: Number(machine.renderY ?? machine.y) + arc*.52,
+        rotationY: Number(machine.rotationY ?? machine.rotation) || 0,
+        rotation: Number(machine.rotationY ?? machine.rotation) || 0,
+        rotationZ: (Number(machine.rotationZ)||0) + direction*roll*360,
+      };
+    }
     const eased = 1 - Math.pow(1 - death, 3);
     const direction = Number(combat?.deathDirection) < 0 ? -1 : 1;
     const width = Math.max(.01, Number(machine.w) || 1.8);
@@ -10264,6 +10276,13 @@
       box(localBox3d(actor,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
     }
 
+    // Combat faces keep visible eyes even when custom-person LOD/design parts omit tiny facial pieces.
+    const eyeY = height*.805;
+    box(localBox3d(actor,width*.345,-.075,width*.13,.065,height*.025,"#f5f6f2",eyeY),alpha,1);
+    box(localBox3d(actor,width*.525,-.075,width*.13,.065,height*.025,"#f5f6f2",eyeY),alpha,1);
+    box(localBox3d(actor,width*.39,-.105,width*.045,.028,height*.016,"#172228",eyeY+height*.003),alpha,1);
+    box(localBox3d(actor,width*.57,-.105,width*.045,.028,height*.016,"#172228",eyeY+height*.003),alpha,1);
+
     // Two-segment legs create an actual walking gait instead of sliding feet.
     const hipY = height * .43;
     const kneeY = height * .22;
@@ -10308,6 +10327,13 @@
       localLine3d(actor,[width*.54,gripY+.08,-.3],[width*.54,gripY+.08,-2.35],"#314436",9.5,alpha);
       localLine3d(actor,[width*.54,gripY+.08,-2.05],[width*.54,gripY+.08,-2.55],"#b7c1b6",11,alpha);
       weaponMuzzleZ = -2.55;
+    } else if (enemyWeapon === "rocket") {
+      box(localBox3d(actor,width*.35,-.74,width*.4,2.05,.42,"#465b49",gripY-.08),alpha,1);
+      box(localBox3d(actor,width*.31,-.08,width*.48,.34,.5,"#2b3930",gripY-.12),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.08,-.36],[width*.55,gripY+.08,-2.7],"#26382d",12.5,alpha);
+      box(localBox3d(actor,width*.42,-2.74,width*.26,.28,.3,"#a6b6a5",gripY-.07),alpha,1);
+      box(localBox3d(actor,width*.45,-.24,width*.2,.32,.2,"#151c18",gripY+.22),alpha,1);
+      weaponMuzzleZ = -2.82;
     } else if (enemyWeapon === "sniper") {
       box(localBox3d(actor,width*.25,depth*.01,width*.56,.4,.34,weapon,gripY-.18),alpha,1);
       box(localBox3d(actor,width*.3,-.68,width*.45,.76,.28,"#3d4a4e",gripY-.15),alpha,1);
@@ -10342,18 +10368,18 @@
 
     const muzzle = localPoint3d(actor,width*.55,gripY+.03,weaponMuzzleZ);
     if (combat.muzzleFlash && enemyWeapon !== "chainsaw") {
-      const flashLength = enemyWeapon === "bazooka" ? 1.55 : 1.05;
-      localLine3d(actor,[width*.55,gripY+.03,weaponMuzzleZ],[width*.55,gripY+.03,weaponMuzzleZ-flashLength],enemyWeapon === "bazooka" ? "#ff7c32" : "#ffd26c",enemyWeapon === "bazooka" ? 13 : 9,alpha);
+      const flashLength = (enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? 1.55 : 1.05;
+      localLine3d(actor,[width*.55,gripY+.03,weaponMuzzleZ],[width*.55,gripY+.03,weaponMuzzleZ-flashLength],(enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? "#ff7c32" : "#ffd26c",(enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? 13 : 9,alpha);
       localLine3d(actor,[width*.55-.28,gripY+.03,weaponMuzzleZ-.48],[width*.55+.28,gripY+.03,weaponMuzzleZ-.48],"#fff3bc",6,alpha);
       localLine3d(actor,[width*.55,gripY-.28,weaponMuzzleZ-.48],[width*.55,gripY+.32,weaponMuzzleZ-.48],"#ff9140",6,alpha);
     }
     if (combat.tracerTarget) {
       const target = [Number(combat.tracerTarget.x), Number(combat.tracerTarget.y), Number(combat.tracerTarget.z)];
       const tracerStyle = String(combat.tracerStyle || "rifle");
-      const glow = tracerStyle === "sniper" ? "rgba(120,211,255,.36)" : tracerStyle === "bazooka" ? "rgba(255,89,24,.42)" : "rgba(255,116,38,.28)";
-      const core = tracerStyle === "sniper" ? "rgba(197,241,255,.98)" : tracerStyle === "bazooka" ? "rgba(255,210,106,.98)" : "rgba(255,231,151,.98)";
-      line3d(muzzle,target,glow,tracerStyle === "bazooka" ? 9 : 5.8,alpha*.58);
-      line3d(muzzle,target,core,tracerStyle === "bazooka" ? 2.8 : 1.65,alpha*.98);
+      const glow = tracerStyle === "sniper" ? "rgba(120,211,255,.36)" : (tracerStyle === "bazooka" || tracerStyle === "rocket") ? "rgba(255,89,24,.42)" : "rgba(255,116,38,.28)";
+      const core = tracerStyle === "sniper" ? "rgba(197,241,255,.98)" : (tracerStyle === "bazooka" || tracerStyle === "rocket") ? "rgba(255,210,106,.98)" : "rgba(255,231,151,.98)";
+      line3d(muzzle,target,glow,(tracerStyle === "bazooka" || tracerStyle === "rocket") ? 9 : 5.8,alpha*.58);
+      line3d(muzzle,target,core,(tracerStyle === "bazooka" || tracerStyle === "rocket") ? 2.8 : 1.65,alpha*.98);
     }
     if (combat.killerReveal) {
       const outlineItem = {
@@ -10516,6 +10542,13 @@
       Number(from.y) + (Number(to.y)-Number(from.y))*t,
       Number(from.z) + (Number(to.z)-Number(from.z))*t,
     ];
+    const impactBasis = (normal) => {
+      const nx=Math.abs(Number(normal?.x)||0), ny=Math.abs(Number(normal?.y)||0), nz=Math.abs(Number(normal?.z)||0);
+      if (ny >= nx && ny >= nz) return [[1,0,0],[0,0,1]];
+      if (nx >= nz) return [[0,1,0],[0,0,1]];
+      return [[1,0,0],[0,1,0]];
+    };
+
     for (const effect of effects.tracers || []) {
       const progress = clamp((time - effect.startAt) / Math.max(1,effect.duration),0,1);
       const head = Math.min(1,progress*1.25);
@@ -10525,44 +10558,89 @@
       const style = String(effect.style || "player");
       const glow = style === "player-aim" ? "rgba(126,220,255,.42)" : "rgba(255,182,84,.38)";
       const core = style === "player-aim" ? "rgba(220,249,255,.98)" : "rgba(255,245,196,.98)";
-      overlayLine3d(a,b,glow,6.2,1-progress*.35);
-      overlayLine3d(a,b,core,1.65,1-progress*.2);
+      line3d(a,b,glow,6.2,1-progress*.35);
+      line3d(a,b,core,1.65,1-progress*.2);
     }
+
+    for (const rocket of effects.rockets || []) {
+      if (time < rocket.startAt) continue;
+      const progress=clamp((time-rocket.startAt)/Math.max(1,rocket.duration),0,1);
+      const head=lerpPoint(rocket.origin,rocket.target,progress);
+      const tail=lerpPoint(rocket.origin,rocket.target,Math.max(0,progress-.1));
+      line3d(tail,head,"rgba(255,225,145,.98)",4.2,1);
+      line3d(lerpPoint(rocket.origin,rocket.target,Math.max(0,progress-.2)),tail,"rgba(255,96,34,.5)",9,.8);
+      const puff=.12;
+      polygon([[head[0]-puff,head[1],head[2]],[head[0],head[1]+puff,head[2]],[head[0]+puff,head[1],head[2]],[head[0],head[1]-puff,head[2]]],"rgba(255,214,111,.96)",null,1,.96,{transparent:true});
+    }
+
     for (const effect of effects.impacts || []) {
-      const p = project(Number(effect.point.x),Number(effect.point.y),Number(effect.point.z));
-      if (p[0] < -30 || p[0] > canvas.width+30 || p[1] < -30 || p[1] > canvas.height+30) continue;
-      const age = Math.max(0,time-effect.startAt);
-      const pop = clamp(age/120,0,1);
-      ctx.save();
-      ctx.globalAlpha = .72 + .22*pop;
-      ctx.fillStyle = "rgba(18,18,16,.92)";
-      ctx.strokeStyle = "rgba(172,147,111,.54)";
-      ctx.lineWidth = 1.1;
-      ctx.beginPath(); ctx.arc(p[0],p[1],2.5+pop*1.2,0,Math.PI*2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "rgba(0,0,0,.85)"; ctx.beginPath(); ctx.arc(p[0],p[1],1.25,0,Math.PI*2); ctx.fill();
-      ctx.restore();
+      const [u,v]=impactBasis(effect.normal);
+      const n=[Number(effect.normal?.x)||0,Number(effect.normal?.y)||0,Number(effect.normal?.z)||0];
+      const center=[Number(effect.point.x)+n[0]*.008,Number(effect.point.y)+n[1]*.008,Number(effect.point.z)+n[2]*.008];
+      const radius=Number(effect.size)||.105;
+      const points=[];
+      for(let i=0;i<10;i++){
+        const a=i/10*Math.PI*2;
+        const wobble=.82+.16*Math.sin(a*3+(effect.seed||0));
+        points.push([center[0]+(u[0]*Math.cos(a)+v[0]*Math.sin(a))*radius*wobble,center[1]+(u[1]*Math.cos(a)+v[1]*Math.sin(a))*radius*wobble,center[2]+(u[2]*Math.cos(a)+v[2]*Math.sin(a))*radius*wobble]);
+      }
+      const rim=effect.kind === "floor" ? "rgba(134,117,91,.58)" : "rgba(156,164,163,.5)";
+      polygon(points,"rgba(18,18,16,.94)",rim,1,.98,{transparent:false});
     }
+
     for (const burst of effects.bloodBursts || []) {
       const elapsed = clamp((time-burst.startAt)/Math.max(1,burst.duration),0,1);
-      for (let i=0;i<7;i++) {
-        const angle = burst.seed*.17 + i*.91;
-        const distance = (.35 + (i%3)*.14) * (elapsed*1.35);
-        const rise = (.45 + (i%2)*.18)*elapsed - 1.05*elapsed*elapsed;
-        const end = [Number(burst.point.x)+Math.cos(angle)*distance,Number(burst.point.y)+rise,Number(burst.point.z)+Math.sin(angle)*distance];
-        overlayLine3d([Number(burst.point.x),Number(burst.point.y),Number(burst.point.z)],end,"rgba(139,19,20,.9)",2.2,1-elapsed);
+      const intensity=Number(burst.intensity)||1;
+      for (let i=0;i<14;i++) {
+        const angle = burst.seed*.17 + i*.63;
+        const distance = (.42 + (i%4)*.16) * (elapsed*1.55) * intensity;
+        const rise = (.55 + (i%3)*.18)*elapsed - 1.18*elapsed*elapsed;
+        const start=[Number(burst.point.x),Number(burst.point.y),Number(burst.point.z)];
+        const end = [start[0]+Math.cos(angle)*distance,start[1]+rise,start[2]+Math.sin(angle)*distance];
+        line3d(start,end,i%3===0?"rgba(186,24,28,.94)":"rgba(126,10,14,.94)",i%4===0?3.6:2.4,1-elapsed*.82);
       }
     }
+
+    for (const fountain of effects.bloodFountains || []) {
+      if (time < fountain.startAt) continue;
+      const elapsed=clamp((time-fountain.startAt)/Math.max(1,fountain.duration),0,1);
+      for(let i=0;i<9;i++){
+        const phase=(elapsed*1.8 + i/9)%1;
+        const angle=fountain.seed*.11+i*.71;
+        const spread=.16+.2*phase;
+        const y=Number(fountain.y)+phase*2.4-1.9*phase*phase;
+        const a=[Number(fountain.x),Number(fountain.y),Number(fountain.z)];
+        const b=[Number(fountain.x)+Math.cos(angle)*spread,y,Number(fountain.z)+Math.sin(angle)*spread];
+        line3d(a,b,"rgba(154,12,18,.92)",2.7,Math.sin(phase*Math.PI));
+      }
+    }
+
     for (const pool of effects.bloodPools || []) {
       if (time < pool.startAt) continue;
-      const grow = clamp((time-pool.startAt)/1450,0,1);
-      const radius = .35 + grow*1.35;
+      const grow = clamp((time-pool.startAt)/1650,0,1);
+      const radius = .42 + grow*1.6;
       const points=[];
-      for(let i=0;i<16;i++) {
-        const angle=i/16*Math.PI*2;
-        const wobble=.82 + .18*Math.sin(angle*3+pool.seed);
-        points.push([Number(pool.x)+Math.cos(angle)*radius*wobble,Number(pool.y),Number(pool.z)+Math.sin(angle)*radius*.62*wobble]);
+      for(let i=0;i<20;i++) {
+        const angle=i/20*Math.PI*2;
+        const wobble=.78 + .22*Math.sin(angle*3+pool.seed);
+        points.push([Number(pool.x)+Math.cos(angle)*radius*wobble,Number(pool.y),Number(pool.z)+Math.sin(angle)*radius*.66*wobble]);
       }
-      overlayPolygon(points,"rgba(92,12,14,.72)","rgba(126,17,18,.58)",1.2,.9);
+      polygon(points,"rgba(86,8,12,.78)","rgba(122,12,16,.64)",1.2,.92,{transparent:true});
+    }
+
+    for (const explosion of effects.explosions || []) {
+      if (time < explosion.startAt) continue;
+      const t=clamp((time-explosion.startAt)/Math.max(1,explosion.duration),0,1);
+      const radius=(.5+Math.sin(t*Math.PI)*3.8)*(Number(explosion.radius||9)/9);
+      const center=[Number(explosion.point.x),Number(explosion.point.y)+.35,Number(explosion.point.z)];
+      for(let i=0;i<12;i++){
+        const a=i/12*Math.PI*2 + (explosion.seed||0)*.01;
+        const edge=[center[0]+Math.cos(a)*radius,center[1]+Math.sin(a*2)*radius*.28,center[2]+Math.sin(a)*radius];
+        line3d(center,edge,i%2?"rgba(255,93,24,.82)":"rgba(255,213,78,.95)",5.5*(1-t)+1.2,1-t*.7);
+      }
+      const ring=[];
+      for(let i=0;i<18;i++){const a=i/18*Math.PI*2;ring.push([center[0]+Math.cos(a)*radius,Number(explosion.point.y)+.08,center[2]+Math.sin(a)*radius]);}
+      polygon(ring,"rgba(255,91,24,.12)","rgba(255,171,48,.72)",2,1-t,{transparent:true});
     }
   }
 
@@ -10589,25 +10667,36 @@
       rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
       rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
     };
-    const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381";
+    const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381", steel="#77858b", accent="#202a2f";
     const parts = combat.weapon === "handgun" ? [
-      {x:.02,y:.02,z:.0,w:.28,h:.16,d:.72,color:metal},
-      {x:.02,y:-.13,z:.16,w:.18,h:.32,d:.24,color:dark,rotationX:-10},
-      {x:.02,y:.11,z:-.05,w:.12,h:.04,d:.42,color:mid},
-      {x:.02,y:.0,z:-.5,w:.08,h:.08,d:.42,color:dark},
-      {x:.0,y:-.2,z:.12,w:.22,h:.17,d:.26,color:skin,rotationX:-8},
-      {x:-.18,y:-.15,z:.14,w:.17,h:.15,d:.24,color:skin,rotationZ:-12},
+      {x:.02,y:.04,z:-.06,w:.3,h:.15,d:.72,color:metal},
+      {x:.02,y:.13,z:-.08,w:.25,h:.035,d:.56,color:steel},
+      {x:.02,y:.105,z:.19,w:.16,h:.055,d:.19,color:"#11171a"},
+      {x:.02,y:.105,z:-.33,w:.08,h:.07,d:.08,color:"#a8b1b4"},
+      {x:.02,y:-.15,z:.16,w:.19,h:.36,d:.25,color:dark,rotationX:-12},
+      {x:.02,y:-.04,z:.19,w:.23,h:.07,d:.18,color:accent},
+      {x:.02,y:.01,z:-.55,w:.09,h:.085,d:.4,color:dark},
+      {x:.02,y:.01,z:-.77,w:.12,h:.1,d:.08,color:"#222b2f"},
+      {x:.0,y:-.22,z:.12,w:.22,h:.17,d:.26,color:skin,rotationX:-8},
+      {x:-.18,y:-.16,z:.12,w:.17,h:.15,d:.24,color:skin,rotationZ:-12},
     ] : [
-      {x:0,y:0,z:.02,w:.34,h:.22,d:.72,color:metal},
-      {x:0,y:.16,z:.0,w:.18,h:.07,d:.56,color:dark},
-      {x:0,y:.24,z:-.08,w:.11,h:.18,d:.12,color:mid},
-      {x:0,y:-.2,z:.09,w:.17,h:.42,d:.18,color:dark,rotationX:-12},
-      {x:0,y:-.19,z:-.08,w:.17,h:.38,d:.18,color:dark,rotationX:8},
-      {x:0,y:.01,z:-.55,w:.18,h:.16,d:.5,color:mid},
-      {x:0,y:.0,z:-1.02,w:.08,h:.08,d:.52,color:dark},
-      {x:0,y:.0,z:.62,w:.28,h:.22,d:.48,color:dark},
-      {x:.03,y:-.29,z:.1,w:.25,h:.19,d:.3,color:skin,rotationX:-8},
-      {x:-.21,y:-.12,z:-.28,w:.2,h:.18,d:.34,color:skin,rotationZ:-14},
+      {x:0,y:0,z:.02,w:.36,h:.23,d:.75,color:metal},
+      {x:0,y:.155,z:-.02,w:.3,h:.055,d:.72,color:steel},
+      {x:0,y:.2,z:-.18,w:.21,h:.06,d:.22,color:dark},
+      {x:0,y:.265,z:-.18,w:.22,h:.13,d:.08,color:"#171f23"},
+      {x:-.09,y:.275,z:-.18,w:.045,h:.24,d:.09,color:mid},
+      {x:.09,y:.275,z:-.18,w:.045,h:.24,d:.09,color:mid},
+      {x:0,y:.34,z:-.18,w:.19,h:.035,d:.09,color:"#29363c"},
+      {x:0,y:-.21,z:.12,w:.18,h:.43,d:.2,color:dark,rotationX:-13},
+      {x:0,y:-.21,z:-.09,w:.18,h:.4,d:.2,color:dark,rotationX:8},
+      {x:0,y:.01,z:-.55,w:.24,h:.18,d:.56,color:mid},
+      {x:0,y:.07,z:-.58,w:.28,h:.05,d:.42,color:steel},
+      {x:0,y:.0,z:-1.03,w:.09,h:.09,d:.52,color:dark},
+      {x:0,y:.0,z:-1.32,w:.13,h:.12,d:.09,color:"#252f33"},
+      {x:0,y:.0,z:.64,w:.3,h:.23,d:.5,color:dark},
+      {x:0,y:.0,z:.91,w:.25,h:.19,d:.16,color:"#252f33"},
+      {x:.03,y:-.3,z:.11,w:.25,h:.19,d:.3,color:skin,rotationX:-8},
+      {x:-.21,y:-.13,z:-.29,w:.2,h:.18,d:.34,color:skin,rotationZ:-14},
     ];
     // During reload the magazine visibly drops and returns instead of the whole gun merely rotating.
     parts.forEach((part,index) => {
@@ -11997,9 +12086,11 @@
     // route sections correctly.
     const todayProductionFlow = isTodayStage() ? drawTodayProductionFlow(machineEntries, time) : null;
 
-    // World-space labels are part of the physical WebGL scene and are submitted
-    // before the frame is presented.
+    // World-space labels and Combat Mode effects are physical depth-tested scene geometry.
+    // Submitting impacts, blood, rockets and tracers before the scene is presented keeps
+    // them from bleeding through machines, walls or structural pillars.
     drawWorldMachineLabels(machineEntries, time);
+    drawCombatWorldEffects(time);
     state.visibleAnimationsActive = state.visibleAnimationsActive || Boolean(depthRenderer.worldLabelsAnimating?.());
     presentPhysicalScene?.();
 
@@ -12355,7 +12446,6 @@
       renderPerformance.beginPhase?.("overlays");
     }
     drawLayoutRulers();
-    drawCombatWorldEffects(time);
     drawCombatKillerOverlay(time);
     drawFirstPersonCombatWeapon(time);
     renderPerformance.setRendererStats?.(depthRenderer.getStats?.());

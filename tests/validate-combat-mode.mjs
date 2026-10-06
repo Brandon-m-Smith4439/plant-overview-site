@@ -84,7 +84,7 @@ const publishedPeople = publishedLayout.machines.filter((machine) => {
 assert.ok(publishedPeople.length >= 10, "Published person-machine coverage unexpectedly collapsed.");
 assert.equal(publishedPeople.filter((machine) => machine.name === "Helper").length, 2, "Helper must be included in combat coverage as both published person instances.");
 
-// v0.13.57: shield, combat-owned Esc menu, death input lock, and killer outline/name.
+// v0.13.58: shield, combat-owned Esc menu, death input lock, and killer outline/name.
 assert.ok(combat.includes("SHIELD_MAX = 22") && combat.includes("SHIELD_RECHARGE_DELAY_MS") && combat.includes("updatePlayerShield"), "Rechargeable combat shield is missing.");
 assert.ok(combat.includes("combat-pause-overlay") && combat.includes("handleEscape") && combat.includes("setPaused"), "Combat Mode must own a dedicated Esc pause menu.");
 assert.ok(combat.includes("options.setMovementLocked?.(true)") && combat.includes("isDefeated: () => roundState === \"lost\""), "Death must lock player movement and expose defeated state.");
@@ -96,16 +96,28 @@ assert.ok(css.includes(".combat-shield-track") && css.includes(".combat-pause-ov
 const firstPersonControllerSource = fs.readFileSync(new URL("../public/first-person-controller.js", import.meta.url), "utf8");
 assert.ok(firstPersonControllerSource.includes("setInputLocked") && firstPersonControllerSource.includes("if (inputLocked)"), "First-person controller cannot hard-lock movement after death/pause.");
 
-// v0.13.57: player tracers/impacts, blood effects, ADS scope, enemy loadout variety, and reduced shield.
+// v0.13.58: player tracers/impacts, blood effects, ADS scope, enemy loadout variety, and reduced shield.
 assert.ok(combat.includes("SHIELD_MAX = 22") && combat.includes("SHIELD_RECHARGE_PER_SECOND = 7"), "Combat shield must be reduced to about half strength.");
 assert.ok(combat.includes("ENEMY_WEAPONS") && combat.includes("sniper") && combat.includes("bazooka") && combat.includes("chainsaw") && combat.includes("shotgun") && combat.includes("smg"), "Randomized enemy weapon catalog is incomplete.");
 assert.ok(combat.includes("record.weaponKey = ENEMY_WEAPON_KEYS") && combat.includes("loadout.melee"), "Enemy loadouts must randomize and drive melee/ranged AI behavior.");
 assert.ok(combat.includes("pushTracer") && combat.includes("pushImpact") && combat.includes("resolveWorldImpact") && combat.includes("combatEffects"), "Player tracers and persistent impact decals are missing.");
-assert.ok(combat.includes("pushBloodBurst") && combat.includes("bloodPools") && combat.includes("startAt: now + 850"), "Enemy hit blood and delayed death pools are missing.");
+assert.ok(combat.includes("pushBloodBurst") && combat.includes("bloodPools") && combat.includes("startAt: now + 920"), "Enemy hit blood and delayed death pools are missing.");
 assert.ok(combat.includes("event.button === 2") && combat.includes("setAiming") && combat.includes("combat-scope-overlay"), "Right-click aim/scope flow is missing.");
 assert.ok(plant.includes("drawCombatWorldEffects") && plant.includes("bloodBursts") && plant.includes("bloodPools"), "Combat world effects are not rendered in the plant scene.");
 assert.ok(plant.includes('enemyWeapon === "sniper"') && plant.includes('enemyWeapon === "bazooka"') && plant.includes('enemyWeapon === "chainsaw"'), "Distinct 3D enemy weapon models are missing.");
 assert.ok(plant.includes("state.combatAimFov") && plant.includes("setAimZoom"), "Scoped aiming must narrow the first-person FOV.");
-assert.ok(css.includes(".combat-scope-overlay") && css.includes(".combat-scope-lens"), "Scope overlay styling is missing.");
+assert.ok(css.includes(".combat-scope-overlay") && css.includes(".combat-holo-sight"), "Holographic aim overlay styling is missing.");
 assert.ok(plant.includes("function combatLabelsSuppressed()") && plant.includes("combatLabelsSuppressed() || !WORLD_MACHINE_LABELS"), "Machine labels must be suppressed while Combat Mode is active.");
 assert.ok(plant.includes("SCREEN_SPACE_LABELS && !combatLabelsSuppressed()") && plant.includes("combatLabelsSuppressed() || !SCREEN_SPACE_LABELS"), "Process-step and route-tag labels must be suppressed while Combat Mode is active.");
+
+// v0.13.58: depth-tested combat effects, holographic ADS, explosive rockets, dodge rolls, and combat-face/death polish.
+assert.ok(combat.includes("impactNormalForBox") && combat.includes("size: .105") && combat.includes("normal: { ...normal }"), "Bullet holes must be constant-size world-space decals aligned to the struck surface.");
+assert.ok(plant.includes("drawCombatWorldEffects(time);") && plant.indexOf("drawCombatWorldEffects(time);") < plant.indexOf("presentPhysicalScene?.();"), "Combat tracers/decals/blood must enter the physical depth-tested scene before presentation.");
+assert.ok(combat.includes("bloodFountains") && plant.includes("effects.bloodFountains") && plant.includes("14;i++"), "Stronger blood bursts and occasional post-death blood fountains are missing.");
+assert.ok(combat.includes('rocket: Object.freeze') && combat.includes("pushExplosiveProjectile") && combat.includes("resolveExplosionDamage"), "Rocket Launcher projectile/explosion behavior is missing.");
+assert.ok(combat.includes("sightRange: 145") && combat.includes("moveSpeed: 2") && combat.includes("const sightRange = loadout.sightRange"), "Melee enemies must detect farther and rush at double-speed loadout weighting.");
+assert.ok(combat.includes("triggerCombatRoll") && combat.includes("rollStartedAt") && plant.includes("rollProgress") && plant.includes("rotationZ"), "Enemy combat-roll behavior/animation is missing.");
+assert.ok(plant.includes("Combat faces keep visible eyes") && plant.includes("#f5f6f2"), "Combat people must retain visible eyes.");
+assert.ok(css.includes("combat-holo-sight") && css.includes("combat-holo-glass") && !css.includes("border-radius:50%;\n  border:clamp(3px,.4vw,6px)"), "Rifle ADS must use a holographic sight instead of the old circular scope.");
+assert.ok(plant.includes("direction.x * .96 + Math.cos(yaw) * .46") || combat.includes("direction.x * .96 + Math.cos(yaw) * .46"), "Player tracer muzzle must originate at the rendered gun side of the camera.");
+assert.ok(css.includes("combat-hitmarker.visible i") && css.includes("#ff4e55"), "Person hits must use a red hit marker instead of bullet-hole decals.");

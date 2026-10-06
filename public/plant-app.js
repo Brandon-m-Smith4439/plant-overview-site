@@ -6254,17 +6254,9 @@
     controls.innerHTML = `
       <button type="button" data-view="overview" aria-label="Reset to overview">Overview</button>
       <button type="button" data-toggle="walk" aria-pressed="false">First person</button>
+      ${ownerCombatAllowed ? '<button type="button" data-toggle="combat" class="combat-mode-button" aria-pressed="false">Combat mode</button>' : ""}
     `;
     frame.appendChild(controls);
-    if (ownerCombatAllowed) {
-      const combatButton = document.createElement("button");
-      combatButton.type = "button";
-      combatButton.dataset.toggle = "combat";
-      combatButton.className = "combat-mode-button";
-      combatButton.setAttribute("aria-pressed", "false");
-      combatButton.textContent = "Combat mode";
-      controls.appendChild(combatButton);
-    }
     const fullscreenToggle = document.createElement("button");
     fullscreenToggle.type = "button";
     fullscreenToggle.className = "fullscreen-toggle-button viewer-icon-button";
@@ -6640,9 +6632,12 @@
         setStage(stages.length - 1);
         state.stageFloat = stages.length - 1;
         if (state.cameraMode !== "walk") setWalkMode(true);
-        combatController.start();
-        syncCombatButton(true);
-        showToast("Owner Combat Mode started. Mouse 1 fires; 1/2 switch weapons; R reloads.");
+        window.requestAnimationFrame(() => {
+          if (state.cameraMode !== "walk" || combatController?.isActive?.()) return;
+          combatController.start();
+          syncCombatButton(true);
+          showToast("Combat starts in 2 seconds. Get ready.");
+        });
       } else {
         combatController.stop();
         syncCombatButton(false);
@@ -6669,6 +6664,7 @@
       exitCombat: () => setCombatMode(false),
       invalidate: () => renderPerformance.invalidate?.("combat-mode"),
       onStateChange: syncCombatButton,
+      onCombatStart: () => showToast("Fight! Defeat every enemy AI to complete the round."),
     }) || null;
 
     if (ownerCombatAllowed && new URLSearchParams(window.location.search).get("owner") === "combat") {

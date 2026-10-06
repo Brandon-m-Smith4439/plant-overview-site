@@ -1,5 +1,7 @@
 ## 0.13.57 - 2026-10-06
 
+- Combat Mode now suppresses normal machine labels, necessary process-step labels, and route-tag labels for a cleaner game view; exiting combat restores the existing label settings without modifying them.
+
 - Added animated player bullet tracers and persistent impact marks on walls, machines, pillars, and floor surfaces where shots land.
 - Added restrained combat hit effects for enemy AI: short blood spurts on confirmed hits and delayed floor pools after defeated enemies finish falling.
 - Added right-click aim-down-sights. Rifle ADS narrows the first-person FOV and opens a dedicated circular scope/reticle overlay; handgun ADS gets a lighter zoom without the scope.

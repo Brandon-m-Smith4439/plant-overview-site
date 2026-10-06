@@ -6453,6 +6453,13 @@
         <button type="button" data-touch-action="crouch" aria-pressed="false">Crouch</button>
         <button type="button" data-touch-action="exit" class="touch-exit">Exit</button>
       </div>
+      <div class="touch-combat-actions" aria-label="Mobile combat controls">
+        <button type="button" data-touch-combat="fire" class="touch-combat-fire">FIRE</button>
+        <button type="button" data-touch-combat="aim" aria-pressed="false">AIM</button>
+        <button type="button" data-touch-combat="reload">RELOAD</button>
+        <button type="button" data-touch-combat="swap">SWAP</button>
+        <button type="button" data-touch-combat="menu">MENU</button>
+      </div>
     `;
     frame.appendChild(firstPersonTouchControls);
 
@@ -6693,7 +6700,11 @@
         yaw: state.yaw,
         pitch: state.pitch,
         moving: firstPersonController?.isMoving?.() === true,
-        engaged: state.cameraMode === "walk" && firstPersonController?.isPointerLocked?.() === true,
+        engaged: state.cameraMode === "walk" && (
+          firstPersonController?.isPointerLocked?.() === true
+          || window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches === true
+          || Number(navigator.maxTouchPoints || 0) > 0
+        ),
       }),
       getEnemies: combatEnemyMachines,
       getOccluders: combatOccluders,
@@ -6821,7 +6832,10 @@
       crouchButton.classList.toggle("active", active);
       firstPersonController?.setTouchCrouch?.(active);
     });
-    firstPersonTouchControls.querySelector("[data-touch-action='exit']")?.addEventListener("click", () => setWalkMode(false));
+    firstPersonTouchControls.querySelector("[data-touch-action='exit']")?.addEventListener("click", () => {
+      if (combatController?.isActive?.()) combatController.handleEscape?.("mobile-exit");
+      else setWalkMode(false);
+    });
     const touchLookPad = firstPersonTouchControls.querySelector("[data-touch-look]");
     let touchLookPointer = null;
     let touchLookX = 0;
@@ -6849,6 +6863,43 @@
       touchLookPad?.classList.remove("active");
     };
     ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => touchLookPad?.addEventListener(type, endTouchLook));
+
+    const touchFireButton = firstPersonTouchControls.querySelector("[data-touch-combat='fire']");
+    const setTouchFire = (active, event) => {
+      event?.preventDefault?.();
+      if (active) event?.currentTarget?.setPointerCapture?.(event.pointerId);
+      touchFireButton?.classList.toggle("active", active);
+      combatController?.setTriggerHeld?.(active);
+    };
+    touchFireButton?.addEventListener("pointerdown", (event) => setTouchFire(true, event));
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => touchFireButton?.addEventListener(type, (event) => setTouchFire(false, event)));
+
+    const touchAimButton = firstPersonTouchControls.querySelector("[data-touch-combat='aim']");
+    touchAimButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!combatController?.isActive?.()) return;
+      const activeAim = touchAimButton.getAttribute("aria-pressed") !== "true";
+      touchAimButton.setAttribute("aria-pressed", String(activeAim));
+      touchAimButton.classList.toggle("active", activeAim);
+      combatController.setAiming?.(activeAim);
+    });
+    firstPersonTouchControls.querySelector("[data-touch-combat='reload']")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      combatController?.reload?.();
+    });
+    firstPersonTouchControls.querySelector("[data-touch-combat='swap']")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      const weapon = combatController?.playerRenderState?.()?.weapon;
+      combatController?.switchWeapon?.(weapon === "rifle" ? "handgun" : "rifle");
+      if (touchAimButton) {
+        touchAimButton.setAttribute("aria-pressed", "false");
+        touchAimButton.classList.remove("active");
+      }
+    });
+    firstPersonTouchControls.querySelector("[data-touch-combat='menu']")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      combatController?.handleEscape?.("mobile-menu");
+    });
 
     firstPersonHud.querySelector("[data-first-person-action='capture']")?.addEventListener("click", () => firstPersonController?.capture());
     firstPersonHud.querySelector("[data-first-person-action='exit']")?.addEventListener("click", () => setWalkMode(false));
@@ -10277,11 +10328,13 @@
     }
 
     // Combat faces keep visible eyes even when custom-person LOD/design parts omit tiny facial pieces.
-    const eyeY = height*.805;
-    box(localBox3d(actor,width*.345,-.075,width*.13,.065,height*.025,"#f5f6f2",eyeY),alpha,1);
-    box(localBox3d(actor,width*.525,-.075,width*.13,.065,height*.025,"#f5f6f2",eyeY),alpha,1);
-    box(localBox3d(actor,width*.39,-.105,width*.045,.028,height*.016,"#172228",eyeY+height*.003),alpha,1);
-    box(localBox3d(actor,width*.57,-.105,width*.045,.028,height*.016,"#172228",eyeY+height*.003),alpha,1);
+    // The face points toward negative local Z, so positive Z tucks the eyes back into the head.
+    const eyeY = height*.865;
+    const eyeZ = depth*.035;
+    box(localBox3d(actor,width*.35,eyeZ,width*.12,.055,height*.022,"#f5f6f2",eyeY),alpha,1);
+    box(localBox3d(actor,width*.53,eyeZ,width*.12,.055,height*.022,"#f5f6f2",eyeY),alpha,1);
+    box(localBox3d(actor,width*.392,eyeZ-.022,width*.038,.018,height*.014,"#172228",eyeY+height*.002),alpha,1);
+    box(localBox3d(actor,width*.572,eyeZ-.022,width*.038,.018,height*.014,"#172228",eyeY+height*.002),alpha,1);
 
     // Two-segment legs create an actual walking gait instead of sliding feet.
     const hipY = height * .43;
@@ -10317,30 +10370,47 @@
     const enemyWeapon = String(combat.weaponKey || "rifle");
     let weaponMuzzleZ = muzzleZ;
     if (enemyWeapon === "chainsaw") {
-      box(localBox3d(actor,width*.32,-.38,width*.48,.62,.42,"#d64c32",gripY-.22),alpha,1);
-      box(localBox3d(actor,width*.42,-1.12,width*.28,1.25,.16,"#aab1b2",gripY-.14),alpha,1);
-      localLine3d(actor,[width*.42,gripY-.04,-1.05],[width*.42,gripY-.04,-2.1],"#555f62",4.4,alpha);
-      localLine3d(actor,[width*.7,gripY-.1,-.35],[width*.7,gripY-.1,-.8],"#1b2326",3.3,alpha);
-      weaponMuzzleZ = -2.05;
+      // Right-hand chainsaw: engine housing, wrap handle, long guide bar and visible chain.
+      box(localBox3d(actor,width*.38,-.46,width*.48,.72,.52,"#d54b31",gripY-.29),alpha,1);
+      box(localBox3d(actor,width*.43,-.5,width*.38,.22,.22,"#222a2d",gripY+.17),alpha,1);
+      box(localBox3d(actor,width*.42,-1.58,width*.28,1.48,.19,"#c5cbca",gripY-.16),alpha,1);
+      box(localBox3d(actor,width*.455,-1.62,width*.21,1.53,.09,"#596164",gripY-.105),alpha,1);
+      localLine3d(actor,[width*.42,gripY+.28,-.26],[width*.7,gripY+.48,-.46],"#1b2326",5.4,alpha);
+      localLine3d(actor,[width*.7,gripY+.48,-.46],[width*.72,gripY+.12,-.72],"#1b2326",5.4,alpha);
+      localLine3d(actor,[width*.64,gripY-.06,-.34],[width*.72,gripY-.08,-.9],"#171d20",4.4,alpha);
+      for (let tooth = 0; tooth < 6; tooth += 1) {
+        const z = -1.52 - tooth*.22;
+        localLine3d(actor,[width*.43,gripY-.05,z],[width*.39,gripY-.12,z-.08],"#f0c75c",2.1,alpha);
+      }
+      weaponMuzzleZ = -2.9;
     } else if (enemyWeapon === "bazooka") {
       box(localBox3d(actor,width*.39,-.56,width*.3,1.65,.38,"#566d55",gripY-.08),alpha,1);
       localLine3d(actor,[width*.54,gripY+.08,-.3],[width*.54,gripY+.08,-2.35],"#314436",9.5,alpha);
       localLine3d(actor,[width*.54,gripY+.08,-2.05],[width*.54,gripY+.08,-2.55],"#b7c1b6",11,alpha);
       weaponMuzzleZ = -2.55;
     } else if (enemyWeapon === "rocket") {
-      box(localBox3d(actor,width*.35,-.74,width*.4,2.05,.42,"#465b49",gripY-.08),alpha,1);
-      box(localBox3d(actor,width*.31,-.08,width*.48,.34,.5,"#2b3930",gripY-.12),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.08,-.36],[width*.55,gripY+.08,-2.7],"#26382d",12.5,alpha);
-      box(localBox3d(actor,width*.42,-2.74,width*.26,.28,.3,"#a6b6a5",gripY-.07),alpha,1);
-      box(localBox3d(actor,width*.45,-.24,width*.2,.32,.2,"#151c18",gripY+.22),alpha,1);
-      weaponMuzzleZ = -2.82;
+      // Oversized shoulder-fired rocket launcher with a broad tube, rear exhaust and front warhead collar.
+      box(localBox3d(actor,width*.28,-1.02,width*.58,2.72,.66,"#405747",gripY-.2),alpha,1);
+      box(localBox3d(actor,width*.24,-.06,width*.66,.5,.78,"#263a2d",gripY-.26),alpha,1);
+      box(localBox3d(actor,width*.31,-2.98,width*.52,.5,.62,"#657869",gripY-.18),alpha,1);
+      box(localBox3d(actor,width*.38,-3.28,width*.38,.38,.46,"#b7c5b6",gripY-.1),alpha,1);
+      box(localBox3d(actor,width*.43,-.42,width*.24,.46,.24,"#121b16",gripY+.34),alpha,1);
+      box(localBox3d(actor,width*.5,-.12,width*.18,.34,.65,"#202c24",gripY-.64),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.12,.2],[width*.55,gripY+.12,-3.45],"#17241c",15.5,alpha);
+      localLine3d(actor,[width*.3,gripY+.06,.08],[width*.18,gripY+.06,.55],"#d49b48",5.8,alpha);
+      weaponMuzzleZ = -3.48;
     } else if (enemyWeapon === "sniper") {
-      box(localBox3d(actor,width*.25,depth*.01,width*.56,.4,.34,weapon,gripY-.18),alpha,1);
-      box(localBox3d(actor,width*.3,-.68,width*.45,.76,.28,"#3d4a4e",gripY-.15),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.04,-.55],[width*.55,gripY+.04,-2.45],weapon,4.4,alpha);
-      box(localBox3d(actor,width*.46,-.18,width*.18,.46,.22,"#11181c",gripY+.18),alpha,1);
-      box(localBox3d(actor,width*.49,-.28,width*.12,.55,.18,"#6a7880",gripY+.2),alpha,1);
-      weaponMuzzleZ = -2.45;
+      // Long precision rifle: shoulder stock, receiver, magazine, handguard, heavy barrel and scope.
+      box(localBox3d(actor,width*.12,depth*.2,width*.3,.62,.42,"#2d373c",gripY-.22),alpha,1);
+      box(localBox3d(actor,width*.3,-.26,width*.5,.72,.38,weapon,gripY-.2),alpha,1);
+      box(localBox3d(actor,width*.39,-.9,width*.34,.78,.28,"#46545a",gripY-.16),alpha,1);
+      box(localBox3d(actor,width*.47,-.16,width*.18,.3,.72,"#151c20",gripY-.72),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.03,-.72],[width*.55,gripY+.03,-2.92],weapon,5.2,alpha);
+      localLine3d(actor,[width*.55,gripY+.03,-2.72],[width*.55,gripY+.03,-3.08],"#171e22",7,alpha);
+      box(localBox3d(actor,width*.43,-.35,width*.25,.78,.23,"#11181c",gripY+.2),alpha,1);
+      box(localBox3d(actor,width*.47,-.44,width*.17,.94,.18,"#718089",gripY+.23),alpha,1);
+      box(localBox3d(actor,width*.5,-.52,width*.11,1.02,.12,"#a9b3b7",gripY+.25),alpha,1);
+      weaponMuzzleZ = -3.08;
     } else if (enemyWeapon === "shotgun") {
       box(localBox3d(actor,width*.28,depth*.01,width*.52,.42,.32,weapon,gripY-.18),alpha,1);
       box(localBox3d(actor,width*.36,-.72,width*.38,.76,.28,"#6b4a2e",gripY-.16),alpha,1);
@@ -10357,13 +10427,19 @@
       localLine3d(actor,[width*.55,gripY+.02,-.48],[width*.55,gripY+.02,-1.18],weapon,4.2,alpha);
       weaponMuzzleZ = -1.18;
     } else {
-      box(localBox3d(actor,width*.28,depth*.01,width*.52,.38,.36,weapon,gripY-.18),alpha,1);
-      box(localBox3d(actor,width*.16,depth*.27,width*.22,.5,.32,weaponLight,gripY-.19),alpha,1);
-      box(localBox3d(actor,width*.43,-.18,width*.22,.3,.72,"#161d21",gripY-.69),alpha,1);
-      box(localBox3d(actor,width*.48,depth*.03,width*.16,.22,.86,"#1a2226",gripY-.87),alpha,1);
-      box(localBox3d(actor,width*.36,-.64,width*.38,.7,.34,"#313d42",gripY-.17),alpha,1);
-      localLine3d(actor,[width*.55,gripY+.03,-.6],[width*.55,gripY+.03,muzzleZ],weapon,5.4,alpha);
-      localLine3d(actor,[width*.49,gripY+.36,depth*.01],[width*.61,gripY+.36,depth*.01],"#7f8c92",2.2,alpha);
+      // Full 3D right-hand service rifle with shoulder stock, receiver, handguard, curved magazine, grip, rail and optic.
+      box(localBox3d(actor,width*.1,depth*.18,width*.32,.72,.46,"#2a3439",gripY-.24),alpha,1);
+      box(localBox3d(actor,width*.29,-.28,width*.54,.78,.42,weapon,gripY-.21),alpha,1);
+      box(localBox3d(actor,width*.36,-.92,width*.4,.8,.32,weaponLight,gripY-.17),alpha,1);
+      box(localBox3d(actor,width*.44,-.16,width*.2,.3,.76,"#151d21",gripY-.73),alpha,1);
+      box(localBox3d(actor,width*.49,-.06,width*.17,.28,.94,"#1a2226",gripY-.93),alpha,1);
+      box(localBox3d(actor,width*.49,depth*.02,width*.15,.26,.62,"#20282c",gripY-.64),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.03,-.78],[width*.55,gripY+.03,-2.18],weapon,6.1,alpha);
+      localLine3d(actor,[width*.55,gripY+.03,-2.02],[width*.55,gripY+.03,-2.34],"#151c20",7.4,alpha);
+      box(localBox3d(actor,width*.42,-.24,width*.28,.68,.12,"#11181c",gripY+.2),alpha,1);
+      box(localBox3d(actor,width*.47,-.18,width*.18,.32,.25,"#27343a",gripY+.31),alpha,1);
+      box(localBox3d(actor,width*.5,-.24,width*.12,.44,.18,"#7d8b91",gripY+.34),alpha,1);
+      weaponMuzzleZ = -2.34;
     }
 
     const muzzle = localPoint3d(actor,width*.55,gripY+.03,weaponMuzzleZ);

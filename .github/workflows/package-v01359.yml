@@ -1,0 +1,94 @@
+name: Validate v0.13.59 mobile victory
+
+on:
+  push:
+    branches:
+      - release-v01359-mobile-victory
+    paths:
+      - ".github/workflows/package-v01359.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validate-build-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: release-v01359-mobile-victory
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript
+        run: npm run validate:js
+
+      - name: Validate first person
+        run: npm run validate:first-person
+
+      - name: Validate first-person collisions
+        run: npm run validate:first-person-collisions
+
+      - name: Validate first-person rendering
+        run: npm run validate:first-person-rendering
+
+      - name: Validate combat mode
+        run: npm run validate:combat
+
+      - name: Validate animations
+        run: npm run validate:animations
+
+      - name: Build production site
+        run: npm run build
+
+      - name: Commit clean validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Brandon-m-Smith4439"
+          git config user.email "masterchief4439@gmail.com"
+          rm -f .github/workflows/package-v01359.yml
+          git add -A
+          git commit -m "v0.13.59 add mobile combat and victory presentation"
+          git push origin HEAD:release-v01359-mobile-victory
+
+      - name: Create release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL="monroe-glass-plant-evolution-v0.13.59-full-project.zip"
+          CHANGED="monroe-glass-plant-evolution-v0.13.59-changed-files.zip"
+
+          zip -rq "$FULL" . -x ".git/*" "node_modules/*" ".next/*" "dist/*" ".wrangler/*" "build/*"
+
+          rm -rf changed-files
+          mkdir -p changed-files
+          for file in             CHANGELOG.md README.md VERSION             app/globals.css app/legacy-script-loader.tsx app/machine-studio/page.tsx app/page.tsx             package.json package-lock.json             public/machine-studio.html public/plant-app.js public/plant-combat.js public/preview.html             tests/validate-combat-mode.mjs
+          do
+            mkdir -p "changed-files/$(dirname "$file")"
+            cp "$file" "changed-files/$file"
+          done
+          (cd changed-files && zip -rq "../$CHANGED" .)
+
+      - name: Upload full project
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-project-v0.13.59
+          path: monroe-glass-plant-evolution-v0.13.59-full-project.zip
+          if-no-files-found: error
+
+      - name: Upload changed files
+        uses: actions/upload-artifact@v4
+        with:
+          name: changed-files-v0.13.59
+          path: monroe-glass-plant-evolution-v0.13.59-changed-files.zip
+          if-no-files-found: error

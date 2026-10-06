@@ -83,3 +83,15 @@ const publishedPeople = publishedLayout.machines.filter((machine) => {
 });
 assert.ok(publishedPeople.length >= 10, "Published person-machine coverage unexpectedly collapsed.");
 assert.equal(publishedPeople.filter((machine) => machine.name === "Helper").length, 2, "Helper must be included in combat coverage as both published person instances.");
+
+// v0.13.56: shield, combat-owned Esc menu, death input lock, and killer outline/name.
+assert.ok(combat.includes("SHIELD_MAX = 45") && combat.includes("SHIELD_RECHARGE_DELAY_MS") && combat.includes("updatePlayerShield"), "Rechargeable combat shield is missing.");
+assert.ok(combat.includes("combat-pause-overlay") && combat.includes("handleEscape") && combat.includes("setPaused"), "Combat Mode must own a dedicated Esc pause menu.");
+assert.ok(combat.includes("options.setMovementLocked?.(true)") && combat.includes("isDefeated: () => roundState === \"lost\""), "Death must lock player movement and expose defeated state.");
+assert.ok(plant.includes("setInputLocked") && plant.includes("combatController.handleEscape?.(reason)"), "First-person input/escape routing is not separated for Combat Mode.");
+assert.ok(plant.includes("combatController?.isActive?.()") && plant.includes("the death menu stays authoritative"), "Esc must not open the normal pause menu during Combat Mode death.");
+assert.ok(plant.includes("rgba(255,48,42,.98)") && plant.includes("combat.killerName") && plant.includes("ctx.fillText(name"), "Fatal shooter must receive a red 3D outline and visible name label.");
+assert.ok(plant.includes("- .3));") && plant.includes("elapsed / 1050"), "Player death camera must collapse close to floor level before focusing the killer.");
+assert.ok(css.includes(".combat-shield-track") && css.includes(".combat-pause-overlay") && css.includes(".combat-mode-active .first-person-menu"), "Shield/combat pause/menu separation styling is missing.");
+const firstPersonControllerSource = fs.readFileSync(new URL("../public/first-person-controller.js", import.meta.url), "utf8");
+assert.ok(firstPersonControllerSource.includes("setInputLocked") && firstPersonControllerSource.includes("if (inputLocked)"), "First-person controller cannot hard-lock movement after death/pause.");

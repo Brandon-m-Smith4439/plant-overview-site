@@ -2,6 +2,10 @@
   "use strict";
 
   const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+  const SHIELD_MAX = 45;
+  const SHIELD_RECHARGE_DELAY_MS = 2800;
+  const SHIELD_RECHARGE_PER_SECOND = 11;
+
   const WEAPONS = Object.freeze({
     rifle: Object.freeze({
       key: "rifle",
@@ -131,6 +135,8 @@
       '<div class="combat-health-panel">',
         '<div class="combat-health-heading"><span>HEALTH</span><strong data-combat-health-value>100</strong></div>',
         '<div class="combat-health-track"><span data-combat-health-bar></span></div>',
+        '<div class="combat-shield-heading"><span>SHIELD</span><strong data-combat-shield-value>45</strong></div>',
+        '<div class="combat-shield-track"><span data-combat-shield-bar></span></div>',
         '<small data-combat-threat>No threats in sight</small>',
       '</div>',
       '<div class="combat-hitmarker" data-combat-hitmarker aria-hidden="true"><i></i><i></i><i></i><i></i></div>',
@@ -141,6 +147,17 @@
       '</div>',
       '<div class="combat-damage-directions" data-combat-damage-directions aria-hidden="true"></div>',
       '<div class="combat-direction-callout" data-combat-direction-callout hidden><strong></strong><span></span></div>',
+      '<div class="combat-pause-overlay" data-combat-pause hidden>',
+        '<div>',
+          '<p>COMBAT PAUSED</p>',
+          '<h2>Combat options</h2>',
+          '<span>Resume the fight or leave Combat Mode. The normal walkthrough menu stays separate.</span>',
+          '<div class="combat-pause-actions">',
+            '<button type="button" data-combat-pause-action="resume" class="primary">Resume combat</button>',
+            '<button type="button" data-combat-pause-action="exit">Exit combat</button>',
+          '</div>',
+        '</div>',
+      '</div>',
       '<div class="combat-weapon-panel">',
         '<div class="combat-weapon-copy">',
           '<span data-combat-slot>PRIMARY</span>',
@@ -171,6 +188,9 @@
 
     const healthValue = hud.querySelector("[data-combat-health-value]");
     const healthBar = hud.querySelector("[data-combat-health-bar]");
+    const shieldValue = hud.querySelector("[data-combat-shield-value]");
+    const shieldBar = hud.querySelector("[data-combat-shield-bar]");
+    const shieldTrack = hud.querySelector(".combat-shield-track");
     const enemyCounter = hud.querySelector("[data-combat-enemies]");
     const threatCopy = hud.querySelector("[data-combat-threat]");
     const weaponCopy = hud.querySelector("[data-combat-weapon]");
@@ -193,6 +213,7 @@
     const killerDetail = hud.querySelector("[data-combat-killer-detail]");
     const roundActions = hud.querySelector("[data-combat-round-actions]");
     const restartButton = hud.querySelector("[data-combat-restart]");
+    const pauseOverlay = hud.querySelector("[data-combat-pause]");
 
     const enemies = new Map();
     const ammunition = {
@@ -202,6 +223,11 @@
 
     let active = false;
     let playerHealth = 100;
+    let playerShield = SHIELD_MAX;
+    let lastDamageAt = 0;
+    let lastShieldUpdateAt = 0;
+    let paused = false;
+    let pausedAt = 0;
     let selectedWeapon = "rifle";
     let reloading = false;
     let reloadSerial = 0;
@@ -515,6 +541,7 @@
         deathDirection: enemy.deathDirection || 1,
         tracerTarget: now < enemy.tracerUntil ? enemy.tracerTarget : null,
         killerReveal: now < enemy.killerRevealUntil,
+        killerName: now < enemy.killerRevealUntil ? String(enemy.machine?.name || "Enemy") : "",
         aiming: enemy.alerted || now < enemy.aimLockUntil,
         health: enemy.health,
       };
@@ -618,6 +645,8 @@
       const alive = all.filter((enemy) => enemy.health > 0).length;
       if (healthValue) healthValue.textContent = String(Math.max(0, Math.ceil(playerHealth)));
       if (healthBar) healthBar.style.width = clamp(playerHealth, 0, 100) + "%";
+      if (shieldValue) shieldValue.textContent = String(Math.max(0, Math.ceil(playerShield)));
+      if (shieldBar) shieldBar.style.width = (clamp(playerShield, 0, SHIELD_MAX) / SHIELD_MAX * 100) + "%";
       if (enemyCounter) enemyCounter.textContent = "Enemies " + alive + " / " + all.length;
       if (slotCopy) slotCopy.textContent = selectedWeapon === "rifle" ? "PRIMARY" : "SECONDARY";
       if (weaponCopy) weaponCopy.textContent = weapon.shortLabel.toUpperCase();
@@ -634,10 +663,76 @@
       if (statusCopy && !reloading && performance.now() >= transientStatusUntil) statusCopy.textContent = "Ready";
     }
 
+    function updatePlayerShield(now) {
+      const previous = lastShieldUpdateAt || now;
+      const deltaSeconds = clamp((now - previous) / 1000, 0, .12);
+      lastShieldUpdateAt = now;
+      if (!active || paused || roundState !== "playing" || playerShield >= SHIELD_MAX) return;
+      if (now - lastDamageAt < SHIELD_RECHARGE_DELAY_MS) return;
+      const previousShield = playerShield;
+      playerShield = Math.min(SHIELD_MAX, playerShield + SHIELD_RECHARGE_PER_SECOND * deltaSeconds);
+      if (playerShield !== previousShield) syncHud();
+    }
+
+    function shiftPauseTimers(duration) {
+      if (!(duration > 0)) return;
+      if (roundState === "countdown" && countdownEndsAt) countdownEndsAt += duration;
+      if (nextPlayerShotAt) nextPlayerShotAt += duration;
+      if (reloadStartedAt) reloadStartedAt += duration;
+      if (reloadEndsAt) reloadEndsAt += duration;
+      enemies.forEach((enemy) => {
+        for (const key of ["nextHeadingAt","nextShotAt","firingUntil","muzzleFlashUntil","recoilUntil","hitReactUntil","tracerUntil","aimLockUntil","blockedUntil"]) {
+          if (enemy[key]) enemy[key] += duration;
+        }
+      });
+    }
+
+    function setPaused(next, { capture = true } = {}) {
+      if (!active || ["lost","won"].includes(roundState)) return false;
+      const requested = Boolean(next);
+      if (requested === paused) return true;
+      if (requested) {
+        paused = true;
+        pausedAt = performance.now();
+        mouseHeld = false;
+        frame.classList.add("combat-paused");
+        if (pauseOverlay) pauseOverlay.hidden = false;
+        options.hideWalkMenu?.();
+        options.setMovementLocked?.(true);
+        options.releasePointer?.();
+        window.requestAnimationFrame(() => pauseOverlay?.querySelector("button")?.focus());
+      } else {
+        const duration = Math.max(0, performance.now() - pausedAt);
+        shiftPauseTimers(duration);
+        paused = false;
+        pausedAt = 0;
+        frame.classList.remove("combat-paused");
+        if (pauseOverlay) pauseOverlay.hidden = true;
+        options.setMovementLocked?.(false);
+        if (capture) window.requestAnimationFrame(() => options.capture?.());
+      }
+      options.invalidate?.();
+      return true;
+    }
+
+    function handleEscape(reason = "escape-key") {
+      if (!active) return false;
+      options.hideWalkMenu?.();
+      if (["lost","won"].includes(roundState)) return true;
+      if (paused && reason === "pointer-lock-released") return true;
+      return setPaused(!paused);
+    }
+
     function finishRound(kind, killer = null, player = null) {
       roundState = kind;
+      paused = false;
+      pausedAt = 0;
       mouseHeld = false;
       lastThreatCount = 0;
+      frame.classList.remove("combat-paused");
+      if (pauseOverlay) pauseOverlay.hidden = true;
+      options.hideWalkMenu?.();
+      options.setMovementLocked?.(true);
       syncHud();
       if (!roundOverlay) return;
       const revealSerial = ++roundRevealSerial;
@@ -647,6 +742,7 @@
         options.resetDeathCinematic?.();
         roundOverlay.hidden = false;
         roundOverlay.classList.remove("killer-reveal");
+        options.releasePointer?.();
         roundActions?.classList.remove("locked");
         if (restartButton) {
           restartButton.disabled = false;
@@ -679,7 +775,10 @@
         roundActions?.classList.remove("locked");
         roundOverlay.hidden = true;
         roundOverlay.classList.add("killer-reveal");
-        window.setTimeout(() => options.releasePointer?.(), 35);
+        window.setTimeout(() => {
+          options.hideWalkMenu?.();
+          options.releasePointer?.();
+        }, 35);
         options.playDeathCinematic?.({
           target: source,
           killerId: killer?.id || null,
@@ -773,12 +872,27 @@
     }
 
     function damagePlayer(amount, enemy, player) {
-      if (!active || roundState !== "playing") return;
-      playerHealth = Math.max(0, playerHealth - Math.max(0, number(amount)));
-      showDamage();
+      if (!active || paused || roundState !== "playing") return;
+      const now = performance.now();
+      const incoming = Math.max(0, number(amount));
+      lastDamageAt = now;
+      const absorbed = Math.min(playerShield, incoming);
+      playerShield = Math.max(0, playerShield - absorbed);
+      const healthDamage = Math.max(0, incoming - absorbed);
+      if (healthDamage > 0) {
+        playerHealth = Math.max(0, playerHealth - healthDamage);
+        showDamage();
+      } else if (shieldTrack) {
+        shieldTrack.classList.remove("hit");
+        void shieldTrack.offsetWidth;
+        shieldTrack.classList.add("hit");
+        window.setTimeout(() => shieldTrack.classList.remove("hit"), 220);
+      }
       showIncomingDirection(enemy, player, true);
       const sourceName = String(enemy?.machine?.name || "Enemy");
-      setTransientStatus("Incoming fire - " + sourceName, 600);
+      if (absorbed > 0 && playerShield <= 0) setTransientStatus("Shield broken - " + sourceName, 800);
+      else if (absorbed > 0 && healthDamage <= 0) setTransientStatus("Shield hit - " + sourceName, 520);
+      else setTransientStatus("Incoming fire - " + sourceName, 600);
       if (playerHealth <= 0) finishRound("lost", enemy, player);
       syncHud();
     }
@@ -855,6 +969,11 @@
 
     function resetRound({ countdown = false } = {}) {
       playerHealth = 100;
+      playerShield = SHIELD_MAX;
+      lastDamageAt = 0;
+      lastShieldUpdateAt = 0;
+      paused = false;
+      pausedAt = 0;
       selectedWeapon = "rifle";
       reloading = false;
       reloadStartedAt = 0;
@@ -871,7 +990,10 @@
       lastThreatCount = 0;
       lastFrameAt = 0;
       playerDeathStartedAt = 0;
-      frame.classList.remove("combat-death-cinematic");
+      frame.classList.remove("combat-death-cinematic", "combat-paused");
+      if (pauseOverlay) pauseOverlay.hidden = true;
+      options.setMovementLocked?.(false);
+      options.hideWalkMenu?.();
       options.resetDeathCinematic?.();
       ammunition.rifle.magazine = WEAPONS.rifle.magazine;
       ammunition.rifle.reserve = WEAPONS.rifle.reserve;
@@ -902,6 +1024,7 @@
         countdownEndsAt = 0;
         countdownDisplay = 0;
         if (countdownOverlay) countdownOverlay.hidden = true;
+      if (pauseOverlay) pauseOverlay.hidden = true;
         setTransientStatus(enemies.size ? "Combat ready" : "No enemy AI found", 1000);
       }
       syncHud();
@@ -933,6 +1056,14 @@
 
     function loop(now) {
       if (!active) return;
+      if (paused) {
+        lastFrameAt = now;
+        lastShieldUpdateAt = now;
+        options.invalidate?.();
+        frameRequest = window.requestAnimationFrame(loop);
+        return;
+      }
+      updatePlayerShield(now);
       if (!updateCountdown(now)) {
         if (mouseHeld && currentWeapon().automatic) fire();
         updateEnemyAi(now);
@@ -947,7 +1078,10 @@
       if (active || options.isOwner?.() !== true) return false;
       active = true;
       hud.hidden = false;
+      paused = false;
+      pausedAt = 0;
       frame.classList.add("combat-mode-active");
+      options.hideWalkMenu?.();
       resetRound({ countdown: true });
       options.onStateChange?.(true);
       frameRequest = window.requestAnimationFrame(loop);
@@ -957,6 +1091,8 @@
     function stop() {
       if (!active) return;
       active = false;
+      paused = false;
+      pausedAt = 0;
       mouseHeld = false;
       reloading = false;
       reloadSerial += 1;
@@ -966,7 +1102,9 @@
       countdownDisplay = 0;
       lastFrameAt = 0;
       hud.hidden = true;
-      frame.classList.remove("combat-mode-active", "combat-under-fire", "combat-death-cinematic");
+      frame.classList.remove("combat-mode-active", "combat-under-fire", "combat-death-cinematic", "combat-paused");
+      options.setMovementLocked?.(false);
+      options.hideWalkMenu?.();
       playerDeathStartedAt = 0;
       options.resetDeathCinematic?.();
       if (countdownOverlay) countdownOverlay.hidden = true;
@@ -997,7 +1135,7 @@
     }
 
     function handleMouseDown(event) {
-      if (!active || event.button !== 0 || options.isPointerLocked?.() !== true) return;
+      if (!active || paused || ["lost","won"].includes(roundState) || event.button !== 0 || options.isPointerLocked?.() !== true) return;
       event.preventDefault();
       if (currentWeapon().automatic) mouseHeld = true;
       fire();
@@ -1020,6 +1158,11 @@
       resetRound({ countdown: true });
       options.capture?.();
     });
+    hud.querySelector("[data-combat-pause-action='resume']")?.addEventListener("click", () => setPaused(false));
+    hud.querySelector("[data-combat-pause-action='exit']")?.addEventListener("click", () => {
+      stop();
+      options.exitCombat?.();
+    });
     hud.querySelector("[data-combat-exit]")?.addEventListener("click", () => {
       stop();
       options.exitCombat?.();
@@ -1032,6 +1175,12 @@
       switchWeapon,
       reload: startReload,
       fire,
+      handleEscape,
+      pause: () => setPaused(true),
+      resume: () => setPaused(false),
+      isPaused: () => paused,
+      isDefeated: () => roundState === "lost",
+      isRoundComplete: () => roundState === "won",
       isActive: () => active,
       playerRenderState,
       enemyRenderState,

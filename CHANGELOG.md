@@ -1,3 +1,13 @@
+## 0.13.56 - 2026-10-06
+
+- Added a rechargeable 45-point Combat Mode shield. Incoming shots consume shield first; health only takes overflow damage, and the shield begins recharging after a short no-damage delay.
+- Added a dedicated Combat Mode Esc menu with Resume Combat and Exit Combat. While Combat Mode is active, the normal first-person walkthrough menu is suppressed instead of being overwritten or stacked underneath combat UI.
+- Added first-person input locking for combat pause, round completion, and player death. After death the player cannot move, look, jump, recapture the mouse, or reopen the normal pause menu.
+- Player death now releases pointer lock immediately so the mouse cursor returns, drops the camera to roughly floor-level over the first second, then eases the view onto the fatal shooter before the Restart/Exit death menu appears after the existing five-second replay.
+- Upgraded the fatal-shooter reveal from a small marker to a bright red 3D wireframe outline around the killer plus an in-world red name plate, retained throughout the death replay.
+- Combat pause freezes AI, shield timing, reload/shot timers, and player movement; resuming restores those timers and recaptures the mouse.
+- Expanded Combat Mode regressions for shield behavior, dedicated Esc routing, movement lock, death-menu authority, and killer outline/name rendering.
+
 ## 0.13.55 - 2026-10-06
 
 - Fixed the root cause behind custom person machines such as Helper not receiving combat weapons/poses: retained shared-design, production-animation, and low-LOD proxy instancing now explicitly bypass every active combat person so the combat renderer owns their live transform.

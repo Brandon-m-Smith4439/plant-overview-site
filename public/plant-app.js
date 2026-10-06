@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.55";
+  const APP_VERSION = "0.13.56";
 
   function editorProfileProtected() {
     try {
@@ -6551,8 +6551,14 @@
       canOccupyHard: walkCanOccupyHard,
       onLockChange: updateFirstPersonHud,
       onMovement: () => renderPerformance.noteInteraction(120),
-      onExitRequest: () => {
-        if (state.cameraMode === "walk" && !walkModeTransitioning) setFirstPersonMenu(true);
+      onExitRequest: (reason) => {
+        if (state.cameraMode !== "walk" || walkModeTransitioning) return;
+        if (combatController?.isActive?.()) {
+          setFirstPersonMenu(false);
+          combatController.handleEscape?.(reason);
+          return;
+        }
+        setFirstPersonMenu(true);
       },
     }) || null;
 
@@ -6689,6 +6695,8 @@
       getBounds: floorBounds,
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
       capture: () => firstPersonController?.capture?.(),
+      setMovementLocked: (locked) => firstPersonController?.setInputLocked?.(locked),
+      hideWalkMenu: () => setFirstPersonMenu(false),
       releasePointer: () => {
         walkModeTransitioning = true;
         firstPersonController?.release?.();
@@ -6716,7 +6724,7 @@
         const startVertical = Number(state.walkVerticalOffset) || 0;
         const playerX = modelCenter()[0] + state.panX;
         const playerZ = modelCenter()[1] + state.panZ;
-        const finalVertical = Math.min(startVertical, -(Math.max(3.8, Number(state.walkEyeHeight) || 5.6) - .95));
+        const finalVertical = Math.min(startVertical, -(Math.max(3.8, Number(state.walkEyeHeight) || 5.6) - .3));
         const targetYaw = target ? Math.atan2(Number(target.x) - playerX, Number(target.z) - playerZ) : startYaw;
         const finalEyeY = Math.max(.85, Number(state.walkEyeHeight) + finalVertical);
         const targetHorizontal = target ? Math.max(.001, Math.hypot(Number(target.x) - playerX, Number(target.z) - playerZ)) : 1;
@@ -6731,12 +6739,12 @@
         const tick = (now) => {
           if (state.combatDeathCinematicSerial !== serial || !combatController?.isActive?.()) return;
           const elapsed = Math.max(0, now - startedAt);
-          const fall = smooth(clamp(elapsed / 1250, 0, 1));
-          const focus = smooth(clamp((elapsed - 900) / 1750, 0, 1));
+          const fall = smooth(clamp(elapsed / 1050, 0, 1));
+          const focus = smooth(clamp((elapsed - 1050) / 2050, 0, 1));
           state.walkVerticalOffset = startVertical + (finalVertical - startVertical) * fall;
           state.walkBobOffset = 0;
           state.yaw = startYaw + shortestAngle(startYaw, targetYaw) * focus;
-          const fallPitch = startPitch + (-.38 - startPitch) * fall;
+          const fallPitch = startPitch + (-.68 - startPitch) * fall;
           state.pitch = fallPitch + (targetPitch - fallPitch) * focus;
           renderPerformance.invalidate?.("combat-death-cinematic");
           if (elapsed < durationMs) window.requestAnimationFrame(tick);
@@ -10299,9 +10307,111 @@
       line3d(muzzle,target,"rgba(255,231,151,.98)",1.65,alpha*.98);
     }
     if (combat.killerReveal) {
-      const markerY = height + 1.15;
-      localLine3d(actor,[width*.5,markerY-.65,depth*.5],[width*.5,markerY+.75,depth*.5],"#ff453a",6.5,alpha);
-      localLine3d(actor,[width*.18,markerY+.42,depth*.5],[width*.82,markerY+.42,depth*.5],"#fff1ee",3.2,alpha);
+      const outlineItem = {
+        ...actor,
+        x: Number(actor.x) - .14,
+        y: Number(actor.renderY ?? actor.y) - .08,
+        z: Number(actor.z) - .14,
+        w: width + .28,
+        d: depth + .28,
+        h: height + .34,
+      };
+      const vertices = boxVertices3d(outlineItem, 1);
+      const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+      edges.forEach(([from,to]) => overlayLine3d(vertices[from],vertices[to],"rgba(255,48,42,.98)",4.2,alpha));
+      const name = String(combat.killerName || machine.name || "Enemy");
+      const labelPoint = project(...localPoint3d(actor,width*.5,height+1.35,depth*.5));
+      if (labelPoint[0] > -240 && labelPoint[0] < canvas.width + 240 && labelPoint[1] > -100 && labelPoint[1] < canvas.height + 100) {
+        const pixelScale = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
+        ctx.save();
+        ctx.font = `800 ${Math.max(13,15*pixelScale)}px "Segoe UI", sans-serif`;
+        const labelWidth = ctx.measureText(name).width + 22*pixelScale;
+        const labelHeight = 28*pixelScale;
+        const left = labelPoint[0] - labelWidth/2;
+        const top = labelPoint[1] - labelHeight/2;
+        ctx.fillStyle = "rgba(45,5,7,.94)";
+        ctx.strokeStyle = "rgba(255,56,48,.98)";
+        ctx.lineWidth = Math.max(2,2.2*pixelScale);
+        if (typeof ctx.roundRect === "function") {
+          ctx.beginPath();
+          ctx.roundRect(left,top,labelWidth,labelHeight,7*pixelScale);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillRect(left,top,labelWidth,labelHeight);
+          ctx.strokeRect(left,top,labelWidth,labelHeight);
+        }
+        ctx.fillStyle = "#fff4f2";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(name,labelPoint[0],labelPoint[1]+.5*pixelScale);
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawCombatKillerOverlay(time) {
+    if (!combatController?.isActive?.()) return;
+    for (const machine of machines) {
+      if (!combatEnemyMachine(machine) || machine.visible === false) continue;
+      const combat = combatController.enemyRenderState?.(machine.instanceId, time);
+      if (!combat?.killerReveal) continue;
+      let rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
+      rendered = {
+        ...rendered,
+        x: Number(combat.x),
+        z: Number(combat.z),
+        rotationY: Number(combat.rotationY),
+        rotation: Number(combat.rotationY),
+        combatState: combat,
+      };
+      const actor = combatEnemyPoseParent(rendered, combat);
+      const width = Math.max(1.4, Number(actor.w) || 1.8);
+      const depth = Math.max(1.2, Number(actor.d) || 1.8);
+      const height = Math.max(5.5, Number(actor.h) || 6.5);
+      const outlineItem = {
+        ...actor,
+        x: Number(actor.x) - .16,
+        y: Number(actor.renderY ?? actor.y) - .08,
+        z: Number(actor.z) - .16,
+        w: width + .32,
+        d: depth + .32,
+        h: height + .38,
+      };
+      const vertices = boxVertices3d(outlineItem, 1);
+      const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+      edges.forEach(([from,to]) => overlayLine3d(vertices[from],vertices[to],"rgba(255,38,34,.98)",4.6,1));
+
+      const name = String(combat.killerName || machine.name || "Enemy");
+      const labelPoint = project(...localPoint3d(actor,width*.5,height+1.4,depth*.5));
+      if (labelPoint[0] < -240 || labelPoint[0] > canvas.width + 240 || labelPoint[1] < -100 || labelPoint[1] > canvas.height + 100) continue;
+      const pixelScale = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
+      ctx.save();
+      ctx.font = `800 ${Math.max(13,15*pixelScale)}px "Segoe UI", sans-serif`;
+      const labelWidth = ctx.measureText(name).width + 24*pixelScale;
+      const labelHeight = 30*pixelScale;
+      const left = labelPoint[0] - labelWidth/2;
+      const top = labelPoint[1] - labelHeight/2;
+      ctx.fillStyle = "rgba(50,4,7,.96)";
+      ctx.strokeStyle = "rgba(255,52,45,1)";
+      ctx.lineWidth = Math.max(2,2.4*pixelScale);
+      ctx.shadowColor = "rgba(255,35,30,.72)";
+      ctx.shadowBlur = 16*pixelScale;
+      if (typeof ctx.roundRect === "function") {
+        ctx.beginPath();
+        ctx.roundRect(left,top,labelWidth,labelHeight,7*pixelScale);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(left,top,labelWidth,labelHeight);
+        ctx.strokeRect(left,top,labelWidth,labelHeight);
+      }
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#fff6f4";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(name,labelPoint[0],labelPoint[1]+.5*pixelScale);
+      ctx.restore();
     }
   }
 
@@ -12136,6 +12246,7 @@
       renderPerformance.beginPhase?.("overlays");
     }
     drawLayoutRulers();
+    drawCombatKillerOverlay(time);
     drawFirstPersonCombatWeapon(time);
     renderPerformance.setRendererStats?.(depthRenderer.getStats?.());
     renderPerformance.endPhase?.();
@@ -12516,6 +12627,12 @@
     if (!typing && state.cameraMode === "walk") {
       if (event.key === "Escape") {
         event.preventDefault();
+        if (combatController?.isActive?.()) {
+          // The first-person controller owns Esc in Combat Mode. Its capture-phase
+          // handler routes to the dedicated combat pause menu. After death, the
+          // combat controller intentionally ignores Esc so the death menu stays authoritative.
+          return;
+        }
         openFirstPersonOptions(true);
         return;
       }

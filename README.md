@@ -1,3 +1,7 @@
+## Version 0.13.56
+
+Version 0.13.56 separates Combat Mode state cleanly from the normal first-person walkthrough. Combat now has its own Esc pause menu, a rechargeable shield that absorbs damage before health, hard movement/mouse locking after death, and an improved five-second death replay that drops the camera to floor level before focusing the fatal shooter. The killer is outlined in bright red with an in-world name plate during the replay, pointer lock is released so the mouse returns, and only the death menu can appear until the player chooses Restart or Exit.
+
 ## Version 0.13.55
 
 Version 0.13.55 fixes the custom-person Combat Mode path. Named people such as Helper now bypass the retained design batching that previously left many employees visually static/unarmed, while their individual torso/head/hair/hard-hat details remain visible under the articulated combat limbs and 3D rifle. Enemy left/right facing math is corrected so the body and weapon point at the player, yellow structural pillars are permanent collision/LOS cover, and player death now runs a five-second falling-camera/killer reveal before Restart or Exit appears.

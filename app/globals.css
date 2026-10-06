@@ -8331,3 +8331,44 @@ body.viewer-fullscreen-fallback-active {
   from { opacity:0; transform:translateY(1.2rem); }
   to { opacity:1; transform:translateY(0); }
 }
+
+
+/* Combat shield, pause, and death-state separation · v0.13.56 */
+.combat-mode-active .first-person-menu { display:none !important; }
+.combat-shield-heading {
+  display:flex; align-items:baseline; justify-content:space-between; gap:.75rem;
+  margin-top:.58rem; color:#8edfff; font-size:.66rem; letter-spacing:.12em;
+}
+.combat-shield-heading strong { color:#d9f5ff; font-size:1rem; letter-spacing:0; }
+.combat-shield-track {
+  height:.34rem; margin:.3rem 0 .55rem; overflow:hidden; border-radius:999px;
+  background:rgba(126,211,255,.13); box-shadow:inset 0 0 0 1px rgba(126,211,255,.1);
+}
+.combat-shield-track > span {
+  display:block; width:100%; height:100%; border-radius:inherit;
+  background:linear-gradient(90deg,#4daee8,#8edfff);
+  box-shadow:0 0 .7rem rgba(77,174,232,.34); transition:width .16s ease;
+}
+.combat-shield-track.hit { animation:combat-shield-hit .22s ease-out; }
+@keyframes combat-shield-hit {
+  0% { box-shadow:0 0 0 2px rgba(142,223,255,.9),0 0 1.3rem rgba(77,174,232,.7); }
+  100% { box-shadow:inset 0 0 0 1px rgba(126,211,255,.1); }
+}
+.combat-pause-overlay {
+  position:absolute; inset:0; z-index:18; display:grid; place-items:center; padding:1rem;
+  pointer-events:auto; background:rgba(2,7,10,.72); backdrop-filter:blur(8px);
+}
+.combat-pause-overlay[hidden] { display:none; }
+.combat-pause-overlay > div {
+  width:min(30rem,100%); padding:1.45rem; border:1px solid rgba(116,192,219,.34);
+  border-radius:1rem; background:rgba(8,15,19,.96); box-shadow:0 1.4rem 4rem rgba(0,0,0,.42); text-align:center;
+}
+.combat-pause-overlay p { margin:0 0 .32rem; color:#8edfff; font-size:.68rem; font-weight:800; letter-spacing:.16em; }
+.combat-pause-overlay h2 { margin:.1rem 0 .45rem; }
+.combat-pause-overlay span { display:block; color:rgba(255,255,255,.64); }
+.combat-pause-actions { display:flex; justify-content:center; gap:.65rem; margin-top:1.1rem; }
+.combat-pause-actions button { min-height:2.7rem; }
+.combat-paused .walkthrough-reticle,
+.combat-death-cinematic .walkthrough-reticle { opacity:.25; }
+.combat-death-cinematic { cursor:default; }
+.combat-death-cinematic canvas { cursor:default !important; }

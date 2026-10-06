@@ -33,6 +33,7 @@
     let pointerLocked = false;
     let hadPointerLock = false;
     let stopping = false;
+    let inputLocked = false;
 
     function settings() {
       const camera = getCamera();
@@ -143,6 +144,18 @@
 
     function update(time) {
       if (!enabled) return false;
+      if (inputLocked) {
+        lastUpdate = time;
+        keys.clear();
+        velocityX = 0;
+        velocityZ = 0;
+        touchForward = 0;
+        touchStrafe = 0;
+        touchCrouching = false;
+        touchSprinting = false;
+        jumpRequested = false;
+        return false;
+      }
       if (!lastUpdate) {
         lastUpdate = time;
         return true;
@@ -224,6 +237,10 @@
         onExitRequest("escape-key");
         return;
       }
+      if (inputLocked) {
+        event.preventDefault?.();
+        return;
+      }
       // A button often remains focused after First person or Capture mouse is
       // clicked. Do not let that stale focus block WASD. Only active text/form
       // editing should suppress movement before pointer lock is acquired.
@@ -246,7 +263,7 @@
     }
 
     function handleMouseMove(event) {
-      if (!enabled || document.pointerLockElement !== canvas) return;
+      if (!enabled || inputLocked || document.pointerLockElement !== canvas) return;
       const camera = getCamera();
       const config = settings();
       setCamera({
@@ -301,7 +318,19 @@
     }
 
     function handleCanvasClick() {
-      if (enabled && document.pointerLockElement !== canvas) requestPointerLock();
+      if (enabled && !inputLocked && document.pointerLockElement !== canvas) requestPointerLock();
+    }
+
+    function setInputLocked(locked) {
+      inputLocked = Boolean(locked);
+      keys.clear();
+      velocityX = 0;
+      velocityZ = 0;
+      touchForward = 0;
+      touchStrafe = 0;
+      touchCrouching = false;
+      touchSprinting = false;
+      jumpRequested = false;
     }
 
     function handleBlur() {
@@ -330,6 +359,8 @@
       setTouchSprint,
       requestJump,
       lookBy,
+      setInputLocked,
+      isInputLocked: () => inputLocked,
       isMoving: () => Math.abs(velocityX) + Math.abs(velocityZ) > 0.02 || keys.size > 0 || Math.abs(touchForward) + Math.abs(touchStrafe) > .02,
       destroy() {
         stop();

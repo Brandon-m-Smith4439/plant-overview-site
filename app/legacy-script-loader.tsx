@@ -6,11 +6,11 @@ import type * as ThreeNamespace from "three";
 declare global {
   interface Window {
     THREE?: typeof ThreeNamespace;
-    monroeEditorAccess?: { editingAllowed(): boolean; hasAccess(): boolean; requestAccess(): Promise<boolean> };
+    monroeEditorAccess?: { editingAllowed(): boolean; hasAccess(): boolean; requestAccess(): Promise<boolean>; isOwner?(): boolean };
   }
 }
 
-const LEGACY_BUILD_TOKEN = "0.13.49";
+const LEGACY_BUILD_TOKEN = "0.13.50";
 const scriptLoads = new Map<string, Promise<void>>();
 
 function loadScript(source: string) {

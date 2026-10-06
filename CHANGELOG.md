@@ -1,3 +1,14 @@
+## 0.13.47 - 2026-10-06
+
+- Raised process routes now gain real 3D thickness as their Route Y height is increased. Near the floor they remain a clean ribbon; as Y rises they progressively become a physical rectangular rail with top, bottom, side, and end faces.
+- Extended Route Y height from 6 ft to 30 ft and renamed the editor field to Route Y height (ft) so elevated overhead paths are practical.
+- Moving white direction highlights now ride on the top surface of elevated 3D rails instead of remaining a flat overlay through the rail center.
+- Destination markers also lift to the top surface of elevated routes while preserving the corrected source-to-destination motion direction from v0.13.45.
+- Kept all raised route geometry inside the depth-tested WebGL scene, so machines and other opaque equipment still occlude the route correctly.
+- Split billboard lettering onto its own front and rear texture meshes and physically offset those text planes slightly in front of the sign faces. This gives the machine names real parallax and a subtle raised/extruded 3D appearance from both sides.
+- Kept the cleaner v0.13.46 billboard styling, double-sided readability, damped camera-follow behavior, glow, and zoom limits.
+- Advanced the app/browser cache token to v0.13.47 and added regression coverage for elevated 3D route geometry and raised billboard text.
+
 ## 0.13.46 - 2026-10-05
 
 - Simplified the new 3D machine billboard face after the v0.13.45 overhaul felt too busy.

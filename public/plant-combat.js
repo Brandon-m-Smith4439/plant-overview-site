@@ -127,6 +127,10 @@
       '</div>',
       '<div class="combat-hitmarker" data-combat-hitmarker aria-hidden="true"><i></i><i></i><i></i><i></i></div>',
       '<div class="combat-damage-vignette" data-combat-damage aria-hidden="true"></div>',
+      '<div class="combat-countdown" data-combat-countdown hidden>',
+        '<span>COMBAT STARTS IN</span>',
+        '<strong data-combat-countdown-value>2</strong>',
+      '</div>',
       '<div class="combat-weapon-panel">',
         '<div class="combat-weapon-copy">',
           '<span data-combat-slot>PRIMARY</span>',
@@ -165,6 +169,8 @@
     const weaponVisual = hud.querySelector("[data-combat-weapon-visual]");
     const hitmarker = hud.querySelector("[data-combat-hitmarker]");
     const damageVignette = hud.querySelector("[data-combat-damage]");
+    const countdownOverlay = hud.querySelector("[data-combat-countdown]");
+    const countdownValue = hud.querySelector("[data-combat-countdown-value]");
     const roundOverlay = hud.querySelector("[data-combat-round]");
     const roundKicker = hud.querySelector("[data-combat-round-kicker]");
     const roundTitle = hud.querySelector("[data-combat-round-title]");
@@ -186,6 +192,8 @@
     let frameRequest = 0;
     let lastThreatCount = 0;
     let roundState = "playing";
+    let countdownEndsAt = 0;
+    let countdownDisplay = 0;
     let transientStatusUntil = 0;
 
     function currentWeapon() {
@@ -437,14 +445,13 @@
       syncHud();
     }
 
-    function resetRound() {
+    function resetRound({ countdown = false } = {}) {
       playerHealth = 100;
       selectedWeapon = "rifle";
       reloading = false;
       reloadSerial += 1;
       nextPlayerShotAt = 0;
       mouseHeld = false;
-      roundState = "playing";
       lastThreatCount = 0;
       ammunition.rifle.magazine = WEAPONS.rifle.magazine;
       ammunition.rifle.reserve = WEAPONS.rifle.reserve;
@@ -452,14 +459,53 @@
       ammunition.handgun.reserve = WEAPONS.handgun.reserve;
       syncEnemies(true);
       if (roundOverlay) roundOverlay.hidden = true;
-      setTransientStatus(enemies.size ? "Combat ready" : "No enemy AI found", 1000);
+
+      if (countdown) {
+        roundState = "countdown";
+        countdownEndsAt = performance.now() + 2000;
+        countdownDisplay = 2;
+        if (countdownValue) countdownValue.textContent = "2";
+        if (countdownOverlay) countdownOverlay.hidden = false;
+        setTransientStatus("Get ready", 2200);
+      } else {
+        roundState = "playing";
+        countdownEndsAt = 0;
+        countdownDisplay = 0;
+        if (countdownOverlay) countdownOverlay.hidden = true;
+        setTransientStatus(enemies.size ? "Combat ready" : "No enemy AI found", 1000);
+      }
       syncHud();
+    }
+
+    function updateCountdown(now) {
+      if (roundState !== "countdown") return false;
+      const remaining = Math.max(0, countdownEndsAt - now);
+      if (remaining <= 0) {
+        roundState = "playing";
+        countdownEndsAt = 0;
+        countdownDisplay = 0;
+        if (countdownValue) countdownValue.textContent = "FIGHT";
+        setTransientStatus("Fight!", 700);
+        window.setTimeout(() => {
+          if (countdownOverlay && roundState !== "countdown") countdownOverlay.hidden = true;
+        }, 350);
+        options.onCombatStart?.();
+        return true;
+      }
+      const nextDisplay = Math.max(1, Math.ceil(remaining / 1000));
+      if (nextDisplay !== countdownDisplay) {
+        countdownDisplay = nextDisplay;
+        if (countdownValue) countdownValue.textContent = String(nextDisplay);
+      }
+      return true;
     }
 
     function loop(now) {
       if (!active) return;
-      if (mouseHeld && currentWeapon().automatic) fire();
-      updateEnemyAi(now);
+      if (!updateCountdown(now)) {
+        if (mouseHeld && currentWeapon().automatic) fire();
+        updateEnemyAi(now);
+      }
       frameRequest = window.requestAnimationFrame(loop);
     }
 
@@ -468,7 +514,7 @@
       active = true;
       hud.hidden = false;
       frame.classList.add("combat-mode-active");
-      resetRound();
+      resetRound({ countdown: true });
       options.onStateChange?.(true);
       frameRequest = window.requestAnimationFrame(loop);
       return true;
@@ -482,8 +528,11 @@
       reloadSerial += 1;
       if (frameRequest) window.cancelAnimationFrame(frameRequest);
       frameRequest = 0;
+      countdownEndsAt = 0;
+      countdownDisplay = 0;
       hud.hidden = true;
       frame.classList.remove("combat-mode-active");
+      if (countdownOverlay) countdownOverlay.hidden = true;
       if (roundOverlay) roundOverlay.hidden = true;
       options.onStateChange?.(false);
     }
@@ -524,7 +573,7 @@
     window.addEventListener("blur", handleBlur);
 
     hud.querySelector("[data-combat-restart]")?.addEventListener("click", () => {
-      resetRound();
+      resetRound({ countdown: true });
       options.capture?.();
     });
     hud.querySelector("[data-combat-exit]")?.addEventListener("click", () => {

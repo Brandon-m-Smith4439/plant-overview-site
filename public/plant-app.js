@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.46";
+  const APP_VERSION = "0.13.47";
 
   function editorProfileProtected() {
     try {
@@ -1359,7 +1359,7 @@
       flowPivotMode: source.flowPivotMode === "custom" ? "custom" : (Array.isArray(source.flowPivotPoints) && source.flowPivotPoints.length ? "custom" : "legacy"),
       flowPivotPoints: normalizeProcessFlowPivotPoints(source.flowPivotPoints),
       flowCurvePercent: readNumber("flowCurvePercent", 0, 100),
-      flowFloorHeight: readNumber("flowFloorHeight", 0.02, 6),
+      flowFloorHeight: readNumber("flowFloorHeight", 0.02, 30),
       flowSpeed: readNumber("flowSpeed", 0, 180),
       flowGlow: readNumber("flowGlow", 0, 200),
       tagVisible: source.tagVisible !== undefined ? source.tagVisible === true : defaults.tagVisible === true,
@@ -4516,11 +4516,11 @@
             </div>
             <div class="process-pointer-grid process-flow-behavior-grid">
               <label>Curve / rounding (%)<input type="number" data-process-connection-field="flowCurvePercent" min="0" max="100" step="5"></label>
-              <label>Floor height (ft)<input type="number" data-process-connection-field="flowFloorHeight" min="0.02" max="6" step="0.02"></label>
+              <label>Route Y height (ft)<input type="number" data-process-connection-field="flowFloorHeight" min="0.02" max="30" step="0.02"></label>
               <label>Flow speed (stable world rate)<input type="number" data-process-connection-field="flowSpeed" min="0" max="180" step="2"></label>
               <label>Glow strength (%)<input type="number" data-process-connection-field="flowGlow" min="0" max="200" step="5"></label>
             </div>
-            <p class="process-route-tag-preview">S / E can still be dragged far outside the machines. Numbered pivot handles use exact X / Z coordinates and can also be dragged directly.</p>
+            <p class="process-route-tag-preview">S / E can still be dragged far outside the machines. Numbered pivot handles use exact X / Z coordinates and can also be dragged directly. Raising Route Y lifts the path off the floor and progressively turns the flat ribbon into a physical 3D rail.</p>
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>7 · Flow appearance</legend>
@@ -7440,7 +7440,7 @@
   function processFlowFloorAnchor(entry, connection, endpoint) {
     const anchor = flowEntryWorldAnchor(entry, connection, endpoint);
     if (!anchor) return null;
-    const floorHeight = clamp(Number(connection?.flowFloorHeight ?? .18), .02, 6);
+    const floorHeight = clamp(Number(connection?.flowFloorHeight ?? .18), .02, 30);
     return [anchor[0], floorHeight, anchor[2]];
   }
 
@@ -7592,6 +7592,36 @@
     }
   }
 
+  function worldRouteSegmentPrismFaces(start,end,width,thickness,yOffset=0){
+    const dx=end[0]-start[0],dz=end[2]-start[2],length=Math.hypot(dx,dz);if(length<.001)return[];
+    const halfWidth=Math.max(.02,width)/2,halfHeight=Math.max(.02,thickness)/2;
+    const nx=-dz/length*halfWidth,nz=dx/length*halfWidth;
+    const sy=start[1]+yOffset,ey=end[1]+yOffset;
+    const slt=[start[0]+nx,sy+halfHeight,start[2]+nz],srt=[start[0]-nx,sy+halfHeight,start[2]-nz];
+    const elt=[end[0]+nx,ey+halfHeight,end[2]+nz],ert=[end[0]-nx,ey+halfHeight,end[2]-nz];
+    const slb=[start[0]+nx,sy-halfHeight,start[2]+nz],srb=[start[0]-nx,sy-halfHeight,start[2]-nz];
+    const elb=[end[0]+nx,ey-halfHeight,end[2]+nz],erb=[end[0]-nx,ey-halfHeight,end[2]-nz];
+    return[
+      [slt,elt,ert,srt],
+      [slb,srb,erb,elb],
+      [slb,elb,elt,slt],
+      [srb,srt,ert,erb],
+      [slb,slt,srt,srb],
+      [elb,erb,ert,elt],
+    ];
+  }
+
+  function addWorldRoutePrism(path,width,thickness,color,alpha,yOffset=0){
+    if(typeof depthRenderer.addPolygon!=="function")return;
+    for(let index=0;index<(path?.length||0)-1;index+=1){
+      const faces=worldRouteSegmentPrismFaces(path[index],path[index+1],width,thickness,yOffset);
+      faces.forEach((face,faceIndex)=>{
+        const faceAlpha=faceIndex===0?alpha:alpha*.82;
+        depthRenderer.addPolygon(face,color,faceAlpha,null,1,{transparent:true});
+      });
+    }
+  }
+
   function worldRouteMetrics(path){
     const segments=[];let total=0;
     for(let index=0;index<(path?.length||0)-1;index+=1){
@@ -7624,11 +7654,11 @@
     return points.filter(Boolean);
   }
 
-  function drawWorldProcessEndMarker(route,width,opacity){
+  function drawWorldProcessEndMarker(route,width,opacity,surfaceLift=.035){
     const connection=route?.connection,style=["arrow","dot","ring","none"].includes(connection?.endStyle)?connection.endStyle:"none";if(style==="none")return;
     const path=route.worldPath||[];if(path.length<2)return;
     const end=path[path.length-1],previous=path[path.length-2],dx=end[0]-previous[0],dz=end[2]-previous[2],length=Math.hypot(dx,dz);if(length<.001)return;
-    const ux=dx/length,uz=dz/length,nx=-uz,nz=ux,size=Math.max(width*2.4,clamp(Number(connection.endSize)||3.2,1,14)*.22),y=.035;
+    const ux=dx/length,uz=dz/length,nx=-uz,nz=ux,size=Math.max(width*2.4,clamp(Number(connection.endSize)||3.2,1,14)*.22),y=surfaceLift;
     if(style==="arrow"){
       depthRenderer.addPolygon?.([
         [end[0],end[1]+y,end[2]],
@@ -7651,12 +7681,21 @@
     const speedFeetPerSecond=clamp(Number(connection.flowSpeed??42),0,180)*.12;
     const style=["solid","dashed","dotted"].includes(connection.style)?connection.style:"solid";
 
-    // Physical floor ribbons use world units. Camera motion changes only the
-    // view, not route thickness or animation velocity. The depth buffer hides
-    // route sections naturally when opaque machines are in front of them.
-    addWorldRouteRibbon(route.worldPath,coreWidth*(2.5+glow*.9),route.color,opacity*(.08+glow*.055),-.015);
-    addWorldRouteRibbon(route.worldPath,coreWidth*1.55,route.color,opacity*.34,.005);
-    addWorldRouteRibbon(route.worldPath,coreWidth,route.color,opacity*.88,.018);
+    // Near the floor the route stays a clean ribbon. As Route Y is raised, the
+    // same path progressively gains vertical thickness and becomes a physical
+    // 3D rail with top, bottom and side faces. Everything remains depth-tested.
+    const routeY=clamp(Number(connection.flowFloorHeight??.18),.02,30);
+    const elevationFactor=clamp((routeY-.26)/1.05,0,1);
+    const routeThickness=Math.max(.06,coreWidth*(.16+elevationFactor*.68));
+    if(elevationFactor>.01){
+      addWorldRoutePrism(route.worldPath,coreWidth*(2.15+glow*.62),routeThickness*1.45,route.color,opacity*(.06+glow*.045),0);
+      addWorldRoutePrism(route.worldPath,coreWidth*1.45,routeThickness*1.08,route.color,opacity*.34,0);
+      addWorldRoutePrism(route.worldPath,coreWidth,routeThickness,route.color,opacity*.90,0);
+    }else{
+      addWorldRouteRibbon(route.worldPath,coreWidth*(2.5+glow*.9),route.color,opacity*(.08+glow*.055),-.015);
+      addWorldRouteRibbon(route.worldPath,coreWidth*1.55,route.color,opacity*.34,.005);
+      addWorldRouteRibbon(route.worldPath,coreWidth,route.color,opacity*.88,.018);
+    }
 
     const metrics=worldRouteMetrics(route.worldPath);
     if(metrics.total>.01&&speedFeetPerSecond>0){
@@ -7669,10 +7708,15 @@
       for(let start=phase-period;start<metrics.total;start+=period){
         const from=Math.max(0,start),to=Math.min(metrics.total,start+dashLength);if(to<=from)continue;
         const slice=worldRouteSlice(metrics,from,to);
-        addWorldRouteRibbon(slice,Math.max(.12,coreWidth*.38),"#eaffff",opacity*.98,.045);
+        if(elevationFactor>.01){
+          const highlightThickness=Math.max(.045,routeThickness*.20);
+          addWorldRoutePrism(slice,Math.max(.12,coreWidth*.38),highlightThickness,"#eaffff",opacity*.98,routeThickness/2+highlightThickness/2+.012);
+        }else{
+          addWorldRouteRibbon(slice,Math.max(.12,coreWidth*.38),"#eaffff",opacity*.98,.045);
+        }
       }
     }
-    drawWorldProcessEndMarker(route,coreWidth,opacity);
+    drawWorldProcessEndMarker(route,coreWidth,opacity,elevationFactor>.01?routeThickness/2+.035:.035);
     return route;
   }
 

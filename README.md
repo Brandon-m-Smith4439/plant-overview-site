@@ -1,3 +1,7 @@
+## Version 0.13.54
+
+Version 0.13.54 improves combat readability and enemy aiming. Incoming-fire feedback now combines larger directional arrows with explicit eight-way direction text and shooter names. Enemy movement no longer repeatedly spins blocked people in place; active shooters maintain authoritative facing toward the player and their 3D rifles follow that pose. When the player is eliminated, the camera centers on the killer, highlights that enemy in the plant, names them and their distance in the death overlay, and briefly locks restart so the shooter can be reviewed before the next round.
+
 ## Version 0.13.53
 
 Version 0.13.53 upgrades Combat Mode's presentation. The owner weapon is now rendered as actual perspective 3D canvas geometry rather than a CSS silhouette, positioned just right of center with walk bob, recoil, muzzle flash, and reload motion. Enemy AI now uses a clearer two-segment walking gait, carries a more detailed 3D rifle, falls toward the floor around its feet when defeated, produces brighter world-space bullet tracers, and drives directional incoming-fire indicators around the player's crosshair.

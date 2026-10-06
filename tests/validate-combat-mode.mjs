@@ -19,6 +19,10 @@ assert.ok(combat.includes("updateEnemyMotion") && combat.includes("tryMoveEnemy"
 assert.ok(combat.includes("enemyRenderState") && combat.includes("movementBlend") && combat.includes("walkPhase"), "Enemy animation state is not exposed to the plant renderer.");
 assert.ok(combat.includes("muzzleFlashUntil") && combat.includes("recoilUntil") && combat.includes("tracerUntil"), "Enemy firing animation effects are incomplete.");
 assert.ok(combat.includes("showIncomingDirection") && combat.includes("combat-damage-direction"), "Incoming-fire direction indicators are not wired to enemy shots.");
+assert.ok(combat.includes("incomingDirectionName") && combat.includes("combat-direction-callout"), "Readable directional fire callouts are missing.");
+assert.ok(combat.includes("blockedUntil") && combat.includes("aimLockUntil") && combat.includes("lastSeenAt"), "Enemy anti-spin steering and aim-lock state are missing.");
+assert.ok(combat.includes("enemy.rotationY = faceAngle(source, playerTarget)") && combat.includes("aimLockUntil = now + 520"), "Enemy firing must authoritatively face the player.");
+assert.ok(combat.includes("Killed by ") && combat.includes("killerRevealUntil") && combat.includes("Reviewing killer"), "Death killer reveal flow is missing.");
 assert.ok(plant.includes("leftKnee") && plant.includes("rightKnee") && plant.includes("leftFoot") && plant.includes("rightFoot"), "Two-segment enemy walking gait is missing.");
 assert.ok(plant.includes("rgba(255,231,151,.98)") && plant.includes("tracerTarget"), "Visible two-layer enemy bullet tracers are missing.");
 assert.ok(combat.includes("hitReactUntil") && combat.includes("defeatedAt") && combat.includes("deathProgress"), "Enemy hit/death animations are incomplete.");
@@ -35,6 +39,8 @@ assert.ok(plant.includes('kind: "pillar"'), "Pillars must be explicit combat lin
 assert.ok(plant.includes("drawCombatEnemy") && plant.includes("combatState"), "The plant renderer is not using live combat animation poses.");
 assert.ok(plant.includes("drawFirstPersonCombatWeapon") && plant.includes("drawViewmodelBox") && plant.includes("viewmodelProject"), "The player weapon must be real canvas-rendered 3D geometry.");
 assert.ok(plant.includes("combatEnemyPoseParent") && plant.includes("deathDirection"), "Enemy death animation must pivot the body down to the floor.");
+assert.ok(plant.includes("focusEnemy") && plant.includes("combat-killer-focus") && plant.includes("releasePointer"), "Death camera must center on the killer before restart.");
+assert.ok(plant.includes("combat.killerReveal"), "Killer world marker is missing.");
 assert.ok(plant.includes("walkHitsStructuralColumn"), "Pillar walking collision must have a direct safety check.");
 assert.ok(plant.includes("window.createPlantCombatMode"), "Plant viewer does not create the combat controller.");
 assert.ok(page.includes('/plant-combat.js'), "Next plant page does not load the combat controller.");
@@ -42,6 +48,7 @@ assert.ok(preview.includes('plant-combat.js'), "Standalone preview does not load
 assert.ok(owner.includes('href="/?owner=combat"'), "Owner dashboard does not expose a Combat Mode launcher.");
 assert.ok(css.includes(".combat-hud") && css.includes(".combat-weapon-panel"), "Combat HUD styling is missing.");
 assert.ok(css.includes(".combat-damage-direction") && css.includes("combat-direction-fade"), "Directional incoming-fire indicators are missing.");
+assert.ok(css.includes(".combat-direction-callout") && css.includes(".combat-round-overlay.killer-reveal"), "Enhanced direction readability and killer reveal styling are missing.");
 assert.ok(css.includes(".combat-mode-active .first-person-hud"), "Normal first-person HUD must get out of the way during combat.");
 console.log("Owner-only combat mode checks passed.");
 

@@ -140,6 +140,7 @@
         '<strong data-combat-countdown-value>2</strong>',
       '</div>',
       '<div class="combat-damage-directions" data-combat-damage-directions aria-hidden="true"></div>',
+      '<div class="combat-direction-callout" data-combat-direction-callout hidden><strong></strong><span></span></div>',
       '<div class="combat-weapon-panel">',
         '<div class="combat-weapon-copy">',
           '<span data-combat-slot>PRIMARY</span>',
@@ -154,7 +155,12 @@
           '<p data-combat-round-kicker>ROUND COMPLETE</p>',
           '<h2 data-combat-round-title>Plant secured</h2>',
           '<span data-combat-round-copy>All enemy AI has been defeated.</span>',
-          '<div class="combat-round-actions">',
+          '<div class="combat-killer-reveal" data-combat-killer hidden>',
+            '<span>ELIMINATED BY</span>',
+            '<strong data-combat-killer-name>Enemy</strong>',
+            '<small data-combat-killer-detail></small>',
+          '</div>',
+          '<div class="combat-round-actions" data-combat-round-actions>',
             '<button type="button" data-combat-restart>Restart combat</button>',
             '<button type="button" data-combat-exit>Exit combat</button>',
           '</div>',
@@ -173,6 +179,7 @@
     const magazineCopy = hud.querySelector("[data-combat-mag]");
     const reserveCopy = hud.querySelector("[data-combat-reserve]");
     const damageDirections = hud.querySelector("[data-combat-damage-directions]");
+    const directionCallout = hud.querySelector("[data-combat-direction-callout]");
     const hitmarker = hud.querySelector("[data-combat-hitmarker]");
     const damageVignette = hud.querySelector("[data-combat-damage]");
     const countdownOverlay = hud.querySelector("[data-combat-countdown]");
@@ -181,6 +188,11 @@
     const roundKicker = hud.querySelector("[data-combat-round-kicker]");
     const roundTitle = hud.querySelector("[data-combat-round-title]");
     const roundCopy = hud.querySelector("[data-combat-round-copy]");
+    const killerReveal = hud.querySelector("[data-combat-killer]");
+    const killerName = hud.querySelector("[data-combat-killer-name]");
+    const killerDetail = hud.querySelector("[data-combat-killer-detail]");
+    const roundActions = hud.querySelector("[data-combat-round-actions]");
+    const restartButton = hud.querySelector("[data-combat-restart]");
 
     const enemies = new Map();
     const ammunition = {
@@ -206,6 +218,8 @@
     let countdownEndsAt = 0;
     let countdownDisplay = 0;
     let transientStatusUntil = 0;
+    let directionCalloutTimer = 0;
+    let roundRevealSerial = 0;
 
     function currentWeapon() {
       return WEAPONS[selectedWeapon];
@@ -245,8 +259,14 @@
       record.rotationY = number(machine?.rotationY ?? machine?.rotation);
       record.heading = unit * Math.PI * 2;
       record.nextHeadingAt = 0;
+      record.blockedUntil = 0;
       record.nextShotAt = 0;
       record.alerted = false;
+      record.lastSeenAt = 0;
+      record.lastKnownPlayerX = record.x;
+      record.lastKnownPlayerZ = record.z;
+      record.aimLockUntil = 0;
+      record.killerRevealUntil = 0;
       record.movementBlend = .16;
       record.walkPhase = unit * Math.PI * 2;
       record.firingUntil = 0;
@@ -389,9 +409,16 @@
       let moveX = 0;
       let moveZ = 0;
       let speed = 3.2 * enemy.speedBias;
+      let desiredRotation = enemy.rotationY;
+      let aimLocked = false;
 
       if (lineOfSight) {
-        enemy.rotationY = faceAngle(center, playerTarget);
+        enemy.lastSeenAt = now;
+        enemy.lastKnownPlayerX = playerTarget.x;
+        enemy.lastKnownPlayerZ = playerTarget.z;
+        enemy.aimLockUntil = Math.max(enemy.aimLockUntil, now + 320);
+        desiredRotation = faceAngle(center, playerTarget);
+        aimLocked = true;
         if (distance > 46) {
           moveX = towardX * .82 + strafeX * .28;
           moveZ = towardZ * .82 + strafeZ * .28;
@@ -405,6 +432,18 @@
           moveZ = strafeZ;
           speed = 3.7 * enemy.speedBias;
         }
+      } else if (now - enemy.lastSeenAt < 1600) {
+        const remembered = { x: enemy.lastKnownPlayerX, z: enemy.lastKnownPlayerZ };
+        const rememberedDx = remembered.x - center.x;
+        const rememberedDz = remembered.z - center.z;
+        const rememberedDistance = Math.max(.001, Math.hypot(rememberedDx, rememberedDz));
+        desiredRotation = faceAngle(center, remembered);
+        aimLocked = now < enemy.aimLockUntil;
+        if (rememberedDistance > 4) {
+          moveX = rememberedDx / rememberedDistance;
+          moveZ = rememberedDz / rememberedDistance;
+          speed = 3.15 * enemy.speedBias;
+        }
       } else {
         if (now >= enemy.nextHeadingAt) {
           const size = enemyDimensions(enemy);
@@ -414,26 +453,38 @@
           if (homeDistance > 42) {
             enemy.heading = Math.atan2(anchorCenterX - center.x, anchorCenterZ - center.z);
           } else {
-            enemy.heading += (stableUnit(enemy.id + ":" + Math.floor(now / 1700)) - .5) * 2.4;
+            enemy.heading += (stableUnit(enemy.id + ":" + Math.floor(now / 2200)) - .5) * 1.35;
           }
-          enemy.nextHeadingAt = now + 1250 + stableUnit(enemy.id + ":" + Math.floor(now / 2500)) * 1800;
+          enemy.nextHeadingAt = now + 2100 + stableUnit(enemy.id + ":" + Math.floor(now / 3100)) * 2100;
         }
         moveX = Math.sin(enemy.heading);
         moveZ = Math.cos(enemy.heading);
-        enemy.rotationY = enemy.heading * 180 / Math.PI + 180;
-        speed = 2.4 * enemy.speedBias;
+        desiredRotation = enemy.heading * 180 / Math.PI + 180;
+        speed = 2.35 * enemy.speedBias;
       }
 
-      const length = Math.hypot(moveX, moveZ) || 1;
-      const step = Math.min(1.1, speed * deltaSeconds);
-      const moved = tryMoveEnemy(enemy, moveX / length * step, moveZ / length * step);
-      if (!moved) {
-        enemy.strafeSign *= -1;
-        enemy.heading += Math.PI * (.55 + stableUnit(enemy.id + ":bounce") * .45);
-        enemy.nextHeadingAt = now + 350;
+      const length = Math.hypot(moveX, moveZ);
+      const step = length > .001 ? Math.min(1.1, speed * deltaSeconds) : 0;
+      const moved = step > 0 ? tryMoveEnemy(enemy, moveX / length * step, moveZ / length * step) : false;
+
+      // When engaging, facing the player is authoritative even while strafing or blocked.
+      // When wandering, only rotate after a successful move. This prevents blocked actors
+      // from spinning in place while repeatedly choosing new headings.
+      if (aimLocked || lineOfSight || now < enemy.aimLockUntil) {
+        enemy.rotationY = desiredRotation;
+      } else if (moved) {
+        enemy.rotationY = desiredRotation;
       }
-      enemy.movementBlend += ((moved ? 1 : .18) - enemy.movementBlend) * Math.min(1, deltaSeconds * 8);
-      enemy.walkPhase += deltaSeconds * (moved ? 8.5 * enemy.speedBias : 2.2);
+
+      if (!moved && step > 0 && now >= enemy.blockedUntil) {
+        enemy.strafeSign *= -1;
+        const turn = .55 + stableUnit(enemy.id + ":blocked:" + Math.floor(now / 650)) * .55;
+        enemy.heading += enemy.strafeSign * turn;
+        enemy.nextHeadingAt = now + 1100;
+        enemy.blockedUntil = now + 720;
+      }
+      enemy.movementBlend += ((moved ? 1 : .08) - enemy.movementBlend) * Math.min(1, deltaSeconds * 8);
+      enemy.walkPhase += deltaSeconds * (moved ? 8.5 * enemy.speedBias : .8);
     }
 
     function enemyRenderState(id, now = performance.now()) {
@@ -459,6 +510,8 @@
         deathProgress,
         deathDirection: enemy.deathDirection || 1,
         tracerTarget: now < enemy.tracerUntil ? enemy.tracerTarget : null,
+        killerReveal: now < enemy.killerRevealUntil,
+        aiming: enemy.alerted || now < enemy.aimLockUntil,
         health: enemy.health,
       };
     }
@@ -466,6 +519,18 @@
     function setTransientStatus(text, duration = 850) {
       if (statusCopy) statusCopy.textContent = text;
       transientStatusUntil = performance.now() + duration;
+    }
+
+    function incomingDirectionName(relative) {
+      const degrees = ((relative * 180 / Math.PI) + 360) % 360;
+      if (degrees < 22.5 || degrees >= 337.5) return "FRONT";
+      if (degrees < 67.5) return "FRONT-RIGHT";
+      if (degrees < 112.5) return "RIGHT";
+      if (degrees < 157.5) return "BACK-RIGHT";
+      if (degrees < 202.5) return "BEHIND";
+      if (degrees < 247.5) return "BACK-LEFT";
+      if (degrees < 292.5) return "LEFT";
+      return "FRONT-LEFT";
     }
 
     function showIncomingDirection(enemy, player, hit = false) {
@@ -480,9 +545,26 @@
       const indicator = document.createElement("span");
       indicator.className = "combat-damage-direction" + (hit ? " hit" : " near-miss");
       indicator.style.setProperty("--damage-angle", (relative * 180 / Math.PI).toFixed(2) + "deg");
-      indicator.innerHTML = "<i></i>";
+      indicator.innerHTML = "<i></i><em></em>";
       damageDirections.appendChild(indicator);
-      window.setTimeout(() => indicator.remove(), hit ? 760 : 520);
+      window.setTimeout(() => indicator.remove(), hit ? 1250 : 850);
+
+      if (directionCallout) {
+        const name = String(enemy?.machine?.name || "Enemy");
+        const direction = incomingDirectionName(relative);
+        const strong = directionCallout.querySelector("strong");
+        const detail = directionCallout.querySelector("span");
+        directionCallout.classList.toggle("hit", hit);
+        directionCallout.classList.toggle("near-miss", !hit);
+        if (strong) strong.textContent = (hit ? "HIT FROM " : "FIRE FROM ") + direction;
+        if (detail) detail.textContent = name;
+        directionCallout.hidden = false;
+        if (directionCalloutTimer) window.clearTimeout(directionCalloutTimer);
+        directionCalloutTimer = window.setTimeout(() => {
+          directionCallout.hidden = true;
+          directionCalloutTimer = 0;
+        }, hit ? 1350 : 900);
+      }
     }
 
     function playerRenderState(now = performance.now()) {
@@ -543,23 +625,51 @@
       if (statusCopy && !reloading && performance.now() >= transientStatusUntil) statusCopy.textContent = "Ready";
     }
 
-    function finishRound(kind) {
+    function finishRound(kind, killer = null, player = null) {
       roundState = kind;
       mouseHeld = false;
       lastThreatCount = 0;
       syncHud();
       if (!roundOverlay) return;
+      const revealSerial = ++roundRevealSerial;
       roundOverlay.hidden = false;
+      roundOverlay.classList.toggle("killer-reveal", kind === "lost");
+      if (roundActions) roundActions.classList.toggle("locked", kind === "lost");
+      if (restartButton) {
+        restartButton.disabled = kind === "lost";
+        restartButton.textContent = kind === "lost" ? "Reviewing killer..." : "Restart combat";
+      }
       if (kind === "won") {
+        if (killerReveal) killerReveal.hidden = true;
         if (roundKicker) roundKicker.textContent = "ROUND COMPLETE";
         if (roundTitle) roundTitle.textContent = "Plant secured";
         if (roundCopy) roundCopy.textContent = "All enemy AI has been defeated.";
       } else {
+        const source = killer ? enemyCenter(killer) : null;
+        const killerLabel = String(killer?.machine?.name || "Enemy");
+        const distance = source && player
+          ? Math.hypot(source.x - number(player.x), source.z - number(player.z))
+          : 0;
+        if (killer) killer.killerRevealUntil = performance.now() + 5000;
+        if (killerReveal) killerReveal.hidden = false;
+        if (killerName) killerName.textContent = killerLabel;
+        if (killerDetail) killerDetail.textContent = distance > 0 ? Math.round(distance) + " ft away" : "Last attacker";
         if (roundKicker) roundKicker.textContent = "PLAYER DOWN";
-        if (roundTitle) roundTitle.textContent = "Combat run ended";
-        if (roundCopy) roundCopy.textContent = "Restart to reset your health, weapons, and every enemy.";
+        if (roundTitle) roundTitle.textContent = "Killed by " + killerLabel;
+        if (roundCopy) roundCopy.textContent = "Camera centered on your killer. Review the shooter before restarting.";
+        if (source) options.focusEnemy?.(source);
+        window.setTimeout(() => options.releasePointer?.(), 80);
+        window.setTimeout(() => {
+          if (!active || revealSerial !== roundRevealSerial || roundState !== "lost") return;
+          if (restartButton) {
+            restartButton.disabled = false;
+            restartButton.textContent = "Restart combat";
+          }
+          roundActions?.classList.remove("locked");
+        }, 2200);
       }
-      options.onRoundEnd?.(kind);
+      options.onRoundEnd?.(kind, killer?.id || null);
+      options.invalidate?.();
     }
 
     function switchWeapon(next) {
@@ -645,11 +755,17 @@
       showIncomingDirection(enemy, player, true);
       const sourceName = String(enemy?.machine?.name || "Enemy");
       setTransientStatus("Incoming fire - " + sourceName, 600);
-      if (playerHealth <= 0) finishRound("lost");
+      if (playerHealth <= 0) finishRound("lost", enemy, player);
       syncHud();
     }
 
     function fireEnemy(enemy, playerTarget, distance, now) {
+      const source = enemyCenter(enemy);
+      enemy.rotationY = faceAngle(source, playerTarget);
+      enemy.lastSeenAt = now;
+      enemy.lastKnownPlayerX = playerTarget.x;
+      enemy.lastKnownPlayerZ = playerTarget.z;
+      enemy.aimLockUntil = now + 520;
       enemy.firingUntil = now + 150;
       enemy.muzzleFlashUntil = now + 85;
       enemy.recoilUntil = now + 180;
@@ -702,6 +818,10 @@
         if (!lineOfSight) continue;
 
         threats += 1;
+        enemy.lastSeenAt = now;
+        enemy.lastKnownPlayerX = playerTarget.x;
+        enemy.lastKnownPlayerZ = playerTarget.z;
+        enemy.aimLockUntil = Math.max(enemy.aimLockUntil, now + 320);
         enemy.rotationY = faceAngle(source, playerTarget);
         if (now >= enemy.nextShotAt) fireEnemy(enemy, playerTarget, distance, now);
       }
@@ -731,7 +851,17 @@
       ammunition.handgun.magazine = WEAPONS.handgun.magazine;
       ammunition.handgun.reserve = WEAPONS.handgun.reserve;
       syncEnemies(true);
-      if (roundOverlay) roundOverlay.hidden = true;
+      if (roundOverlay) {
+        roundOverlay.hidden = true;
+        roundOverlay.classList.remove("killer-reveal");
+      }
+      if (killerReveal) killerReveal.hidden = true;
+      if (roundActions) roundActions.classList.remove("locked");
+      if (restartButton) {
+        restartButton.disabled = false;
+        restartButton.textContent = "Restart combat";
+      }
+      roundRevealSerial += 1;
 
       if (countdown) {
         roundState = "countdown";
@@ -811,7 +941,13 @@
       hud.hidden = true;
       frame.classList.remove("combat-mode-active", "combat-under-fire");
       if (countdownOverlay) countdownOverlay.hidden = true;
-      if (roundOverlay) roundOverlay.hidden = true;
+      if (roundOverlay) {
+        roundOverlay.hidden = true;
+        roundOverlay.classList.remove("killer-reveal");
+      }
+      if (directionCalloutTimer) window.clearTimeout(directionCalloutTimer);
+      directionCalloutTimer = 0;
+      if (directionCallout) directionCallout.hidden = true;
       options.onStateChange?.(false);
       options.invalidate?.();
     }

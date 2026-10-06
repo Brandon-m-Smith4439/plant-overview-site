@@ -8202,3 +8202,116 @@ body.viewer-fullscreen-fallback-active {
   72% { opacity: .94; }
   100% { opacity: 0; transform: translate(-50%,-50%) rotate(var(--damage-angle)) translateY(-9.4rem) scale(.88); }
 }
+
+
+/* Combat readability and killer reveal pass · v0.13.54 */
+.combat-damage-direction {
+  transform: translate(-50%,-50%) rotate(var(--damage-angle)) translateY(-11.5rem);
+  animation-duration: 1.18s;
+}
+.combat-damage-direction i {
+  left: -1.65rem;
+  top: -.62rem;
+  width: 3.3rem;
+  height: 1.2rem;
+  border-radius: 1.1rem 1.1rem .25rem .25rem;
+  background: linear-gradient(180deg,#fff7ef 0 12%,#ff675a 35%,#cf201b 100%);
+  box-shadow: 0 0 1rem rgba(255,68,56,.96), 0 0 2.2rem rgba(255,68,56,.58);
+  clip-path: polygon(50% 100%,0 0,100% 0);
+}
+.combat-damage-direction em {
+  position: absolute;
+  left: -2.7rem;
+  top: -1rem;
+  width: 5.4rem;
+  height: 1.2rem;
+  border-top: .42rem solid rgba(255,68,56,.78);
+  border-radius: 50% 50% 0 0;
+  filter: drop-shadow(0 0 .8rem rgba(255,52,45,.72));
+}
+.combat-damage-direction.hit i {
+  left: -2rem;
+  width: 4rem;
+  height: 1.45rem;
+  background: linear-gradient(180deg,#fff 0 10%,#ff473d 34%,#b80f0a 100%);
+}
+.combat-damage-direction.hit em {
+  left: -3.2rem;
+  width: 6.4rem;
+  border-top-width: .55rem;
+}
+.combat-damage-direction.near-miss { opacity: .78; }
+@keyframes combat-direction-fade {
+  0% { opacity: 0; filter: blur(2px); transform: translate(-50%,-50%) rotate(var(--damage-angle)) translateY(-9.5rem) scale(.78); }
+  10% { opacity: 1; filter: blur(0); transform: translate(-50%,-50%) rotate(var(--damage-angle)) translateY(-11.5rem) scale(1.06); }
+  76% { opacity: .98; }
+  100% { opacity: 0; transform: translate(-50%,-50%) rotate(var(--damage-angle)) translateY(-13.2rem) scale(.92); }
+}
+.combat-direction-callout {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 5.3rem);
+  z-index: 7;
+  min-width: 12rem;
+  max-width: min(26rem,calc(100% - 2rem));
+  padding: .55rem .9rem .5rem;
+  border: 1px solid rgba(255,92,82,.5);
+  border-radius: .65rem;
+  transform: translateX(-50%);
+  background: rgba(18,7,8,.82);
+  box-shadow: 0 0 1.5rem rgba(220,35,29,.22);
+  text-align: center;
+  pointer-events: none;
+  backdrop-filter: blur(7px);
+}
+.combat-direction-callout[hidden] { display:none; }
+.combat-direction-callout strong {
+  display:block;
+  color:#fff5f1;
+  font-size:.78rem;
+  letter-spacing:.12em;
+}
+.combat-direction-callout span {
+  display:block;
+  margin-top:.14rem;
+  color:rgba(255,255,255,.7);
+  font-size:.68rem;
+}
+.combat-direction-callout.hit {
+  border-color:rgba(255,76,65,.9);
+  background:rgba(45,8,9,.9);
+}
+.combat-round-overlay.killer-reveal {
+  place-items:end center;
+  padding: 1rem 1rem 3rem;
+  background: radial-gradient(circle at center,rgba(3,7,9,.03) 0 34%,rgba(3,7,9,.26) 70%,rgba(3,7,9,.55) 100%);
+}
+.combat-round-overlay.killer-reveal > div {
+  width:min(30rem,100%);
+  background:rgba(8,13,16,.88);
+}
+.combat-killer-reveal {
+  margin:.9rem auto .1rem;
+  padding:.7rem .85rem;
+  border:1px solid rgba(255,69,58,.38);
+  border-radius:.65rem;
+  background:rgba(72,13,14,.28);
+}
+.combat-killer-reveal[hidden] { display:none; }
+.combat-killer-reveal span,
+.combat-killer-reveal small { display:block; }
+.combat-killer-reveal span {
+  color:#ff8b82;
+  font-size:.62rem;
+  font-weight:800;
+  letter-spacing:.16em;
+}
+.combat-killer-reveal strong {
+  display:block;
+  margin:.12rem 0;
+  color:#fff;
+  font-size:1.22rem;
+}
+.combat-killer-reveal small { color:rgba(255,255,255,.65); }
+.combat-round-actions.locked { opacity:.55; }
+.combat-round-actions button:disabled { cursor:not-allowed; filter:saturate(.35); }

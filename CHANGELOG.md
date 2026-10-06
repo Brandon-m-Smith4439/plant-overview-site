@@ -1,3 +1,12 @@
+## 0.13.54 - 2026-10-06
+
+- Enlarged and clarified incoming-fire direction feedback with bigger radial arrows, glow arcs, longer visibility, and explicit eight-way FRONT / FRONT-RIGHT / RIGHT / BACK-RIGHT / BEHIND / BACK-LEFT / LEFT / FRONT-LEFT callouts that also identify the shooter.
+- Fixed enemy AI spinning/stalling by separating aim-facing from wander-facing, remembering the last seen player position, slowing random heading changes, and rate-limiting blocked-path steering changes. Blocked wandering enemies no longer continuously rotate in place.
+- Made engagement facing authoritative: every armed person faces the player while it has line of sight, preserves a short aim lock after sight loss, and snaps its 3D weapon directly toward the player immediately before every shot.
+- Kept the 3D rifle render on every combat person and added a temporary red/white world marker to the enemy that delivers the fatal shot.
+- Added a killer reveal sequence on player death. The first-person camera centers on the killer, pointer lock releases without opening the normal first-person menu, the death overlay names the killer and distance, and restart stays disabled for 2.2 seconds so the shooter can be reviewed first.
+- Expanded Combat Mode regression coverage for anti-spin steering, aim locking, readable incoming-fire callouts, authoritative shooter facing, and the killer reveal/death-camera flow.
+
 ## 0.13.53 - 2026-10-06
 
 - Replaced the previous CSS first-person gun silhouette with an actual canvas-rendered 3D viewmodel made from perspective cuboid geometry. Rifle and handgun models now sit just right of screen center with visible receiver/body, barrel, stock/grip, magazine, sights, and player hands.

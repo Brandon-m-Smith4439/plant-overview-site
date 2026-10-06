@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.53";
+  const APP_VERSION = "0.13.54";
 
   function editorProfileProtected() {
     try {
@@ -6679,6 +6679,24 @@
       getBounds: floorBounds,
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
       capture: () => firstPersonController?.capture?.(),
+      releasePointer: () => {
+        walkModeTransitioning = true;
+        firstPersonController?.release?.();
+        window.setTimeout(() => { walkModeTransitioning = false; }, 120);
+      },
+      focusEnemy: (target) => {
+        if (!target) return;
+        const playerX = modelCenter()[0] + state.panX;
+        const playerY = Math.max(1.5, Number(state.walkEyeHeight) + Number(state.walkVerticalOffset || 0));
+        const playerZ = modelCenter()[1] + state.panZ;
+        const dx = Number(target.x) - playerX;
+        const dy = Number(target.y) - playerY;
+        const dz = Number(target.z) - playerZ;
+        const horizontal = Math.max(.001, Math.hypot(dx, dz));
+        state.yaw = Math.atan2(dx, dz);
+        state.pitch = clamp(Math.atan2(dy, horizontal), -1.12, 1.12);
+        renderPerformance.invalidate?.("combat-killer-focus");
+      },
       exitCombat: () => setCombatMode(false),
       invalidate: () => renderPerformance.invalidate?.("combat-mode"),
       onStateChange: syncCombatButton,
@@ -10211,6 +10229,11 @@
       const target = [Number(combat.tracerTarget.x), Number(combat.tracerTarget.y), Number(combat.tracerTarget.z)];
       line3d(muzzle,target,"rgba(255,116,38,.28)",5.8,alpha*.55);
       line3d(muzzle,target,"rgba(255,231,151,.98)",1.65,alpha*.98);
+    }
+    if (combat.killerReveal) {
+      const markerY = height + 1.15;
+      localLine3d(actor,[width*.5,markerY-.65,depth*.5],[width*.5,markerY+.75,depth*.5],"#ff453a",6.5,alpha);
+      localLine3d(actor,[width*.18,markerY+.42,depth*.5],[width*.82,markerY+.42,depth*.5],"#fff1ee",3.2,alpha);
     }
   }
 

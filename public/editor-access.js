@@ -25,6 +25,10 @@
     try { return sessionStorage.getItem(OWNER_SESSION_KEY) === "granted"; } catch { return false; }
   }
 
+  function isOwner() {
+    return ownerPathActive() || hasOwnerSession();
+  }
+
   function hasEditorProfile() {
     try { return localStorage.getItem(EDITOR_PROFILE_KEY) === "protected"; } catch { return false; }
   }
@@ -106,5 +110,5 @@
     });
   }
 
-  window.monroeEditorAccess = { editingAllowed, hasAccess, requestAccess, verify, hasEditorProfile, protectEditorProfile };
+  window.monroeEditorAccess = { editingAllowed, hasAccess, requestAccess, verify, hasEditorProfile, protectEditorProfile, isOwner };
 })();

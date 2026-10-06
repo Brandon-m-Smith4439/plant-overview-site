@@ -121,3 +121,14 @@ assert.ok(plant.includes("Combat faces keep visible eyes") && plant.includes("#f
 assert.ok(css.includes("combat-holo-sight") && css.includes("combat-holo-glass") && !css.includes("border-radius:50%;\n  border:clamp(3px,.4vw,6px)"), "Rifle ADS must use a holographic sight instead of the old circular scope.");
 assert.ok(plant.includes("direction.x * .96 + Math.cos(yaw) * .46") || combat.includes("direction.x * .96 + Math.cos(yaw) * .46"), "Player tracer muzzle must originate at the rendered gun side of the camera.");
 assert.ok(css.includes("combat-hitmarker.visible i") && css.includes("#ff4e55"), "Person hits must use a red hit marker instead of bullet-hole decals.");
+
+// v0.13.59: celebratory victory, touch combat, corrected combat eyes, and loadout-specific 3D weapons.
+assert.ok(combat.includes('roundTitle.textContent = "PLANT SECURED"') && combat.includes('roundKicker.textContent = "VICTORY"') && combat.includes("victoryTime"), "Victory screen must present a celebratory PLANT SECURED state with round stats.");
+assert.ok(css.includes(".combat-round-overlay.victory") && css.includes(".combat-victory-confetti") && css.includes("@keyframes combat-confetti-fall"), "Victory screen celebratory animation styling is missing.");
+assert.ok(plant.includes('data-touch-combat="fire"') && plant.includes('data-touch-combat="aim"') && plant.includes('data-touch-combat="reload"') && plant.includes('data-touch-combat="swap"'), "Mobile Combat Mode action controls are missing.");
+assert.ok(plant.includes("navigator.maxTouchPoints") && combat.includes("setTriggerHeld") && combat.includes("setAiming: (enabled)"), "Touch players must be combat-engaged without desktop pointer lock and expose fire/aim APIs.");
+assert.ok(css.includes(".combat-mode-active .touch-combat-actions") && css.includes(".touch-combat-fire"), "Mobile Combat Mode controls are not styled for touch screens.");
+assert.ok(plant.includes("const eyeY = height*.865") && plant.includes("const eyeZ = depth*.035"), "Combat eyes must be moved higher and recessed into the face.");
+assert.ok(plant.includes("Oversized shoulder-fired rocket launcher") && plant.includes("weaponMuzzleZ = -3.48"), "Enemy Rocket Launcher must render as a large shoulder-fired 3D weapon.");
+assert.ok(plant.includes("Long precision rifle") && plant.includes("Full 3D right-hand service rifle") && plant.includes("Right-hand chainsaw"), "AI rifle, sniper, and chainsaw models must have distinct detailed right-hand 3D geometry.");
+

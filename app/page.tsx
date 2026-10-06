@@ -17,7 +17,7 @@ export default function Home() {
             <a className="active" href="/">Plant layout</a>
             <ProtectedEditorLink href="/machine-studio">Machine Design Studio</ProtectedEditorLink>
           </nav>
-          <SecretOwnerEntry version="0.13.49" />
+          <SecretOwnerEntry version="0.13.50" />
         </div>
       </header>
 
@@ -100,6 +100,7 @@ export default function Home() {
           "/published-workspace.js",
           "/animation-timeline.js",
           "/first-person-controller.js",
+          "/plant-combat.js",
           "/three-mf-exporter.js",
           "/plant-app.js",
         ]}

@@ -1680,6 +1680,10 @@
 
   let firstPersonController = null;
   let combatController = null;
+
+  function combatLabelsSuppressed() {
+    return combatController?.isActive?.() === true;
+  }
   let openFirstPersonOptions = () => {};
   let showWalkthroughInvitation = () => {};
   let walkReturnView = null;
@@ -8168,7 +8172,7 @@
   }
 
   function drawProcessStepLabel(node,protectedMachineRects=[]){
-    if (!SCREEN_SPACE_LABELS) return;
+    if (combatLabelsSuppressed() || !SCREEN_SPACE_LABELS) return;
     const anchor=project(...node.worldPoint);if(state.cameraMode==="walk"&&anchor[3]<WALK_NEAR_CLIP)return;
     if(!Number.isFinite(anchor[0])||!Number.isFinite(anchor[1]))return;
     const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width),spanCss=projectedPixelSpan(node.entry.rendered)/Math.max(.001,pixelScale);
@@ -8194,7 +8198,7 @@
   }
 
   function drawSelectedCustomRouteTag(route) {
-    if (!SCREEN_SPACE_LABELS) return;
+    if (combatLabelsSuppressed() || !SCREEN_SPACE_LABELS) return;
     if (!state.editing || state.objectEditorTab !== "pointers" || route?.connection?.key !== state.selectedProcessConnectionKey || route.connection.tagVisible !== true) return;
     const connection = route.connection;
     const text = String(connection.tagText || "").trim() || `${processConnectionEndpointText(connection,"source")} → ${processConnectionEndpointText(connection,"target")}`;
@@ -8229,7 +8233,7 @@
       const rect=canvas.getBoundingClientRect(),pixelScale=canvas.width/Math.max(1,rect.width);
       routes.forEach((route)=>drawProcessFlowEditHandles(route,pixelScale));
     }
-    if(SCREEN_SPACE_LABELS){
+    if(SCREEN_SPACE_LABELS && !combatLabelsSuppressed()){
       const protectedMachineRects=state.cameraMode==="walk"?[]:[...entriesById.values()].map((entry)=>processStepMachineRect(entry,3)).filter(Boolean);
       collectProcessStepNodes(entriesById,routes).forEach((node)=>drawProcessStepLabel(node,protectedMachineRects));
       routes.forEach(drawSelectedCustomRouteTag);
@@ -8475,7 +8479,7 @@
   }
 
   function label(text, x, y, z, color, options = {}) {
-    if (!SCREEN_SPACE_LABELS || !state.showLabels || state.labelMode === "off") return { drawn: false, targetVisible: false };
+    if (combatLabelsSuppressed() || !SCREEN_SPACE_LABELS || !state.showLabels || state.labelMode === "off") return { drawn: false, targetVisible: false };
     const labelKey = String(options.labelKey || text);
     const labelTime = Number(options.time) || state.lastFrameTime;
     const previousVisual = labelVisualStates.get(labelKey);
@@ -11822,7 +11826,7 @@
   // object types together gives the expected result: rear columns are covered by
   // machinery and front columns remain visible without any see-through outline.
   function drawWorldMachineLabels(machineEntries, time) {
-    if (!WORLD_MACHINE_LABELS || !state.showLabels || state.labelMode === "off") return;
+    if (combatLabelsSuppressed() || !WORLD_MACHINE_LABELS || !state.showLabels || state.labelMode === "off") return;
     if (typeof depthRenderer.addWorldLabel !== "function") return;
     (machineEntries || []).forEach(({ machine, rendered, alpha }) => {
       if (!machine || !rendered || alpha <= .15 || isFloorFeatureType(machine.type)) return;

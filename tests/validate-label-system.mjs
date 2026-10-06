@@ -105,7 +105,7 @@ assert.ok(
 
 
 assert.ok(threeRenderer.includes("new THREE.BoxGeometry(1, 1, 1)"), "3D labels must have a real solid sign edge/backing.");
-assert.ok(threeRenderer.includes("group.add(backing, front, back)"), "3D labels must contain distinct front and back readable faces.");
+assert.ok(threeRenderer.includes("group.add(backing, front, back, frontText, backText)"), "3D labels must contain distinct front/back faces plus raised front/back text meshes.");
 assert.ok(threeRenderer.includes("back.rotation.y = Math.PI"), "Back-side label text must be oriented for normal reading instead of mirrored.");
 assert.ok(threeRenderer.includes("Labels remain planted at one world position"), "3D billboards must keep a stable world position while their yaw follows the camera.");
 assert.ok(threeRenderer.includes("const cameraYaw = Number(currentView?.yaw) || 0;"), "3D billboards must derive their slow yaw target from camera heading.");

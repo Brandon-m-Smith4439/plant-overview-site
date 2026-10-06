@@ -20,14 +20,6 @@ jobs:
           fetch-depth: 0
           ref: release-v01357-combat-effects-loadouts
 
-      - name: Apply reviewed patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          base64 -d .github/v01357.patch.b64 | xz -d > /tmp/v01357.patch
-          git apply --check /tmp/v01357.patch
-          git apply /tmp/v01357.patch
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -64,9 +56,9 @@ jobs:
           set -euo pipefail
           git config user.name "Brandon-m-Smith4439"
           git config user.email "masterchief4439@gmail.com"
-          rm -f .github/v01357.patch.b64 .github/workflows/package-v01357.yml
+          rm -f .github/workflows/package-v01357.yml
           git add -A
-          git commit -m "v0.13.57 add combat effects ADS and randomized enemy loadouts"
+          git commit -m "Remove temporary v0.13.57 packaging workflow"
           git push origin HEAD:release-v01357-combat-effects-loadouts
 
       - name: Create release archives

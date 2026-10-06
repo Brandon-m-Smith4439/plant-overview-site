@@ -1,3 +1,7 @@
+## Version 0.13.48
+
+Version 0.13.48 makes the new physical route/label styling easier to control consistently. Process routes can now use their full 30 ft Route Y range from the editor; as they rise, they progressively become physical 3D rails rather than flat ribbons. The already-raised billboard lettering now has an editable Raised text depth setting, allowing a subtle or stronger physical offset from both sign faces. A shared preset palette was also added for labels and process routes so Plant teal, Glass blue, Process blue/green, Amber, Orange, Alert red, Purple, and Steel can be reused consistently while still allowing custom colors.
+
 ## Version 0.13.47
 
 Version 0.13.47 adds true vertical volume to elevated process routes and subtle physical depth to billboard lettering. Route Y can now be raised as high as 30 ft. Near the floor a route stays a clean ribbon, but increasing Y progressively turns it into a depth-tested 3D rail with visible side and underside faces; the moving white direction highlights ride on its top surface. Machine billboard text now renders on separate front/rear planes that sit slightly in front of the physical sign faces, giving the names real parallax and a small extruded effect while preserving double-sided readability and the cleaner v0.13.46 styling.

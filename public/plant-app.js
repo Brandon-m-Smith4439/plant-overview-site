@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.47";
+  const APP_VERSION = "0.13.48";
 
   function editorProfileProtected() {
     try {
@@ -822,6 +822,7 @@
       labelTurnToCamera: machine.labelTurnToCamera !== false,
       labelTurnSpeedPercent: clamp(Number.isFinite(Number(machine.labelTurnSpeedPercent)) ? Number(machine.labelTurnSpeedPercent) : 100, 25, 200),
       labelDepthFeet: clamp(Number.isFinite(Number(machine.labelDepthFeet)) ? Number(machine.labelDepthFeet) : .35, .1, 2),
+      labelTextExtrudeFeet: clamp(Number.isFinite(Number(machine.labelTextExtrudeFeet)) ? Number(machine.labelTextExtrudeFeet) : .065, .02, .3),
       labelGlowPercent: clamp(Number.isFinite(Number(machine.labelGlowPercent)) ? Number(machine.labelGlowPercent) : 55, 0, 100),
       labelZoomMinPercent: clamp(Number.isFinite(Number(machine.labelZoomMinPercent)) ? Number(machine.labelZoomMinPercent) : 88, 70, 100),
       labelZoomMaxPercent: clamp(Number.isFinite(Number(machine.labelZoomMaxPercent)) ? Number(machine.labelZoomMaxPercent) : 112, 100, 140),
@@ -1804,6 +1805,38 @@
     utility: "#2f7771",
   };
 
+  const VISUAL_COLOR_PRESETS = {
+    "plant-teal": { name: "Plant teal", accent: "#52b7aa", background: "#132126", text: "#ffffff" },
+    "glass-blue": { name: "Glass blue", accent: "#65b8d4", background: "#10202a", text: "#ffffff" },
+    "process-blue": { name: "Process blue", accent: "#5b8def", background: "#111827", text: "#ffffff" },
+    "process-green": { name: "Process green", accent: "#62c782", background: "#102019", text: "#ffffff" },
+    amber: { name: "Amber", accent: "#e6b84a", background: "#241d10", text: "#ffffff" },
+    orange: { name: "Orange", accent: "#e8864c", background: "#24170f", text: "#ffffff" },
+    red: { name: "Alert red", accent: "#e66a73", background: "#251316", text: "#ffffff" },
+    purple: { name: "Purple", accent: "#9b82df", background: "#1c1728", text: "#ffffff" },
+    steel: { name: "Steel", accent: "#9aa7ad", background: "#171d20", text: "#ffffff" },
+  };
+
+  function matchingLabelColorPreset(machine) {
+    if (!machine) return "custom";
+    const textColor = String(machine.labelTextColor || "").toLowerCase();
+    const backgroundColor = String(machine.labelBackgroundColor || "").toLowerCase();
+    const accentColor = String(machine.labelLineColor || "").toLowerCase();
+    const match = Object.entries(VISUAL_COLOR_PRESETS).find(([, preset]) => (
+      preset.text.toLowerCase() === textColor &&
+      preset.background.toLowerCase() === backgroundColor &&
+      preset.accent.toLowerCase() === accentColor
+    ));
+    return match?.[0] || "custom";
+  }
+
+  function matchingProcessColorPreset(connection) {
+    if (!connection) return "custom";
+    const color = String(connection.color || "").toLowerCase();
+    const match = Object.entries(VISUAL_COLOR_PRESETS).find(([, preset]) => preset.accent.toLowerCase() === color);
+    return match?.[0] || "custom";
+  }
+
   function snapshotLayout() {
     return {
       machines: clone(machines),
@@ -2120,7 +2153,7 @@
       endAnchorZPercent: [PROCESS_CONNECTION_ANCHOR_MIN_PERCENT, PROCESS_CONNECTION_ANCHOR_MAX_PERCENT],
       flowTurn1Progress: [0, 100], flowTurn1Offset: [-500, 500],
       flowTurn2Progress: [0, 100], flowTurn2Offset: [-500, 500],
-      flowCurvePercent: [0, 100], flowFloorHeight: [0.02, 6],
+      flowCurvePercent: [0, 100], flowFloorHeight: [0.02, 30],
       flowSpeed: [0, 180], flowGlow: [0, 200],
       tagLift: [0, 60], tagScreenOffsetX: [-500, 500], tagScreenOffsetY: [-500, 500],
       width: [.5, 12], opacity: [5, 100], endSize: [1, 14],
@@ -3354,6 +3387,11 @@
       input.disabled = !machine;
       input.checked = Boolean(machine?.[input.dataset.labelCheck]);
     });
+    const labelColorPreset = panel.querySelector("[data-label-color-preset]");
+    if (labelColorPreset) {
+      labelColorPreset.disabled = !machine;
+      labelColorPreset.value = machine ? matchingLabelColorPreset(machine) : "custom";
+    }
     const labelSourceSummary = panel.querySelector("[data-label-source-summary]");
     if (labelSourceSummary) {
       labelSourceSummary.textContent = !machine
@@ -3431,6 +3469,11 @@
       input.disabled = !activeConnection;
       input.checked = Boolean(activeConnection?.[input.dataset.processConnectionCheck]);
     });
+    const processColorPreset = panel.querySelector("[data-process-color-preset]");
+    if (processColorPreset) {
+      processColorPreset.disabled = !activeConnection;
+      processColorPreset.value = activeConnection ? matchingProcessColorPreset(activeConnection) : "custom";
+    }
     const processPivotList=panel.querySelector("[data-process-pivot-list]");
     if(processPivotList){
       if(!activeConnection){processPivotList.innerHTML='<p class="process-route-tag-preview">Select a process route to edit its exact pivot coordinates.</p>';}
@@ -4411,6 +4454,18 @@
             <p class="label-help">The compact process label uses the same collision-aware sizing as the standard numbered route labels. Leave text blank to use the machine name.</p>
           </fieldset>
           <div class="label-format-grid">
+            <label>Color preset<select data-label-color-preset data-needs-selection>
+              <option value="custom">Custom</option>
+              <option value="plant-teal">Plant teal</option>
+              <option value="glass-blue">Glass blue</option>
+              <option value="process-blue">Process blue</option>
+              <option value="process-green">Process green</option>
+              <option value="amber">Amber</option>
+              <option value="orange">Orange</option>
+              <option value="red">Alert red</option>
+              <option value="purple">Purple</option>
+              <option value="steel">Steel</option>
+            </select></label>
             <label>Text color<input type="color" data-label-field="labelTextColor" data-needs-selection value="#ffffff"></label>
             <label>Background<input type="color" data-label-field="labelBackgroundColor" data-needs-selection value="#141c20"></label>
             <label>Size (%)<input type="number" data-label-field="labelSizePercent" data-needs-selection min="50" max="250" step="5" value="100"></label>
@@ -4434,6 +4489,7 @@
               <label>Facing offset (°)<input type="number" data-label-field="labelRotationY" data-needs-selection min="-180" max="180" step="5"></label>
               <label>Camera follow speed (%)<input type="number" data-label-field="labelTurnSpeedPercent" data-needs-selection min="25" max="200" step="5"></label>
               <label>Sign depth (ft)<input type="number" data-label-field="labelDepthFeet" data-needs-selection min="0.1" max="2" step="0.05"></label>
+              <label>Raised text depth (ft)<input type="number" data-label-field="labelTextExtrudeFeet" data-needs-selection min="0.02" max="0.3" step="0.005"></label>
               <label>Text glow (%)<input type="number" data-label-field="labelGlowPercent" data-needs-selection min="0" max="100" step="5"></label>
               <label>Zoom min size (%)<input type="number" data-label-field="labelZoomMinPercent" data-needs-selection min="70" max="100" step="1"></label>
               <label>Zoom max size (%)<input type="number" data-label-field="labelZoomMaxPercent" data-needs-selection min="100" max="140" step="1"></label>
@@ -4525,7 +4581,19 @@
           <fieldset class="process-pointer-controls">
             <legend>7 · Flow appearance</legend>
             <div class="process-pointer-grid">
-              <label>Color<input type="color" data-process-connection-field="color"></label>
+              <label>Color preset<select data-process-color-preset>
+                <option value="custom">Custom</option>
+                <option value="plant-teal">Plant teal</option>
+                <option value="glass-blue">Glass blue</option>
+                <option value="process-blue">Process blue</option>
+                <option value="process-green">Process green</option>
+                <option value="amber">Amber</option>
+                <option value="orange">Orange</option>
+                <option value="red">Alert red</option>
+                <option value="purple">Purple</option>
+                <option value="steel">Steel</option>
+              </select></label>
+              <label>Custom color<input type="color" data-process-connection-field="color"></label>
               <label>Core width (world scale)<input type="number" data-process-connection-field="width" min="0.5" max="12" step="0.25"></label>
               <label>Opacity (%)<input type="number" data-process-connection-field="opacity" min="5" max="100" step="5"></label>
               <label>Flow pattern<select data-process-connection-field="style"><option value="solid">Continuous glow</option><option value="dashed">Moving segments</option><option value="dotted">Moving dots</option></select></label>
@@ -5199,6 +5267,9 @@
         } else if (field === "labelDepthFeet") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelDepthFeet = clamp(value, .1, 2);
+        } else if (field === "labelTextExtrudeFeet") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelTextExtrudeFeet = clamp(value, .02, .3);
         } else if (field === "labelGlowPercent") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelGlowPercent = clamp(value, 0, 100);
@@ -5235,6 +5306,25 @@
         updateEditorPanel();
       });
     });
+    panel.querySelector("[data-label-color-preset]")?.addEventListener("change", (event) => {
+      const preset = VISUAL_COLOR_PRESETS[event.target.value];
+      if (!preset) return;
+      const machine = selectedMachine();
+      if (!machine) return;
+      const selection = selectedMachines();
+      const targets = selection.length ? selection : [machine];
+      pushHistory();
+      targets.forEach((item) => {
+        item.labelTextColor = preset.text;
+        item.labelBackgroundColor = preset.background;
+        item.labelLineColor = preset.accent;
+      });
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(preset.name + " applied to " + targets.length + " 3D label" + (targets.length === 1 ? "." : "s."));
+    });
+
     panel.querySelectorAll("[data-label-check]").forEach((input) => {
       input.addEventListener("change", () => {
         const machine = selectedMachine();
@@ -5390,6 +5480,18 @@
       renderPerformance.invalidate();
       updateEditorPanel();
       showToast(`Removed the ${label} object-to-object process pointer. Machine labels were unchanged.`);
+    });
+
+    panel.querySelector("[data-process-color-preset]")?.addEventListener("change", (event) => {
+      const preset = VISUAL_COLOR_PRESETS[event.target.value];
+      const connection = selectedProcessConnection();
+      if (!preset || !connection) return;
+      pushHistory();
+      connection.color = preset.accent;
+      persistLayout();
+      renderPerformance.invalidate();
+      updateEditorPanel();
+      showToast(preset.name + " applied to the selected process route.");
     });
 
     panel.querySelectorAll("[data-process-connection-field]").forEach((input) => {
@@ -11000,6 +11102,7 @@
         position: [x, y, z],
         height: labelHeight,
         depth: clamp(Number(machine.labelDepthFeet ?? .35), .1, 2),
+        textExtrudeFeet: clamp(Number(machine.labelTextExtrudeFeet ?? .065), .02, .3),
         rotationY: clamp(Number(machine.labelRotationY ?? 0), -180, 180),
         turnToCamera: machine.labelTurnToCamera !== false,
         turnSpeedPercent: clamp(Number(machine.labelTurnSpeedPercent ?? 100), 25, 200),

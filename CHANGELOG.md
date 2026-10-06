@@ -1,3 +1,14 @@
+## 0.13.48 - 2026-10-06
+
+- Added consistent named color presets shared by 3D machine billboards and process routes: Plant teal, Glass blue, Process blue, Process green, Amber, Orange, Alert red, Purple, and Steel. Custom color pickers remain available.
+- Label color presets apply a coordinated text/background/accent combination, while process-route presets apply the matching accent color. The editor automatically shows Custom when a saved color combination no longer matches a preset.
+- Added a Raised text depth control to the 3D billboard settings. Billboard lettering already renders on independent front/rear meshes; the new setting now controls how far those text planes physically project from the sign face.
+- Expanded the raised-text physical offset range to 0.02–0.30 ft while keeping the default subtle at 0.065 ft.
+- Fixed the process-route field editor so Route Y height can actually be entered up to 30 ft, matching the saved-data normalizer and visible editor range.
+- Elevated routes continue to transition from a flat floor ribbon into a depth-tested 3D rail with side/bottom/top faces, top-surface white direction highlights, and correctly lifted destination markers.
+- Preserved the cleaner v0.13.47 billboard design, double-sided readability, damped camera following, route direction, and machine occlusion behavior.
+- Advanced app/browser cache tokens to v0.13.48 and added regressions for elevated-route height, raised label text, and preset colors.
+
 ## 0.13.47 - 2026-10-06
 
 - Raised process routes now gain real 3D thickness as their Route Y height is increased. Near the floor they remain a clean ribbon; as Y rises they progressively become a physical rectangular rail with top, bottom, side, and end faces.

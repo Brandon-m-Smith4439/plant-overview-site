@@ -158,3 +158,14 @@ assert.ok(threeRenderer.includes('function createWorldLabelTextTexture'), "Billb
 assert.ok(threeRenderer.includes('frontText') && threeRenderer.includes('backText'), "Billboard text must have raised front and rear meshes.");
 assert.ok(threeRenderer.includes('const textExtrude = clamp(Number(options.textExtrudeFeet) || .065'), "3D billboard text must physically protrude from the sign face.");
 assert.ok(threeRenderer.includes('entry.frontText.position.set(0, 0, textOffset)') && threeRenderer.includes('entry.backText.position.set(0, 0, -textOffset)'), "Raised label text must sit in front of both readable faces.");
+
+
+assert.ok(plant.includes("flowFloorHeight: [0.02, 30]"), "Route Y editor must allow elevated routes up to 30 ft.");
+assert.ok(plant.includes("function addWorldRoutePrism") && plant.includes("elevationFactor=clamp((routeY-.26)/1.05,0,1)"), "Elevated process routes must progressively become physical 3D rails.");
+assert.ok(plant.includes("labelTextExtrudeFeet: clamp("), "Machine labels must persist raised text depth.");
+assert.ok(plant.includes('data-label-field="labelTextExtrudeFeet"'), "Labels editor must expose raised text depth.");
+assert.ok(plant.includes("textExtrudeFeet: clamp(Number(machine.labelTextExtrudeFeet"), "Raised text depth must reach the WebGL billboard renderer.");
+assert.ok(threeRenderer.includes("const textExtrude = clamp(Number(options.textExtrudeFeet) || .065, .02, .3);"), "Billboard text must have configurable physical offset from the sign face.");
+assert.ok(plant.includes("const VISUAL_COLOR_PRESETS = {") && plant.includes('"plant-teal"') && plant.includes('"glass-blue"') && plant.includes('"process-green"'), "Shared color presets must include a consistent plant palette.");
+assert.ok(plant.includes("data-label-color-preset") && plant.includes("data-process-color-preset"), "Both 3D labels and process routes must expose preset color selectors.");
+assert.ok(plant.includes("matchingLabelColorPreset") && plant.includes("matchingProcessColorPreset"), "Preset selectors must reflect the current custom/preset color state.");

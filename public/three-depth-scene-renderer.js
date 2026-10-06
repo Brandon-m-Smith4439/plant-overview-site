@@ -464,7 +464,7 @@
       const faceOffset = worldDepth / 2 + .012;
       // A small physical offset produces real parallax against the sign face.
       // This is intentionally subtle: roughly 1/2 to 1 inch for normal signs.
-      const textExtrude = clamp(Number(options.textExtrudeFeet) || .065, .025, .16);
+      const textExtrude = clamp(Number(options.textExtrudeFeet) || .065, .02, .3);
       const textOffset = faceOffset + textExtrude;
       const position = Array.isArray(options.position) ? options.position : [0, 0, 0];
 

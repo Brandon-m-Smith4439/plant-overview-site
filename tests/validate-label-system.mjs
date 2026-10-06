@@ -145,6 +145,16 @@ assert.ok(threeRenderer.includes('context.createLinearGradient') && threeRendere
 
 
 assert.ok(plant.includes("for(let start=phase-period;start<metrics.total;start+=period)"), "World-route white highlights must travel from source toward destination.");
-assert.ok(threeRenderer.includes('WORLD_LABEL_FACE_REVISION = "v0.13.46-clean-industrial"'), "3D labels must use the v0.13.46 clean industrial face revision.");
+assert.ok(threeRenderer.includes('WORLD_LABEL_FACE_REVISION = "v0.13.47-extruded-text"'), "3D labels must use the v0.13.47 extruded-text face revision.");
 assert.ok(threeRenderer.includes('roundedRect(context, 20, 27, 5, height - 54, 2.5)') && !threeRenderer.includes('context.arc(46, 67, 15'), "3D labels must use the restrained single accent rail without the previous busy beacon/status treatment.");
 assert.ok(threeRenderer.includes('const edge = parseColor(options.backgroundColor || "#132126", 1);'), "3D label physical sides must use the dark background color instead of the bright accent color.");
+
+
+assert.ok(plant.includes('flowFloorHeight: readNumber("flowFloorHeight", 0.02, 30)'), "Process route Y height must persist up to 30 ft.");
+assert.ok(plant.includes('function worldRouteSegmentPrismFaces') && plant.includes('function addWorldRoutePrism'), "Raised process routes must gain real 3D prism geometry.");
+assert.ok(plant.includes('const elevationFactor=clamp((routeY-.26)/1.05,0,1);'), "Route 3D thickness must increase progressively as Route Y rises.");
+assert.ok(plant.includes('addWorldRoutePrism(slice') && plant.includes('routeThickness/2+highlightThickness/2+.012'), "Moving white route highlights must ride on top of elevated 3D rails.");
+assert.ok(threeRenderer.includes('function createWorldLabelTextTexture'), "Billboard text must render on a separate texture plane.");
+assert.ok(threeRenderer.includes('frontText') && threeRenderer.includes('backText'), "Billboard text must have raised front and rear meshes.");
+assert.ok(threeRenderer.includes('const textExtrude = clamp(Number(options.textExtrudeFeet) || .065'), "3D billboard text must physically protrude from the sign face.");
+assert.ok(threeRenderer.includes('entry.frontText.position.set(0, 0, textOffset)') && threeRenderer.includes('entry.backText.position.set(0, 0, -textOffset)'), "Raised label text must sit in front of both readable faces.");

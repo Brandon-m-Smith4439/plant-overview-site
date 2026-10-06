@@ -182,28 +182,41 @@
       context.closePath();
     }
 
-    const WORLD_LABEL_FACE_REVISION = "v0.13.46-clean-industrial";
+    const WORLD_LABEL_FACE_REVISION = "v0.13.47-extruded-text";
 
-    function createWorldLabelTexture(options = {}) {
+    function worldLabelTextureMetrics(options = {}) {
       const text = String(options.text || "Object").trim() || "Object";
-      const textColor = String(options.textColor || "#ffffff");
-      const backgroundColor = String(options.backgroundColor || "#132126");
-      const borderColor = String(options.borderColor || "#52b7aa");
-      const canvas = document.createElement("canvas");
-      const measure = canvas.getContext("2d");
       const fontSize = 54;
       const fontWeight = options.fontWeight === "bold" ? 800 : options.fontWeight === "regular" ? 500 : 700;
+      const measureCanvas = document.createElement("canvas");
+      const measure = measureCanvas.getContext("2d");
       measure.font = `${fontWeight} ${fontSize}px "Segoe UI", Arial, sans-serif`;
       const measured = Math.ceil(measure.measureText(text).width);
-      canvas.width = clamp(measured + 110, 280, 1400);
-      canvas.height = 104;
+      return { text, fontSize, fontWeight, width: clamp(measured + 110, 280, 1400), height: 104 };
+    }
+
+    function finalizeWorldLabelTexture(canvas) {
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.generateMipmaps = false;
+      if (THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    function createWorldLabelTexture(options = {}) {
+      const backgroundColor = String(options.backgroundColor || "#132126");
+      const borderColor = String(options.borderColor || "#52b7aa");
+      const metrics = worldLabelTextureMetrics(options);
+      const canvas = document.createElement("canvas");
+      canvas.width = metrics.width;
+      canvas.height = metrics.height;
       const context = canvas.getContext("2d");
       const width = canvas.width;
       const height = canvas.height;
       context.clearRect(0, 0, width, height);
 
-      // v0.13.46: quieter industrial plate. Keep depth and glow, but remove
-      // decorative modules so the machine name remains the visual focus.
       context.save();
       context.shadowColor = "rgba(0,0,0,.52)";
       context.shadowBlur = 14;
@@ -239,9 +252,19 @@
       context.fillStyle = borderColor;
       roundedRect(context, 20, 27, 5, height - 54, 2.5);
       context.fill();
+      return finalizeWorldLabelTexture(canvas);
+    }
 
+    function createWorldLabelTextTexture(options = {}) {
+      const textColor = String(options.textColor || "#ffffff");
+      const metrics = worldLabelTextureMetrics(options);
+      const canvas = document.createElement("canvas");
+      canvas.width = metrics.width;
+      canvas.height = metrics.height;
+      const context = canvas.getContext("2d");
+      context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = textColor;
-      context.font = `${fontWeight} ${fontSize}px "Segoe UI", Arial, sans-serif`;
+      context.font = `${metrics.fontWeight} ${metrics.fontSize}px "Segoe UI", Arial, sans-serif`;
       context.textAlign = "left";
       context.textBaseline = "middle";
       const glowStrength = clamp(Number(options.glowStrength ?? 55), 0, 100);
@@ -250,31 +273,24 @@
         context.shadowColor = textColor;
         context.shadowBlur = 3 + glowStrength * .16;
         context.globalAlpha = .50 + glowStrength * .003;
-        context.fillText(text, 41, height / 2 + 1, width - 61);
+        context.fillText(metrics.text, 41, metrics.height / 2 + 1, metrics.width - 61);
         context.restore();
       }
-
       context.save();
-      context.shadowColor = "rgba(0,0,0,.66)";
+      context.shadowColor = "rgba(0,0,0,.70)";
       context.shadowBlur = 4;
       context.shadowOffsetY = 2;
-      context.fillText(text, 41, height / 2 + 1, width - 61);
+      context.fillText(metrics.text, 41, metrics.height / 2 + 1, metrics.width - 61);
       context.restore();
-      context.fillText(text, 41, height / 2 + 1, width - 61);
-
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      texture.generateMipmaps = false;
-      if (THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
-      texture.needsUpdate = true;
-      return texture;
+      context.fillText(metrics.text, 41, metrics.height / 2 + 1, metrics.width - 61);
+      return finalizeWorldLabelTexture(canvas);
     }
-    function worldLabelFaceMaterial(options = {}) {
+
+    function worldLabelMappedMaterial(texture, { depthWrite = false } = {}) {
       return new THREE.ShaderMaterial({
         uniforms: {
           u_viewProjection: viewProjection,
-          u_map: { value: createWorldLabelTexture(options) },
+          u_map: { value: texture },
           u_opacity: { value: 1 },
         },
         vertexShader: `
@@ -297,9 +313,17 @@
         `,
         transparent: true,
         depthTest: true,
-        depthWrite: false,
+        depthWrite,
         side: THREE.FrontSide,
       });
+    }
+
+    function worldLabelFaceMaterial(options = {}) {
+      return worldLabelMappedMaterial(createWorldLabelTexture(options), { depthWrite: false });
+    }
+
+    function worldLabelTextMaterial(options = {}) {
+      return worldLabelMappedMaterial(createWorldLabelTextTexture(options), { depthWrite: false });
     }
 
     function worldLabelEdgeMaterial(options = {}) {
@@ -339,15 +363,23 @@
 
       const faceGeometry = new THREE.PlaneGeometry(1, 1);
       const faceMaterial = worldLabelFaceMaterial(options);
+      const textMaterial = worldLabelTextMaterial(options);
       const front = new THREE.Mesh(faceGeometry, faceMaterial);
       const back = new THREE.Mesh(faceGeometry, faceMaterial);
+      const frontText = new THREE.Mesh(faceGeometry, textMaterial);
+      const backText = new THREE.Mesh(faceGeometry, textMaterial);
       front.frustumCulled = false;
       back.frustumCulled = false;
+      frontText.frustumCulled = false;
+      backText.frustumCulled = false;
       front.renderOrder = 4;
       back.renderOrder = 4;
-      // The second face is physically rotated 180 degrees instead of relying
-      // on DoubleSide, so its texture reads normally rather than mirrored.
+      frontText.renderOrder = 5;
+      backText.renderOrder = 5;
+      // Both the face and its raised text plane are rotated on the rear so the
+      // wording remains readable rather than mirrored.
       back.rotation.y = Math.PI;
+      backText.rotation.y = Math.PI;
 
       const edgeGeometry = new THREE.BoxGeometry(1, 1, 1);
       const edgeMaterial = worldLabelEdgeMaterial(options);
@@ -355,11 +387,11 @@
       backing.frustumCulled = false;
       backing.renderOrder = 3;
 
-      group.add(backing, front, back);
+      group.add(backing, front, back, frontText, backText);
       scene.add(group);
       const entry = {
-        key, group, front, back, backing, faceGeometry, edgeGeometry,
-        faceMaterial, edgeMaterial, revision: "", used: true,
+        key, group, front, back, frontText, backText, backing, faceGeometry, edgeGeometry,
+        faceMaterial, textMaterial, edgeMaterial, revision: "", used: true,
         lastUsed: frame, lastUsedAt: frameTime,
       };
       worldLabels.set(key, entry);
@@ -370,7 +402,9 @@
       if (!entry) return;
       scene.remove(entry.group);
       entry.faceMaterial?.uniforms?.u_map?.value?.dispose?.();
+      entry.textMaterial?.uniforms?.u_map?.value?.dispose?.();
       entry.faceMaterial?.dispose?.();
+      entry.textMaterial?.dispose?.();
       entry.edgeMaterial?.dispose?.();
       entry.faceGeometry?.dispose?.();
       entry.edgeGeometry?.dispose?.();
@@ -395,17 +429,22 @@
         options.fontWeight || "semibold",
       ].join("|");
       if (entry.revision !== revision) {
-        const previous = entry.faceMaterial.uniforms.u_map.value;
+        const previousFace = entry.faceMaterial.uniforms.u_map.value;
+        const previousText = entry.textMaterial.uniforms.u_map.value;
         entry.faceMaterial.uniforms.u_map.value = createWorldLabelTexture(options);
-        previous?.dispose?.();
+        entry.textMaterial.uniforms.u_map.value = createWorldLabelTextTexture(options);
+        previousFace?.dispose?.();
+        previousText?.dispose?.();
         const edge = parseColor(options.backgroundColor || "#132126", 1);
         entry.edgeMaterial.uniforms.u_color.value.set(edge[0], edge[1], edge[2], 1);
         entry.faceMaterial.needsUpdate = true;
+        entry.textMaterial.needsUpdate = true;
         entry.revision = revision;
       }
 
       const opacity = clamp(Number(options.opacity ?? 1), 0, 1);
       entry.faceMaterial.uniforms.u_opacity.value = opacity;
+      entry.textMaterial.uniforms.u_opacity.value = opacity;
       entry.edgeMaterial.uniforms.u_opacity.value = opacity;
 
       const texture = entry.faceMaterial.uniforms.u_map.value;
@@ -423,6 +462,10 @@
       const worldWidth = worldHeight * aspect;
       const worldDepth = clamp(Number(options.depth) || .35, .1, 2);
       const faceOffset = worldDepth / 2 + .012;
+      // A small physical offset produces real parallax against the sign face.
+      // This is intentionally subtle: roughly 1/2 to 1 inch for normal signs.
+      const textExtrude = clamp(Number(options.textExtrudeFeet) || .065, .025, .16);
+      const textOffset = faceOffset + textExtrude;
       const position = Array.isArray(options.position) ? options.position : [0, 0, 0];
 
       // Labels remain planted at one world position, but their yaw eases toward
@@ -469,8 +512,14 @@
       entry.front.position.set(0, 0, faceOffset);
       entry.back.scale.set(worldWidth, worldHeight, 1);
       entry.back.position.set(0, 0, -faceOffset);
+      entry.frontText.scale.set(worldWidth, worldHeight, 1);
+      entry.frontText.position.set(0, 0, textOffset);
+      entry.backText.scale.set(worldWidth, worldHeight, 1);
+      entry.backText.position.set(0, 0, -textOffset);
       entry.front.updateMatrix();
       entry.back.updateMatrix();
+      entry.frontText.updateMatrix();
+      entry.backText.updateMatrix();
       entry.backing.updateMatrix();
     }
 
@@ -694,6 +743,7 @@
       });
       worldLabels.forEach((entry) => {
         if (entry?.faceMaterial) entry.faceMaterial.uniformsNeedUpdate = true;
+        if (entry?.textMaterial) entry.textMaterial.uniformsNeedUpdate = true;
         if (entry?.edgeMaterial) entry.edgeMaterial.uniformsNeedUpdate = true;
       });
     }

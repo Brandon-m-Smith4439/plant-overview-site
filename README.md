@@ -1,3 +1,7 @@
+## Version 0.13.59
+
+Owner Combat Mode now has a much more celebratory **PLANT SECURED** victory sequence and is playable from touch phones using dedicated FIRE, AIM, RELOAD, SWAP, and MENU controls alongside the existing mobile movement/look controls. Combat people also have corrected eye placement and more detailed weapon-specific 3D models, including a large shoulder-fired Rocket Launcher.
+
 ## Version 0.13.58
 
 Combat visuals now use depth-tested world-space tracers, surface-aligned bullet holes, blood effects and rocket explosions. Rifle ADS uses a holographic sight, enemy AI can dodge-roll, chainsaw users detect farther and rush faster, combat faces retain visible eyes, and defeated enemies settle consistently before delayed blood-pool/fountain effects.

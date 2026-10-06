@@ -20,11 +20,14 @@ jobs:
           fetch-depth: 0
           ref: release-v01360-shared-envelopes-weapons
 
-      - name: Apply reviewed patch
+      - name: Reassemble and verify reviewed patch
         shell: bash
         run: |
           set -euo pipefail
-          base64 -d .github/v01360.patch.b64 | xz -d > /tmp/v01360.patch
+          cat .github/v01360-parts/*.txt > /tmp/v01360.patch.b64
+          echo "e2ed875f68e193fefaf694a20a5e015c96a60e01e8c2c1bd8e8d872e82e695fe  /tmp/v01360.patch.b64" | sha256sum -c -
+          base64 -d /tmp/v01360.patch.b64 | xz -d > /tmp/v01360.patch
+          echo "bd88cb303ba34c494642c2fbfe7d9d9e32470c9cf450c87a9516fff1365dfcc6  /tmp/v01360.patch" | sha256sum -c -
           git apply --check /tmp/v01360.patch
           git apply /tmp/v01360.patch
 
@@ -74,6 +77,7 @@ jobs:
           git config user.name "Brandon-m-Smith4439"
           git config user.email "masterchief4439@gmail.com"
           rm -f .github/v01360.patch.b64 .github/workflows/package-v01360.yml
+          rm -rf .github/v01360-parts
           git add -A
           git commit -m "v0.13.60 sync machine envelopes across devices and polish combat weapons"
           git push origin HEAD:release-v01360-shared-envelopes-weapons

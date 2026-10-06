@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.49";
+  const APP_VERSION = "0.13.50";
 
   function editorProfileProtected() {
     try {
@@ -1679,6 +1679,7 @@
   };
 
   let firstPersonController = null;
+  let combatController = null;
   let openFirstPersonOptions = () => {};
   let showWalkthroughInvitation = () => {};
   let walkReturnView = null;
@@ -2514,6 +2515,71 @@
     return true;
   }
 
+  function combatEnemyMachine(machine) {
+    const type = String(machine?.type || "").toLowerCase();
+    const design = machine?.designId ? designLibrary[machine.designId] : null;
+    const designType = String(design?.machineType || "").toLowerCase();
+    return type === "person" || type === "animatedperson" || designType === "person";
+  }
+
+  function combatEnemyMachines() {
+    const stage = Number.isFinite(Number(state.stageFloat)) ? Number(state.stageFloat) : Number(state.stage) || 0;
+    return machines.filter((machine) => {
+      if (!combatEnemyMachine(machine) || machine.visible === false) return false;
+      const reveal = Number.isFinite(Number(machine.reveal)) ? Number(machine.reveal) : 0;
+      const retire = Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99;
+      return reveal <= stage && retire > stage;
+    });
+  }
+
+  function combatOccluders() {
+    const entries = [];
+    const defaultHeight = Math.max(12, Number(state.wallGeometry?.height) || 24);
+    structuralColumns().forEach((column) => {
+      if (isColumnHidden(column)) return;
+      entries.push({
+        x: Number(column.x) - 1.18,
+        y: 0,
+        z: Number(column.z) - 1.18,
+        w: 2.36,
+        h: Math.max(defaultHeight, Number(column.h) || 0),
+        d: 2.36,
+      });
+    });
+    displayedWallSections().forEach((wall) => {
+      if (state.walls[wall.id] === false) return;
+      entries.push({
+        x: Number(wall.x) || 0,
+        y: Number(wall.y) || 0,
+        z: Number(wall.z) || 0,
+        w: Math.max(.05, Number(wall.w) || .05),
+        h: Math.max(.05, Number(wall.h) || defaultHeight),
+        d: Math.max(.05, Number(wall.d) || .05),
+      });
+    });
+    walkCollisionCandidates().forEach((machine) => {
+      if (combatEnemyMachine(machine)) return;
+      walkHitboxesForMachine(machine).forEach((hitbox) => {
+        const angle = angleRadians(hitbox);
+        const halfWidth = Math.max(.05, Number(hitbox.w) / 2);
+        const halfDepth = Math.max(.05, Number(hitbox.d) / 2);
+        const extentX = Math.abs(Math.cos(angle)) * halfWidth + Math.abs(Math.sin(angle)) * halfDepth;
+        const extentZ = Math.abs(Math.sin(angle)) * halfWidth + Math.abs(Math.cos(angle)) * halfDepth;
+        const centerX = Number(hitbox.x) + halfWidth;
+        const centerZ = Number(hitbox.z) + halfDepth;
+        entries.push({
+          x: centerX - extentX,
+          y: Number(hitbox.y) || 0,
+          z: centerZ - extentZ,
+          w: extentX * 2,
+          h: Math.max(.05, Number(hitbox.h) || defaultHeight),
+          d: extentZ * 2,
+        });
+      });
+    });
+    return entries;
+  }
+
   function findWalkSpawn(preferredX, preferredZ) {
     const bounds = floorBounds();
     const radius = Math.max(0.5, Number(state.walkRadius) || 1.2);
@@ -3200,6 +3266,10 @@
     const help = document.querySelector(".view-help");
     if (!help) return;
     if (!state.editing) {
+      if (combatController?.isActive?.()) {
+        help.textContent = "Combat mode · WASD move · mouse aim · Mouse 1 fire · 1/2 switch weapons · R reload";
+        return;
+      }
       const touchFirstViewport = window.matchMedia?.("(max-width: 760px), (hover: none) and (pointer: coarse)")?.matches;
       help.textContent = state.cameraMode === "walk"
         ? "First person · WASD move · mouse look · Shift sprint · Space jump"
@@ -6180,11 +6250,21 @@
     if (!frame) return;
     const controls = document.createElement("div");
     controls.className = "model-controls";
+    const ownerCombatAllowed = window.monroeEditorAccess?.isOwner?.() === true;
     controls.innerHTML = `
       <button type="button" data-view="overview" aria-label="Reset to overview">Overview</button>
       <button type="button" data-toggle="walk" aria-pressed="false">First person</button>
     `;
     frame.appendChild(controls);
+    if (ownerCombatAllowed) {
+      const combatButton = document.createElement("button");
+      combatButton.type = "button";
+      combatButton.dataset.toggle = "combat";
+      combatButton.className = "combat-mode-button";
+      combatButton.setAttribute("aria-pressed", "false");
+      combatButton.textContent = "Combat mode";
+      controls.appendChild(combatButton);
+    }
     const fullscreenToggle = document.createElement("button");
     fullscreenToggle.type = "button";
     fullscreenToggle.className = "fullscreen-toggle-button viewer-icon-button";
@@ -6517,6 +6597,7 @@
         });
         showToast(touchWalk ? "First person started full screen. Rotate your phone anytime; use the left pad to move and drag the right side to look." : "First person started full screen. Use WASD and the mouse; press Esc for options.");
       } else {
+        if (combatController?.isActive?.()) combatController.stop();
         walkModeTransitioning = true;
         firstPersonController?.stop();
         Object.keys(touchMoveState).forEach((key) => { touchMoveState[key] = false; });
@@ -6542,6 +6623,59 @@
       updateFirstPersonHud(false);
       updateEditorHelp();
     };
+
+    const syncCombatButton = (active) => {
+      const button = frame.querySelector("[data-toggle='combat']");
+      if (!button) return;
+      button.classList.toggle("active", active);
+      button.classList.remove("combat-ready");
+      button.setAttribute("aria-pressed", String(active));
+      button.textContent = active ? "Exit combat" : "Combat mode";
+      updateEditorHelp();
+    };
+
+    const setCombatMode = (enabled) => {
+      if (!ownerCombatAllowed || !combatController) return;
+      if (enabled) {
+        setStage(stages.length - 1);
+        state.stageFloat = stages.length - 1;
+        if (state.cameraMode !== "walk") setWalkMode(true);
+        combatController.start();
+        syncCombatButton(true);
+        showToast("Owner Combat Mode started. Mouse 1 fires; 1/2 switch weapons; R reloads.");
+      } else {
+        combatController.stop();
+        syncCombatButton(false);
+        if (state.cameraMode === "walk") setWalkMode(false);
+      }
+    };
+
+    combatController = window.createPlantCombatMode?.({
+      frame,
+      canvas,
+      isOwner: () => window.monroeEditorAccess?.isOwner?.() === true,
+      getPlayer: () => ({
+        x: modelCenter()[0] + state.panX,
+        y: Math.max(1.5, Number(state.walkEyeHeight) + Number(state.walkVerticalOffset || 0) + Number(state.walkBobOffset || 0)),
+        z: modelCenter()[1] + state.panZ,
+        yaw: state.yaw,
+        pitch: state.pitch,
+        engaged: state.cameraMode === "walk" && firstPersonController?.isPointerLocked?.() === true,
+      }),
+      getEnemies: combatEnemyMachines,
+      getOccluders: combatOccluders,
+      isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
+      capture: () => firstPersonController?.capture?.(),
+      exitCombat: () => setCombatMode(false),
+      invalidate: () => renderPerformance.invalidate?.("combat-mode"),
+      onStateChange: syncCombatButton,
+    }) || null;
+
+    if (ownerCombatAllowed && new URLSearchParams(window.location.search).get("owner") === "combat") {
+      const combatButton = frame.querySelector("[data-toggle='combat']");
+      combatButton?.classList.add("combat-ready");
+      showToast("Owner Combat Mode is ready. Select Combat mode to begin.");
+    }
 
     const touchMoveState = { forward: false, back: false, left: false, right: false };
     const syncTouchMove = () => {
@@ -6675,6 +6809,10 @@
         if (button.dataset.toggle === "editor") {
           if (state.cameraMode === "walk") setWalkMode(false);
           setEditing(!state.editing);
+          return;
+        }
+        if (button.dataset.toggle === "combat") {
+          setCombatMode(!combatController?.isActive?.());
           return;
         }
         if (button.dataset.toggle === "walk") {

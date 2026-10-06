@@ -17,7 +17,7 @@ assert.ok(combat.includes("getOccluders") && combat.includes("nearestObstacleDis
 assert.ok(combat.includes("playerHealth") && combat.includes("damagePlayer"), "Player health/damage flow is missing.");
 assert.ok(combat.includes("roundState") && combat.includes("Restart combat"), "Win/defeat restart flow is missing.");
 assert.ok(access.includes("isOwner"), "Browser editor access must expose owner-session status.");
-assert.ok(plant.includes('data-toggle = "combat"') || plant.includes('data-toggle="combat"'), "Owner-only Combat mode button is missing from the plant controls.");
+assert.ok(plant.includes('dataset.toggle = "combat"') || plant.includes('data-toggle="combat"'), "Owner-only Combat mode button is missing from the plant controls.");
 assert.ok(plant.includes("combatEnemyMachines") && plant.includes("animatedperson"), "Person/team-member machines are not wired as enemy AI.");
 assert.ok(plant.includes("combatOccluders"), "Plant geometry is not wired into combat line of sight.");
 assert.ok(plant.includes("window.createPlantCombatMode"), "Plant viewer does not create the combat controller.");

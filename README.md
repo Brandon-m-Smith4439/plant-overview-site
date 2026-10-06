@@ -1,3 +1,7 @@
+## Version 0.13.50
+
+Version 0.13.50 adds an owner-only Combat Mode on top of the existing first-person plant walkthrough. The private owner dashboard opens a combat-ready plant view, where the owner can start a temporary FPS session. Person/team-member machine objects become line-of-sight enemy AI, while machines, columns, walls, and Designer collision envelopes block shots and enemy vision. The player has a generic primary rifle and secondary handgun, ammo/reload management, health, hit feedback, win/defeat states, and restart controls. None of the combat state is saved into the plant model, and the feature remains unavailable to public or ordinary editor sessions.
+
 ## Version 0.13.49
 
 Version 0.13.49 cleans up the physical 3D machine-label workflow. Label settings are now organized into focused sections, preset colors live directly inside the label color control with custom Background/Text/Accent choices, X/Y/Z placement can move beyond machine bounds using the same -1000%..1100% range as process routes, and label size no longer has an arbitrary upper limit. Legacy screen-space timing/importance and duplicate offset controls are hidden from the active editor but remain compatible with older saved layouts.

@@ -1,6 +1,6 @@
 {
   "name": "monroe-glass-plant-evolution",
-  "version": "0.13.49",
+  "version": "0.13.50",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -14,7 +14,7 @@
     "publish:workspace": "node scripts/generate-published-workspace.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern worker-configuration.d.ts",
     "validate:encoding": "node tests/validate-ui-encoding.mjs",
-    "validate:js": "node --check public/depth-scene-renderer.js && node --check public/three-depth-scene-renderer.js && node --check public/spatial-index.js && node --check public/geometry-prep-client.js && node --check public/geometry-prep-worker.js && node --check public/render-performance.js && node --check public/editor-access.js && node --check public/workspace-transfer.js && node --check public/first-person-controller.js && node --check public/animation-timeline.js && node --check public/animation-timeline-workspace.js && node --check public/three-mf-exporter.js && node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
+    "validate:js": "node --check public/depth-scene-renderer.js && node --check public/three-depth-scene-renderer.js && node --check public/spatial-index.js && node --check public/geometry-prep-client.js && node --check public/geometry-prep-worker.js && node --check public/render-performance.js && node --check public/editor-access.js && node --check public/workspace-transfer.js && node --check public/first-person-controller.js && node --check public/plant-combat.js && node --check public/animation-timeline.js && node --check public/animation-timeline-workspace.js && node --check public/three-mf-exporter.js && node --check public/plant-app.js && node --check public/machine-designs.js && node --check public/machine-design-studio.js",
     "export:machines": "python cad/export_machine_registry.py",
     "db:generate": "drizzle-kit generate",
     "validate:rendering": "node tests/validate-layout-rendering.mjs",
@@ -47,6 +47,7 @@
     "validate:floor-flow": "node tests/validate-floor-flow-routes.mjs",
     "validate:process-pivots": "node tests/validate-process-pivot-editor.mjs",
     "validate:first-person": "node tests/validate-first-person.mjs",
+    "validate:combat": "node tests/validate-combat-mode.mjs",
     "validate:first-person-collisions": "node tests/validate-first-person-collisions.mjs",
     "validate:first-person-rendering": "node tests/validate-first-person-rendering.mjs",
     "validate:columns": "node tests/validate-structural-columns.mjs",

@@ -21,7 +21,7 @@ assert.ok(combat.includes("muzzleFlashUntil") && combat.includes("recoilUntil") 
 assert.ok(combat.includes("showIncomingDirection") && combat.includes("combat-damage-direction"), "Incoming-fire direction indicators are not wired to enemy shots.");
 assert.ok(combat.includes("incomingDirectionName") && combat.includes("combat-direction-callout"), "Readable directional fire callouts are missing.");
 assert.ok(combat.includes("blockedUntil") && combat.includes("aimLockUntil") && combat.includes("lastSeenAt"), "Enemy anti-spin steering and aim-lock state are missing.");
-assert.ok(combat.includes("enemy.rotationY = faceAngle(source, playerTarget)") && combat.includes("aimLockUntil = now + 520"), "Enemy firing must authoritatively face the player.");
+assert.ok(combat.includes("enemy.rotationY = faceAngle(source, playerTarget)") && combat.includes("enemy.aimLockUntil = now + (loadout.melee ? 260 : 520)"), "Enemy firing must authoritatively face the player.");
 assert.ok(combat.includes("Killed by ") && combat.includes("killerRevealUntil") && combat.includes("playerDeathDuration = 5000") && combat.includes("roundOverlay.hidden = true"), "Five-second death killer reveal flow is missing.");
 assert.ok(plant.includes("leftKnee") && plant.includes("rightKnee") && plant.includes("leftFoot") && plant.includes("rightFoot"), "Two-segment enemy walking gait is missing.");
 assert.ok(plant.includes("rgba(255,231,151,.98)") && plant.includes("tracerTarget"), "Visible two-layer enemy bullet tracers are missing.");
@@ -84,8 +84,8 @@ const publishedPeople = publishedLayout.machines.filter((machine) => {
 assert.ok(publishedPeople.length >= 10, "Published person-machine coverage unexpectedly collapsed.");
 assert.equal(publishedPeople.filter((machine) => machine.name === "Helper").length, 2, "Helper must be included in combat coverage as both published person instances.");
 
-// v0.13.56: shield, combat-owned Esc menu, death input lock, and killer outline/name.
-assert.ok(combat.includes("SHIELD_MAX = 45") && combat.includes("SHIELD_RECHARGE_DELAY_MS") && combat.includes("updatePlayerShield"), "Rechargeable combat shield is missing.");
+// v0.13.57: shield, combat-owned Esc menu, death input lock, and killer outline/name.
+assert.ok(combat.includes("SHIELD_MAX = 22") && combat.includes("SHIELD_RECHARGE_DELAY_MS") && combat.includes("updatePlayerShield"), "Rechargeable combat shield is missing.");
 assert.ok(combat.includes("combat-pause-overlay") && combat.includes("handleEscape") && combat.includes("setPaused"), "Combat Mode must own a dedicated Esc pause menu.");
 assert.ok(combat.includes("options.setMovementLocked?.(true)") && combat.includes("isDefeated: () => roundState === \"lost\""), "Death must lock player movement and expose defeated state.");
 assert.ok(plant.includes("setInputLocked") && plant.includes("combatController.handleEscape?.(reason)"), "First-person input/escape routing is not separated for Combat Mode.");
@@ -95,3 +95,15 @@ assert.ok(plant.includes("- .3));") && plant.includes("elapsed / 1050"), "Player
 assert.ok(css.includes(".combat-shield-track") && css.includes(".combat-pause-overlay") && css.includes(".combat-mode-active .first-person-menu"), "Shield/combat pause/menu separation styling is missing.");
 const firstPersonControllerSource = fs.readFileSync(new URL("../public/first-person-controller.js", import.meta.url), "utf8");
 assert.ok(firstPersonControllerSource.includes("setInputLocked") && firstPersonControllerSource.includes("if (inputLocked)"), "First-person controller cannot hard-lock movement after death/pause.");
+
+// v0.13.57: player tracers/impacts, blood effects, ADS scope, enemy loadout variety, and reduced shield.
+assert.ok(combat.includes("SHIELD_MAX = 22") && combat.includes("SHIELD_RECHARGE_PER_SECOND = 7"), "Combat shield must be reduced to about half strength.");
+assert.ok(combat.includes("ENEMY_WEAPONS") && combat.includes("sniper") && combat.includes("bazooka") && combat.includes("chainsaw") && combat.includes("shotgun") && combat.includes("smg"), "Randomized enemy weapon catalog is incomplete.");
+assert.ok(combat.includes("record.weaponKey = ENEMY_WEAPON_KEYS") && combat.includes("loadout.melee"), "Enemy loadouts must randomize and drive melee/ranged AI behavior.");
+assert.ok(combat.includes("pushTracer") && combat.includes("pushImpact") && combat.includes("resolveWorldImpact") && combat.includes("combatEffects"), "Player tracers and persistent impact decals are missing.");
+assert.ok(combat.includes("pushBloodBurst") && combat.includes("bloodPools") && combat.includes("startAt: now + 850"), "Enemy hit blood and delayed death pools are missing.");
+assert.ok(combat.includes("event.button === 2") && combat.includes("setAiming") && combat.includes("combat-scope-overlay"), "Right-click aim/scope flow is missing.");
+assert.ok(plant.includes("drawCombatWorldEffects") && plant.includes("bloodBursts") && plant.includes("bloodPools"), "Combat world effects are not rendered in the plant scene.");
+assert.ok(plant.includes('enemyWeapon === "sniper"') && plant.includes('enemyWeapon === "bazooka"') && plant.includes('enemyWeapon === "chainsaw"'), "Distinct 3D enemy weapon models are missing.");
+assert.ok(plant.includes("state.combatAimFov") && plant.includes("setAimZoom"), "Scoped aiming must narrow the first-person FOV.");
+assert.ok(css.includes(".combat-scope-overlay") && css.includes(".combat-scope-lens"), "Scope overlay styling is missing.");

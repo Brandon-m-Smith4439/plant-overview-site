@@ -1,3 +1,7 @@
+## Version 0.13.57
+
+Version 0.13.57 expands owner Combat Mode with visible player tracers, bullet-impact marks, restrained enemy hit/death blood effects, right-click scoped aiming, and randomized enemy weapon classes. Enemy AI now receives rifle, SMG, shotgun, sniper, bazooka, pistol, or chainsaw loadouts with matching 3D models and engagement behavior; chainsaw enemies rush into melee range while sniper and launcher enemies favor distance. The rechargeable shield is reduced from 45 to 22 so it remains useful without absorbing most incoming damage.
+
 ## Version 0.13.56
 
 Version 0.13.56 separates Combat Mode state cleanly from the normal first-person walkthrough. Combat now has its own Esc pause menu, a rechargeable shield that absorbs damage before health, hard movement/mouse locking after death, and an improved five-second death replay that drops the camera to floor level before focusing the fatal shooter. The killer is outlined in bright red with an in-world name plate during the replay, pointer lock is released so the mouse returns, and only the death menu can appear until the player chooses Restart or Exit.

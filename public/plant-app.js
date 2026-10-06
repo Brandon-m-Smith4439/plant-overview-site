@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.56";
+  const APP_VERSION = "0.13.57";
 
   function editorProfileProtected() {
     try {
@@ -6604,6 +6604,7 @@
         state.pitch = 0;
         state.walkVerticalOffset = 0;
         state.walkBobOffset = 0;
+        state.combatAimFov = null;
         firstPersonController?.start({ capture: false });
         const captureWalkthrough = () => {
           canvasSizeDirty = true;
@@ -6696,6 +6697,10 @@
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
       capture: () => firstPersonController?.capture?.(),
       setMovementLocked: (locked) => firstPersonController?.setInputLocked?.(locked),
+      setAimZoom: (enabled, weapon) => {
+        state.combatAimFov = enabled ? (weapon === "rifle" ? Math.max(24, state.walkFov * .46) : Math.max(42, state.walkFov * .72)) : null;
+        renderPerformance.invalidate?.("combat-aim-zoom");
+      },
       hideWalkMenu: () => setFirstPersonMenu(false),
       releasePointer: () => {
         walkModeTransitioning = true;
@@ -7144,7 +7149,7 @@
         centerZ: modelCenter()[1] + state.panZ,
         yaw: state.yaw,
         pitch: state.pitch,
-        fov: state.walkFov,
+        fov: Number.isFinite(state.combatAimFov) ? state.combatAimFov : state.walkFov,
         near: WALK_NEAR_CLIP,
         far: Math.max(900, renderPerformance.walkDrawDistance() * 3),
       };
@@ -10286,25 +10291,65 @@
     localLine3d(actor,leftShoulder,leftGrip,bodyColor,3.2,alpha);
     localLine3d(actor,rightShoulder,rightGrip,bodyColor,3.2,alpha);
 
-    // 3D enemy rifle: receiver, stock, grip, magazine, handguard, barrel and sight.
-    box(localBox3d(actor,width*.28,depth*.01,width*.52,.38,.36,weapon,gripY-.18),alpha,1);
-    box(localBox3d(actor,width*.16,depth*.27,width*.22,.5,.32,weaponLight,gripY-.19),alpha,1);
-    box(localBox3d(actor,width*.43,-.18,width*.22,.3,.72,"#161d21",gripY-.69),alpha,1);
-    box(localBox3d(actor,width*.48,depth*.03,width*.16,.22,.86,"#1a2226",gripY-.87),alpha,1);
-    box(localBox3d(actor,width*.36,-.64,width*.38,.7,.34,"#313d42",gripY-.17),alpha,1);
-    localLine3d(actor,[width*.55,gripY+.03,-.6],[width*.55,gripY+.03,muzzleZ],weapon,5.4,alpha);
-    localLine3d(actor,[width*.49,gripY+.36,depth*.01],[width*.61,gripY+.36,depth*.01],"#7f8c92",2.2,alpha);
+    const enemyWeapon = String(combat.weaponKey || "rifle");
+    let weaponMuzzleZ = muzzleZ;
+    if (enemyWeapon === "chainsaw") {
+      box(localBox3d(actor,width*.32,-.38,width*.48,.62,.42,"#d64c32",gripY-.22),alpha,1);
+      box(localBox3d(actor,width*.42,-1.12,width*.28,1.25,.16,"#aab1b2",gripY-.14),alpha,1);
+      localLine3d(actor,[width*.42,gripY-.04,-1.05],[width*.42,gripY-.04,-2.1],"#555f62",4.4,alpha);
+      localLine3d(actor,[width*.7,gripY-.1,-.35],[width*.7,gripY-.1,-.8],"#1b2326",3.3,alpha);
+      weaponMuzzleZ = -2.05;
+    } else if (enemyWeapon === "bazooka") {
+      box(localBox3d(actor,width*.39,-.56,width*.3,1.65,.38,"#566d55",gripY-.08),alpha,1);
+      localLine3d(actor,[width*.54,gripY+.08,-.3],[width*.54,gripY+.08,-2.35],"#314436",9.5,alpha);
+      localLine3d(actor,[width*.54,gripY+.08,-2.05],[width*.54,gripY+.08,-2.55],"#b7c1b6",11,alpha);
+      weaponMuzzleZ = -2.55;
+    } else if (enemyWeapon === "sniper") {
+      box(localBox3d(actor,width*.25,depth*.01,width*.56,.4,.34,weapon,gripY-.18),alpha,1);
+      box(localBox3d(actor,width*.3,-.68,width*.45,.76,.28,"#3d4a4e",gripY-.15),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.04,-.55],[width*.55,gripY+.04,-2.45],weapon,4.4,alpha);
+      box(localBox3d(actor,width*.46,-.18,width*.18,.46,.22,"#11181c",gripY+.18),alpha,1);
+      box(localBox3d(actor,width*.49,-.28,width*.12,.55,.18,"#6a7880",gripY+.2),alpha,1);
+      weaponMuzzleZ = -2.45;
+    } else if (enemyWeapon === "shotgun") {
+      box(localBox3d(actor,width*.28,depth*.01,width*.52,.42,.32,weapon,gripY-.18),alpha,1);
+      box(localBox3d(actor,width*.36,-.72,width*.38,.76,.28,"#6b4a2e",gripY-.16),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.03,-.55],[width*.55,gripY+.03,-2.08],"#20282d",6.2,alpha);
+      weaponMuzzleZ = -2.08;
+    } else if (enemyWeapon === "smg") {
+      box(localBox3d(actor,width*.32,depth*.01,width*.46,.36,.34,weapon,gripY-.18),alpha,1);
+      box(localBox3d(actor,width*.46,-.14,width*.17,.28,.62,"#151c20",gripY-.62),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.03,-.45],[width*.55,gripY+.03,-1.36],weapon,5,alpha);
+      weaponMuzzleZ = -1.36;
+    } else if (enemyWeapon === "pistol") {
+      box(localBox3d(actor,width*.42,-.16,width*.28,.58,.24,weapon,gripY-.12),alpha,1);
+      box(localBox3d(actor,width*.48,-.02,width*.16,.22,.5,"#171f22",gripY-.54),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.02,-.48],[width*.55,gripY+.02,-1.18],weapon,4.2,alpha);
+      weaponMuzzleZ = -1.18;
+    } else {
+      box(localBox3d(actor,width*.28,depth*.01,width*.52,.38,.36,weapon,gripY-.18),alpha,1);
+      box(localBox3d(actor,width*.16,depth*.27,width*.22,.5,.32,weaponLight,gripY-.19),alpha,1);
+      box(localBox3d(actor,width*.43,-.18,width*.22,.3,.72,"#161d21",gripY-.69),alpha,1);
+      box(localBox3d(actor,width*.48,depth*.03,width*.16,.22,.86,"#1a2226",gripY-.87),alpha,1);
+      box(localBox3d(actor,width*.36,-.64,width*.38,.7,.34,"#313d42",gripY-.17),alpha,1);
+      localLine3d(actor,[width*.55,gripY+.03,-.6],[width*.55,gripY+.03,muzzleZ],weapon,5.4,alpha);
+      localLine3d(actor,[width*.49,gripY+.36,depth*.01],[width*.61,gripY+.36,depth*.01],"#7f8c92",2.2,alpha);
+    }
 
-    const muzzle = localPoint3d(actor,width*.55,gripY+.03,muzzleZ);
-    if (combat.muzzleFlash) {
-      localLine3d(actor,[width*.55,gripY+.03,muzzleZ],[width*.55,gripY+.03,muzzleZ-1.05],"#ffd26c",9,alpha);
-      localLine3d(actor,[width*.55-.28,gripY+.03,muzzleZ-.48],[width*.55+.28,gripY+.03,muzzleZ-.48],"#fff3bc",6,alpha);
-      localLine3d(actor,[width*.55,gripY-.28,muzzleZ-.48],[width*.55,gripY+.32,muzzleZ-.48],"#ff9140",6,alpha);
+    const muzzle = localPoint3d(actor,width*.55,gripY+.03,weaponMuzzleZ);
+    if (combat.muzzleFlash && enemyWeapon !== "chainsaw") {
+      const flashLength = enemyWeapon === "bazooka" ? 1.55 : 1.05;
+      localLine3d(actor,[width*.55,gripY+.03,weaponMuzzleZ],[width*.55,gripY+.03,weaponMuzzleZ-flashLength],enemyWeapon === "bazooka" ? "#ff7c32" : "#ffd26c",enemyWeapon === "bazooka" ? 13 : 9,alpha);
+      localLine3d(actor,[width*.55-.28,gripY+.03,weaponMuzzleZ-.48],[width*.55+.28,gripY+.03,weaponMuzzleZ-.48],"#fff3bc",6,alpha);
+      localLine3d(actor,[width*.55,gripY-.28,weaponMuzzleZ-.48],[width*.55,gripY+.32,weaponMuzzleZ-.48],"#ff9140",6,alpha);
     }
     if (combat.tracerTarget) {
       const target = [Number(combat.tracerTarget.x), Number(combat.tracerTarget.y), Number(combat.tracerTarget.z)];
-      line3d(muzzle,target,"rgba(255,116,38,.28)",5.8,alpha*.55);
-      line3d(muzzle,target,"rgba(255,231,151,.98)",1.65,alpha*.98);
+      const tracerStyle = String(combat.tracerStyle || "rifle");
+      const glow = tracerStyle === "sniper" ? "rgba(120,211,255,.36)" : tracerStyle === "bazooka" ? "rgba(255,89,24,.42)" : "rgba(255,116,38,.28)";
+      const core = tracerStyle === "sniper" ? "rgba(197,241,255,.98)" : tracerStyle === "bazooka" ? "rgba(255,210,106,.98)" : "rgba(255,231,151,.98)";
+      line3d(muzzle,target,glow,tracerStyle === "bazooka" ? 9 : 5.8,alpha*.58);
+      line3d(muzzle,target,core,tracerStyle === "bazooka" ? 2.8 : 1.65,alpha*.98);
     }
     if (combat.killerReveal) {
       const outlineItem = {
@@ -10458,6 +10503,65 @@
     faces.forEach((face)=>drawViewmodelPolygon(face.points,face.c,"rgba(8,14,17,.22)",alpha));
   }
 
+  function drawCombatWorldEffects(time) {
+    if (!combatController?.isActive?.()) return;
+    const effects = combatController.combatEffects?.(time);
+    if (!effects) return;
+    const lerpPoint = (from,to,t) => [
+      Number(from.x) + (Number(to.x)-Number(from.x))*t,
+      Number(from.y) + (Number(to.y)-Number(from.y))*t,
+      Number(from.z) + (Number(to.z)-Number(from.z))*t,
+    ];
+    for (const effect of effects.tracers || []) {
+      const progress = clamp((time - effect.startAt) / Math.max(1,effect.duration),0,1);
+      const head = Math.min(1,progress*1.25);
+      const tail = Math.max(0,head-.32);
+      const a = lerpPoint(effect.origin,effect.target,tail);
+      const b = lerpPoint(effect.origin,effect.target,head);
+      const style = String(effect.style || "player");
+      const glow = style === "player-aim" ? "rgba(126,220,255,.42)" : "rgba(255,182,84,.38)";
+      const core = style === "player-aim" ? "rgba(220,249,255,.98)" : "rgba(255,245,196,.98)";
+      overlayLine3d(a,b,glow,6.2,1-progress*.35);
+      overlayLine3d(a,b,core,1.65,1-progress*.2);
+    }
+    for (const effect of effects.impacts || []) {
+      const p = project(Number(effect.point.x),Number(effect.point.y),Number(effect.point.z));
+      if (p[0] < -30 || p[0] > canvas.width+30 || p[1] < -30 || p[1] > canvas.height+30) continue;
+      const age = Math.max(0,time-effect.startAt);
+      const pop = clamp(age/120,0,1);
+      ctx.save();
+      ctx.globalAlpha = .72 + .22*pop;
+      ctx.fillStyle = "rgba(18,18,16,.92)";
+      ctx.strokeStyle = "rgba(172,147,111,.54)";
+      ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.arc(p[0],p[1],2.5+pop*1.2,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "rgba(0,0,0,.85)"; ctx.beginPath(); ctx.arc(p[0],p[1],1.25,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    for (const burst of effects.bloodBursts || []) {
+      const elapsed = clamp((time-burst.startAt)/Math.max(1,burst.duration),0,1);
+      for (let i=0;i<7;i++) {
+        const angle = burst.seed*.17 + i*.91;
+        const distance = (.35 + (i%3)*.14) * (elapsed*1.35);
+        const rise = (.45 + (i%2)*.18)*elapsed - 1.05*elapsed*elapsed;
+        const end = [Number(burst.point.x)+Math.cos(angle)*distance,Number(burst.point.y)+rise,Number(burst.point.z)+Math.sin(angle)*distance];
+        overlayLine3d([Number(burst.point.x),Number(burst.point.y),Number(burst.point.z)],end,"rgba(139,19,20,.9)",2.2,1-elapsed);
+      }
+    }
+    for (const pool of effects.bloodPools || []) {
+      if (time < pool.startAt) continue;
+      const grow = clamp((time-pool.startAt)/1450,0,1);
+      const radius = .35 + grow*1.35;
+      const points=[];
+      for(let i=0;i<16;i++) {
+        const angle=i/16*Math.PI*2;
+        const wobble=.82 + .18*Math.sin(angle*3+pool.seed);
+        points.push([Number(pool.x)+Math.cos(angle)*radius*wobble,Number(pool.y),Number(pool.z)+Math.sin(angle)*radius*.62*wobble]);
+      }
+      overlayPolygon(points,"rgba(92,12,14,.72)","rgba(126,17,18,.58)",1.2,.9);
+    }
+  }
+
   function drawFirstPersonCombatWeapon(time) {
     if (state.cameraMode !== "walk" || !combatController?.isActive?.()) return;
     const combat = combatController.playerRenderState?.(time);
@@ -10470,14 +10574,15 @@
     const recoil = clamp(Number(combat.recoilProgress)||0,0,1);
     const reload = clamp(Number(combat.reloadProgress)||0,0,1);
     const reloadArc = Math.sin(reload * Math.PI);
+    const aim = combat.aiming ? 1 : 0;
     const death = clamp(Number(combat.deathProgress) || 0, 0, 1);
     const deathDrop = Math.sin(Math.min(1, death * 2) * Math.PI / 2);
     const root = {
-      x: .34 + bobX + deathDrop*.18,
-      y: -.25 - bobY - reloadArc*.12 + recoil*.045 - deathDrop*.72,
-      z: 1.15 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
+      x: .34 + bobX*(1-aim*.78) - aim*.27 + deathDrop*.18,
+      y: -.25 - bobY*(1-aim*.8) - aim*.045 - reloadArc*.12 + recoil*.045 - deathDrop*.72,
+      z: 1.15 - aim*.22 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
       rotationX: -4 - recoil*6 + reloadArc*18 + deathDrop*28,
-      rotationY: -6 + bobX*40,
+      rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
       rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
     };
     const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381";
@@ -12246,6 +12351,7 @@
       renderPerformance.beginPhase?.("overlays");
     }
     drawLayoutRulers();
+    drawCombatWorldEffects(time);
     drawCombatKillerOverlay(time);
     drawFirstPersonCombatWeapon(time);
     renderPerformance.setRendererStats?.(depthRenderer.getStats?.());

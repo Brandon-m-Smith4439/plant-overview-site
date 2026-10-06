@@ -1,3 +1,13 @@
+## 0.13.57 - 2026-10-06
+
+- Added animated player bullet tracers and persistent impact marks on walls, machines, pillars, and floor surfaces where shots land.
+- Added restrained combat hit effects for enemy AI: short blood spurts on confirmed hits and delayed floor pools after defeated enemies finish falling.
+- Added right-click aim-down-sights. Rifle ADS narrows the first-person FOV and opens a dedicated circular scope/reticle overlay; handgun ADS gets a lighter zoom without the scope.
+- Reduced the rechargeable player shield from 45 to 22 and slowed recharge to keep health damage relevant.
+- Randomized enemy loadouts each round across rifle, SMG, shotgun, sniper, bazooka, pistol, and chainsaw. AI movement, preferred engagement distance, fire rate, accuracy, damage, and tracer style now follow the assigned weapon.
+- Added weapon-specific 3D enemy geometry, including a long scoped sniper rifle, launcher tube, shotgun, compact SMG/pistol, and a chainsaw. Chainsaw enemies rush the player and only deal damage at melee range.
+- Expanded Combat Mode regression coverage for impacts, blood/pools, ADS scope, reduced shield, randomized loadouts, melee behavior, and distinct enemy weapon models.
+
 ## 0.13.56 - 2026-10-06
 
 - Added a rechargeable 45-point Combat Mode shield. Incoming shots consume shield first; health only takes overflow damage, and the shield begins recharging after a short no-damage delay.

@@ -8157,3 +8157,48 @@ body.viewer-fullscreen-fallback-active {
     transform: scale(.78); transform-origin: right bottom;
   }
 }
+
+
+/* Combat viewmodel + directional damage indicators · v0.13.53 */
+.combat-first-person-weapon { display: none !important; }
+.combat-damage-directions {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.combat-damage-direction {
+  --damage-angle: 0deg;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform: translate(-50%,-50%) rotate(var(--damage-angle)) translateY(-8.2rem);
+  transform-origin: center;
+  animation: combat-direction-fade .72s ease-out forwards;
+}
+.combat-damage-direction i {
+  position: absolute;
+  left: -.75rem;
+  top: -.25rem;
+  width: 1.5rem;
+  height: .5rem;
+  border-radius: 999px 999px .2rem .2rem;
+  background: linear-gradient(180deg, rgba(255,238,220,.98), rgba(231,72,61,.92));
+  box-shadow: 0 0 .75rem rgba(232,67,56,.78), 0 0 1.5rem rgba(232,67,56,.32);
+  clip-path: polygon(50% 100%,0 0,100% 0);
+}
+.combat-damage-direction.near-miss { opacity: .58; }
+.combat-damage-direction.hit i {
+  width: 1.85rem;
+  left: -.925rem;
+  height: .65rem;
+  background: linear-gradient(180deg,#fff3e5,#ff4c3f);
+}
+@keyframes combat-direction-fade {
+  0% { opacity: 0; filter: blur(2px); }
+  12% { opacity: 1; filter: blur(0); }
+  72% { opacity: .94; }
+  100% { opacity: 0; transform: translate(-50%,-50%) rotate(var(--damage-angle)) translateY(-9.4rem) scale(.88); }
+}

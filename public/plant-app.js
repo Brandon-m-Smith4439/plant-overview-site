@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.52";
+  const APP_VERSION = "0.13.53";
 
   function editorProfileProtected() {
     try {
@@ -6671,6 +6671,7 @@
         z: modelCenter()[1] + state.panZ,
         yaw: state.yaw,
         pitch: state.pitch,
+        moving: firstPersonController?.isMoving?.() === true,
         engaged: state.cameraMode === "walk" && firstPersonController?.isPointerLocked?.() === true,
       }),
       getEnemies: combatEnemyMachines,
@@ -10109,65 +10110,219 @@
     return detailed;
   }
 
+  function combatEnemyPoseParent(machine, combat) {
+    const death = clamp(Number(combat?.deathProgress) || 0, 0, 1);
+    if (death <= .001) return machine;
+    const eased = 1 - Math.pow(1 - death, 3);
+    const direction = Number(combat?.deathDirection) < 0 ? -1 : 1;
+    const width = Math.max(.01, Number(machine.w) || 1.8);
+    const depth = Math.max(.01, Number(machine.d) || 1.8);
+    const height = Math.max(.01, Number(machine.h) || 6.5);
+    const rotationX = (Number(machine.rotationX) || 0) + direction * eased * 86;
+    const rotationY = Number(machine.rotationY ?? machine.rotation) || 0;
+    const rotationZ = Number(machine.rotationZ) || 0;
+    const baseY = Number(machine.renderY ?? machine.y) || 0;
+    const pivot = [Number(machine.x) + width / 2, baseY + eased * .28, Number(machine.z) + depth / 2];
+    const footOffset = rotateVector3([0, -height / 2, 0], rotationX, rotationY, rotationZ);
+    const center = [pivot[0] - footOffset[0], pivot[1] - footOffset[1], pivot[2] - footOffset[2]];
+    return {
+      ...machine,
+      x: center[0] - width / 2,
+      renderY: center[1] - height / 2,
+      z: center[2] - depth / 2,
+      rotationX,
+      rotationY,
+      rotation: rotationY,
+      rotationZ,
+    };
+  }
+
   function drawCombatEnemy(machine, alpha, grow, time) {
     const combat = machine.combatState || {};
-    const width = Math.max(1.4, Number(machine.w) || 1.8);
-    const depth = Math.max(1.2, Number(machine.d) || 1.8);
-    const height = Math.max(5.5, Number(machine.h) || 6.5) * grow;
-    const movement = clamp(Number(combat.movementBlend) || 0, 0, 1);
+    const actor = combatEnemyPoseParent(machine, combat);
+    const width = Math.max(1.4, Number(actor.w) || 1.8);
+    const depth = Math.max(1.2, Number(actor.d) || 1.8);
+    const height = Math.max(5.5, Number(actor.h) || 6.5) * grow;
+    const movement = combat.defeated ? 0 : clamp(Number(combat.movementBlend) || 0, 0, 1);
     const phase = Number(combat.walkPhase) || time * .008;
-    const swing = Math.sin(phase) * .62 * movement;
-    const oppositeSwing = Math.sin(phase + Math.PI) * .62 * movement;
-    const recoil = combat.recoil ? .24 : 0;
+    const stride = Math.sin(phase) * .55 * movement;
+    const liftLeft = Math.max(0, Math.sin(phase)) * .14 * movement;
+    const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * .14 * movement;
+    const recoil = combat.recoil ? .22 : 0;
     const hit = clamp(Number(combat.hitReact) || 0, 0, 1);
     const bodyColor = machine.color || "#1e7b78";
     const skin = "#e6b993";
     const pants = "#26363d";
+    const boot = "#161d21";
     const weapon = "#20282d";
+    const weaponLight = "#4b5960";
     const vest = "#e3ad28";
 
-    localLine3d(machine,[width*.38,height*.42,depth*.5],[width*.25 + swing*.12,.08,depth*.5 + swing],pants,3.2,alpha);
-    localLine3d(machine,[width*.62,height*.42,depth*.5],[width*.75 + oppositeSwing*.12,.08,depth*.5 + oppositeSwing],pants,3.2,alpha);
-    box(localBox3d(machine,width*.16,depth*.38,width*.22,depth*.25,.22,pants,.02),alpha,1);
-    box(localBox3d(machine,width*.62,depth*.38,width*.22,depth*.25,.22,pants,.02),alpha,1);
+    // Two-segment legs create an actual walking gait instead of sliding feet.
+    const hipY = height * .43;
+    const kneeY = height * .22;
+    const leftHip = [width*.38, hipY, depth*.5];
+    const rightHip = [width*.62, hipY, depth*.5];
+    const leftKnee = [width*.35, kneeY + liftLeft*.45, depth*.5 + stride*.48];
+    const rightKnee = [width*.65, kneeY + liftRight*.45, depth*.5 - stride*.48];
+    const leftFoot = [width*.3, .12 + liftLeft, depth*.5 + stride];
+    const rightFoot = [width*.7, .12 + liftRight, depth*.5 - stride];
+    localLine3d(actor,leftHip,leftKnee,pants,3.4,alpha);
+    localLine3d(actor,leftKnee,leftFoot,pants,3.1,alpha);
+    localLine3d(actor,rightHip,rightKnee,pants,3.4,alpha);
+    localLine3d(actor,rightKnee,rightFoot,pants,3.1,alpha);
+    box(localBox3d(actor,leftFoot[0]-.18,leftFoot[2]-.34,.42,.7,.2,boot,leftFoot[1]-.1),alpha,1);
+    box(localBox3d(actor,rightFoot[0]-.18,rightFoot[2]-.34,.42,.7,.2,boot,rightFoot[1]-.1),alpha,1);
 
-    box(localBox3d(machine,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
-    box(localBox3d(machine,width*.2,depth*.17,width*.6,depth*.12,height*.18,vest,height*.5),alpha*.96,1);
-    box(localBox3d(machine,width*.32,depth*.3,width*.36,depth*.38,height*.14,skin,height*.75),alpha,1);
-    box(localBox3d(machine,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
+    // Torso/head move with the same actor transform, so a defeated enemy falls around its feet and lands on the floor.
+    box(localBox3d(actor,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
+    box(localBox3d(actor,width*.2,depth*.17,width*.6,depth*.12,height*.18,vest,height*.5),alpha*.96,1);
+    box(localBox3d(actor,width*.32,depth*.3,width*.36,depth*.38,height*.14,skin,height*.75),alpha,1);
+    box(localBox3d(actor,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
 
     const shoulderY = height*.68;
     const gripY = height*.58 - recoil;
     const gripZ = depth*.12;
-    const muzzleZ = -1.55 - recoil;
+    const muzzleZ = -1.62 - recoil;
     const leftShoulder = [width*.28,shoulderY,depth*.48];
     const rightShoulder = [width*.72,shoulderY,depth*.48];
     const leftGrip = [width*.43 - hit*.08,gripY,gripZ];
     const rightGrip = [width*.62 + hit*.08,gripY+.04,gripZ-.12];
 
-    localLine3d(machine,leftShoulder,leftGrip,bodyColor,3.2,alpha);
-    localLine3d(machine,rightShoulder,rightGrip,bodyColor,3.2,alpha);
+    localLine3d(actor,leftShoulder,leftGrip,bodyColor,3.2,alpha);
+    localLine3d(actor,rightShoulder,rightGrip,bodyColor,3.2,alpha);
 
-    box(localBox3d(machine,width*.31,depth*.02,width*.48,.32,.34,weapon,gripY-.16),alpha,1);
-    box(localBox3d(machine,width*.22,depth*.28,width*.2,.44,.3,"#323d42",gripY-.18),alpha,1);
-    box(localBox3d(machine,width*.44,-.18,width*.2,.28,.7,"#161d21",gripY-.68),alpha,1);
-    localLine3d(machine,[width*.55,gripY+.04,depth*.02],[width*.55,gripY+.04,muzzleZ],weapon,5,alpha);
-    localLine3d(machine,[width*.49,gripY+.35,depth*.02],[width*.6,gripY+.35,depth*.02],"#79878d",2,alpha);
+    // 3D enemy rifle: receiver, stock, grip, magazine, handguard, barrel and sight.
+    box(localBox3d(actor,width*.28,depth*.01,width*.52,.38,.36,weapon,gripY-.18),alpha,1);
+    box(localBox3d(actor,width*.16,depth*.27,width*.22,.5,.32,weaponLight,gripY-.19),alpha,1);
+    box(localBox3d(actor,width*.43,-.18,width*.22,.3,.72,"#161d21",gripY-.69),alpha,1);
+    box(localBox3d(actor,width*.48,depth*.03,width*.16,.22,.86,"#1a2226",gripY-.87),alpha,1);
+    box(localBox3d(actor,width*.36,-.64,width*.38,.7,.34,"#313d42",gripY-.17),alpha,1);
+    localLine3d(actor,[width*.55,gripY+.03,-.6],[width*.55,gripY+.03,muzzleZ],weapon,5.4,alpha);
+    localLine3d(actor,[width*.49,gripY+.36,depth*.01],[width*.61,gripY+.36,depth*.01],"#7f8c92",2.2,alpha);
 
-    const muzzle = localPoint3d(machine,width*.55,gripY+.04,muzzleZ);
+    const muzzle = localPoint3d(actor,width*.55,gripY+.03,muzzleZ);
     if (combat.muzzleFlash) {
-      localLine3d(machine,[width*.55,gripY+.04,muzzleZ],[width*.55,gripY+.04,muzzleZ-.95],"#ffd26c",8,alpha);
-      localLine3d(machine,[width*.55-.22,gripY+.04,muzzleZ-.42],[width*.55+.22,gripY+.04,muzzleZ-.42],"#fff1b0",5,alpha);
-      localLine3d(machine,[width*.55,gripY-.22,muzzleZ-.42],[width*.55,gripY+.28,muzzleZ-.42],"#ff9b43",5,alpha);
+      localLine3d(actor,[width*.55,gripY+.03,muzzleZ],[width*.55,gripY+.03,muzzleZ-1.05],"#ffd26c",9,alpha);
+      localLine3d(actor,[width*.55-.28,gripY+.03,muzzleZ-.48],[width*.55+.28,gripY+.03,muzzleZ-.48],"#fff3bc",6,alpha);
+      localLine3d(actor,[width*.55,gripY-.28,muzzleZ-.48],[width*.55,gripY+.32,muzzleZ-.48],"#ff9140",6,alpha);
     }
     if (combat.tracerTarget) {
-      line3d(
-        muzzle,
-        [Number(combat.tracerTarget.x), Number(combat.tracerTarget.y), Number(combat.tracerTarget.z)],
-        combat.firing ? "rgba(255,216,118,.95)" : "rgba(255,187,89,.68)",
-        1.6,
-        alpha*.86,
-      );
+      const target = [Number(combat.tracerTarget.x), Number(combat.tracerTarget.y), Number(combat.tracerTarget.z)];
+      line3d(muzzle,target,"rgba(255,116,38,.28)",5.8,alpha*.55);
+      line3d(muzzle,target,"rgba(255,231,151,.98)",1.65,alpha*.98);
+    }
+  }
+
+  function viewmodelProject(point) {
+    const depth = Math.max(.18, Number(point[2]) || .18);
+    const fov = 61 * Math.PI / 180;
+    const focal = canvas.height / Math.max(.1, 2 * Math.tan(fov / 2));
+    return [canvas.width/2 + Number(point[0]) * focal / depth, canvas.height/2 - Number(point[1]) * focal / depth, depth];
+  }
+
+  function viewmodelPoint(point, root) {
+    const rotated = rotateVector3(point, root.rotationX, root.rotationY, root.rotationZ);
+    return [rotated[0] + root.x, rotated[1] + root.y, rotated[2] + root.z];
+  }
+
+  function drawViewmodelPolygon(points, fill, stroke = "rgba(255,255,255,.08)", alpha = 1) {
+    const projected = points.map(viewmodelProject);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    projected.forEach((point,index) => index ? ctx.lineTo(point[0],point[1]) : ctx.moveTo(point[0],point[1]));
+    ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(1, canvas.width/1100); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function drawViewmodelBox(spec, root, alpha = 1) {
+    const width = Number(spec.w), height = Number(spec.h), depth = Number(spec.d);
+    const center = [Number(spec.x),Number(spec.y),Number(spec.z)];
+    const local = [
+      [-width/2,-height/2,-depth/2],[width/2,-height/2,-depth/2],[width/2,-height/2,depth/2],[-width/2,-height/2,depth/2],
+      [-width/2,height/2,-depth/2],[width/2,height/2,-depth/2],[width/2,height/2,depth/2],[-width/2,height/2,depth/2],
+    ].map((offset) => {
+      const part = rotateVector3(offset, spec.rotationX||0, spec.rotationY||0, spec.rotationZ||0);
+      return viewmodelPoint([center[0]+part[0],center[1]+part[1],center[2]+part[2]],root);
+    });
+    const faces = [
+      {i:[0,1,5,4],c:shade(spec.color,-.08)},{i:[1,2,6,5],c:shade(spec.color,-.22)},
+      {i:[2,3,7,6],c:shade(spec.color,-.14)},{i:[3,0,4,7],c:shade(spec.color,-.03)},
+      {i:[3,2,1,0],c:shade(spec.color,-.28)},{i:[4,5,6,7],c:spec.color},
+    ].map((face) => ({...face,points:face.i.map((index)=>local[index])}));
+    faces.sort((a,b) => b.points.reduce((sum,p)=>sum+p[2],0) - a.points.reduce((sum,p)=>sum+p[2],0));
+    faces.forEach((face)=>drawViewmodelPolygon(face.points,face.c,"rgba(8,14,17,.22)",alpha));
+  }
+
+  function drawFirstPersonCombatWeapon(time) {
+    if (state.cameraMode !== "walk" || !combatController?.isActive?.()) return;
+    const combat = combatController.playerRenderState?.(time);
+    if (!combat) return;
+    const pixelRatio = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
+    const moving = combat.moving ? 1 : 0;
+    const walkPhase = time * (combat.sprinting ? .0155 : .0125);
+    const bobX = Math.sin(walkPhase) * .028 * moving;
+    const bobY = Math.abs(Math.cos(walkPhase)) * .035 * moving;
+    const recoil = clamp(Number(combat.recoilProgress)||0,0,1);
+    const reload = clamp(Number(combat.reloadProgress)||0,0,1);
+    const reloadArc = Math.sin(reload * Math.PI);
+    const root = {
+      x: .34 + bobX,
+      y: -.25 - bobY - reloadArc*.12 + recoil*.045,
+      z: 1.15 - recoil*.11 + reloadArc*.08,
+      rotationX: -4 - recoil*6 + reloadArc*18,
+      rotationY: -6 + bobX*40,
+      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30,
+    };
+    const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381";
+    const parts = combat.weapon === "handgun" ? [
+      {x:.02,y:.02,z:.0,w:.28,h:.16,d:.72,color:metal},
+      {x:.02,y:-.13,z:.16,w:.18,h:.32,d:.24,color:dark,rotationX:-10},
+      {x:.02,y:.11,z:-.05,w:.12,h:.04,d:.42,color:mid},
+      {x:.02,y:.0,z:-.5,w:.08,h:.08,d:.42,color:dark},
+      {x:.0,y:-.2,z:.12,w:.22,h:.17,d:.26,color:skin,rotationX:-8},
+      {x:-.18,y:-.15,z:.14,w:.17,h:.15,d:.24,color:skin,rotationZ:-12},
+    ] : [
+      {x:0,y:0,z:.02,w:.34,h:.22,d:.72,color:metal},
+      {x:0,y:.16,z:.0,w:.18,h:.07,d:.56,color:dark},
+      {x:0,y:.24,z:-.08,w:.11,h:.18,d:.12,color:mid},
+      {x:0,y:-.2,z:.09,w:.17,h:.42,d:.18,color:dark,rotationX:-12},
+      {x:0,y:-.19,z:-.08,w:.17,h:.38,d:.18,color:dark,rotationX:8},
+      {x:0,y:.01,z:-.55,w:.18,h:.16,d:.5,color:mid},
+      {x:0,y:.0,z:-1.02,w:.08,h:.08,d:.52,color:dark},
+      {x:0,y:.0,z:.62,w:.28,h:.22,d:.48,color:dark},
+      {x:.03,y:-.29,z:.1,w:.25,h:.19,d:.3,color:skin,rotationX:-8},
+      {x:-.21,y:-.12,z:-.28,w:.2,h:.18,d:.34,color:skin,rotationZ:-14},
+    ];
+    // During reload the magazine visibly drops and returns instead of the whole gun merely rotating.
+    parts.forEach((part,index) => {
+      const magazineIndex = combat.weapon === "rifle" ? 4 : -1;
+      const spec = {...part};
+      if (index === magazineIndex && reload > .05) {
+        const eject = reload < .5 ? reload*2 : (1-reload)*2;
+        spec.y -= .42 * clamp(eject,0,1);
+        spec.rotationZ = (spec.rotationZ||0) + 18*clamp(eject,0,1);
+      }
+      drawViewmodelBox(spec,root,1);
+    });
+    if (combat.muzzleFlash) {
+      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78] : [0,.01,-1.31];
+      const muzzle = viewmodelPoint(muzzleLocal,root);
+      const p=viewmodelProject(muzzle);
+      const radius=Math.max(16,42*pixelRatio);
+      ctx.save();
+      ctx.translate(p[0],p[1]);
+      ctx.globalCompositeOperation="lighter";
+      const gradient=ctx.createRadialGradient(0,0,0,0,0,radius);
+      gradient.addColorStop(0,"rgba(255,255,255,1)");
+      gradient.addColorStop(.22,"rgba(255,235,151,.95)");
+      gradient.addColorStop(.55,"rgba(255,126,45,.58)");
+      gradient.addColorStop(1,"rgba(255,73,24,0)");
+      ctx.fillStyle=gradient;ctx.beginPath();ctx.arc(0,0,radius,0,Math.PI*2);ctx.fill();
+      ctx.restore();
     }
   }
 
@@ -10826,10 +10981,9 @@
             z: Number(combatState.z),
             rotationY: Number(combatState.rotationY),
             rotation: Number(combatState.rotationY),
-            rotationZ: (Number(rendered.rotationZ) || 0)
-              + (combatState.defeated ? combatState.deathProgress * 78 : combatState.hitReact * 7),
+            rotationZ: (Number(rendered.rotationZ) || 0) + (combatState.defeated ? 0 : combatState.hitReact * 5),
             renderY: (Number(rendered.renderY ?? rendered.y) || 0)
-              + (combatState.defeated ? combatState.deathProgress * .15 : Math.abs(Math.sin(combatState.walkPhase || 0)) * .08 * combatState.movementBlend),
+              + (combatState.defeated ? 0 : Math.abs(Math.sin(combatState.walkPhase || 0)) * .08 * combatState.movementBlend),
             combatState,
           };
         }
@@ -11884,6 +12038,7 @@
       renderPerformance.beginPhase?.("overlays");
     }
     drawLayoutRulers();
+    drawFirstPersonCombatWeapon(time);
     renderPerformance.setRendererStats?.(depthRenderer.getStats?.());
     renderPerformance.endPhase?.();
     renderPerformance.recordFrame(performance.now() - frameStartedAt);

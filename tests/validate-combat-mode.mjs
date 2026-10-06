@@ -18,8 +18,11 @@ assert.ok(combat.includes("playerHealth") && combat.includes("damagePlayer"), "P
 assert.ok(combat.includes("updateEnemyMotion") && combat.includes("tryMoveEnemy"), "Enemy combat movement and obstacle-aware roaming are missing.");
 assert.ok(combat.includes("enemyRenderState") && combat.includes("movementBlend") && combat.includes("walkPhase"), "Enemy animation state is not exposed to the plant renderer.");
 assert.ok(combat.includes("muzzleFlashUntil") && combat.includes("recoilUntil") && combat.includes("tracerUntil"), "Enemy firing animation effects are incomplete.");
+assert.ok(combat.includes("showIncomingDirection") && combat.includes("combat-damage-direction"), "Incoming-fire direction indicators are not wired to enemy shots.");
+assert.ok(plant.includes("leftKnee") && plant.includes("rightKnee") && plant.includes("leftFoot") && plant.includes("rightFoot"), "Two-segment enemy walking gait is missing.");
+assert.ok(plant.includes("rgba(255,231,151,.98)") && plant.includes("tracerTarget"), "Visible two-layer enemy bullet tracers are missing.");
 assert.ok(combat.includes("hitReactUntil") && combat.includes("defeatedAt") && combat.includes("deathProgress"), "Enemy hit/death animations are incomplete.");
-assert.ok(combat.includes("combat-first-person-weapon") && combat.includes("fp-weapon-muzzle"), "The player's first-person weapon model is missing.");
+assert.ok(combat.includes("playerRenderState") && combat.includes("reloadProgress") && combat.includes("recoilProgress"), "Player weapon animation state is missing.");
 assert.ok(combat.includes("roundState") && combat.includes("Restart combat"), "Win/defeat restart flow is missing.");
 assert.ok(combat.includes("countdownEndsAt") && combat.includes("COMBAT STARTS IN"), "Two-second combat countdown is missing.");
 assert.ok(combat.includes('resetRound({ countdown: true })'), "Combat and restart must enter the countdown state before AI becomes active.");
@@ -30,13 +33,15 @@ assert.ok(plant.includes("combatEnemyMachines") && plant.includes("animatedperso
 assert.ok(plant.includes("combatOccluders"), "Plant geometry is not wired into combat line of sight.");
 assert.ok(plant.includes('kind: "pillar"'), "Pillars must be explicit combat line-of-sight obstacles.");
 assert.ok(plant.includes("drawCombatEnemy") && plant.includes("combatState"), "The plant renderer is not using live combat animation poses.");
+assert.ok(plant.includes("drawFirstPersonCombatWeapon") && plant.includes("drawViewmodelBox") && plant.includes("viewmodelProject"), "The player weapon must be real canvas-rendered 3D geometry.");
+assert.ok(plant.includes("combatEnemyPoseParent") && plant.includes("deathDirection"), "Enemy death animation must pivot the body down to the floor.");
 assert.ok(plant.includes("walkHitsStructuralColumn"), "Pillar walking collision must have a direct safety check.");
 assert.ok(plant.includes("window.createPlantCombatMode"), "Plant viewer does not create the combat controller.");
 assert.ok(page.includes('/plant-combat.js'), "Next plant page does not load the combat controller.");
 assert.ok(preview.includes('plant-combat.js'), "Standalone preview does not load the combat controller.");
 assert.ok(owner.includes('href="/?owner=combat"'), "Owner dashboard does not expose a Combat Mode launcher.");
 assert.ok(css.includes(".combat-hud") && css.includes(".combat-weapon-panel"), "Combat HUD styling is missing.");
-assert.ok(css.includes(".combat-first-person-weapon") && css.includes("combat-weapon-recoil") && css.includes("combat-muzzle-bloom"), "First-person weapon/recoil/muzzle animations are missing.");
+assert.ok(css.includes(".combat-damage-direction") && css.includes("combat-direction-fade"), "Directional incoming-fire indicators are missing.");
 assert.ok(css.includes(".combat-mode-active .first-person-hud"), "Normal first-person HUD must get out of the way during combat.");
 console.log("Owner-only combat mode checks passed.");
 

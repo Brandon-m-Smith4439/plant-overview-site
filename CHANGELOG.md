@@ -1,3 +1,14 @@
+## 0.13.53 - 2026-10-06
+
+- Replaced the previous CSS first-person gun silhouette with an actual canvas-rendered 3D viewmodel made from perspective cuboid geometry. Rifle and handgun models now sit just right of screen center with visible receiver/body, barrel, stock/grip, magazine, sights, and player hands.
+- Added first-person weapon motion driven by combat state: subtle walking bob, firing recoil, muzzle flash, and a staged reload animation where the weapon rolls and the rifle magazine visibly drops and returns.
+- Upgraded enemy walking animation to a two-segment leg gait with hips, knees, feet, and foot lift so roaming AI visibly walks instead of sliding.
+- Improved enemy 3D rifles with receiver, stock, magazine, handguard, barrel, sight, and aimed arm placement.
+- Reworked enemy death animation so the entire actor pivots around its feet and collapses toward the floor instead of rotating sideways around its center in mid-air.
+- Strengthened enemy bullet tracers with a bright tracer core and wider orange glow extending from the firing weapon muzzle to the shot destination.
+- Added directional incoming-fire indicators around the crosshair. Hits show a stronger red indicator and near misses show a softer indicator, both rotated to the shooter direction relative to the player camera.
+- Added regression coverage for the canvas 3D viewmodel, reload/recoil state, two-segment enemy walk gait, grounded death pose, tracers, and directional shot indicators.
+
 ## 0.13.52 - 2026-10-06
 
 - Upgraded owner Combat Mode enemies from static targets to live roaming AI. Every person/team-member combat enemy now has runtime position, facing, walk-cycle phase, strafing/chasing/wandering behavior, obstacle-aware movement, and per-enemy movement variation.

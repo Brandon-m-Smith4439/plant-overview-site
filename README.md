@@ -1,3 +1,7 @@
+## Version 0.13.53
+
+Version 0.13.53 upgrades Combat Mode's presentation. The owner weapon is now rendered as actual perspective 3D canvas geometry rather than a CSS silhouette, positioned just right of center with walk bob, recoil, muzzle flash, and reload motion. Enemy AI now uses a clearer two-segment walking gait, carries a more detailed 3D rifle, falls toward the floor around its feet when defeated, produces brighter world-space bullet tracers, and drives directional incoming-fire indicators around the player's crosshair.
+
 ## Version 0.13.52
 
 Version 0.13.52 turns Combat Mode people into fully animated roaming combat actors. Enemy AI now moves around the plant using obstacle-aware wandering, strafing, advancing and retreating while its runtime pose drives both rendering and hit detection. Combat people visibly walk, aim their weapons, recoil, flash at the muzzle, show shot tracers, react to hits, and fall when defeated. The owner also receives a much larger first-person rifle/handgun render with sway, recoil, reload and muzzle-flash animations. Structural pillars now have a direct first-person collision safety check in addition to the spatial index and remain explicit line-of-sight/gunfire blockers for combat AI.

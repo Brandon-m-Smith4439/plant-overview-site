@@ -139,17 +139,7 @@
         '<span>COMBAT STARTS IN</span>',
         '<strong data-combat-countdown-value>2</strong>',
       '</div>',
-      '<div class="combat-first-person-weapon rifle" data-combat-first-person-weapon aria-hidden="true">',
-        '<span class="fp-weapon-stock"></span>',
-        '<span class="fp-weapon-body"></span>',
-        '<span class="fp-weapon-rail"></span>',
-        '<span class="fp-weapon-sight"></span>',
-        '<span class="fp-weapon-barrel"></span>',
-        '<span class="fp-weapon-magazine"></span>',
-        '<span class="fp-weapon-grip"></span>',
-        '<span class="fp-weapon-hand"></span>',
-        '<span class="fp-weapon-muzzle"></span>',
-      '</div>',
+      '<div class="combat-damage-directions" data-combat-damage-directions aria-hidden="true"></div>',
       '<div class="combat-weapon-panel">',
         '<div class="combat-weapon-copy">',
           '<span data-combat-slot>PRIMARY</span>',
@@ -182,7 +172,7 @@
     const statusCopy = hud.querySelector("[data-combat-status]");
     const magazineCopy = hud.querySelector("[data-combat-mag]");
     const reserveCopy = hud.querySelector("[data-combat-reserve]");
-    const firstPersonWeapon = hud.querySelector("[data-combat-first-person-weapon]");
+    const damageDirections = hud.querySelector("[data-combat-damage-directions]");
     const hitmarker = hud.querySelector("[data-combat-hitmarker]");
     const damageVignette = hud.querySelector("[data-combat-damage]");
     const countdownOverlay = hud.querySelector("[data-combat-countdown]");
@@ -204,6 +194,10 @@
     let reloading = false;
     let reloadSerial = 0;
     let nextPlayerShotAt = 0;
+    let playerRecoilUntil = 0;
+    let playerMuzzleUntil = 0;
+    let reloadStartedAt = 0;
+    let reloadEndsAt = 0;
     let mouseHeld = false;
     let frameRequest = 0;
     let lastFrameAt = 0;
@@ -260,6 +254,7 @@
       record.recoilUntil = 0;
       record.hitReactUntil = 0;
       record.defeatedAt = 0;
+      record.deathDirection = unit > .5 ? 1 : -1;
       record.tracerUntil = 0;
       record.tracerTarget = null;
       record.strafeSign = unit > .5 ? 1 : -1;
@@ -462,6 +457,7 @@
         hitReact,
         defeated,
         deathProgress,
+        deathDirection: enemy.deathDirection || 1,
         tracerTarget: now < enemy.tracerUntil ? enemy.tracerTarget : null,
         health: enemy.health,
       };
@@ -472,11 +468,41 @@
       transientStatusUntil = performance.now() + duration;
     }
 
-    function pulseWeapon() {
-      firstPersonWeapon?.classList.remove("firing");
-      void firstPersonWeapon?.offsetWidth;
-      firstPersonWeapon?.classList.add("firing");
-      window.setTimeout(() => firstPersonWeapon?.classList.remove("firing"), 90);
+    function showIncomingDirection(enemy, player, hit = false) {
+      if (!damageDirections || !enemy || !player) return;
+      const source = enemyCenter(enemy);
+      const dx = source.x - number(player.x);
+      const dz = source.z - number(player.z);
+      const worldAngle = Math.atan2(dx, dz);
+      let relative = worldAngle - number(player.yaw);
+      while (relative > Math.PI) relative -= Math.PI * 2;
+      while (relative < -Math.PI) relative += Math.PI * 2;
+      const indicator = document.createElement("span");
+      indicator.className = "combat-damage-direction" + (hit ? " hit" : " near-miss");
+      indicator.style.setProperty("--damage-angle", (relative * 180 / Math.PI).toFixed(2) + "deg");
+      indicator.innerHTML = "<i></i>";
+      damageDirections.appendChild(indicator);
+      window.setTimeout(() => indicator.remove(), hit ? 760 : 520);
+    }
+
+    function playerRenderState(now = performance.now()) {
+      const player = options.getPlayer?.() || {};
+      const weapon = currentWeapon();
+      const recoilRemaining = Math.max(0, playerRecoilUntil - now);
+      const recoilProgress = recoilRemaining > 0 ? clamp(recoilRemaining / Math.max(1, weapon.fireInterval * .95), 0, 1) : 0;
+      const reloadDuration = Math.max(1, reloadEndsAt - reloadStartedAt);
+      const reloadProgress = reloading ? clamp((now - reloadStartedAt) / reloadDuration, 0, 1) : 0;
+      return {
+        weapon: selectedWeapon,
+        firing: now < playerRecoilUntil,
+        muzzleFlash: now < playerMuzzleUntil,
+        recoilProgress,
+        reloading,
+        reloadProgress,
+        moving: Boolean(player.moving),
+        sprinting: Boolean(player.sprinting),
+        engaged: Boolean(player.engaged),
+      };
     }
 
     function showHitmarker(defeated = false) {
@@ -506,11 +532,6 @@
       if (weaponCopy) weaponCopy.textContent = weapon.shortLabel.toUpperCase();
       if (magazineCopy) magazineCopy.textContent = String(ammo.magazine);
       if (reserveCopy) reserveCopy.textContent = String(ammo.reserve);
-      if (firstPersonWeapon) {
-        firstPersonWeapon.classList.toggle("rifle", selectedWeapon === "rifle");
-        firstPersonWeapon.classList.toggle("handgun", selectedWeapon === "handgun");
-        firstPersonWeapon.classList.toggle("reloading", reloading);
-      }
       frame.classList.toggle("combat-under-fire", lastThreatCount > 0);
       if (threatCopy) {
         threatCopy.textContent = all.length === 0
@@ -545,6 +566,8 @@
       if (!WEAPONS[next] || selectedWeapon === next || !active || roundState !== "playing") return;
       reloadSerial += 1;
       reloading = false;
+      reloadStartedAt = 0;
+      reloadEndsAt = 0;
       selectedWeapon = next;
       mouseHeld = false;
       nextPlayerShotAt = performance.now() + 120;
@@ -562,6 +585,8 @@
       }
       reloading = true;
       mouseHeld = false;
+      reloadStartedAt = performance.now();
+      reloadEndsAt = reloadStartedAt + weapon.reloadMs;
       const serial = ++reloadSerial;
       if (statusCopy) statusCopy.textContent = "Reloading...";
       syncHud();
@@ -572,6 +597,8 @@
         ammo.magazine += loaded;
         ammo.reserve -= loaded;
         reloading = false;
+        reloadStartedAt = 0;
+        reloadEndsAt = 0;
         setTransientStatus("Reloaded", 600);
         syncHud();
       }, weapon.reloadMs);
@@ -591,7 +618,8 @@
         return;
       }
       ammo.magazine -= 1;
-      pulseWeapon();
+      playerRecoilUntil = now + Math.max(90, weapon.fireInterval * .9);
+      playerMuzzleUntil = now + 68;
 
       const origin = { x: number(player.x), y: number(player.y, 5.5), z: number(player.z) };
       const direction = directionFromCamera(player);
@@ -610,11 +638,13 @@
       options.invalidate?.();
     }
 
-    function damagePlayer(amount, sourceName) {
+    function damagePlayer(amount, enemy, player) {
       if (!active || roundState !== "playing") return;
       playerHealth = Math.max(0, playerHealth - Math.max(0, number(amount)));
       showDamage();
-      if (sourceName) setTransientStatus("Incoming fire - " + sourceName, 600);
+      showIncomingDirection(enemy, player, true);
+      const sourceName = String(enemy?.machine?.name || "Enemy");
+      setTransientStatus("Incoming fire - " + sourceName, 600);
       if (playerHealth <= 0) finishRound("lost");
       syncHud();
     }
@@ -632,10 +662,12 @@
         y: playerTarget.y + (Math.random() - .5) * missScale * .32,
         z: playerTarget.z + (Math.random() - .5) * missScale,
       };
-      enemy.tracerUntil = now + 105;
+      enemy.tracerUntil = now + 180;
+      const player = options.getPlayer?.() || playerTarget;
       if (hit) {
-        damagePlayer(6 + Math.random() * 7, String(enemy.machine?.name || "Enemy"));
+        damagePlayer(6 + Math.random() * 7, enemy, player);
       } else {
+        showIncomingDirection(enemy, player, false);
         setTransientStatus("Incoming fire", 320);
       }
     }
@@ -681,8 +713,16 @@
       playerHealth = 100;
       selectedWeapon = "rifle";
       reloading = false;
+      reloadStartedAt = 0;
+      reloadEndsAt = 0;
+      playerRecoilUntil = 0;
+      playerMuzzleUntil = 0;
       reloadSerial += 1;
       nextPlayerShotAt = 0;
+      playerRecoilUntil = 0;
+      playerMuzzleUntil = 0;
+      reloadStartedAt = 0;
+      reloadEndsAt = 0;
       mouseHeld = false;
       lastThreatCount = 0;
       lastFrameAt = 0;
@@ -828,6 +868,7 @@
       reload: startReload,
       fire,
       isActive: () => active,
+      playerRenderState,
       enemyRenderState,
       isEnemyDefeated(id) {
         const record = enemies.get(String(id || ""));

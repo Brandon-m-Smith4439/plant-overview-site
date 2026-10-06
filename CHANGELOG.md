@@ -1,3 +1,13 @@
+## 0.13.51 - 2026-10-06
+
+- Moved the owner-only Combat Mode control directly beside the First person control in the plant viewer.
+- Starting Combat Mode now enters first person first, then displays a visible 2-second countdown before the combat round becomes active.
+- Player firing, weapon actions that require an active round, enemy line-of-sight attacks, and enemy damage remain locked during the countdown.
+- The countdown presents 2, 1, then FIGHT, and Combat Mode announces the live round only after the countdown completes.
+- Restarting a completed or lost round now uses the same 2-second countdown.
+- The round completes immediately when the final enemy AI is defeated, retaining the Plant secured completion screen and restart/exit choices.
+- Bumped viewer and cache tokens to v0.13.51 and expanded combat regression coverage for control placement and countdown behavior.
+
 ## 0.13.50 - 2026-10-06
 
 - Added an owner-only Combat Mode launcher to the private owner dashboard and plant viewer. Public visitors and ordinary editor sessions do not receive the combat control; a valid owner-session flag is required.

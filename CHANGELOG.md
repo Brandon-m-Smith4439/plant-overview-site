@@ -1,3 +1,13 @@
+## 0.13.50 - 2026-10-06
+
+- Added an owner-only Combat Mode launcher to the private owner dashboard and plant viewer. Public visitors and ordinary editor sessions do not receive the combat control; a valid owner-session flag is required.
+- Combat Mode reuses the existing first-person walkthrough without modifying saved plant data. Person, animated-person, and person-design machines become temporary enemy AI only for the active game session.
+- Enemy AI fires only when it has line of sight to the player. Plant machines, design collision envelopes, structural columns, and walls are reused as shot/sight occluders.
+- Added a generic primary rifle and secondary handgun with weapon switching (1/2), mouse fire, magazines, reserves, reloads (R), hit markers, health, incoming-fire feedback, victory/defeat screens, and restart.
+- Combat pauses whenever pointer lock is released, including the Esc first-person options menu, so enemies do not damage the owner while menus are open.
+- Added a dedicated combat HUD and game-styled weapon silhouettes while keeping the standard first-person HUD hidden during the owner-only game layer.
+- Added Combat Mode validation and advanced cache/version tokens to v0.13.50.
+
 ## 0.13.49 - 2026-10-06
 
 - Rebuilt the machine-label settings panel around the active physical 3D billboard system, grouping Content, Appearance, Position, Advanced motion/leader, and Necessary process-step controls into a cleaner hierarchy.

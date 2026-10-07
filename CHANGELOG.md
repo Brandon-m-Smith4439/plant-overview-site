@@ -1,3 +1,11 @@
+## 0.13.64 - 2026-10-07
+
+- Anchored Zombie Mode face skin, eyes, pupils, and wound marks to the actual custom-person **Head** component through the design-placement transform, with a corrected built-in-person fallback. This prevents the zombie face layer from appearing as a flat plate around the neck on differently scaled employee models.
+- Changed rifle ADS presentation so the physical holographic optic/glass/reticle on the 3D rifle disappears while zoomed and the rifle sits lower, leaving the dedicated screen-space holographic aiming sight completely open. Hip fire still shows the detailed optic on the rifle model.
+- Added a camera-basis-aware player muzzle calculation that moves the tracer origin with the visible weapon. Rifle ADS now moves the muzzle forward and close to center; hip fire returns it to the visible right-side barrel position. Shotgun and pistol use their own muzzle offsets.
+- Widened Zombie Mode shotgun spread to 0.09 radians and render all eight buckshot pellets as separate world-space tracers instead of collapsing the shot into one center tracer.
+- Started enemy death animation at the exact kill timestamp inside `markEnemyDefeated()` rather than waiting for a later render-state pass, eliminating intermittent standing stalls before the fall animation begins.
+
 ## 0.13.63 - 2026-10-07
 
 - Added owner-only **Zombie mode** beside Combat Mode. Zombie rounds force every person AI to use a chainsaw, apply an additional 1.55x zombie sprint multiplier on top of the already-fast chainsaw movement profile, tint/mark people with sickly zombie faces and eyes, and give the player a dedicated shotgun + pistol loadout.

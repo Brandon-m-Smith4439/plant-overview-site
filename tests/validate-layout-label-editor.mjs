@@ -31,7 +31,7 @@ assert.match(plant, /data-editor-action="reset-selected-label"/);
 assert.match(plant, /data-editor-action="refresh-labels"/);
 assert.match(plant, /data-editor-action="reset-all-labels"/);
 assert.match(plant, /data-label-field="labelAnchorXPercent"/);
-assert.match(plant, /data-label-field="labelScreenOffsetX"/);
+assert.ok(plant.includes("labelScreenOffsetX:") && !plant.includes('data-label-field="labelScreenOffsetX"'), "Legacy screen-space label offsets may remain readable in saved data but must stay out of the physical 3D label editor.");
 assert.match(plant, /data-label-field="labelAnchorYPercent"/);
 assert.match(plant, /function refreshLayoutLabels\(\{ resetCustom = false \} = \{\}\)/);
 assert.match(plant, /if \(resetCustom \|\| machine\.labelUseMachineName !== false\)/, "Updating linked labels must preserve custom label text.");

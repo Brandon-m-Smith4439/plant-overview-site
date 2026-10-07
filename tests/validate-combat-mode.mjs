@@ -199,3 +199,8 @@ assert.ok(page.includes('/combat-multiplayer.js') && multiplayer.includes("creat
 assert.ok(lobbyRoute.includes("Owner password session required") && lobbyRoute.includes('action === "create"') && lobbyRoute.includes('action === "join"') && lobbyRoute.includes('action === "event"'), "Multiplayer lobbies must require the owner-password server session and support create/join/game events.");
 assert.ok(combat.includes('data-match-type="private"') && combat.includes('data-match-type="coop"') && combat.includes('player-hit') && combat.includes('enemy-hit'), "Lobby setup must support Private Match plus shared Combat/Zombie co-op hit events.");
 assert.ok(plant.includes("drawCombatRemotePlayers") && combat.includes("remotePlayers"), "Remote lobby players must render as their selected plant characters on the layout.");
+
+// v0.13.68: combat lobby authorization must be backed by the signed owner cookie only.
+assert.ok(lobbyRoute.includes('SESSION_COOKIE = "monroe-glass-owner-server-v1"') && lobbyRoute.includes('timingSafeEqual') && lobbyRoute.includes('Owner password session required.'), "Combat multiplayer must validate the signed owner-password session cookie server-side.");
+assert.ok(!lobbyRoute.includes('x-monroe-owner-session') && !lobbyRoute.includes('clientOwner && sameOrigin'), "Combat lobby authorization must not trust a client-supplied owner marker.");
+

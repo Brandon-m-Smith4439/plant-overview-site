@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useRef, useState, useSyncExternalStore } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { OWNER_ACCESS_PATH, grantEditorAccess, hasEditorAccess, isEditorEnvironment, verifyEditorPassword } from "./editor-access";
 
@@ -53,6 +53,16 @@ export function ProtectedEditorLink({ href, children, className }: { href: strin
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  // An editor session may already be authenticated before the private owner
+  // route is opened. Re-granting while that route is active stamps the
+  // owner-session marker as well, so returning to the plant keeps owner-only
+  // controls such as Combat Mode available without asking for the password a
+  // second time.
+  useEffect(() => {
+    if (!editingAvailable || !hasEditorAccess()) return;
+    grantEditorAccess();
+  }, [editingAvailable]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!(await verifyEditorPassword(password))) { setError("That password is not correct."); return; }

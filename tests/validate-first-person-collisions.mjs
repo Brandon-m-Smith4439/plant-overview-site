@@ -206,6 +206,10 @@ const sweepContext = {
 vm.runInNewContext(`${functionSource(controller, "tryMove")}\nresult = tryMove(camera, 6, 0, 1, true);`, sweepContext);
 assert.ok(sweepContext.result.x < 2, "Swept collision must stop before a hitbox instead of tunneling through it.");
 
+
+// v0.13.71: cutting-table base footprints stay additive even when a saved custom envelope exists.
+assert.ok(plant.includes("cuttingBaseEnvelopes") && plant.includes("envelopes = [...envelopes, ...cuttingBaseEnvelopes]"), "Cutting-table base collision must not disappear when another custom envelope exists.");
+
 console.log("First-person machine envelope collision checks passed.");
 
 assert.ok(plant.includes("function walkCanOccupyHard"), "A hard pillar collision path is required.");

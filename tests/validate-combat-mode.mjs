@@ -53,6 +53,23 @@ assert.ok(css.includes(".combat-hud") && css.includes(".combat-weapon-panel"), "
 assert.ok(css.includes(".combat-damage-direction") && css.includes("combat-direction-fade"), "Directional incoming-fire indicators are missing.");
 assert.ok(css.includes(".combat-direction-callout") && css.includes(".combat-round-overlay.killer-reveal"), "Enhanced direction readability and killer reveal styling are missing.");
 assert.ok(css.includes(".combat-mode-active .first-person-hud"), "Normal first-person HUD must get out of the way during combat.");
+
+// v0.13.71: authoritative co-op enemies, smoothed allies, distance-aware ally tags/outlines, and animated glass coverage.
+assert.ok(combat.includes("exportEnemySyncState") && combat.includes("applyHostEnemySyncState") && combat.includes("coopFollower"), "Co-op clients must share the host enemy state instead of simulating separate enemies.");
+assert.ok(combat.includes('if (!multiplayer?.isHost?.()) return;') && combat.includes('event.type === "enemy-hit"'), "Only the co-op host may authoritatively apply remote enemy-hit events.");
+assert.ok(multiplayer.includes("REMOTE_STATE_INTERVAL_MS") && multiplayer.includes("setInterval(heartbeat, REMOTE_STATE_INTERVAL_MS)"), "Multiplayer heartbeat cadence must be explicit and tuned for responsive movement.");
+assert.ok(plant.includes("smoothRemotePlayerState") && plant.includes("remotePlayerVisuals"), "Remote player movement must interpolate/extrapolate network snapshots instead of teleporting between them.");
+assert.ok(plant.includes("allyOutline") && plant.includes("ALLY_OUTLINE_DISTANCE") && plant.includes("ALLY_LABEL_FADE_DISTANCE"), "Co-op allies need distance-aware name tags that transition into a blue outline.");
+const remoteLabelStart = plant.indexOf("function drawCombatRemotePlayerLabels(time)");
+const remoteLabelEnd = plant.indexOf("function drawCombatWorldEffects", remoteLabelStart);
+const remoteLabelBody = plant.slice(remoteLabelStart, remoteLabelEnd);
+assert.ok(remoteLabelStart >= 0 && remoteLabelBody.includes("const allyDistance=remotePlayerDistance(playerState);"), "Remote ally labels must compute their own distance before applying scale/fade rules.");
+const remotePlayerStart = plant.indexOf("function drawCombatRemotePlayers(time)");
+const remotePlayerEnd = plant.indexOf("function drawCombatRemotePlayerLabels(time)", remotePlayerStart);
+const remotePlayerBody = plant.slice(remotePlayerStart, remotePlayerEnd);
+assert.ok(remotePlayerStart >= 0 && remotePlayerBody.includes("allyOutline") && !remotePlayerBody.includes("allyDistance >= ALLY_LABEL_HIDE_DISTANCE"), "Far co-op allies must stay rendered as a blue outline after their name tag fades away.");
+assert.ok(plant.includes("visibleDesignComponents(design, time).flatMap") && plant.includes("combatGlassOccluders(machine, time"), "Combat glass hitboxes must follow nested animated design geometry at the current animation frame.");
+assert.ok(combat.includes('sendEvent?.("glass-shatter"') && combat.includes('event.type === "glass-shatter"'), "Co-op glass destruction must be broadcast so both players see the same shattered panes.");
 console.log("Owner-only combat mode checks passed.");
 
 const controlsStart = plant.indexOf('controls.innerHTML =');
@@ -207,7 +224,7 @@ assert.ok(combat.includes("data-match-setup") && combat.includes("data-match-dif
 assert.ok(combat.includes("function availableCharacters") && combat.includes("selectedCharacterId") && combat.includes("excludedCharacters"), "Players must be able to select a plant person and selected characters must be removed from the AI pool.");
 assert.ok(combat.includes("getEnemyHeadVolume") && plant.includes("function combatHeadVolume") && plant.includes('/^head$/i') && combat.includes("Stop the body volume below the neck"), "Headshots must follow the actual rendered Head component instead of the neck/body overlap.");
 assert.ok(plant.includes("combatGlassOccluders") && combat.includes("pushGlassShatter") && combat.includes("glassShards") && plant.includes("isGlassShattered"), "Shooting machine glass must create shatter/explosion effects and remove broken glass from rendering/collision.");
-assert.ok(page.includes('/combat-multiplayer.js') && multiplayer.includes("createCombatMultiplayer") && multiplayer.includes('setInterval(heartbeat, 180)'), "The plant must load the multiplayer lobby client and synchronize player state continuously.");
+assert.ok(page.includes('/combat-multiplayer.js') && multiplayer.includes("createCombatMultiplayer") && multiplayer.includes("setInterval(heartbeat, REMOTE_STATE_INTERVAL_MS)"), "The plant must load the multiplayer lobby client and synchronize player state continuously.");
 assert.ok(lobbyRoute.includes("Owner password session required") && lobbyRoute.includes('action === "create"') && lobbyRoute.includes('action === "join"') && lobbyRoute.includes('action === "event"'), "Multiplayer lobbies must require the owner-password server session and support create/join/game events.");
 assert.ok(combat.includes('data-match-type="private"') && combat.includes('data-match-type="coop"') && combat.includes('player-hit') && combat.includes('enemy-hit'), "Lobby setup must support Private Match plus shared Combat/Zombie co-op hit events.");
 assert.ok(plant.includes("drawCombatRemotePlayers") && combat.includes("remotePlayers"), "Remote lobby players must render as their selected plant characters on the layout.");

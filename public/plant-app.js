@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.70";
+  const APP_VERSION = "0.13.71";
 
   function editorProfileProtected() {
     try {
@@ -2374,15 +2374,17 @@
     const design = machine.designId ? designLibrary[machine.designId] : null;
     let envelopes = designCollisionEnvelopes(design);
     if (!design) return [machine];
-    if (!envelopes.length) {
-      const identity = `${machine.type || ""} ${machine.name || ""} ${design.machineType || ""} ${design.name || ""}`;
-      if (/cutting/i.test(identity)) {
-        // A cutting-line design is two separate physical tables plus a console.
-        // Treating the complete design base as one huge collision box blocked the
-        // service gap between the tables and made its envelope feel offset/oversized.
-        envelopes = (design.components || []).filter((component) => (
-          component?.type === "box" && /(?:cutting table base|operator console|left-base|right-base|console)/i.test(`${component.name || ""} ${component.id || ""}`)
-        )).map((component) => ({ x:component.x, y:component.y, z:component.z, w:component.w, h:component.h, d:component.d, automatic:true }));
+    const identity = `${machine.type || ""} ${machine.name || ""} ${design.machineType || ""} ${design.name || ""}`;
+    if (/cutting/i.test(identity)) {
+      // Cutting-table base footprints are additive to saved custom envelopes while preserving the service gap between the tables.
+      // Previously this fallback only ran when the design had zero envelopes,
+      // so one unrelated/incomplete blue envelope made the table itself walk-through.
+      const cuttingBaseEnvelopes = flattenDesignComponents(design.components || []).filter((component) => (
+        component?.type === "box" && /(?:cutting table base|operator console|left-base|right-base|console)/i.test(`${component.name || ""} ${component.id || ""}`)
+      )).map((component) => ({ x:component.x, y:component.y, z:component.z, w:component.w, h:component.h, d:component.d, automatic:true, cuttingBase:true }));
+      envelopes = [...envelopes, ...cuttingBaseEnvelopes];
+      if (!cuttingBaseEnvelopes.length && design.base) {
+        envelopes.push({ x:0,y:0,z:0,w:Number(design.base.w)||Number(machine.w),h:Number(design.base.h)||Number(machine.h),d:Number(design.base.d)||Number(machine.d),automatic:true,cuttingBase:true });
       }
     }
     if (!envelopes.length) return [machine];
@@ -2609,11 +2611,18 @@
       || (opacity < .82 && String(component.color || "").toLowerCase() === "#8fc6d4");
   }
 
-  function combatGlassOccluders(machine) {
-    const design=machine?.designId ? designLibrary[machine.designId] : null;
+  function combatGlassOccluders(machine, time = performance.now()) {
+    const renderedMachine = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
+    const design=renderedMachine?.designId ? designLibrary[renderedMachine.designId] : null;
     if (!design) return [];
-    return (design.components || []).filter((component) => ["box", "glassPanel"].includes(component.type) && combatGlassComponent(component)).map((component) => {
-      const spec=scaledComponentBox(machine,component,design);
+    // Use the exact animated/nested parts that are visible this frame. This makes
+    // glass stay shootable while groups, carts, bridges, racks, and machine parts
+    // move through timeline/legacy animation states.
+    const glassParts = visibleDesignComponents(design, time).flatMap((component) => (
+      component?.type === "group" ? flattenDesignComponents([component]) : [component]
+    ));
+    return glassParts.filter((component) => ["box", "glassPanel"].includes(component.type) && combatGlassComponent(component)).map((component) => {
+      const spec=scaledComponentBox(renderedMachine,component,design);
       const angle=angleRadians(spec);
       const halfWidth=Math.max(.025,Number(spec.w)/2), halfDepth=Math.max(.025,Number(spec.d)/2);
       const extentX=Math.abs(Math.cos(angle))*halfWidth+Math.abs(Math.sin(angle))*halfDepth;
@@ -2661,9 +2670,13 @@
         d: Math.max(.05, Number(wall.d) || .05),
       });
     });
+    const combatTime=performance.now();
+    machines.forEach((machine) => {
+      if (machine.visible === false || combatEnemyMachine(machine) || stageAlpha(machine.reveal,machine.retire) <= .08) return;
+      combatGlassOccluders(machine, combatTime).forEach((glass) => entries.push(glass));
+    });
     walkCollisionCandidates().forEach((machine) => {
       if (combatEnemyMachine(machine)) return;
-      combatGlassOccluders(machine).forEach((glass) => entries.push(glass));
       walkHitboxesForMachine(machine).forEach((hitbox) => {
         const angle = angleRadians(hitbox);
         const halfWidth = Math.max(.05, Number(hitbox.w) / 2);
@@ -10706,6 +10719,12 @@
       line3d(muzzle,target,glow,(tracerStyle === "bazooka" || tracerStyle === "rocket") ? 9 : 5.8,alpha*.58);
       line3d(muzzle,target,core,(tracerStyle === "bazooka" || tracerStyle === "rocket") ? 2.8 : 1.65,alpha*.98);
     }
+    if (combat.allyOutline) {
+      const outlineItem={...actor,x:Number(actor.x)-.11,y:Number(actor.renderY ?? actor.y)-.06,z:Number(actor.z)-.11,w:width+.22,d:depth+.22,h:height+.28};
+      const vertices=boxVertices3d(outlineItem,1);
+      const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+      edges.forEach(([from,to]) => overlayLine3d(vertices[from],vertices[to],"rgba(72,183,255,.96)",3.4,alpha*.95));
+    }
     if (combat.killerReveal) {
       const outlineItem = {
         ...actor,
@@ -10858,13 +10877,53 @@
     faces.forEach((face)=>drawViewmodelPolygon(face.points,face.c,"rgba(8,14,17,.22)",alpha));
   }
 
+  const remotePlayerVisuals = new Map();
+  const ALLY_LABEL_FADE_DISTANCE = 78;
+  const ALLY_OUTLINE_DISTANCE = 118;
+  const ALLY_LABEL_HIDE_DISTANCE = 150;
+
+  function smoothRemotePlayerState(player, time) {
+    const target=player?.state || {};
+    const id=String(player?.id || "remote");
+    let visual=remotePlayerVisuals.get(id);
+    const targetX=Number(target.x), targetZ=Number(target.z), targetYaw=Number(target.yaw)||0;
+    if (!Number.isFinite(targetX) || !Number.isFinite(targetZ)) return target;
+    if (!visual) {
+      visual={x:targetX,z:targetZ,yaw:targetYaw,targetX,targetZ,targetYaw,lastTargetAt:time,lastFrameAt:time,vx:Number(target.vx)||0,vz:Number(target.vz)||0};
+      remotePlayerVisuals.set(id,visual);
+    }
+    if (targetX !== visual.targetX || targetZ !== visual.targetZ || targetYaw !== visual.targetYaw) {
+      const elapsed=Math.max(.016,(time-visual.lastTargetAt)/1000);
+      visual.vx=Number.isFinite(Number(target.vx)) ? Number(target.vx) : clamp((targetX-visual.targetX)/elapsed,-28,28);
+      visual.vz=Number.isFinite(Number(target.vz)) ? Number(target.vz) : clamp((targetZ-visual.targetZ)/elapsed,-28,28);
+      visual.targetX=targetX; visual.targetZ=targetZ; visual.targetYaw=targetYaw; visual.lastTargetAt=time;
+    }
+    const frameDt=clamp((time-visual.lastFrameAt)/1000,0,0.08);
+    visual.lastFrameAt=time;
+    const age=clamp((time-visual.lastTargetAt)/1000,0,.24);
+    const predict=target.moving === false ? 0 : age;
+    const desiredX=visual.targetX+visual.vx*predict, desiredZ=visual.targetZ+visual.vz*predict;
+    const gap=Math.hypot(desiredX-visual.x,desiredZ-visual.z);
+    const blend=gap>16 ? 1 : 1-Math.exp(-Math.max(.001,frameDt)*13);
+    visual.x+=(desiredX-visual.x)*blend; visual.z+=(desiredZ-visual.z)*blend;
+    let yawDelta=((visual.targetYaw-visual.yaw+Math.PI)%(Math.PI*2))-Math.PI;
+    visual.yaw+=yawDelta*Math.min(1,blend*1.35);
+    return {...target,x:visual.x,z:visual.z,yaw:visual.yaw};
+  }
+
+  function remotePlayerDistance(playerState) {
+    const cameraX=modelCenter()[0]+state.panX, cameraZ=modelCenter()[1]+state.panZ;
+    return Math.hypot(Number(playerState.x)-cameraX,Number(playerState.z)-cameraZ);
+  }
+
   function drawCombatRemotePlayers(time) {
     if (!combatController?.isActive?.()) return;
     const lobby=combatController.multiplayerLobby?.();
     if (!lobby || lobby.status !== "started") return;
     for (const player of combatController.remotePlayers?.() || []) {
-      const playerState=player.state || {};
+      const playerState=smoothRemotePlayerState(player,time);
       if (!Number.isFinite(Number(playerState.x)) || !Number.isFinite(Number(playerState.z))) continue;
+      const allyDistance=remotePlayerDistance(playerState);
       const template=machines.find((machine,index) => String(machine.instanceId || machine.id || machine.name || `enemy-${index}`) === String(player.characterId || ""))
         || combatBaseEnemyMachines()[0];
       if (!template) continue;
@@ -10885,33 +10944,39 @@
           weaponKey:playerState.weapon === "handgun" ? "pistol" : (playerState.weapon || "rifle"),
           shotProgress:0,reloadProgress:0,firing:false,muzzleFlash:false,recoil:false,hitReact:0,defeated:playerState.alive === false,deathProgress:playerState.alive === false ? 1 : 0,
           health:Number(playerState.health ?? 100),
+          allyOutline:lobby.config?.matchType === "coop" && allyDistance >= ALLY_OUTLINE_DISTANCE,
         },
       };
       drawCombatEnemy(rendered,1,1,time);
     }
   }
 
-  function drawCombatRemotePlayerLabels() {
+  function drawCombatRemotePlayerLabels(time) {
     if (!combatController?.isActive?.()) return;
     const lobby=combatController.multiplayerLobby?.();
     if (!lobby || lobby.status !== "started") return;
     const pixelScale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
     for (const player of combatController.remotePlayers?.() || []) {
-      const playerState=player.state || {};
+      const playerState=smoothRemotePlayerState(player,time);
       if (!Number.isFinite(Number(playerState.x)) || !Number.isFinite(Number(playerState.z))) continue;
+      const allyDistance=remotePlayerDistance(playerState);
+      if (lobby.config?.matchType === "coop" && allyDistance >= ALLY_LABEL_HIDE_DISTANCE) continue;
       const template=machines.find((machine,index) => String(machine.instanceId || machine.id || machine.name || `enemy-${index}`) === String(player.characterId || ""));
       const characterName=String(template?.name || template?.short || "Plant character");
       const point=project(Number(playerState.x),Number(playerState.y || 5.5)+1.25,Number(playerState.z));
       if (point[0] < -260 || point[0] > canvas.width+260 || point[1] < -120 || point[1] > canvas.height+120) continue;
       const playerName=String(player.name || "Player");
+      const distanceScale=lobby.config?.matchType === "coop" ? clamp(1-(Math.max(0,allyDistance-28)/122)*.5,.5,1) : 1;
+      const labelAlpha=lobby.config?.matchType === "coop" ? clamp((ALLY_LABEL_HIDE_DISTANCE-allyDistance)/(ALLY_LABEL_HIDE_DISTANCE-ALLY_LABEL_FADE_DISTANCE),0,1) : 1;
       ctx.save();
-      ctx.font=`800 ${Math.max(12,14*pixelScale)}px "Segoe UI", sans-serif`;
+      ctx.globalAlpha=labelAlpha;
+      ctx.font=`800 ${Math.max(9,14*pixelScale*distanceScale)}px "Segoe UI", sans-serif`;
       const primaryWidth=ctx.measureText(playerName).width;
-      ctx.font=`650 ${Math.max(9,10.5*pixelScale)}px "Segoe UI", sans-serif`;
+      ctx.font=`650 ${Math.max(7,10.5*pixelScale*distanceScale)}px "Segoe UI", sans-serif`;
       const secondary=`${characterName}`;
       const secondaryWidth=ctx.measureText(secondary).width;
-      const width=Math.max(primaryWidth,secondaryWidth)+24*pixelScale;
-      const height=42*pixelScale;
+      const width=Math.max(primaryWidth,secondaryWidth)+24*pixelScale*distanceScale;
+      const height=42*pixelScale*distanceScale;
       const left=point[0]-width/2, top=point[1]-height/2;
       ctx.fillStyle="rgba(5,18,24,.88)";
       ctx.strokeStyle=lobby.config?.matchType === "private" ? "rgba(255,103,91,.9)" : "rgba(112,217,255,.88)";
@@ -10922,9 +10987,9 @@
       else { ctx.fillRect(left,top,width,height);ctx.strokeRect(left,top,width,height); }
       ctx.shadowBlur=0;
       ctx.textAlign="center";ctx.textBaseline="middle";
-      ctx.fillStyle="#f6fcff";ctx.font=`800 ${Math.max(12,14*pixelScale)}px "Segoe UI", sans-serif`;
+      ctx.fillStyle="#f6fcff";ctx.font=`800 ${Math.max(9,14*pixelScale*distanceScale)}px "Segoe UI", sans-serif`;
       ctx.fillText(playerName,point[0],point[1]-7*pixelScale);
-      ctx.fillStyle="rgba(205,231,241,.72)";ctx.font=`650 ${Math.max(9,10.5*pixelScale)}px "Segoe UI", sans-serif`;
+      ctx.fillStyle="rgba(205,231,241,.72)";ctx.font=`650 ${Math.max(7,10.5*pixelScale*distanceScale)}px "Segoe UI", sans-serif`;
       ctx.fillText(characterName,point[0],point[1]+10*pixelScale);
       ctx.restore();
     }
@@ -11794,6 +11859,32 @@
     );
   }
 
+  function visibilitySensitiveMachine(machine) {
+    const design=machine?.designId ? designLibrary[machine.designId] : null;
+    const identity=`${machine?.type || ""} ${machine?.name || ""} ${design?.machineType || ""} ${design?.name || ""}`.toLowerCase();
+    return /crane|cutting|barefoot|furnace|temper/.test(identity);
+  }
+
+  function firstPersonVisibilityBounds(machine, rendered, time) {
+    if (state.cameraMode !== "walk" || !visibilitySensitiveMachine(machine)) return rendered;
+    const design=rendered?.designId ? designLibrary[rendered.designId] : null;
+    if (!design) return rendered;
+    const components=visibleDesignComponents(design,time).flatMap((component) => (
+      component?.type === "group" ? flattenDesignComponents([component]) : [component]
+    ));
+    const points=[];
+    for (const component of components) {
+      if (component?.visible === false) continue;
+      for (const point of designComponentPoints(component)) points.push(designLocalPointToWorld(rendered,design,point,1));
+    }
+    if (!points.length) return rendered;
+    const minX=Math.min(...points.map((point)=>point[0])), maxX=Math.max(...points.map((point)=>point[0]));
+    const minY=Math.min(...points.map((point)=>point[1])), maxY=Math.max(...points.map((point)=>point[1]));
+    const minZ=Math.min(...points.map((point)=>point[2])), maxZ=Math.max(...points.map((point)=>point[2]));
+    const padding=1.5;
+    return {x:minX-padding,y:minY-padding,z:minZ-padding,w:maxX-minX+padding*2,h:maxY-minY+padding*2,d:maxZ-minZ+padding*2};
+  }
+
   function projectedBoxVisible(item, margin = 180) {
     if (state.cameraMode === "walk") {
       // Bound first-person work by distance before projecting eight corners.
@@ -11884,7 +11975,7 @@
     // Moving machines can enter the view from outside their saved index cell.
     const sourceMachines = new Set(indexedMachines);
     machines.forEach((machine) => {
-      if (machineHasLayoutMotion(machine) || (combatController?.isActive?.() && combatEnemyMachine(machine))) sourceMachines.add(machine);
+      if (machineHasLayoutMotion(machine) || (state.cameraMode === "walk" && visibilitySensitiveMachine(machine)) || (combatController?.isActive?.() && combatEnemyMachine(machine))) sourceMachines.add(machine);
     });
     if (combatController?.isActive?.()) combatEnemyMachines().forEach((machine) => sourceMachines.add(machine));
     for (const machine of sourceMachines) {
@@ -11912,9 +12003,10 @@
           };
         }
       }
+      const visibilityBounds = state.cameraMode === "walk" ? firstPersonVisibilityBounds(machine, rendered, time) : rendered;
       let walkDistanceAlpha = 1;
       if (state.cameraMode === "walk") {
-        const distance = firstPersonDistanceToBox(rendered);
+        const distance = firstPersonDistanceToBox(visibilityBounds);
         const drawDistance = renderPerformance.walkDrawDistance();
         const wasVisible = walkVisibleMachineIds.has(machine.instanceId);
         const visibilityLimit = drawDistance + (wasVisible ? WALK_DRAW_HYSTERESIS : WALK_DRAW_HYSTERESIS * .45);
@@ -11928,7 +12020,7 @@
         const fadeProgress = clamp((distance - fadeStart) / (WALK_DRAW_HYSTERESIS * 2), 0, 1);
         walkDistanceAlpha = 1 - fadeProgress * fadeProgress * (3 - 2 * fadeProgress);
       }
-      if (!projectedBoxVisible(rendered)) continue;
+      if (!projectedBoxVisible(visibilityBounds)) continue;
       entries.push({
         kind: "machine",
         machine,

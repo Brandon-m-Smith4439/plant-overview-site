@@ -34,7 +34,7 @@ assert.ok(plant.includes("renderPerformance.detailPixelThreshold"), "Small custo
 assert.ok(plant.includes("renderPerformance.maxDetailedParts") && controller.includes("maxDetailedParts"), "Nested custom-machine detail needs a bounded per-frame part budget.");
 assert.ok(plant.includes("shouldDrawDetailedMachine") && controller.includes("maxDetailedMachines"), "Whole-plant rendering needs a zoom-aware machine-detail budget.");
 assert.ok(plant.includes("const cellSize = 40") && plant.includes("const tested = new Set()"), "Layout overlap detection needs a spatial broad phase instead of all-pairs checks.");
-assert.ok(plant.includes("const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;") && plant.includes("if (!projectedBoxVisible(rendered)) continue;"), "Static off-screen machines must be rejected without animation cloning, and moving machines must use current bounds.");
+assert.ok(plant.includes("const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;") && plant.includes("if (!projectedBoxVisible(visibilityBounds)) continue;"), "Static off-screen machines must be rejected without animation cloning, and moving machines must use current bounds.");
 assert.ok(plant.includes("projectedBoundsCache") && plant.includes("projectedBoxMetrics"), "Repeated object-bound projections must be cached within each rendered frame.");
 assert.match(plant, /shouldRender\([\s\S]*?\)\) return;\s*projectedBoundsCache = new WeakMap\(\);/, "Skipped frames must not allocate a new projection cache.");
 assert.ok(plant.includes("staticVisibleDesignComponentsCache") && plant.includes("animatedVisibleDesignComponentsCache") && plant.includes("designAnimationPresenceCache"), "Static designs, animated frame results, and animation presence must be cached.");
@@ -55,4 +55,8 @@ assert.doesNotMatch(controller, /Auto targets 60 FPS and lowers render resolutio
 assert.ok(controller.includes("adaptive: true") && plant.includes("renderPerformance.invalidate()"), "Adaptive detail changes must invalidate the plant scene.");
 assert.ok(page.includes('/render-performance.js'), "Plant page does not load the performance controller.");
 assert.ok(studioPage.includes('/render-performance.js'), "Designer page does not load the performance controller.");
+
+// v0.13.71: large/animated plant machines use their current design bounds for first-person visibility.
+assert.ok(plant.includes("firstPersonVisibilityBounds") && plant.includes("visibilitySensitiveMachine") && plant.includes("projectedBoxVisible(visibilityBounds)"), "First-person culling must use conservative current design bounds for cranes, cutting tables, and furnaces.");
+
 console.log("Adaptive rendering, culling, bounded shadows, and WebGL reuse checks passed.");

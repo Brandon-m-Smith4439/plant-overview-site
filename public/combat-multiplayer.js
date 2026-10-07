@@ -4,6 +4,7 @@
   const API = "/api/combat-lobby";
   const CLIENT_KEY = "monroe-glass-combat-player-v1";
   const NAME_KEY = "monroe-glass-combat-player-name-v1";
+  const REMOTE_STATE_INTERVAL_MS = 120;
   const clean = (value, max = 48) => String(value || "").replace(/[<>\u0000-\u001f]/g, "").trim().slice(0, max);
 
   function playerId() {
@@ -39,6 +40,7 @@
     let lobby = null;
     let heartbeatTimer = 0;
     let heartbeatBusy = false;
+    let lastHeartbeatAt = 0;
     let lastEventIds = new Set();
     let lastStatus = "";
     let destroyed = false;
@@ -146,6 +148,9 @@
 
     async function heartbeat() {
       if (!lobby || heartbeatBusy || destroyed) return;
+      const now = performance.now();
+      if (now - lastHeartbeatAt < REMOTE_STATE_INTERVAL_MS) return;
+      lastHeartbeatAt = now;
       heartbeatBusy = true;
       try {
         const local = localPlayer();
@@ -164,7 +169,7 @@
 
     function startHeartbeat() {
       if (heartbeatTimer) return;
-      heartbeatTimer = window.setInterval(heartbeat, 180);
+      heartbeatTimer = window.setInterval(heartbeat, REMOTE_STATE_INTERVAL_MS);
       heartbeat();
     }
     function stopHeartbeat() {

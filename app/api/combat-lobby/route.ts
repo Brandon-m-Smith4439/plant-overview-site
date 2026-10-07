@@ -9,10 +9,17 @@ const LOBBY_EXPIRE_MS = 2 * 60 * 60 * 1000;
 const MAX_PLAYERS = 6;
 const MAX_EVENTS = 120;
 
+type EnemySyncState = {
+  id: string; x: number; z: number; rotationY: number; health: number; weaponKey: string;
+  movementBlend: number; walkPhase: number; synthetic?: boolean; defeatedAt?: number;
+  machine?: { name?: string; w?: number; d?: number; h?: number; y?: number };
+};
+
 type PlayerState = {
-  x?: number; y?: number; z?: number; yaw?: number; pitch?: number;
+  x?: number; y?: number; z?: number; yaw?: number; pitch?: number; vx?: number; vz?: number;
   health?: number; shield?: number; moving?: boolean; weapon?: string;
   alive?: boolean; kills?: number; headshots?: number;
+  enemies?: EnemySyncState[]; glass?: string[];
 };
 
 type LobbyPlayer = {
@@ -55,6 +62,9 @@ type Lobby = {
 type Store = { version: 1; lobbies: Record<string, Lobby> };
 
 let writeChain: Promise<unknown> = Promise.resolve();
+let cachedStore: Store | null = null;
+let cachedStoreLoad: Promise<Store> | null = null;
+let deferredPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
 function lobbyPath() {
   return process.env.PLANT_COMBAT_LOBBY_PATH || "/data/combat-lobbies.json";
@@ -106,11 +116,33 @@ function finite(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function sanitizeEnemyState(value: unknown): EnemySyncState | null {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  if (!source) return null;
+  const id = cleanId(source.id, 120);
+  if (!id) return null;
+  const machineSource = source.machine && typeof source.machine === "object" ? source.machine as Record<string, unknown> : {};
+  return {
+    id, x: finite(source.x), z: finite(source.z), rotationY: finite(source.rotationY),
+    health: Math.max(0, Math.min(500, finite(source.health, 100))),
+    weaponKey: cleanText(source.weaponKey, 24) || "rifle",
+    movementBlend: Math.max(0, Math.min(1, finite(source.movementBlend, .08))),
+    walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), defeatedAt: Math.max(0, finite(source.defeatedAt)),
+    machine: {
+      name: cleanText(machineSource.name, 48), w: Math.max(.4, Math.min(20, finite(machineSource.w, 1.8))),
+      d: Math.max(.4, Math.min(20, finite(machineSource.d, 1.8))), h: Math.max(1, Math.min(20, finite(machineSource.h, 6.5))),
+      y: finite(machineSource.y),
+    },
+  };
+}
+
 function sanitizeState(value: unknown): PlayerState {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const enemies = Array.isArray(source.enemies) ? source.enemies.map(sanitizeEnemyState).filter(Boolean).slice(0, 80) as EnemySyncState[] : undefined;
+  const glass = Array.isArray(source.glass) ? source.glass.map((item) => cleanId(item, 180)).filter(Boolean).slice(0, 240) : undefined;
   return {
     x: finite(source.x), y: finite(source.y), z: finite(source.z),
-    yaw: finite(source.yaw), pitch: finite(source.pitch),
+    yaw: finite(source.yaw), pitch: finite(source.pitch), vx: finite(source.vx), vz: finite(source.vz),
     health: Math.max(0, Math.min(100, finite(source.health, 100))),
     shield: Math.max(0, Math.min(100, finite(source.shield, 0))),
     moving: Boolean(source.moving),
@@ -118,6 +150,8 @@ function sanitizeState(value: unknown): PlayerState {
     alive: source.alive !== false,
     kills: Math.max(0, Math.floor(finite(source.kills))),
     headshots: Math.max(0, Math.floor(finite(source.headshots))),
+    ...(enemies ? { enemies } : {}),
+    ...(glass ? { glass } : {}),
   };
 }
 
@@ -134,14 +168,21 @@ function sanitizeConfig(value: unknown, fallback?: Lobby["config"]): Lobby["conf
 }
 
 async function readStore(): Promise<Store> {
-  try {
-    const parsed = JSON.parse(await readFile(lobbyPath(), "utf8"));
-    if (parsed?.version === 1 && parsed?.lobbies && typeof parsed.lobbies === "object") return parsed as Store;
-  } catch (error: unknown) {
-    const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code || "") : "";
-    if (code !== "ENOENT") console.error("combat lobby read failed", error);
-  }
-  return { version: 1, lobbies: {} };
+  if (cachedStore) return cachedStore;
+  if (cachedStoreLoad) return cachedStoreLoad;
+  cachedStoreLoad = (async () => {
+    try {
+      const parsed = JSON.parse(await readFile(lobbyPath(), "utf8"));
+      if (parsed?.version === 1 && parsed?.lobbies && typeof parsed.lobbies === "object") return parsed as Store;
+    } catch (error: unknown) {
+      const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code || "") : "";
+      if (code !== "ENOENT") console.error("combat lobby read failed", error);
+    }
+    return { version: 1, lobbies: {} } as Store;
+  })();
+  cachedStore = await cachedStoreLoad;
+  cachedStoreLoad = null;
+  return cachedStore;
 }
 
 function prune(store: Store, now = Date.now()) {
@@ -160,6 +201,7 @@ function prune(store: Store, now = Date.now()) {
 }
 
 async function saveStore(store: Store) {
+  cachedStore = store;
   const target = lobbyPath();
   await mkdir(dirname(target), { recursive: true });
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
@@ -167,7 +209,16 @@ async function saveStore(store: Store) {
   await rename(temporary, target);
 }
 
-async function mutate<T>(operation: (store: Store) => Promise<T> | T): Promise<T> {
+function scheduleDeferredPersist(store: Store) {
+  cachedStore = store;
+  if (deferredPersistTimer) return;
+  deferredPersistTimer = setTimeout(() => {
+    deferredPersistTimer = null;
+    writeChain = writeChain.catch(() => {}).then(() => saveStore(store)).catch((error) => console.error("combat lobby deferred save failed", error));
+  }, 650);
+}
+
+async function mutate<T>(operation: (store: Store) => Promise<T> | T, persistImmediately = true): Promise<T> {
   let resolveValue!: (value: T) => void;
   let rejectValue!: (error: unknown) => void;
   const result = new Promise<T>((resolve, reject) => { resolveValue = resolve; rejectValue = reject; });
@@ -176,7 +227,8 @@ async function mutate<T>(operation: (store: Store) => Promise<T> | T): Promise<T
       const store = await readStore();
       prune(store);
       const value = await operation(store);
-      await saveStore(store);
+      if (persistImmediately) await saveStore(store);
+      else scheduleDeferredPersist(store);
       resolveValue(value);
     } catch (error) { rejectValue(error); }
   });
@@ -323,7 +375,7 @@ export async function POST(request: Request) {
         return { ok: true, lobby: store.lobbies[code] ? publicLobby(lobby) : null };
       }
       return { ok: false, status: 400, error: "Unknown lobby action." };
-    });
+    }, action !== "heartbeat");
     const status = typeof response === "object" && response && "status" in response ? Number((response as { status?: unknown }).status || 200) : 200;
     return Response.json(response, { status, headers: { "cache-control": "no-store" } });
   } catch (error) {

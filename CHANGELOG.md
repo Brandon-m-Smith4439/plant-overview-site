@@ -1,3 +1,15 @@
+## 0.13.71 - 2026-10-07
+
+- Made co-op enemies host-authoritative. The host publishes enemy IDs, positions, facing, health, loadouts, movement/death state, synthetic zombie state, and shattered-glass IDs; follower clients consume that snapshot instead of independently running enemy AI, so both players see and shoot the same opponents.
+- Made remote-player movement smoother by sending velocity with player state and interpolating/extrapolating snapshots client-side. Reduced transport latency with an explicit 120 ms heartbeat cadence plus an in-memory lobby heartbeat path with deferred persistence instead of serialized disk I/O on every movement update.
+- Made co-op ally identity distance-aware: nearby player/character name tags shrink and fade as distance grows, then the teammate remains identifiable through a blue 3D outline at longer range.
+- Broadcast co-op `glass-shatter` events so a pane destroyed by either player or host AI stays destroyed for both players.
+- Rebuilt combat glass discovery around the live animation frame. Nested `box`/`glassPanel` geometry is flattened from `visibleDesignComponents(...)` after animation transforms and all visible machines are scanned, covering animated glass plus rack/cart/shipping glass instead of only static top-level walk-collision candidates.
+- Hardened first-person culling for cranes, cutting equipment, furnaces/tempering assets, and other large animated machines by testing conservative current-design world bounds rather than only the placed machine's coarse box. This prevents still-visible geometry from disappearing while looking up/down or across extended machine parts.
+- Restored cutting-table collision by always adding the cutting design's physical base components to walk hitboxes, even when other custom collision envelopes exist, while preserving the intentional service gap between table sections.
+- Added/updated regression coverage for authoritative co-op enemies, responsive/smoothed remote players, distance-aware ally UI, shared glass destruction, live animated glass hitboxes, first-person design-bound culling, and additive cutting-table collision.
+- Bumped viewer/editor release tokens to v0.13.71.
+
 ## 0.13.70 - 2026-10-07
 
 - Added a pre-match player weapon selector for **Rifle, Sniper, Shotgun, Rocket Launcher, and Chainsaw** in both Combat and Zombie setup. The chosen weapon becomes the primary loadout and the pistol remains available as the secondary weapon. Sniper receives the stronger scoped zoom, Rocket Launcher uses projectile/explosion visuals, Chainsaw is continuous ammo-free melee, and all five have first-person weapon geometry.

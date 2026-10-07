@@ -442,6 +442,7 @@
     let matchType = "solo";
     let multiplayer = null;
     let multiplayerStartedRevision = 0;
+    let lastLocalSyncSample = null;
 
     function readZombieSettings() {
       try {
@@ -886,24 +887,40 @@
       if (worldEffects.impacts.length > 180) worldEffects.impacts.splice(0, worldEffects.impacts.length - 180);
     }
 
-    function pushGlassShatter(worldImpact, now) {
-      const obstacle = worldImpact?.obstacle || {};
-      const glassId = String(obstacle.glassId || `${obstacle.machineId || "glass"}:${obstacle.componentId || "surface"}`);
-      if (shatteredGlass.has(glassId)) return;
+    function applyGlassShatterPayload(payload, now, announce = true) {
+      const glassId = String(payload?.glassId || "");
+      if (!glassId || shatteredGlass.has(glassId)) return false;
       shatteredGlass.add(glassId);
       worldEffects.glassShards.push({
         glassId,
+        machineId:String(payload?.machineId || ""),
+        componentId:String(payload?.componentId || ""),
+        point:{x:number(payload?.point?.x),y:number(payload?.point?.y),z:number(payload?.point?.z)},
+        normal:{x:number(payload?.normal?.x),y:number(payload?.normal?.y),z:number(payload?.normal?.z,1)},
+        startAt:now,
+        duration:1250,
+        radius:Math.max(.7, Math.min(3.4, number(payload?.radius, 1.8))),
+        seed:Math.random()*1000,
+      });
+      if (worldEffects.glassShards.length > 36) worldEffects.glassShards.splice(0, worldEffects.glassShards.length - 36);
+      if (announce) setTransientStatus("GLASS SHATTERED", 650);
+      return true;
+    }
+
+    function pushGlassShatter(worldImpact, now) {
+      const obstacle = worldImpact?.obstacle || {};
+      const payload={
+        glassId:String(obstacle.glassId || `${obstacle.machineId || "glass"}:${obstacle.componentId || "surface"}`),
         machineId:String(obstacle.machineId || ""),
         componentId:String(obstacle.componentId || ""),
         point:{...worldImpact.point},
         normal:{...(worldImpact.normal || {x:0,y:0,z:1})},
-        startAt:now,
-        duration:1250,
         radius:Math.max(.7, Math.min(3.4, number(obstacle.glassRadius, 1.8))),
-        seed:Math.random()*1000,
-      });
-      if (worldEffects.glassShards.length > 36) worldEffects.glassShards.splice(0, worldEffects.glassShards.length - 36);
-      setTransientStatus("GLASS SHATTERED", 650);
+      };
+      if (!applyGlassShatterPayload(payload, now, true)) return;
+      if (matchType === "coop" && multiplayer?.getLobby?.()) {
+        multiplayer.sendEvent?.("glass-shatter",payload,"").catch(()=>{});
+      }
     }
 
     function markEnemyDefeated(enemy, now, impactDirection = null) {
@@ -1904,6 +1921,13 @@
     function updateEnemyAi(now) {
       const player = options.getPlayer?.();
       syncEnemies(false);
+      if (coopFollower()) {
+        applyHostEnemySyncState(multiplayer?.getLobby?.());
+        lastFrameAt=now;
+        lastThreatCount=aliveEnemies().length;
+        syncHud();
+        return;
+      }
       const deltaSeconds = lastFrameAt > 0 ? clamp((now - lastFrameAt) / 1000, 0, .06) : 1 / 60;
       lastFrameAt = now;
       if (!player?.engaged || roundState !== "playing") {
@@ -1952,6 +1976,7 @@
       if (victoryTimer) window.clearTimeout(victoryTimer);
       victoryTimer = 0;
       playerHealth = 100;
+      lastLocalSyncSample = null;
       playerShield = SHIELD_MAX;
       aiming = false;
       frame.classList.remove("combat-aiming");
@@ -2263,6 +2288,63 @@
       } catch(error) { setLobbyStatus(error?.message || "Could not start lobby.","error"); }
     }
 
+    function coopFollower() {
+      return matchType === "coop" && Boolean(multiplayer) && !multiplayer.isHost?.();
+    }
+
+    function exportEnemySyncState() {
+      return [...enemies.values()].map((enemy) => ({
+        id:String(enemy.id || ""), x:number(enemy.x), z:number(enemy.z), rotationY:number(enemy.rotationY),
+        health:Math.max(0,number(enemy.health)), weaponKey:String(enemy.weaponKey || "rifle"),
+        movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
+        synthetic:Boolean(enemy.synthetic), defeatedAt:number(enemy.defeatedAt),
+        machine:{
+          name:String(enemy.machine?.name || (enemy.synthetic ? "Zombie" : "Enemy")),
+          w:Math.max(.4,number(enemy.machine?.w,1.8)), d:Math.max(.4,number(enemy.machine?.d,1.8)),
+          h:Math.max(1,number(enemy.machine?.h,6.5)), y:number(enemy.machine?.y),
+        },
+      }));
+    }
+
+    function applyHostEnemySyncState(lobby = multiplayer?.getLobby?.()) {
+      if (!coopFollower() || !lobby) return false;
+      const host=(lobby.players||[]).find((player) => player.id===lobby.hostId);
+      const snapshots=Array.isArray(host?.state?.enemies) ? host.state.enemies : null;
+      if (!snapshots) return false;
+      syncEnemies(false);
+      const seen=new Set();
+      for (const snapshot of snapshots) {
+        const id=String(snapshot?.id || "");
+        if (!id) continue;
+        seen.add(id);
+        let enemy=enemies.get(id);
+        if (!enemy) {
+          const base=(Array.isArray(options.getEnemies?.()) ? options.getEnemies() : []).find((machine,index) => enemyId(machine,index)===id);
+          const machine=base || {
+            id,instanceId:id,name:String(snapshot.machine?.name || "Zombie"),type:"person",x:number(snapshot.x)-.9,y:number(snapshot.machine?.y),z:number(snapshot.z)-.9,
+            w:Math.max(.4,number(snapshot.machine?.w,1.8)),d:Math.max(.4,number(snapshot.machine?.d,1.8)),h:Math.max(1,number(snapshot.machine?.h,6.5)),visible:true,
+          };
+          enemy={id};
+          enemies.set(id,enemy);
+          resetEnemyRecord(enemy,machine,enemies.size);
+          enemy.synthetic=Boolean(snapshot.synthetic || !base);
+        }
+        enemy.x=number(snapshot.x,enemy.x); enemy.z=number(snapshot.z,enemy.z);
+        enemy.rotationY=number(snapshot.rotationY,enemy.rotationY); enemy.health=Math.max(0,number(snapshot.health,enemy.health));
+        enemy.weaponKey=String(snapshot.weaponKey || enemy.weaponKey || "rifle"); enemy.weaponLabel=ENEMY_WEAPONS[enemy.weaponKey]?.label || enemy.weaponLabel || "Rifle";
+        enemy.movementBlend=clamp(number(snapshot.movementBlend,enemy.movementBlend),0,1); enemy.walkPhase=number(snapshot.walkPhase,enemy.walkPhase);
+        enemy.synthetic=Boolean(snapshot.synthetic);
+        if (enemy.health<=0) {
+          enemy.defeatedAt=number(snapshot.defeatedAt,enemy.defeatedAt || performance.now());
+          enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt || enemy.defeatedAt;
+        }
+      }
+      [...enemies.entries()].forEach(([id,enemy]) => { if (enemy.synthetic && !seen.has(id)) enemies.delete(id); });
+      const sharedGlass=Array.isArray(host?.state?.glass) ? host.state.glass : [];
+      sharedGlass.forEach((glassId) => shatteredGlass.add(String(glassId || "")));
+      return true;
+    }
+
     function multiplayerEvent(event,lobby) {
       if (!event) return;
       if (event.type === "player-hit" && event.targetId === multiplayer?.playerId && matchType === "private" && roundState === "playing") {
@@ -2273,7 +2355,12 @@
         damagePlayer(number(event.payload?.damage),fakeEnemy,options.getPlayer?.());
         return;
       }
+      if (event.type === "glass-shatter" && matchType === "coop") {
+        applyGlassShatterPayload(event.payload, performance.now(), false);
+        return;
+      }
       if (event.type === "enemy-hit" && matchType === "coop" && roundState === "playing") {
+        if (!multiplayer?.isHost?.()) return;
         const enemy=enemies.get(String(event.payload?.enemyId || ""));
         if (!enemy || enemy.health <= 0) return;
         const damage=Math.max(0,number(event.payload?.damage));
@@ -2286,6 +2373,7 @@
     function multiplayerUpdate(lobby) {
       syncLobbyUi(lobby);
       if (!active || !lobby) return;
+      if (lobby.status === "started" && roundState !== "setup") applyHostEnemySyncState(lobby);
       if (lobby.status === "started" && roundState === "setup" && multiplayerStartedRevision !== lobby.revision) {
         multiplayerStartedRevision=lobby.revision;
         applyLobbyConfig(lobby);
@@ -2295,10 +2383,21 @@
 
     function multiplayerPlayerState() {
       const player=options.getPlayer?.() || {};
-      return {
-        x:number(player.x),y:number(player.y,5.5),z:number(player.z),yaw:number(player.yaw),pitch:number(player.pitch),moving:Boolean(player.moving),
+      const now=performance.now();
+      const x=number(player.x), z=number(player.z);
+      const elapsed=lastLocalSyncSample ? Math.max(.016,(now-lastLocalSyncSample.at)/1000) : .12;
+      const vx=lastLocalSyncSample ? clamp((x-lastLocalSyncSample.x)/elapsed,-28,28) : 0;
+      const vz=lastLocalSyncSample ? clamp((z-lastLocalSyncSample.z)/elapsed,-28,28) : 0;
+      lastLocalSyncSample={x,z,at:now};
+      const state={
+        x,y:number(player.y,5.5),z,yaw:number(player.yaw),pitch:number(player.pitch),vx,vz,moving:Boolean(player.moving),
         health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,alive:roundState!=="lost",kills:regularKills+headshotKills,headshots:headshotKills,
       };
+      if (matchType === "coop" && multiplayer?.isHost?.() && roundState !== "setup") {
+        state.enemies=exportEnemySyncState();
+        state.glass=[...shatteredGlass];
+      }
+      return state;
     }
 
     function findRemotePlayerTarget(origin,direction,range) {

@@ -6,12 +6,12 @@ import type * as ThreeNamespace from "three";
 declare global {
   interface Window {
     THREE?: typeof ThreeNamespace;
-    monroeEditorAccess?: { editingAllowed(): boolean; hasAccess(): boolean; requestAccess(): Promise<boolean>; isOwner?(): boolean };
+    monroeEditorAccess?: { editingAllowed(): boolean; hasAccess(): boolean; requestAccess(): Promise<boolean>; isOwner?(): boolean; hasEditorProfile?(): boolean };
     PLANT_SHARED_WORKSPACE_READY?: Promise<unknown>;
   }
 }
 
-const LEGACY_BUILD_TOKEN = "0.13.60";
+const LEGACY_BUILD_TOKEN = "0.13.61";
 const scriptLoads = new Map<string, Promise<void>>();
 
 function loadScript(source: string) {
@@ -92,8 +92,10 @@ export default function LegacyScriptLoader({ sources }: { sources: string[] }) {
       for (const source of sourceKey.split("\u001f")) {
         if (!active || !source) return;
         await loadScript(source);
-        if (source.endsWith("/workspace-sync.js") && window.PLANT_SHARED_WORKSPACE_READY) {
-          await window.PLANT_SHARED_WORKSPACE_READY;
+        if (source === "/shared-workspace.js") {
+          await window.PLANT_SHARED_WORKSPACE_READY?.catch?.((error: unknown) => {
+            console.warn("Shared plant workspace initialization failed; continuing with local data.", error);
+          });
         }
       }
     }

@@ -1,10 +1,18 @@
-## 0.13.60 - 2026-10-06
+## 0.13.61 - 2026-10-07
 
-- Replaced device-only Machine Studio envelope persistence with a shared workspace sync API. Owner-authenticated design/layout edits now publish to a durable shared workspace so desktop and mobile render the same collision envelopes and linked machine designs. A Railway persistent volume stores the shared workspace across deployments.
-- The shared workspace is hydrated before the plant or Machine Studio renderer boots, reconciles local/remote revisions, preserves protected editor data while signed out, and automatically publishes later envelope/layout edits after owner authentication.
-- Rebuilt enemy weapons around a right-hand-dominant pose instead of the center of the body, thickening rifle, sniper, shotgun, SMG, pistol, chainsaw, bazooka, and large rocket-launcher geometry so each reads as a physical weapon.
-- Redesigned the first-person rifle around an open-window holographic optic, lowered and centered the rifle during ADS, strengthened receiver/fore-end/barrel/stock geometry, and made reload animation target the magazine explicitly rather than relying on a fragile array index.
-- Enemy death animation now begins on the first rendered defeated frame, lasts longer, keeps Combat Mode in the active render loop, and delays the victory overlay after the final kill so the last enemy visibly completes the fall.
+- Completed the cross-device envelope rollout by shipping the shared workspace API/storage path with the viewer and Machine Studio hydration hooks, so phones and desktops resolve the same saved machine-design envelopes instead of browser-local copies.
+- Hardened the owner-only desktop **Combat mode** entry point: the button now always occupies the toolbar position immediately after **First person**, hides for non-owners, and re-synchronizes on owner authorization, focus, and page restore instead of being decided only at startup.
+- Finalized the thicker right-hand enemy weapon geometry and the rebuilt player rifle/holographic sight alignment so AI weapons no longer intersect the torso and the ADS sight window stays unobstructed.
+- Finalized deterministic enemy deaths with a render-start death clock, longer floor fall, and a short final-kill victory delay so the last enemy cannot remain visually standing behind the victory overlay.
+
+## 0.13.60 - 2026-10-07
+
+- Replaced device-only Machine Studio envelope persistence with a shared workspace sync API. Owner design/layout edits now publish to durable shared storage so desktop and mobile load the same collision envelopes and linked machine designs.
+- The shared workspace hydrates before the Plant viewer or Machine Studio renderer starts, reconciles local/remote revisions, preserves protected local editor data, and auto-publishes later envelope/layout edits.
+- Restored the owner-only desktop **Combat mode** button immediately to the right of **First person** and made its visibility re-sync after owner authorization, page restore, and window focus instead of relying on a one-time startup check.
+- Rebuilt enemy weapons around a thicker right-hand-dominant pose rather than the center of the body. Rifle, sniper, shotgun, SMG, pistol, chainsaw, bazooka, and rocket-launcher silhouettes are wider, easier to identify, and aligned with the articulated hands.
+- Redesigned the first-person rifle around an open-window holographic optic, lowered/centered the receiver during ADS, strengthened the stock/receiver/fore-end/barrel geometry, and made the reload animation target the magazine explicitly.
+- Enemy death animation now starts on the first rendered defeated frame, lasts longer, and delays the final victory overlay so the last enemy visibly completes the fall instead of sometimes appearing to remain standing.
 
 ## 0.13.59 - 2026-10-06
 

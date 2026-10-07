@@ -112,6 +112,7 @@
           protectEditorProfile();
           document.documentElement.classList.remove("public-read-only");
         } catch {}
+        try { window.dispatchEvent(new CustomEvent("plantowneraccesschange", { detail: { owner: isOwner(), access: true } })); } catch {}
         close(true);
       });
       // Browsers only paint the fullscreen element and its descendants. Mount
@@ -124,4 +125,5 @@
   }
 
   window.monroeEditorAccess = { editingAllowed, hasAccess, requestAccess, verify, hasEditorProfile, protectEditorProfile, isOwner };
+  try { window.dispatchEvent(new CustomEvent("plantowneraccesschange", { detail: { owner: isOwner(), access: hasAccess() } })); } catch {}
 })();

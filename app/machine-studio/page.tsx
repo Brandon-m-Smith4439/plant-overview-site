@@ -48,7 +48,7 @@ export default function MachineStudio() {
 <div className="studio-brand">
 <a className="studio-back-link" href="/" aria-label="Return to plant layout"><StudioIcon name="back" /></a>
 <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-<span className="studio-version-badge">v0.13.60</span>
+<span className="studio-version-badge">v0.13.61</span>
 </div>
 <div className="studio-top-actions" role="toolbar" aria-label="Design commands">
 <span id="save-state" className="studio-save-state">Auto-saved</span>
@@ -401,10 +401,10 @@ export default function MachineStudio() {
 "/render-performance.js",
 "/spatial-index.js",
 "/geometry-prep-client.js",
-"/machine-designs.js",
 "/workspace-transfer.js",
 "/published-workspace.js",
-"/workspace-sync.js",
+"/shared-workspace.js",
+"/machine-designs.js",
 "/animation-timeline.js",
 "/animation-timeline-workspace.js",
 "/three-mf-exporter.js",

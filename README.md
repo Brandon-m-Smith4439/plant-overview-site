@@ -1,6 +1,10 @@
+## Version 0.13.61
+
+Version 0.13.61 completes the shared machine-envelope rollout and the Combat Mode reliability pass. Desktop and mobile now hydrate the same published Machine Studio/layout workspace, the owner-only desktop **Combat mode** button reliably appears immediately after **First person**, enemy weapons use thicker right-hand geometry, the player rifle keeps the holographic sight window clear while aiming, and defeated enemies consistently complete their fall before the victory screen can take over.
+
 ## Version 0.13.60
 
-Machine envelopes and reusable Machine Studio designs now use a shared cross-device workspace rather than remaining trapped in one browser's local storage. Once an owner-authenticated desktop with the newest edits opens the site, those definitions publish to the shared workspace and mobile/public viewers hydrate the same layout before rendering. Combat also receives thicker right-hand enemy weapons, a rebuilt player rifle with an unobstructed open holographic sight, and deterministic enemy fall animations before victory.
+Machine envelopes and reusable Machine Studio designs now use one shared cross-device workspace instead of remaining trapped in a single browser's local storage. Once an owner session with newer edits opens the site, those definitions publish to the shared workspace and mobile/public viewers hydrate the same layout before rendering. The desktop owner toolbar also reliably restores **Combat mode** directly after **First person**. Combat receives thicker right-hand enemy weapons, a rebuilt player rifle with an unobstructed open holographic sight, and deterministic enemy fall animations before victory.
 
 ## Version 0.13.59
 

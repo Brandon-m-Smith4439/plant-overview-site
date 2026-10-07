@@ -333,7 +333,6 @@
       record.hitReactUntil = 0;
       record.defeatedAt = 0;
       record.deathAnimationStartedAt = 0;
-      record.deathAnimationDuration = 1120 + unit * 280;
       record.deathDirection = unit > .5 ? 1 : -1;
       record.weaponKey = ENEMY_WEAPON_KEYS[Math.floor(Math.random() * ENEMY_WEAPON_KEYS.length)] || "rifle";
       record.weaponLabel = ENEMY_WEAPONS[record.weaponKey]?.label || "Rifle";
@@ -718,9 +717,7 @@
       const defeated = enemy.health <= 0;
       if (defeated && !enemy.defeatedAt) enemy.defeatedAt = now;
       if (defeated && !enemy.deathAnimationStartedAt) enemy.deathAnimationStartedAt = now;
-      const deathProgress = defeated
-        ? clamp((now - enemy.deathAnimationStartedAt) / Math.max(900, enemy.deathAnimationDuration || 1200), 0, 1)
-        : 0;
+      const deathProgress = defeated ? clamp((now - enemy.deathAnimationStartedAt) / 1120, 0, 1) : 0;
       const rollProgress = !defeated && enemy.rollStartedAt > 0 && now < enemy.rollUntil
         ? clamp((now-enemy.rollStartedAt)/Math.max(1,enemy.rollUntil-enemy.rollStartedAt),0,1)
         : 0;
@@ -944,17 +941,17 @@
     }
 
     function scheduleVictory() {
-      if (victoryTimer || !active || roundState !== "playing" || aliveEnemies().length > 0 || enemies.size === 0) return;
+      if (victoryTimer || !active) return;
+      // Give the final defeated person enough rendered time to visibly hit the floor
+      // before the celebratory overlay covers the scene.
       victoryTimer = window.setTimeout(() => {
         victoryTimer = 0;
-        if (!active || roundState !== "playing" || aliveEnemies().length > 0 || enemies.size === 0) return;
+        if (!active || aliveEnemies().length > 0 || !enemies.size) return;
         finishRound("won");
-      }, 1250);
+      }, 1325);
     }
 
     function finishRound(kind, killer = null, player = null) {
-      if (victoryTimer) window.clearTimeout(victoryTimer);
-      victoryTimer = 0;
       const endedAt = performance.now();
       roundState = kind;
       paused = false;

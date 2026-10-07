@@ -8691,3 +8691,147 @@ body.viewer-fullscreen-fallback-active {
   .combat-round-overlay.victory .combat-victory-stats { gap: .35rem; }
   .combat-victory-stats > div { padding: .55rem .3rem; }
 }
+
+
+/* v0.13.63 Combat + Zombie mode score and restart polish */
+.zombie-mode-button {
+  border-color: rgba(146, 207, 101, .58) !important;
+  color: #dff4c6;
+}
+.zombie-mode-button.combat-ready {
+  border-color: rgba(170, 229, 116, .8) !important;
+  box-shadow: 0 0 0 1px rgba(170,229,116,.15), 0 0 1.4rem rgba(116,187,78,.15);
+}
+.zombie-mode-button.active,
+.zombie-mode-active .zombie-mode-button {
+  background: linear-gradient(180deg, rgba(88,128,61,.96), rgba(48,79,38,.98)) !important;
+  border-color: rgba(185, 231, 128, .82) !important;
+  color: #fff;
+  box-shadow: 0 .5rem 1.6rem rgba(61,101,43,.24);
+}
+.zombie-mode-active .combat-mode-badge {
+  border-color: rgba(183,229,121,.24);
+  background: rgba(35,52,28,.84);
+  color: #e3f2ce;
+}
+.zombie-mode-active .combat-mode-badge span {
+  background: #b5df70;
+  box-shadow: 0 0 .7rem rgba(181,223,112,.65);
+}
+.combat-high-score {
+  padding: .34rem .5rem;
+  border: 1px solid rgba(230,184,74,.2);
+  border-radius: .45rem;
+  background: rgba(230,184,74,.07);
+  color: #f2d47a;
+  font-size: .6rem;
+  font-weight: 900;
+  letter-spacing: .09em;
+  white-space: nowrap;
+}
+.combat-hitmarker.headshot i {
+  background: #f5cf59;
+  box-shadow: 0 0 .55rem rgba(245,207,89,.85);
+}
+.combat-hitmarker.headshot.defeated i {
+  background: #ff9a55;
+  box-shadow: 0 0 .7rem rgba(255,121,63,.9);
+}
+.combat-round-overlay:not(.victory) .combat-victory-stats {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: .48rem;
+  margin-top: 1rem;
+}
+.combat-round-overlay:not(.victory) .combat-victory-stats > div {
+  padding: .62rem .45rem;
+  background: rgba(255,255,255,.04);
+}
+.combat-round-overlay.victory .combat-victory-stats {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+}
+.combat-round-actions .combat-restart-button {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 2.1rem auto;
+  align-items: center;
+  gap: .62rem;
+  min-width: 12.4rem;
+  min-height: 3.25rem;
+  padding: .48rem .8rem .48rem .56rem;
+  overflow: hidden;
+  border: 1px solid rgba(116,226,169,.56);
+  border-radius: .78rem;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255,255,255,.16), transparent 28%),
+    linear-gradient(135deg, #4cc183, #287d57 72%);
+  color: #fff;
+  box-shadow: 0 .65rem 2rem rgba(34,127,84,.27), 0 0 0 1px rgba(255,255,255,.06) inset;
+  text-align: left;
+  transform: translateY(0);
+  transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+}
+.combat-round-actions .combat-restart-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255,255,255,.17) 48%, transparent 72%);
+  transform: translateX(-125%);
+  transition: transform .45s ease;
+  pointer-events: none;
+}
+.combat-round-actions .combat-restart-button:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.07);
+  box-shadow: 0 .9rem 2.4rem rgba(34,127,84,.34), 0 0 0 1px rgba(255,255,255,.09) inset;
+}
+.combat-round-actions .combat-restart-button:hover::after { transform: translateX(125%); }
+.combat-round-actions .combat-restart-button:active { transform: translateY(0) scale(.985); }
+.combat-restart-icon {
+  display: grid !important;
+  place-items: center;
+  width: 2.05rem;
+  height: 2.05rem;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 50%;
+  background: rgba(5,30,21,.22);
+  color: #fff !important;
+  font-size: 1.28rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 0 1rem rgba(255,255,255,.06) inset;
+}
+.combat-restart-copy { display: block !important; color: #fff !important; }
+.combat-restart-copy strong,
+.combat-restart-copy small { display: block; }
+.combat-restart-copy strong { font-size: .88rem; letter-spacing: .025em; }
+.combat-restart-copy small { margin-top: .08rem; color: rgba(255,255,255,.66); font-size: .58rem; letter-spacing: .045em; }
+.zombie-mode-active .combat-round-actions .combat-restart-button {
+  border-color: rgba(186,227,126,.62);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255,255,255,.14), transparent 28%),
+    linear-gradient(135deg, #779d4e, #3f6338 72%);
+  box-shadow: 0 .65rem 2rem rgba(65,95,48,.29), 0 0 0 1px rgba(255,255,255,.06) inset;
+}
+@media (max-width: 640px) {
+  .combat-high-score { display: none; }
+  .combat-round-overlay:not(.victory) .combat-victory-stats,
+  .combat-round-overlay.victory .combat-victory-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .combat-round-actions { flex-wrap: wrap; }
+  .combat-round-actions .combat-restart-button { min-width: min(15rem,100%); }
+}
+.combat-round-overlay.victory .combat-round-actions .combat-restart-button {
+  border-color: rgba(123,225,173,.68);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255,255,255,.18), transparent 28%),
+    linear-gradient(135deg, #52c98a, #2d8a5e 72%);
+  color: #fff;
+  box-shadow: 0 .75rem 2.1rem rgba(46,143,96,.3), 0 0 0 1px rgba(255,255,255,.08) inset;
+}
+.zombie-mode-active .combat-round-overlay.victory .combat-round-actions .combat-restart-button {
+  border-color: rgba(186,227,126,.7);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255,255,255,.16), transparent 28%),
+    linear-gradient(135deg, #7da654, #456c3c 72%);
+  box-shadow: 0 .75rem 2.1rem rgba(65,95,48,.31), 0 0 0 1px rgba(255,255,255,.07) inset;
+}

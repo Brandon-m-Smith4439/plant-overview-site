@@ -1,3 +1,11 @@
+## 0.13.66 - 2026-10-07
+
+- Added a dedicated Zombie Mode setup overlay with four difficulty presets: **Easy**, **Normal**, **Hard**, and **Nightmare**. Difficulty scales zombie health, sprint speed, incoming damage, Endless spawn cadence, alive-enemy cap, starting spawn pressure, and ammo-pickup respawn timing.
+- Added two Zombie run types. **Normal · Clear Plant** uses the people already present in the plant, disables edge respawns, and wins when the last zombie is eliminated. **Endless Survival** preserves the escalating edge-spawn loop and runs until the player dies.
+- Split Zombie records by run type and difficulty so each Normal difficulty keeps its own fastest clear while each Endless difficulty keeps its own longest survival time. Existing v0.13.65 survival records remain available as the Normal-difficulty Endless fallback.
+- Fixed incoming-fire indicators and text callouts to use the mirrored horizontal basis of the first-person camera. The old world-angle subtraction made visual left/right directions appear backwards relative to where attackers actually appeared on screen.
+- Added polished responsive styling for the Zombie setup cards, active difficulty/run selections, and Start/Cancel actions.
+
 ## 0.13.65 - 2026-10-07
 
 - Converted Zombie Mode from a finite clear-the-room round into continuous survival. Existing people still begin as zombies, then additional chainsaw zombies spawn from safe points around the layout edges on an accelerating timer with an alive-enemy cap that rises as survival time increases.
@@ -990,7 +998,6 @@
 - Preserved compact custom envelope dimensions through Plant Layout creation, synchronization, editing, and reload.
 
 ### Validation
-
 - Added compact-envelope regression coverage for the Designer UI, fit calculation, Plant Layout minimums, and versioned documentation.
 
 ## 0.12.0 - 2026-08-05

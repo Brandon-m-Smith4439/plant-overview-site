@@ -6,6 +6,7 @@ const plant = fs.readFileSync(new URL("../public/plant-app.js", import.meta.url)
 const access = fs.readFileSync(new URL("../public/editor-access.js", import.meta.url), "utf8");
 const page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 const owner = fs.readFileSync(new URL("../app/plant-owner-7f3a9c/page.tsx", import.meta.url), "utf8");
+const ownerGate = fs.readFileSync(new URL("../app/editor-access-gate.tsx", import.meta.url), "utf8");
 const preview = fs.readFileSync(new URL("../public/preview.html", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
@@ -21,7 +22,7 @@ assert.ok(combat.includes("muzzleFlashUntil") && combat.includes("recoilUntil") 
 assert.ok(combat.includes("showIncomingDirection") && combat.includes("combat-damage-direction"), "Incoming-fire direction indicators are not wired to enemy shots.");
 assert.ok(combat.includes("incomingDirectionName") && combat.includes("combat-direction-callout"), "Readable directional fire callouts are missing.");
 assert.ok(combat.includes("blockedUntil") && combat.includes("aimLockUntil") && combat.includes("lastSeenAt"), "Enemy anti-spin steering and aim-lock state are missing.");
-assert.ok(combat.includes("enemy.rotationY = faceAngle(source, playerTarget)") && combat.includes("enemy.aimLockUntil = now + (loadout.melee ? 260 : 520)"), "Enemy firing must authoritatively face the player.");
+assert.ok(combat.includes("enemy.rotationY = faceAngle(source, playerTarget)") && combat.includes("enemy.aimLockUntil = now + (loadout.melee ? 300 : 560)"), "Enemy firing must authoritatively face the player.");
 assert.ok(combat.includes("Killed by ") && combat.includes("killerRevealUntil") && combat.includes("playerDeathDuration = 5000") && combat.includes("roundOverlay.hidden = true"), "Five-second death killer reveal flow is missing.");
 assert.ok(plant.includes("leftKnee") && plant.includes("rightKnee") && plant.includes("leftFoot") && plant.includes("rightFoot"), "Two-segment enemy walking gait is missing.");
 assert.ok(plant.includes("rgba(255,231,151,.98)") && plant.includes("tracerTarget"), "Visible two-layer enemy bullet tracers are missing.");
@@ -138,7 +139,15 @@ assert.ok(page.includes('/shared-workspace.js'), "Plant page must hydrate the sh
 assert.ok(sharedWorkspace.includes("monroe-glass-machine-designs-v1") && sharedWorkspace.includes("monroe-glass-plant-layout-v6") && sharedWorkspace.includes("schedulePublish"), "Shared workspace must sync both design envelopes and layout data across devices.");
 assert.ok(sharedWorkspaceRoute.includes("PLANT_WORKSPACE_PATH") && sharedWorkspaceRoute.includes("writeFile") && sharedWorkspaceRoute.includes("ownerSessionValid"), "Shared workspace API must persist owner changes on durable server storage.");
 assert.ok(plant.includes('data-toggle="combat" class="combat-mode-button"') && plant.includes("syncCombatAvailability") && plant.includes("plantowneraccesschange"), "Desktop owner Combat button must stay in the toolbar and resync owner visibility after startup.");
-assert.ok(plant.includes("const weaponCenterX = width*.70") && plant.includes("Both arms now reach an actual right-side weapon"), "Enemy weapons must be shifted into a readable right-hand pose instead of centered through the torso.");
+assert.ok(plant.includes("const weaponCenterX = width*.72") && plant.includes("Both arms reach a real right-hand weapon"), "Enemy weapons must be shifted into a readable right-hand pose instead of centered through the torso.");
 assert.ok(plant.includes("Raised holographic sight: open center") && plant.includes("aim*.34") && plant.includes('magazineIndex = combat.weapon === "rifle" ? 5'), "Player rifle ADS must use an unobstructed open holographic sight and explicit magazine reload animation.");
 assert.ok(combat.includes("deathAnimationStartedAt") && combat.includes("/ 1120") && combat.includes("scheduleVictory") && combat.includes("1325"), "Enemy death animation must start on the first rendered defeated frame and finish before final victory covers the scene.");
 
+
+// v0.13.62: owner-session handoff, enemy firearm reloads, animated weapon handling, and chainsaw sprint pressure.
+assert.ok(ownerGate.includes("useEffect") && ownerGate.includes("if (!editingAvailable || !hasEditorAccess()) return;") && ownerGate.includes("grantEditorAccess();"), "Already-authenticated owner workspace visits must stamp the owner session so Combat Mode stays visible after returning to the plant.");
+assert.ok(combat.includes("beginEnemyReload") && combat.includes("updateEnemyReload") && combat.includes("ammoInMagazine") && combat.includes("reloadUntil") && combat.includes("enemy.ammoInMagazine <= 0 && now >= enemy.nextShotAt"), "Enemy firearms must use real magazines and proactively reload when empty rather than firing forever.");
+assert.ok(combat.includes("shotProgress") && combat.includes("reloadProgress") && combat.includes("magazineSize"), "Enemy firing/reload animation progress must be exposed to the renderer.");
+assert.ok(combat.includes('rifle: Object.freeze({ key: "rifle"') && combat.includes("magazine: 24, reloadMs: 1900") && combat.includes("magazine: 5, reloadMs: 2750") && combat.includes("magazine: 1, reloadMs: 3500"), "Rifle, sniper, and rocket enemy reload timings are missing.");
+assert.ok(plant.includes("shotPulse") && plant.includes("reloadWave") && plant.includes("support hand visibly leaves the fore-end") && plant.includes("magazineDrop"), "Enemy shooting and reloading must visibly animate arms and weapon geometry.");
+assert.ok(plant.includes("Heavy layered motor housing") && plant.includes("chainOffset") && plant.includes("Full 3D service rifle") && plant.includes("multiple 3D collars"), "Chainsaw, rifle, sniper, and rocket launcher 3D revamps are incomplete.");

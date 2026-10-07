@@ -63,6 +63,16 @@ assert.ok(controlsMarkup.indexOf('data-toggle="combat"') > controlsMarkup.indexO
 assert.ok(plant.includes('window.requestAnimationFrame(() => {') && plant.includes('combatController.start(mode);'), "Combat should enter first person before starting the countdown.");
 assert.ok(plant.includes('setWalkMode(true, { capture: false })'), "Combat/Zombie setup must enter first person without capturing the mouse.");
 assert.ok(plant.includes('const capturePointer = options.capture !== false;') && plant.includes('if (capturePointer && !touchWalk) firstPersonController?.capture();'), "First-person startup must honor capture:false so the setup cursor stays free until Start Match.");
+// v0.13.70: selectable player weapons, multiplayer identity labels/character hiding, death weapon/blood, and shared glass destruction.
+assert.ok(combat.includes('data-match-weapon="rifle"') && combat.includes('data-match-weapon="sniper"') && combat.includes('data-match-weapon="shotgun"') && combat.includes('data-match-weapon="rocket"') && combat.includes('data-match-weapon="chainsaw"'), "Match setup must offer Rifle, Sniper, Shotgun, Rocket Launcher, and Chainsaw.");
+assert.ok(combat.includes("selectedPrimaryWeapon") && combat.includes("function playerLoadout()"), "Chosen setup weapon must drive the player's primary loadout.");
+assert.ok(combat.includes("sniper: Object.freeze") && combat.includes("rocket: Object.freeze") && combat.includes("chainsaw: Object.freeze"), "Player weapon catalog is missing sniper, rocket launcher, or chainsaw behavior.");
+assert.ok(plant.includes("drawCombatRemotePlayerLabels") && plant.includes("player.name") && plant.includes("characterName"), "Remote multiplayer players must show player-name and selected-character name tags.");
+assert.ok(plant.includes("isCharacterOccupied") && combat.includes("isCharacterOccupied:"), "Selected multiplayer characters must be hidden from their original plant positions during combat.");
+assert.ok(combat.includes("Killed with") && combat.includes("event.payload?.weapon"), "Death screen must report the weapon that eliminated the player, including private-match kills.");
+assert.ok(css.includes(".combat-death-blood") && combat.includes("combat-player-dead"), "Player death needs a persistent bloody screen treatment.");
+assert.ok(combat.includes("nearestOpaqueObstacleDistance") && combat.includes("AI GLASS"), "Enemy AI shots must be able to break machine glass instead of treating it as an opaque sight wall.");
+assert.ok(plant.includes('["box", "glassPanel"].includes(component.type)') && plant.includes("combatGlassComponent(component)"), "Glass-panel design components must participate in destructible machine glass.");
 
 // v0.13.55: every custom person must bypass retained instancing so combat-owned
 // movement/rotation/weapons are actually rendered. Published Helper instances
@@ -157,13 +167,13 @@ assert.ok(plant.includes("Heavy layered motor housing") && plant.includes("chain
 
 // v0.13.63: separate Zombie Mode, persistent clear times, true headshots, gun-side tracers, and end-screen kill stats.
 assert.ok(plant.includes('data-toggle="zombie" class="zombie-mode-button"') && plant.includes('setCombatMode(!sameMode, "zombie")'), "Owner controls must expose a separate Zombie Mode beside Combat Mode.");
-assert.ok(combat.includes('zombie: Object.freeze') && combat.includes('defaultWeapon: "shotgun"') && combat.includes('loadout: Object.freeze(["shotgun", "handgun"])'), "Zombie Mode must use the shotgun + pistol player loadout.");
+assert.ok(combat.includes('zombie: Object.freeze') && combat.includes('defaultWeapon: "shotgun"') && combat.includes("PLAYER_PRIMARY_WEAPONS") && combat.includes('return [primary, "handgun"]'), "Zombie Mode must retain shotgun as its default while allowing the selected primary weapon plus pistol secondary.");
 assert.ok(combat.includes('record.weaponKey = record.zombie ? "chainsaw"') && combat.includes('1.55 * zombieDifficultyConfig().speed') && combat.includes('combatDifficultyConfig().speed'), "Zombie AI must be chainsaw-only while Combat and Zombie movement are difficulty-scaled independently.");
 assert.ok(plant.includes('headCandidates') && plant.includes('drawDesignBox(actor,{...headPart,color:skin}') && plant.includes('const eyeWhite = zombie ? "#f7e76f"'), "Zombie face/eye overlays must anchor to the actual custom-person Head component.");
 assert.ok(combat.includes('function enemyHitVolumes') && combat.includes('zone: "head"') && combat.includes('zone: "body"') && combat.includes('HEADSHOT_DAMAGE_MULTIPLIER = 3'), "Combat hit detection must have separate head/body volumes and real headshot damage.");
 assert.ok(combat.includes('headshotKills += 1') && combat.includes('regularKills += 1') && combat.includes('data-combat-headshot-kills') && combat.includes('data-combat-regular-kills'), "Regular-kill and headshot-kill statistics must be tracked separately.");
 assert.ok(combat.includes('HIGH_SCORE_STORAGE_KEY') && combat.includes('recordRoundTime') && combat.includes('bestClearTime') && combat.includes('zombieScoreKey'), "Combat and Zombie Mode clear/survival times must persist independently as high scores.");
-assert.ok(combat.includes('function playerMuzzleOrigin') && combat.includes('const ads = weapon?.key === "rifle" && Boolean(isAiming)') && combat.includes('const rightOffset'), "Player tracers must follow the rendered gun muzzle in hip-fire and rifle ADS.");
+assert.ok(combat.includes('function playerMuzzleOrigin') && combat.includes('const ads = Boolean(weapon?.scope && isAiming)') && combat.includes('const rightOffset'), "Player tracers must follow the rendered gun muzzle in hip-fire and scoped ADS.");
 assert.ok(plant.includes('Hip fire keeps the physical holographic sight on the rifle model') && plant.includes('drawViewmodelPolygon(glassLocal') && plant.includes('reticleRadius'), "The player rifle must keep its holographic glass and reticle on the 3D model outside ADS.");
 assert.ok(css.includes('.combat-restart-button') && css.includes('.combat-restart-icon') && css.includes('.combat-restart-copy'), "Victory/death restart control must use the polished replay button presentation.");
 

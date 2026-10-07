@@ -1,3 +1,14 @@
+## 0.13.70 - 2026-10-07
+
+- Added a pre-match player weapon selector for **Rifle, Sniper, Shotgun, Rocket Launcher, and Chainsaw** in both Combat and Zombie setup. The chosen weapon becomes the primary loadout and the pistol remains available as the secondary weapon. Sniper receives the stronger scoped zoom, Rocket Launcher uses projectile/explosion visuals, Chainsaw is continuous ammo-free melee, and all five have first-person weapon geometry.
+- Fixed lobby/setup typing at the first-person input layer: movement can stay locked while text fields still receive keyboard input, allowing player-name changes, lobby-code entry, and owner-password entry without leaving Combat Mode. Player-name edits now synchronize on input instead of waiting for blur/change.
+- Added multiplayer player identity tags above remote avatars showing the **player name** and the **plant character** being controlled. Lobby cards also show each player's selected character and current weapon.
+- Removed occupied character models from their original plant positions while Combat/Zombie mode is active. The local selected character and all remotely selected characters are now rendered only as controlled player avatars, preventing duplicate people on the layout.
+- Expanded death feedback: the end/death copy explicitly names the weapon that killed the player, private-match damage carries the firing weapon through the multiplayer event, and a persistent blood vignette/spatter treatment covers the death cinematic and end screen.
+- Expanded destructible machine glass to authored `glassPanel` geometry and made AI treat intact glass as shootable cover rather than an opaque sight wall. AI bullets and rockets now collide with glass, trigger the same shatter event as player fire, throw depth-tested shards, and remove the broken pane for the rest of the round.
+- Added regression coverage for weapon setup, lobby typing under movement lock, multiplayer name/character tags, occupied-character hiding, death weapon reporting/blood treatment, and shared player/AI glass destruction.
+- Bumped viewer/editor release tokens to v0.13.70.
+
 ## 0.13.69 - 2026-10-07
 
 - Fixed Combat/Zombie pre-match setup so entering either mode transitions to first person/fullscreen without capturing the desktop mouse. Difficulty, character, match-type, and lobby controls remain clickable with a visible cursor until the match actually begins.

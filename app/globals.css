@@ -9045,3 +9045,38 @@ body.viewer-fullscreen-fallback-active {
   .combat-zombie-choice-grid.match-type{grid-template-columns:1fr;}
   .combat-lobby-fields{grid-template-columns:1fr;}
 }
+/* Combat loadout, death blood, and multiplayer polish · v0.13.70 */
+.combat-zombie-choice-grid.weapon-type {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.combat-zombie-choice-grid.weapon-type button {
+  min-height: 4.45rem;
+}
+.combat-death-blood {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 44%, transparent 0 36%, rgba(92, 0, 3, .14) 58%, rgba(86, 0, 4, .58) 100%),
+    radial-gradient(ellipse at 7% 18%, rgba(178, 9, 18, .54) 0 3%, transparent 4.5%),
+    radial-gradient(ellipse at 92% 24%, rgba(151, 3, 12, .48) 0 2.7%, transparent 4.3%),
+    radial-gradient(ellipse at 14% 78%, rgba(132, 0, 7, .56) 0 4%, transparent 6%),
+    radial-gradient(ellipse at 84% 86%, rgba(173, 7, 15, .42) 0 3.5%, transparent 5.5%);
+  transition: opacity .28s ease;
+}
+.combat-player-dead .combat-death-blood {
+  opacity: .78;
+  animation: combat-death-blood-pulse 1.8s ease-in-out infinite alternate;
+}
+@keyframes combat-death-blood-pulse {
+  from { filter: saturate(1) brightness(.96); }
+  to { filter: saturate(1.18) brightness(.82); }
+}
+@media (max-width: 860px) {
+  .combat-zombie-choice-grid.weapon-type { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .combat-zombie-choice-grid.weapon-type { grid-template-columns: 1fr; }
+}

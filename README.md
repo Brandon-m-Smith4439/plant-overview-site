@@ -1,3 +1,9 @@
+## Version 0.13.70
+
+Version 0.13.70 expands the Combat/Zombie setup into a full player loadout and multiplayer identity screen. Players can choose **Rifle, Sniper, Shotgun, Rocket Launcher, or Chainsaw** before a match while retaining the pistol as the secondary weapon. Movement locking no longer swallows text input, so player names, lobby codes, and owner-password fields remain fully typeable while the pre-match overlay is open. In live multiplayer, remote players now carry persistent name tags that show both the lobby player name and the selected plant character, while every character currently occupied by a local or remote player is removed from its original plant position so duplicate bodies do not remain behind.
+
+Death presentation now explicitly reports the weapon that eliminated the player (including private-match player kills) and adds a persistent bloody screen treatment through the death replay/end screen. Destructible machine glass is broadened to include authored `glassPanel` parts, AI sight can recognize glass as shootable cover, and both AI bullets/rockets and player fire use the same glass-shatter pipeline so blue machine glass bursts into depth-tested flying shards and disappears for the rest of the round.
+
 ## Version 0.13.69
 
 Version 0.13.69 keeps the Combat/Zombie pre-match setup fully mouse-driven. Entering either owner game mode can still switch into first-person/fullscreen, but pointer lock is deliberately deferred while the difficulty, character, match type, and lobby controls are on screen. The existing **Start Match** path becomes the single handoff into captured first-person controls, so the cursor disappears only when gameplay actually begins.

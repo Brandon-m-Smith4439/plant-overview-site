@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.69";
+  const APP_VERSION = "0.13.70";
 
   function editorProfileProtected() {
     try {
@@ -2612,7 +2612,7 @@
   function combatGlassOccluders(machine) {
     const design=machine?.designId ? designLibrary[machine.designId] : null;
     if (!design) return [];
-    return (design.components || []).filter((component) => component.type === "box" && combatGlassComponent(component)).map((component) => {
+    return (design.components || []).filter((component) => ["box", "glassPanel"].includes(component.type) && combatGlassComponent(component)).map((component) => {
       const spec=scaledComponentBox(machine,component,design);
       const angle=angleRadians(spec);
       const halfWidth=Math.max(.025,Number(spec.w)/2), halfDepth=Math.max(.025,Number(spec.d)/2);
@@ -6815,7 +6815,7 @@
       capture: () => firstPersonController?.capture?.(),
       setMovementLocked: (locked) => firstPersonController?.setInputLocked?.(locked),
       setAimZoom: (enabled, weapon) => {
-        state.combatAimFov = enabled ? (weapon === "rifle" ? Math.max(50, state.walkFov * .76) : Math.max(46, state.walkFov * .78)) : null;
+        state.combatAimFov = enabled ? (weapon === "sniper" ? Math.max(27, state.walkFov * .43) : weapon === "rifle" ? Math.max(50, state.walkFov * .76) : Math.max(46, state.walkFov * .78)) : null;
         renderPerformance.invalidate?.("combat-aim-zoom");
       },
       hideWalkMenu: () => setFirstPersonMenu(false),
@@ -10891,6 +10891,45 @@
     }
   }
 
+  function drawCombatRemotePlayerLabels() {
+    if (!combatController?.isActive?.()) return;
+    const lobby=combatController.multiplayerLobby?.();
+    if (!lobby || lobby.status !== "started") return;
+    const pixelScale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
+    for (const player of combatController.remotePlayers?.() || []) {
+      const playerState=player.state || {};
+      if (!Number.isFinite(Number(playerState.x)) || !Number.isFinite(Number(playerState.z))) continue;
+      const template=machines.find((machine,index) => String(machine.instanceId || machine.id || machine.name || `enemy-${index}`) === String(player.characterId || ""));
+      const characterName=String(template?.name || template?.short || "Plant character");
+      const point=project(Number(playerState.x),Number(playerState.y || 5.5)+1.25,Number(playerState.z));
+      if (point[0] < -260 || point[0] > canvas.width+260 || point[1] < -120 || point[1] > canvas.height+120) continue;
+      const playerName=String(player.name || "Player");
+      ctx.save();
+      ctx.font=`800 ${Math.max(12,14*pixelScale)}px "Segoe UI", sans-serif`;
+      const primaryWidth=ctx.measureText(playerName).width;
+      ctx.font=`650 ${Math.max(9,10.5*pixelScale)}px "Segoe UI", sans-serif`;
+      const secondary=`${characterName}`;
+      const secondaryWidth=ctx.measureText(secondary).width;
+      const width=Math.max(primaryWidth,secondaryWidth)+24*pixelScale;
+      const height=42*pixelScale;
+      const left=point[0]-width/2, top=point[1]-height/2;
+      ctx.fillStyle="rgba(5,18,24,.88)";
+      ctx.strokeStyle=lobby.config?.matchType === "private" ? "rgba(255,103,91,.9)" : "rgba(112,217,255,.88)";
+      ctx.lineWidth=Math.max(1.4,1.7*pixelScale);
+      ctx.shadowColor="rgba(0,0,0,.42)";
+      ctx.shadowBlur=10*pixelScale;
+      if (typeof ctx.roundRect === "function") { ctx.beginPath();ctx.roundRect(left,top,width,height,8*pixelScale);ctx.fill();ctx.stroke(); }
+      else { ctx.fillRect(left,top,width,height);ctx.strokeRect(left,top,width,height); }
+      ctx.shadowBlur=0;
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillStyle="#f6fcff";ctx.font=`800 ${Math.max(12,14*pixelScale)}px "Segoe UI", sans-serif`;
+      ctx.fillText(playerName,point[0],point[1]-7*pixelScale);
+      ctx.fillStyle="rgba(205,231,241,.72)";ctx.font=`650 ${Math.max(9,10.5*pixelScale)}px "Segoe UI", sans-serif`;
+      ctx.fillText(characterName,point[0],point[1]+10*pixelScale);
+      ctx.restore();
+    }
+  }
+
   function drawCombatWorldEffects(time) {
     if (!combatController?.isActive?.()) return;
     const effects = combatController.combatEffects?.(time);
@@ -11078,6 +11117,41 @@
       {x:.02,y:.01,z:-.77,w:.12,h:.1,d:.08,color:"#222b2f"},
       {x:.0,y:-.22,z:.12,w:.22,h:.17,d:.26,color:skin,rotationX:-8},
       {x:-.18,y:-.16,z:.12,w:.17,h:.15,d:.24,color:skin,rotationZ:-12},
+    ] : combat.weapon === "sniper" ? [
+      // Long, heavy precision rifle with a raised scope and narrow barrel.
+      {x:0,y:-.06,z:.70,w:.32,h:.26,d:.68,color:dark},
+      {x:0,y:-.03,z:.24,w:.36,h:.24,d:.58,color:metal},
+      {x:0,y:-.23,z:.20,w:.17,h:.40,d:.22,color:dark,rotationX:-11},
+      {x:0,y:-.25,z:-.08,w:.18,h:.38,d:.20,color:dark,rotationX:7},
+      {x:0,y:-.025,z:-.58,w:.24,h:.16,d:.88,color:mid},
+      {x:0,y:-.005,z:-1.28,w:.085,h:.085,d:.86,color:dark},
+      {x:0,y:-.005,z:-1.72,w:.13,h:.11,d:.12,color:"#242e32"},
+      {x:0,y:.19,z:-.12,w:.16,h:.14,d:.62,color:"#11181c"},
+      {x:-.11,y:.19,z:-.12,w:.045,h:.20,d:.12,color:steel},
+      {x:.11,y:.19,z:-.12,w:.045,h:.20,d:.12,color:steel},
+      {x:.05,y:-.34,z:.16,w:.24,h:.19,d:.30,color:skin,rotationX:-8},
+      {x:-.22,y:-.16,z:-.68,w:.20,h:.18,d:.36,color:skin,rotationZ:-14},
+    ] : combat.weapon === "rocket" ? [
+      // Shoulder-fired rocket launcher: thick tube, rear bell, grips, and sight.
+      {x:0,y:.00,z:.05,w:.48,h:.48,d:1.78,color:"#394a3d"},
+      {x:0,y:.00,z:.82,w:.62,h:.62,d:.28,color:"#222b25"},
+      {x:0,y:.00,z:-.92,w:.54,h:.54,d:.22,color:"#28372e"},
+      {x:.04,y:-.28,z:.24,w:.18,h:.42,d:.22,color:dark,rotationX:-8},
+      {x:-.05,y:-.24,z:-.42,w:.18,h:.34,d:.22,color:dark,rotationX:8},
+      {x:.0,y:.33,z:-.18,w:.22,h:.10,d:.34,color:steel},
+      {x:.16,y:.36,z:-.20,w:.06,h:.22,d:.10,color:mid},
+      {x:.04,y:-.38,z:.22,w:.25,h:.20,d:.32,color:skin},
+      {x:-.24,y:-.30,z:-.42,w:.23,h:.20,d:.32,color:skin,rotationZ:-10},
+    ] : combat.weapon === "chainsaw" ? [
+      // Compact combat chainsaw with a visible motor body, twin handles, and blade bar.
+      {x:0,y:-.02,z:.30,w:.52,h:.42,d:.62,color:"#b54b24"},
+      {x:0,y:.02,z:-.28,w:.28,h:.18,d:.92,color:steel},
+      {x:0,y:.02,z:-.82,w:.18,h:.12,d:.52,color:"#c9d0cf"},
+      {x:0,y:.14,z:-.58,w:.25,h:.06,d:.86,color:"#343d3d"},
+      {x:.18,y:.26,z:.18,w:.10,h:.38,d:.34,color:dark,rotationZ:-16},
+      {x:-.18,y:.20,z:.00,w:.10,h:.34,d:.44,color:dark,rotationZ:14},
+      {x:.16,y:-.30,z:.20,w:.24,h:.19,d:.30,color:skin,rotationX:-8},
+      {x:-.22,y:-.20,z:-.08,w:.22,h:.18,d:.34,color:skin,rotationZ:-12},
     ] : combat.weapon === "shotgun" ? [
       // Zombie Mode pump shotgun: broad stock, receiver, wood fore-end and twin barrel silhouette.
       {x:0,y:-.055,z:.62,w:.36,h:.28,d:.72,color:"#4d3526"},
@@ -11119,6 +11193,7 @@
       // Rifle optic parts (10-14) disappear while zoomed/ADS so the separate
       // screen-space holographic aiming sight cannot be blocked by the gun model.
       if (combat.weapon === "rifle" && rifleAds && index >= 10 && index <= 14) return;
+      if (combat.weapon === "sniper" && aim > .5 && index >= 7 && index <= 9) return;
       const spec = {...part};
       if (index === magazineIndex && reload > .05) {
         const eject = reload < .5 ? reload*2 : (1-reload)*2;
@@ -11149,7 +11224,11 @@
       ctx.restore();
     }
     if (combat.muzzleFlash) {
-      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78] : combat.weapon === "shotgun" ? [0,.04,-1.26] : [0,-.025,-1.49];
+      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78]
+        : combat.weapon === "shotgun" ? [0,.04,-1.26]
+        : combat.weapon === "sniper" ? [0,-.005,-1.78]
+        : combat.weapon === "rocket" ? [0,0,-1.05]
+        : [0,-.025,-1.49];
       const muzzle = viewmodelPoint(muzzleLocal,root);
       const p=viewmodelProject(muzzle);
       const radius=Math.max(16,42*pixelRatio);
@@ -11810,6 +11889,10 @@
     if (combatController?.isActive?.()) combatEnemyMachines().forEach((machine) => sourceMachines.add(machine));
     for (const machine of sourceMachines) {
       if (machine.visible === false) continue;
+      if (combatController?.isActive?.() && combatEnemyMachine(machine)) {
+        const characterId=String(machine.instanceId || machine.id || machine.name || "");
+        if (combatController.isCharacterOccupied?.(characterId)) continue;
+      }
       const alpha = stageAlpha(machine.reveal,machine.retire);
       if (alpha <= .01) continue;
       let rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
@@ -12533,6 +12616,10 @@
     drawCombatWorldEffects(time);
     state.visibleAnimationsActive = state.visibleAnimationsActive || Boolean(depthRenderer.worldLabelsAnimating?.());
     presentPhysicalScene?.();
+    // Remote-player identity tags are screen-space UI, so draw them only after
+    // the depth scene has been presented. Each tag shows both the lobby player
+    // name and the plant character they selected.
+    drawCombatRemotePlayerLabels(time);
 
     // Editor marks and route editing handles are UI overlays.
     machineEntries.forEach(({ machine, rendered }) => {

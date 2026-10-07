@@ -237,6 +237,12 @@
         onExitRequest("escape-key");
         return;
       }
+      // Match setup deliberately locks movement, but that lock must never turn
+      // ordinary form fields into dead controls. Let text/select editing through
+      // before applying the movement lock so lobby names, codes, and passwords
+      // can be typed while the setup overlay is open.
+      const editingField = event.target?.matches?.("input, select, textarea, [contenteditable='true']");
+      if (editingField && document.pointerLockElement !== canvas) return;
       if (inputLocked) {
         event.preventDefault?.();
         return;
@@ -244,8 +250,6 @@
       // A button often remains focused after First person or Capture mouse is
       // clicked. Do not let that stale focus block WASD. Only active text/form
       // editing should suppress movement before pointer lock is acquired.
-      const editingField = event.target?.matches?.("input, select, textarea, [contenteditable='true']");
-      if (editingField && document.pointerLockElement !== canvas) return;
       const controlled = [
         "KeyW", "KeyA", "KeyS", "KeyD",
         "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",

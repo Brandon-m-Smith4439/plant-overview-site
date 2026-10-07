@@ -109,6 +109,15 @@ listeners.get("document:pointerlockchange")?.();
 assert.equal(exitRequests, 1, "Releasing pointer lock with Escape must request the first-person options menu.");
 listeners.get("document:keydown")?.({ key: "Escape", code: "Escape", target: { matches: () => false }, preventDefault() {}, repeat: false });
 assert.equal(exitRequests, 2, "Escape keydown must also request first-person options when the browser delivers it.");
+controller.setInputLocked(true);
+let formPrevented = false;
+listeners.get("document:keydown")?.({
+  key: "a", code: "KeyA",
+  target: { matches: (selector) => selector.includes("input") },
+  preventDefault() { formPrevented = true; }, repeat: false,
+});
+assert.equal(formPrevented, false, "Typing in setup/lobby inputs must not be swallowed while first-person movement is locked.");
+controller.setInputLocked(false);
 controller.stop();
 assert.ok(plant.includes('event.key === "Escape"'), "Plant integration must handle Escape in first person.");
 assert.ok(plant.includes("press Esc for options"), "First-person instructions must describe the Escape options menu.");

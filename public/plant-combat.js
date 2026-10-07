@@ -18,6 +18,8 @@
   const AMMO_PICKUP_RADIUS = 3.25;
   const ZOMBIE_SETTINGS_STORAGE_KEY = "monroe-glass-zombie-settings-v2";
   const COMBAT_SETTINGS_STORAGE_KEY = "monroe-glass-combat-settings-v1";
+  const HOST_ENEMY_SYNC_INTERVAL_MS = 180;
+  const COOP_ENEMY_PREDICTION_MS = 240;
   const ZOMBIE_DIFFICULTIES = Object.freeze({
     easy: Object.freeze({ key:"easy", label:"Easy", health:.72, speed:.58, damage:.70, spawnRate:1.45, aliveCap:.72, initialExtra:1, pickupRespawn:.72 }),
     normal: Object.freeze({ key:"normal", label:"Normal", health:1, speed:.72, damage:1, spawnRate:1.18, aliveCap:.9, initialExtra:3, pickupRespawn:.9 }),
@@ -443,6 +445,11 @@
     let multiplayer = null;
     let multiplayerStartedRevision = 0;
     let lastLocalSyncSample = null;
+    let lastHostEnemySyncAt = -Infinity;
+    let cachedEnemySyncState = [];
+    let hostWorldSeq = 0;
+    let lastAppliedHostWorldSeq = -1;
+    const hostEnemySyncSamples = new Map();
 
     function readZombieSettings() {
       try {
@@ -1920,16 +1927,15 @@
 
     function updateEnemyAi(now) {
       const player = options.getPlayer?.();
-      syncEnemies(false);
+      const deltaSeconds = lastFrameAt > 0 ? clamp((now - lastFrameAt) / 1000, 0, .06) : 1 / 60;
+      lastFrameAt = now;
       if (coopFollower()) {
-        applyHostEnemySyncState(multiplayer?.getLobby?.());
-        lastFrameAt=now;
+        smoothCoopEnemyVisuals(now, deltaSeconds);
         lastThreatCount=aliveEnemies().length;
         syncHud();
         return;
       }
-      const deltaSeconds = lastFrameAt > 0 ? clamp((now - lastFrameAt) / 1000, 0, .06) : 1 / 60;
-      lastFrameAt = now;
+      syncEnemies(false);
       if (!player?.engaged || roundState !== "playing") {
         lastThreatCount = 0;
         aliveEnemies().forEach((enemy) => {
@@ -1977,6 +1983,11 @@
       victoryTimer = 0;
       playerHealth = 100;
       lastLocalSyncSample = null;
+      lastHostEnemySyncAt = -Infinity;
+      cachedEnemySyncState = [];
+      hostEnemySyncSamples.clear();
+      hostWorldSeq = 0;
+      lastAppliedHostWorldSeq = -1;
       playerShield = SHIELD_MAX;
       aiming = false;
       frame.classList.remove("combat-aiming");
@@ -2292,26 +2303,73 @@
       return matchType === "coop" && Boolean(multiplayer) && !multiplayer.isHost?.();
     }
 
-    function exportEnemySyncState() {
-      return [...enemies.values()].map((enemy) => ({
-        id:String(enemy.id || ""), x:number(enemy.x), z:number(enemy.z), rotationY:number(enemy.rotationY),
-        health:Math.max(0,number(enemy.health)), weaponKey:String(enemy.weaponKey || "rifle"),
-        movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
-        synthetic:Boolean(enemy.synthetic), defeatedAt:number(enemy.defeatedAt),
-        machine:{
-          name:String(enemy.machine?.name || (enemy.synthetic ? "Zombie" : "Enemy")),
+    function exportEnemySyncState(now = performance.now()) {
+      const seen=new Set();
+      cachedEnemySyncState=[...enemies.values()].map((enemy) => {
+        const id=String(enemy.id || "");
+        seen.add(id);
+        const x=number(enemy.x), z=number(enemy.z);
+        const previous=hostEnemySyncSamples.get(id);
+        const elapsed=previous ? Math.max(.016,(now-previous.at)/1000) : HOST_ENEMY_SYNC_INTERVAL_MS/1000;
+        const vx=previous ? clamp((x-previous.x)/elapsed,-36,36) : 0;
+        const vz=previous ? clamp((z-previous.z)/elapsed,-36,36) : 0;
+        hostEnemySyncSamples.set(id,{x,z,at:now});
+        const snapshot={
+          id,x,z,vx,vz,rotationY:number(enemy.rotationY),
+          health:Math.max(0,number(enemy.health)), weaponKey:String(enemy.weaponKey || "rifle"),
+          movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
+          synthetic:Boolean(enemy.synthetic), defeatedAt:number(enemy.defeatedAt),
+        };
+        if (enemy.synthetic) snapshot.machine={
+          name:String(enemy.machine?.name || "Zombie"),
           w:Math.max(.4,number(enemy.machine?.w,1.8)), d:Math.max(.4,number(enemy.machine?.d,1.8)),
           h:Math.max(1,number(enemy.machine?.h,6.5)), y:number(enemy.machine?.y),
-        },
-      }));
+        };
+        return snapshot;
+      });
+      [...hostEnemySyncSamples.keys()].forEach((id)=>{ if(!seen.has(id)) hostEnemySyncSamples.delete(id); });
+      lastHostEnemySyncAt=now;
+      hostWorldSeq+=1;
+      return cachedEnemySyncState;
+    }
+
+    function hostEnemySyncPacket(now = performance.now()) {
+      if (now-lastHostEnemySyncAt < HOST_ENEMY_SYNC_INTERVAL_MS) return null;
+      return { worldSeq:hostWorldSeq+1, enemies:exportEnemySyncState(now), glass:[...shatteredGlass] };
+    }
+
+    function smoothCoopEnemyVisuals(now, deltaSeconds) {
+      const blend=1-Math.exp(-Math.max(.001,deltaSeconds)*15);
+      for (const enemy of enemies.values()) {
+        const sync=enemy.remoteSync;
+        if (!sync) continue;
+        const age=clamp(now-sync.receivedAt,0,COOP_ENEMY_PREDICTION_MS)/1000;
+        const predict=enemy.health>0 ? age : 0;
+        const desiredX=sync.targetX+sync.vx*predict;
+        const desiredZ=sync.targetZ+sync.vz*predict;
+        const gap=Math.hypot(desiredX-number(enemy.x),desiredZ-number(enemy.z));
+        if (gap>14) { enemy.x=desiredX; enemy.z=desiredZ; }
+        else {
+          enemy.x=number(enemy.x)+(desiredX-number(enemy.x))*blend;
+          enemy.z=number(enemy.z)+(desiredZ-number(enemy.z))*blend;
+        }
+        let turn=((sync.targetRotationY-number(enemy.rotationY)+540)%360)-180;
+        enemy.rotationY=number(enemy.rotationY)+turn*Math.min(1,blend*1.35);
+        enemy.movementBlend += (sync.movementBlend-enemy.movementBlend)*Math.min(1,deltaSeconds*10);
+        if (enemy.health>0) enemy.walkPhase += deltaSeconds*(1.4+Math.hypot(sync.vx,sync.vz)*1.7);
+      }
     }
 
     function applyHostEnemySyncState(lobby = multiplayer?.getLobby?.()) {
       if (!coopFollower() || !lobby) return false;
       const host=(lobby.players||[]).find((player) => player.id===lobby.hostId);
+      const worldSeq=number(host?.state?.worldSeq,-1);
+      if (worldSeq>=0 && worldSeq===lastAppliedHostWorldSeq) return false;
       const snapshots=Array.isArray(host?.state?.enemies) ? host.state.enemies : null;
       if (!snapshots) return false;
+      lastAppliedHostWorldSeq=worldSeq;
       syncEnemies(false);
+      const receivedAt=performance.now();
       const seen=new Set();
       for (const snapshot of snapshots) {
         const id=String(snapshot?.id || "");
@@ -2328,14 +2386,17 @@
           enemies.set(id,enemy);
           resetEnemyRecord(enemy,machine,enemies.size);
           enemy.synthetic=Boolean(snapshot.synthetic || !base);
+          enemy.x=number(snapshot.x,enemy.x); enemy.z=number(snapshot.z,enemy.z); enemy.rotationY=number(snapshot.rotationY,enemy.rotationY);
         }
-        enemy.x=number(snapshot.x,enemy.x); enemy.z=number(snapshot.z,enemy.z);
-        enemy.rotationY=number(snapshot.rotationY,enemy.rotationY); enemy.health=Math.max(0,number(snapshot.health,enemy.health));
+        enemy.remoteSync={
+          targetX:number(snapshot.x,enemy.x), targetZ:number(snapshot.z,enemy.z), targetRotationY:number(snapshot.rotationY,enemy.rotationY),
+          vx:number(snapshot.vx), vz:number(snapshot.vz), movementBlend:clamp(number(snapshot.movementBlend,enemy.movementBlend),0,1), receivedAt,
+        };
+        enemy.health=Math.max(0,number(snapshot.health,enemy.health));
         enemy.weaponKey=String(snapshot.weaponKey || enemy.weaponKey || "rifle"); enemy.weaponLabel=ENEMY_WEAPONS[enemy.weaponKey]?.label || enemy.weaponLabel || "Rifle";
-        enemy.movementBlend=clamp(number(snapshot.movementBlend,enemy.movementBlend),0,1); enemy.walkPhase=number(snapshot.walkPhase,enemy.walkPhase);
         enemy.synthetic=Boolean(snapshot.synthetic);
         if (enemy.health<=0) {
-          enemy.defeatedAt=number(snapshot.defeatedAt,enemy.defeatedAt || performance.now());
+          enemy.defeatedAt=number(snapshot.defeatedAt,enemy.defeatedAt || receivedAt);
           enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt || enemy.defeatedAt;
         }
       }
@@ -2371,7 +2432,7 @@
     }
 
     function multiplayerUpdate(lobby) {
-      syncLobbyUi(lobby);
+      if (roundState === "setup") syncLobbyUi(lobby);
       if (!active || !lobby) return;
       if (lobby.status === "started" && roundState !== "setup") applyHostEnemySyncState(lobby);
       if (lobby.status === "started" && roundState === "setup" && multiplayerStartedRevision !== lobby.revision) {
@@ -2394,8 +2455,8 @@
         health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,alive:roundState!=="lost",kills:regularKills+headshotKills,headshots:headshotKills,
       };
       if (matchType === "coop" && multiplayer?.isHost?.() && roundState !== "setup") {
-        state.enemies=exportEnemySyncState();
-        state.glass=[...shatteredGlass];
+        const worldPacket=hostEnemySyncPacket(now);
+        if (worldPacket) Object.assign(state,worldPacket);
       }
       return state;
     }

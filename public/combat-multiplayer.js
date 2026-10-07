@@ -4,7 +4,7 @@
   const API = "/api/combat-lobby";
   const CLIENT_KEY = "monroe-glass-combat-player-v1";
   const NAME_KEY = "monroe-glass-combat-player-name-v1";
-  const REMOTE_STATE_INTERVAL_MS = 120;
+  const REMOTE_STATE_INTERVAL_MS = 100;
   const clean = (value, max = 48) => String(value || "").replace(/[<>\u0000-\u001f]/g, "").trim().slice(0, max);
 
   function playerId() {

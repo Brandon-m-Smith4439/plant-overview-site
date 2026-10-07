@@ -1,3 +1,15 @@
+## 0.13.73 - 2026-10-07
+
+- Fixed the severe co-op host FPS regression by caching combat occluders for 34 ms. Enemy line-of-sight, movement collision, projectile, and related AI queries now reuse one animated-machine/glass geometry result instead of rebuilding the entire plant geometry multiple times per enemy every frame.
+- Reworked host enemy synchronization into compact world snapshots with a 180 ms cadence. Static plant enemies no longer resend repeated machine dimensions; synthetic zombies include only the additional geometry metadata they need.
+- Added enemy velocity and world-sequence data so follower clients reconcile each host snapshot once and interpolate/extrapolate enemy movement locally every render frame instead of teleporting directly between network positions.
+- Removed the per-frame follower call that reapplied the complete host enemy snapshot during every AI update.
+- Increased player-state responsiveness to a 100 ms heartbeat while allowing heavy enemy/glass fields to be omitted between world snapshots. The server preserves the last host world snapshot until a new one arrives.
+- Added a transient heartbeat mutation path that bypasses the durable lobby write queue, preventing deferred JSON file persistence from blocking live movement/state updates.
+- Reduced heartbeat payload cost by stripping the requesting player's own enemy/glass world data from lobby responses and by avoiding hidden lobby/setup DOM rebuilds during active matches.
+- Added combat/co-op performance regression coverage for occluder caching, host snapshot throttling, follower interpolation, lightweight heartbeat state merging, and heartbeat write-queue bypass.
+- Bumped viewer/editor release tokens to v0.13.73.
+
 ## 0.13.72 - 2026-10-07
 
 - Fixed a process-route migration regression that forced legacy route anchors back inside machine bounds. Legacy `processPointerAnchorXPercent`, `processPointerAnchorYPercent`, and `processPointerAnchorZPercent` values now retain the same `-1000%` to `1100%` range used by current object-to-object connections.

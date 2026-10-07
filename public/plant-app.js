@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.72";
+  const APP_VERSION = "0.13.73";
 
   function editorProfileProtected() {
     try {
@@ -2643,7 +2643,12 @@
     return spawned.length ? [...base, ...spawned] : base;
   }
 
+  const COMBAT_OCCLUDER_CACHE_MS = 34;
+  let combatOccluderCache = { at: -Infinity, entries: [] };
+
   function combatOccluders() {
+    const now = performance.now();
+    if (now - combatOccluderCache.at < COMBAT_OCCLUDER_CACHE_MS) return combatOccluderCache.entries;
     const entries = [];
     const defaultHeight = Math.max(12, Number(state.wallGeometry?.height) || 24);
     structuralColumns().forEach((column) => {
@@ -2670,7 +2675,7 @@
         d: Math.max(.05, Number(wall.d) || .05),
       });
     });
-    const combatTime=performance.now();
+    const combatTime=now;
     machines.forEach((machine) => {
       if (machine.visible === false || combatEnemyMachine(machine) || stageAlpha(machine.reveal,machine.retire) <= .08) return;
       combatGlassOccluders(machine, combatTime).forEach((glass) => entries.push(glass));
@@ -2696,6 +2701,7 @@
         });
       });
     });
+    combatOccluderCache = { at: now, entries };
     return entries;
   }
 

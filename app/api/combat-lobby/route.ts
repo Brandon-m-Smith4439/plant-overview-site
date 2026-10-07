@@ -10,7 +10,7 @@ const MAX_PLAYERS = 6;
 const MAX_EVENTS = 120;
 
 type EnemySyncState = {
-  id: string; x: number; z: number; rotationY: number; health: number; weaponKey: string;
+  id: string; x: number; z: number; vx?: number; vz?: number; rotationY: number; health: number; weaponKey: string;
   movementBlend: number; walkPhase: number; synthetic?: boolean; defeatedAt?: number;
   machine?: { name?: string; w?: number; d?: number; h?: number; y?: number };
 };
@@ -18,7 +18,7 @@ type EnemySyncState = {
 type PlayerState = {
   x?: number; y?: number; z?: number; yaw?: number; pitch?: number; vx?: number; vz?: number;
   health?: number; shield?: number; moving?: boolean; weapon?: string;
-  alive?: boolean; kills?: number; headshots?: number;
+  alive?: boolean; kills?: number; headshots?: number; worldSeq?: number;
   enemies?: EnemySyncState[]; glass?: string[];
 };
 
@@ -123,7 +123,7 @@ function sanitizeEnemyState(value: unknown): EnemySyncState | null {
   if (!id) return null;
   const machineSource = source.machine && typeof source.machine === "object" ? source.machine as Record<string, unknown> : {};
   return {
-    id, x: finite(source.x), z: finite(source.z), rotationY: finite(source.rotationY),
+    id, x: finite(source.x), z: finite(source.z), vx: finite(source.vx), vz: finite(source.vz), rotationY: finite(source.rotationY),
     health: Math.max(0, Math.min(500, finite(source.health, 100))),
     weaponKey: cleanText(source.weaponKey, 24) || "rifle",
     movementBlend: Math.max(0, Math.min(1, finite(source.movementBlend, .08))),
@@ -150,9 +150,19 @@ function sanitizeState(value: unknown): PlayerState {
     alive: source.alive !== false,
     kills: Math.max(0, Math.floor(finite(source.kills))),
     headshots: Math.max(0, Math.floor(finite(source.headshots))),
+    worldSeq: Math.max(0, Math.floor(finite(source.worldSeq))),
     ...(enemies ? { enemies } : {}),
     ...(glass ? { glass } : {}),
   };
+}
+
+function mergePlayerState(value: unknown, existing?: PlayerState): PlayerState {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const next = sanitizeState(value);
+  if (source.enemies === undefined && existing?.enemies) next.enemies = existing.enemies;
+  if (source.glass === undefined && existing?.glass) next.glass = existing.glass;
+  if (source.worldSeq === undefined && existing?.worldSeq !== undefined) next.worldSeq = existing.worldSeq;
+  return next;
 }
 
 function sanitizeConfig(value: unknown, fallback?: Lobby["config"]): Lobby["config"] {
@@ -218,6 +228,14 @@ function scheduleDeferredPersist(store: Store) {
   }, 650);
 }
 
+async function mutateHeartbeat<T>(operation: (store: Store) => Promise<T> | T): Promise<T> {
+  const store = await readStore();
+  prune(store);
+  const value = await operation(store);
+  scheduleDeferredPersist(store);
+  return value;
+}
+
 async function mutate<T>(operation: (store: Store) => Promise<T> | T, persistImmediately = true): Promise<T> {
   let resolveValue!: (value: T) => void;
   let rejectValue!: (error: unknown) => void;
@@ -253,11 +271,11 @@ function makePlayer(body: Record<string, unknown>, existing?: LobbyPlayer): Lobb
     ready: Boolean(body.ready ?? existing?.ready ?? false),
     joinedAt: existing?.joinedAt || now,
     lastSeenAt: now,
-    state: body.state ? sanitizeState(body.state) : existing?.state || sanitizeState({}),
+    state: body.state ? mergePlayerState(body.state, existing?.state) : existing?.state || sanitizeState({}),
   };
 }
 
-function publicLobby(lobby: Lobby) {
+function publicLobby(lobby: Lobby, viewerId = "") {
   return {
     code: lobby.code,
     hostId: lobby.hostId,
@@ -265,7 +283,11 @@ function publicLobby(lobby: Lobby) {
     revision: lobby.revision,
     seed: lobby.seed,
     config: lobby.config,
-    players: Object.values(lobby.players).sort((a, b) => a.joinedAt - b.joinedAt),
+    players: Object.values(lobby.players).sort((a, b) => a.joinedAt - b.joinedAt).map((player) => {
+      if (!viewerId || player.id !== viewerId) return player;
+      const { enemies: _enemies, glass: _glass, ...state } = player.state || {};
+      return { ...player, state };
+    }),
     events: lobby.events.slice(-MAX_EVENTS),
     updatedAt: lobby.updatedAt,
   };
@@ -289,7 +311,8 @@ export async function POST(request: Request) {
   try { body = await request.json(); } catch { return Response.json({ ok: false, error: "Invalid JSON." }, { status: 400 }); }
   const action = cleanId(body.action, 24);
   try {
-    const response = await mutate(async (store) => {
+    const mutateAction = action === "heartbeat" ? mutateHeartbeat : mutate;
+    const response = await mutateAction(async (store) => {
       const now = Date.now();
       if (action === "create") {
         const player = makePlayer(body);
@@ -301,7 +324,7 @@ export async function POST(request: Request) {
           config, players: { [player.id]: player }, events: [],
         };
         store.lobbies[code] = lobby;
-        return { ok: true, lobby: publicLobby(lobby) };
+        return { ok: true, lobby: publicLobby(lobby, player.id) };
       }
 
       const code = cleanCode(body.code);
@@ -316,14 +339,14 @@ export async function POST(request: Request) {
         lobby.players[player.id] = player;
         lobby.updatedAt = now;
         lobby.revision += 1;
-        return { ok: true, lobby: publicLobby(lobby) };
+        return { ok: true, lobby: publicLobby(lobby, playerId) };
       }
       if (!playerId || !existing) return { ok: false, status: 403, error: "Join the lobby first." };
 
       if (action === "heartbeat") {
         lobby.players[playerId] = makePlayer(body, existing);
         lobby.updatedAt = now;
-        return { ok: true, lobby: publicLobby(lobby), serverTime: now };
+        return { ok: true, lobby: publicLobby(lobby, playerId), serverTime: now };
       }
       if (action === "configure") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can change match settings." };
@@ -331,7 +354,7 @@ export async function POST(request: Request) {
         lobby.config = sanitizeConfig(body.config, lobby.config);
         lobby.updatedAt = now;
         lobby.revision += 1;
-        return { ok: true, lobby: publicLobby(lobby) };
+        return { ok: true, lobby: publicLobby(lobby, playerId) };
       }
       if (action === "start") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can start the match." };
@@ -339,7 +362,7 @@ export async function POST(request: Request) {
         lobby.updatedAt = now;
         lobby.revision += 1;
         lobby.seed = Math.floor(Math.random() * 2_147_483_647);
-        return { ok: true, lobby: publicLobby(lobby) };
+        return { ok: true, lobby: publicLobby(lobby, playerId) };
       }
       if (action === "reset") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can reset the match." };
@@ -348,7 +371,7 @@ export async function POST(request: Request) {
         Object.values(lobby.players).forEach((player) => { player.ready = false; player.state = sanitizeState({}); });
         lobby.updatedAt = now;
         lobby.revision += 1;
-        return { ok: true, lobby: publicLobby(lobby) };
+        return { ok: true, lobby: publicLobby(lobby, playerId) };
       }
       if (action === "event") {
         const type = cleanId(body.type, 40);
@@ -364,7 +387,7 @@ export async function POST(request: Request) {
         lobby.events.push(event);
         if (lobby.events.length > MAX_EVENTS) lobby.events.splice(0, lobby.events.length - MAX_EVENTS);
         lobby.updatedAt = now;
-        return { ok: true, event, lobby: publicLobby(lobby) };
+        return { ok: true, event, lobby: publicLobby(lobby, playerId) };
       }
       if (action === "leave") {
         delete lobby.players[playerId];
@@ -372,10 +395,10 @@ export async function POST(request: Request) {
         if (!remaining.length) delete store.lobbies[code];
         else if (lobby.hostId === playerId) lobby.hostId = remaining[0];
         if (store.lobbies[code]) { lobby.updatedAt = now; lobby.revision += 1; }
-        return { ok: true, lobby: store.lobbies[code] ? publicLobby(lobby) : null };
+        return { ok: true, lobby: store.lobbies[code] ? publicLobby(lobby, playerId) : null };
       }
       return { ok: false, status: 400, error: "Unknown lobby action." };
-    }, action !== "heartbeat");
+    });
     const status = typeof response === "object" && response && "status" in response ? Number((response as { status?: unknown }).status || 200) : 200;
     return Response.json(response, { status, headers: { "cache-control": "no-store" } });
   } catch (error) {

@@ -1,3 +1,9 @@
+## Version 0.13.73
+
+Version 0.13.73 is a co-op performance and synchronization pass. Host-side AI no longer rebuilds the entire animated machine/glass occluder set for every enemy sight and movement query; combat occluders are cached for roughly one 30 FPS geometry sample and reused across all AI queries in that frame window. This removes the worst frame-time multiplier that appeared after live animated glass was added.
+
+Co-op enemy state is now published as a compact world snapshot on its own cadence instead of rebuilding and serializing the full enemy array on every player heartbeat. Normal plant-character enemies omit repeated machine dimensions, synthetic zombies carry only the extra machine data they need, and snapshots include velocity plus a world sequence. Followers apply each world revision once, then interpolate and briefly extrapolate enemy movement locally every frame for smoother, faster-looking motion. Lightweight player heartbeats now run at 100 ms, preserve the latest host world state when heavy fields are omitted, avoid echoing the host's own heavy world payload back to the host, and bypass durable file-persistence serialization so disk writes cannot stall live movement updates. Hidden lobby/setup DOM is also no longer rebuilt on every gameplay heartbeat.
+
 ## Version 0.13.72
 
 Version 0.13.72 restores unrestricted process-route endpoints for layouts that still carry legacy process-pointer geometry. The modern object-to-object route system already supported endpoints outside machine bounds, but legacy `processPointerAnchor*Percent` values were still normalized to `0–100%` before migration, silently pulling older saved start/end points back inside their machines. Legacy X/Y/Z anchors now preserve the same `-1000%` to `1100%` safety range as current process connections, so migrated routes retain outside-machine positions and remain draggable well beyond machine envelopes.

@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.66";
+  const APP_VERSION = "0.13.67";
 
   function editorProfileProtected() {
     try {
@@ -2578,6 +2578,56 @@
     });
   }
 
+  function combatHeadVolume(machine, x = Number(machine?.x), z = Number(machine?.z)) {
+    if (!machine) return null;
+    const positioned = { ...machine, x:Number(x), z:Number(z) };
+    const design = positioned.designId ? designLibrary[positioned.designId] : null;
+    const heads = (design?.components || []).filter((component) => /^head$/i.test(String(component?.name || ""))
+      && component?.type === "box"
+      && ["x","y","z","w","h","d"].every((key) => Number.isFinite(Number(component?.[key]))));
+    if (heads.length) {
+      heads.sort((first,second) => (Number(second.w)*Number(second.h)*Number(second.d))-(Number(first.w)*Number(first.h)*Number(first.d)));
+      const boxSpec = scaledComponentBox(positioned, heads[0], design);
+      return {
+        center:{ x:Number(boxSpec.x)+Number(boxSpec.w)/2, y:Number(boxSpec.y)+Number(boxSpec.h)/2, z:Number(boxSpec.z)+Number(boxSpec.d)/2 },
+        radius:Math.max(.34,Math.min(.78,Math.max(Number(boxSpec.w),Number(boxSpec.h),Number(boxSpec.d))*.48)),
+      };
+    }
+    const height=Math.max(1,Number(positioned.h)||6.5);
+    return {
+      center:{x:Number(x)+(Number(positioned.w)||1.8)/2,y:(Number(positioned.y)||0)+height*.80,z:Number(z)+(Number(positioned.d)||1.8)/2},
+      radius:Math.max(.38,Math.min(.66,Math.min(Number(positioned.w)||1.8,Number(positioned.d)||1.8)*.32)),
+    };
+  }
+
+  function combatGlassComponent(component) {
+    if (!component || component.visible === false) return false;
+    const name=String(component.name || component.id || "").toLowerCase();
+    const opacity=Number(component.opacity ?? 1);
+    return component.type === "glassPanel"
+      || /glass|window|windshield|cutting surface|observation/.test(name)
+      || (opacity < .82 && String(component.color || "").toLowerCase() === "#8fc6d4");
+  }
+
+  function combatGlassOccluders(machine) {
+    const design=machine?.designId ? designLibrary[machine.designId] : null;
+    if (!design) return [];
+    return (design.components || []).filter((component) => component.type === "box" && combatGlassComponent(component)).map((component) => {
+      const spec=scaledComponentBox(machine,component,design);
+      const angle=angleRadians(spec);
+      const halfWidth=Math.max(.025,Number(spec.w)/2), halfDepth=Math.max(.025,Number(spec.d)/2);
+      const extentX=Math.abs(Math.cos(angle))*halfWidth+Math.abs(Math.sin(angle))*halfDepth;
+      const extentZ=Math.abs(Math.sin(angle))*halfWidth+Math.abs(Math.cos(angle))*halfDepth;
+      const centerX=Number(spec.x)+halfWidth, centerZ=Number(spec.z)+halfDepth;
+      return {
+        kind:"glass", machineId:String(machine.instanceId || machine.id || machine.name || "machine"), componentId:String(component.id || component.name || "glass"),
+        glassId:`${String(machine.instanceId || machine.id || machine.name || "machine")}:${String(component.id || component.name || "glass")}`,
+        glassRadius:Math.max(.8,Math.min(4,Math.hypot(Number(spec.w),Number(spec.h),Number(spec.d))*.12)),
+        x:centerX-extentX,y:Number(spec.y),z:centerZ-extentZ,w:extentX*2,h:Math.max(.04,Number(spec.h)),d:extentZ*2,
+      };
+    });
+  }
+
   function combatEnemyMachines() {
     const base = combatBaseEnemyMachines();
     const spawned = combatController?.isActive?.() ? (combatController.spawnedEnemyMachines?.() || []) : [];
@@ -2613,6 +2663,7 @@
     });
     walkCollisionCandidates().forEach((machine) => {
       if (combatEnemyMachine(machine)) return;
+      combatGlassOccluders(machine).forEach((glass) => entries.push(glass));
       walkHitboxesForMachine(machine).forEach((hitbox) => {
         const angle = angleRadians(hitbox);
         const halfWidth = Math.max(.05, Number(hitbox.w) / 2);
@@ -2622,6 +2673,7 @@
         const centerX = Number(hitbox.x) + halfWidth;
         const centerZ = Number(hitbox.z) + halfDepth;
         entries.push({
+          kind:"machine",
           x: centerX - extentX,
           y: Number(hitbox.y) || 0,
           z: centerZ - extentZ,
@@ -2943,8 +2995,7 @@
       z: modelCenter()[1] + state.panZ - base.d / 2,
       w: base.w,
       d: base.d,
-      h: base.h,
-      naturalW: base.w,
+      h: base.h,      naturalW: base.w,
       naturalD: base.d,
       naturalH: base.h,
       scaleXPercent: 100,
@@ -2995,7 +3046,8 @@
         type: "cutting",
         w: 54, d: 66, h: 5,
         color: "#267e79",
-        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 19 },      },
+        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 19 },
+      },
       waterjet: {
         name: requestedName || "SQ4020 waterjet",
         short: requestedName || "Waterjet",
@@ -3942,8 +3994,7 @@
   function updateEditorLiveTransformFields() {
     const machine = selectedMachine();
     const panel = document.querySelector(".layout-editor");
-    if (!machine || !panel) return;
-    ["x", "y", "z"].forEach((field) => {
+    if (!machine || !panel) return;    ["x", "y", "z"].forEach((field) => {
       const input = panel.querySelector(`[data-machine-field='${field}']`);
       if (input && document.activeElement !== input) input.value = String(Number(machine[field] || 0));
     });
@@ -3994,7 +4045,8 @@
 
   function swapStageReferences(first, second) {
     machines.forEach((machine) => {
-      ["reveal", "retire", "labelReveal", "labelRetire"].forEach((field) => {        if (machine[field] === first) machine[field] = second;
+      ["reveal", "retire", "labelReveal", "labelRetire"].forEach((field) => {
+        if (machine[field] === first) machine[field] = second;
         else if (machine[field] === second) machine[field] = first;
       });
     });
@@ -4941,8 +4993,7 @@
           </div>
           <button type="button" data-editor-action="roof-defaults">Restore 50 / 75 ft roof defaults</button>
         </fieldset>
-        <fieldset class="column-grid-controls">
-          <legend>Automatic structural columns</legend>
+        <fieldset class="column-grid-controls">          <legend>Automatic structural columns</legend>
           <label class="column-grid-toggle"><input type="checkbox" data-column-grid-check="autoExtend" checked> Extend the CAD column grid into new floor sections</label>
           <div class="column-grid-values">
             <label>X bay spacing (ft)<input type="number" min="5" max="250" step="1" data-column-grid-field="spacingX"></label>
@@ -4993,7 +5044,8 @@
         <div class="editor-actions timeline-actions">
           <button type="button" data-editor-action="stage-earlier">← Earlier</button>
           <button type="button" data-editor-action="stage-later">Later →</button>
-        </div>        <div class="editor-actions timeline-actions">
+        </div>
+        <div class="editor-actions timeline-actions">
           <button type="button" data-editor-action="stage-add">Add after</button>
           <button type="button" data-editor-action="stage-delete">Delete stage</button>
         </div>
@@ -5940,8 +5992,7 @@
     });
     panel.querySelectorAll("[data-wall-geometry-field]").forEach((input) => {
       input.addEventListener("change", () => {
-        const field = input.dataset.wallGeometryField;
-        const value = Number(input.value);
+        const field = input.dataset.wallGeometryField;        const value = Number(input.value);
         if (!Number.isFinite(value)) return;
         pushHistory();
         state.wallGeometry[field] = field === "height" ? clamp(value, 8, 150) : clamp(value, .25, 20);
@@ -5992,7 +6043,8 @@
     panel.querySelector("[data-editor-action='stage-later']").addEventListener("click",() => moveCurrentStage(1));
     panel.querySelector("[data-editor-action='stage-add']").addEventListener("click",addTimelineStage);
     panel.querySelector("[data-editor-action='stage-delete']").addEventListener("click",deleteTimelineStage);
-    panel.querySelector("[data-editor-action='refresh-add-designs']")?.addEventListener("click", () => {      refreshDesignLibrary();
+    panel.querySelector("[data-editor-action='refresh-add-designs']")?.addEventListener("click", () => {
+      refreshDesignLibrary();
       updateEditorPanel();
       showToast("Saved Machine Design Studio models refreshed.");
     });
@@ -6754,6 +6806,8 @@
         ),
       }),
       getEnemies: combatBaseEnemyMachines,
+      getCharacters: combatBaseEnemyMachines,
+      getEnemyHeadVolume: combatHeadVolume,
       getOccluders: combatOccluders,
       getBounds: floorBounds,
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
@@ -6829,7 +6883,12 @@
       invalidate: () => renderPerformance.invalidate?.("combat-mode"),
       onStateChange: syncCombatButtons,
       onCombatStart: () => {
-        if (combatController?.getMode?.() !== "zombie") { showToast("Fight! Defeat every enemy AI to complete the round."); return; }
+        if (combatController?.getMode?.() !== "zombie") {
+          const settings=combatController?.getCombatSettings?.() || {};
+          const difficulty=String(settings.difficulty || "normal").replace(/^./,(value)=>value.toUpperCase());
+          showToast(`${difficulty} Combat started${settings.matchType === "private" ? " · Private Match" : settings.matchType === "coop" ? " · Co-op" : ""}.`);
+          return;
+        }
         const settings = combatController?.getZombieSettings?.() || {};
         const difficulty = String(settings.difficulty || "normal").replace(/^./,(value)=>value.toUpperCase());
         showToast(settings.endless ? `${difficulty} Endless started — survive as long as possible.` : `${difficulty} Normal started — clear every zombie in the plant.`);
@@ -6932,8 +6991,7 @@
     touchAimButton?.addEventListener("click", (event) => {
       event.preventDefault();
       if (!combatController?.isActive?.()) return;
-      const activeAim = touchAimButton.getAttribute("aria-pressed") !== "true";
-      touchAimButton.setAttribute("aria-pressed", String(activeAim));
+      const activeAim = touchAimButton.getAttribute("aria-pressed") !== "true";      touchAimButton.setAttribute("aria-pressed", String(activeAim));
       touchAimButton.classList.toggle("active", activeAim);
       combatController.setAiming?.(activeAim);
     });
@@ -6991,7 +7049,8 @@
     });
 
     document.querySelectorAll("[data-view]").forEach((button) => {
-      button.addEventListener("click", () => {        if (state.cameraMode === "walk") setWalkMode(false);
+      button.addEventListener("click", () => {
+        if (state.cameraMode === "walk") setWalkMode(false);
         if (button.dataset.view === "top") {
           state.yaw = 0;
           state.pitch = 1.42;
@@ -7931,8 +7990,7 @@
     // machine from the render list. The route itself is a navigation aid and
     // must stay persistent, so rebuild any missing endpoint from the saved
     // machine record instead of tying route lifetime to camera visibility.
-    Object.values(state.processConnections || {}).forEach((connection) => {
-      if (!connection || connection.visible === false) return;
+    Object.values(state.processConnections || {}).forEach((connection) => {      if (!connection || connection.visible === false) return;
       [connection.sourceId, connection.targetId].forEach((instanceId) => {
         if (!instanceId || entries.has(instanceId)) return;
         const fallback = processEndpointEntry(machineById(instanceId), time);
@@ -7990,7 +8048,8 @@
       connection.flowPivotPoints=processConnectionExactPivotPoints(connection,time);
       connection.flowPivotMode="custom";
     }else connection.flowPivotPoints=normalizeProcessFlowPivotPoints(connection.flowPivotPoints);
-    return connection.flowPivotPoints;  }
+    return connection.flowPivotPoints;
+  }
 
   function createProcessPivotId(connection){
     const existing=new Set(normalizeProcessFlowPivotPoints(connection?.flowPivotPoints).map((item)=>item.id));
@@ -8930,7 +8989,6 @@
     // which caused depth-buffer flicker on the cap during the paint timeline.
     box({ x:x-size/2,z:z-size/2,w:size,d:size,h:height,color });
   }
-
   function sceneDepth(x,z) {
     return project(x,0,z)[2];
   }
@@ -8989,7 +9047,8 @@
       else if (localTime < quarterDuration + pauseSeconds) position = 1;
       else if (localTime < quarterDuration + pauseSeconds + activeDuration / 2) {
         const progress = (localTime - quarterDuration - pauseSeconds) / (activeDuration / 2);
-        position = Math.sin(Math.PI / 2 + progress * Math.PI);      } else if (localTime < quarterDuration + pauseSeconds * 2 + activeDuration / 2) position = -1;
+        position = Math.sin(Math.PI / 2 + progress * Math.PI);
+      } else if (localTime < quarterDuration + pauseSeconds * 2 + activeDuration / 2) position = -1;
       else {
         const progress = (localTime - quarterDuration - pauseSeconds * 2 - activeDuration / 2) / quarterDuration;
         position = Math.sin(Math.PI * 1.5 + progress * Math.PI / 2);
@@ -9929,8 +9988,7 @@
     const count = Math.min(designSegmentCap, renderPerformance.cylinderSegments(component.segments || 20));
     const center = [
       Number(component.x)+Number(component.w)/2,
-      Number(component.y)+Number(component.h)/2,
-      Number(component.z)+Number(component.d)/2,
+      Number(component.y)+Number(component.h)/2,      Number(component.z)+Number(component.d)/2,
     ];
     const rings=[];
     for (const layer of [-1,1]) {
@@ -9988,7 +10046,8 @@
     faces.forEach((indices,index)=>polygon(indices.map((vertexIndex)=>points[vertexIndex]),shades[index]?shade(component.color,shades[index]):component.color,"rgba(15,25,28,.16)",.5,alpha));
   }
 
-  function designRollerFrame(component, index, count) {    const safeCount = Math.max(2, Math.round(Number(count) || Number(component.count) || 2));
+  function designRollerFrame(component, index, count) {
+    const safeCount = Math.max(2, Math.round(Number(count) || Number(component.count) || 2));
     const ratio = safeCount === 1 ? 0 : clamp(Number(index) || 0, 0, safeCount - 1) / (safeCount - 1);
     const localCenter = [
       Number(component.x) + Number(component.w) * ratio,
@@ -10087,6 +10146,7 @@
     const renderComponents = lodLevel >= 2 ? visibleComponents : representativeDesignComponents(visibleComponents);
     try {
       renderComponents.forEach((component) => {
+      if (combatController?.isActive?.() && combatGlassComponent(component) && combatController.isGlassShattered?.(machine.instanceId,component.id)) return;
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
       if (component.type === "box" || component.type === "glassPanel" || component.type === "text") {
         drawDesignBox(machine, component, design, componentAlpha, grow);
@@ -10797,6 +10857,39 @@
     faces.forEach((face)=>drawViewmodelPolygon(face.points,face.c,"rgba(8,14,17,.22)",alpha));
   }
 
+  function drawCombatRemotePlayers(time) {
+    if (!combatController?.isActive?.()) return;
+    const lobby=combatController.multiplayerLobby?.();
+    if (!lobby || lobby.status !== "started") return;
+    for (const player of combatController.remotePlayers?.() || []) {
+      const playerState=player.state || {};
+      if (!Number.isFinite(Number(playerState.x)) || !Number.isFinite(Number(playerState.z))) continue;
+      const template=machines.find((machine,index) => String(machine.instanceId || machine.id || machine.name || `enemy-${index}`) === String(player.characterId || ""))
+        || combatBaseEnemyMachines()[0];
+      if (!template) continue;
+      const width=Math.max(1.4,Number(template.w)||1.8),depth=Math.max(1.2,Number(template.d)||1.8);
+      const rendered={
+        ...template,
+        instanceId:`remote-player:${player.id}`,
+        name:player.name || "Teammate",
+        x:Number(playerState.x)-width/2,
+        z:Number(playerState.z)-depth/2,
+        y:Number(template.y)||0,
+        rotationY:180-(Number(playerState.yaw)||0)*180/Math.PI,
+        rotation:180-(Number(playerState.yaw)||0)*180/Math.PI,
+        combatState:{
+          zombie:lobby.config?.mode === "zombie" && lobby.config?.matchType !== "private",
+          movementBlend:playerState.moving ? 1 : .08,
+          walkPhase:time*.008 + (String(player.id||"").length%7)*.71,
+          weaponKey:playerState.weapon === "handgun" ? "pistol" : (playerState.weapon || "rifle"),
+          shotProgress:0,reloadProgress:0,firing:false,muzzleFlash:false,recoil:false,hitReact:0,defeated:playerState.alive === false,deathProgress:playerState.alive === false ? 1 : 0,
+          health:Number(playerState.health ?? 100),
+        },
+      };
+      drawCombatEnemy(rendered,1,1,time);
+    }
+  }
+
   function drawCombatWorldEffects(time) {
     if (!combatController?.isActive?.()) return;
     const effects = combatController.combatEffects?.(time);
@@ -10852,6 +10945,30 @@
       polygon([[head[0]-puff,head[1],head[2]],[head[0],head[1]+puff,head[2]],[head[0]+puff,head[1],head[2]],[head[0],head[1]-puff,head[2]]],"rgba(255,214,111,.96)",null,1,.96,{transparent:true});
     }
 
+    for (const effect of effects.glassShards || []) {
+      const t=clamp((time-effect.startAt)/Math.max(1,effect.duration),0,1);
+      const center=[Number(effect.point.x),Number(effect.point.y),Number(effect.point.z)];
+      const normal=[Number(effect.normal?.x)||0,Number(effect.normal?.y)||0,Number(effect.normal?.z)||0];
+      const radius=Number(effect.radius)||1.8;
+      for(let i=0;i<20;i++){
+        const a=i/20*Math.PI*2+(Number(effect.seed)||0)*.01;
+        const speed=.35+(i%6)*.12;
+        const spread=radius*(.16+t*speed);
+        const lift=(.35+(i%5)*.09)*t-1.25*t*t;
+        const start=[center[0]+normal[0]*.03,center[1]+normal[1]*.03,center[2]+normal[2]*.03];
+        const end=[start[0]+Math.cos(a)*spread+normal[0]*t*.8,start[1]+lift+normal[1]*t*.8,start[2]+Math.sin(a)*spread+normal[2]*t*.8];
+        line3d(start,end,i%3===0?"rgba(221,251,255,.96)":"rgba(126,210,229,.86)",i%4===0?3.1:1.8,1-t*.78);
+        const shard=.08+(i%4)*.025;
+        polygon([[end[0]-shard,end[1],end[2]],[end[0]+shard,end[1]+shard*1.7,end[2]],[end[0]+shard*.3,end[1]-shard,end[2]+shard]],"rgba(159,225,238,.36)","rgba(225,252,255,.74)",.7,1-t*.72,{transparent:true});
+      }
+      const flash=Math.sin(Math.min(1,t*2.2)*Math.PI);
+      if(flash>0){
+        const ring=[];const ringRadius=radius*(.15+t*.72);
+        for(let i=0;i<18;i++){const a=i/18*Math.PI*2;ring.push([center[0]+Math.cos(a)*ringRadius,center[1]+.02,center[2]+Math.sin(a)*ringRadius]);}
+        polygon(ring,"rgba(159,228,241,.08)","rgba(218,250,255,.55)",1.5,flash*.85,{transparent:true});
+      }
+    }
+
     for (const effect of effects.impacts || []) {
       const [u,v]=impactBasis(effect.normal);
       const n=[Number(effect.normal?.x)||0,Number(effect.normal?.y)||0,Number(effect.normal?.z)||0];
@@ -10870,8 +10987,7 @@
     for (const burst of effects.bloodBursts || []) {
       const elapsed = clamp((time-burst.startAt)/Math.max(1,burst.duration),0,1);
       const intensity=Number(burst.intensity)||1;
-      for (let i=0;i<14;i++) {
-        const angle = burst.seed*.17 + i*.63;
+      for (let i=0;i<14;i++) {        const angle = burst.seed*.17 + i*.63;
         const distance = (.42 + (i%4)*.16) * (elapsed*1.55) * intensity;
         const rise = (.55 + (i%3)*.18)*elapsed - 1.18*elapsed*elapsed;
         const start=[Number(burst.point.x),Number(burst.point.y),Number(burst.point.z)];
@@ -10987,7 +11103,8 @@
       {x:0,y:-.025,z:-1.08,w:.1,h:.1,d:.62,color:dark},
       {x:0,y:-.025,z:-1.43,w:.145,h:.13,d:.12,color:"#252f33"},
       // Raised holographic sight: open center, two side posts, thin top and base.
-      {x:0,y:.18,z:-.22,w:.28,h:.045,d:.24,color:"#182126"},      {x:-.105,y:.305,z:-.22,w:.045,h:.25,d:.075,color:mid},
+      {x:0,y:.18,z:-.22,w:.28,h:.045,d:.24,color:"#182126"},
+      {x:-.105,y:.305,z:-.22,w:.045,h:.25,d:.075,color:mid},
       {x:.105,y:.305,z:-.22,w:.045,h:.25,d:.075,color:mid},
       {x:0,y:.43,z:-.22,w:.25,h:.04,d:.075,color:mid},
       {x:0,y:.325,z:-.255,w:.19,h:.035,d:.035,color:"#4b7780"},
@@ -11869,8 +11986,7 @@
     if (design?.components?.length) {
       if (!shouldDrawDetailedCustomDesign(rendered, design)) {
         const footprintPoints = footprint(rendered, 0, 0).map(([x,,z]) => [x, 0.035, z]);
-        drawSoftGroundShadow(footprintPoints, Math.max(.5, Number(rendered.h) || .5), alpha * .62);
-        return;
+        drawSoftGroundShadow(footprintPoints, Math.max(.5, Number(rendered.h) || .5), alpha * .62);        return;
       }
       const shadowLimit = renderPerformance.maxShadowParts();
       if (shadowLimit <= 0) return;
@@ -11986,7 +12102,8 @@
   function drawSharedDesignInstances(machineEntries, time) {
     if (
       !depthRenderer.available
-      || typeof depthRenderer.beginTemplate !== "function"      || typeof depthRenderer.addGeometryInstances !== "function"
+      || typeof depthRenderer.beginTemplate !== "function"
+      || typeof depthRenderer.addGeometryInstances !== "function"
     ) return new Set();
     const groups = new Map();
     machineEntries.forEach((entry) => {
@@ -12411,6 +12528,7 @@
     // Submitting impacts, blood, rockets and tracers before the scene is presented keeps
     // them from bleeding through machines, walls or structural pillars.
     drawWorldMachineLabels(machineEntries, time);
+    drawCombatRemotePlayers(time);
     drawCombatWorldEffects(time);
     state.visibleAnimationsActive = state.visibleAnimationsActive || Boolean(depthRenderer.worldLabelsAnimating?.());
     presentPhysicalScene?.();
@@ -12867,8 +12985,7 @@
     });
     const scrubber = document.getElementById("timeline-scrubber");
     if (scrubber) scrubber.value = String(state.stage);
-    const stagePanel = document.querySelector(".stage-panel");
-    if (stagePanel && previousStage !== state.stage) {
+    const stagePanel = document.querySelector(".stage-panel");    if (stagePanel && previousStage !== state.stage) {
       stagePanel.classList.remove("stage-transitioning");
       void stagePanel.offsetWidth;
       stagePanel.classList.add("stage-transitioning");
@@ -12985,7 +13102,8 @@
           state.dragOffsetX = worldX-machine.x;
           state.dragOffsetZ = worldZ-machine.z;
           state.dragAction = "machine";
-          state.dragSnapshot = snapshotLayout();          state.dragMoved = false;
+          state.dragSnapshot = snapshotLayout();
+          state.dragMoved = false;
         } else {
           state.dragAction = "pan";
         }

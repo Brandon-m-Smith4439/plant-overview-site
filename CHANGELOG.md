@@ -1,3 +1,13 @@
+## 0.13.65 - 2026-10-07
+
+- Converted Zombie Mode from a finite clear-the-room round into continuous survival. Existing people still begin as zombies, then additional chainsaw zombies spawn from safe points around the layout edges on an accelerating timer with an alive-enemy cap that rises as survival time increases.
+- Added persistent Zombie survival scoring: the mode now records the **longest** survival time on death instead of treating Zombie Mode like a fastest-clear challenge.
+- Added nine safe ammo-pickup locations distributed through the floor plan. Pickups refill shotgun/pistol reserves in Zombie Mode (or rifle/pistol reserves in Combat Mode), visually pulse in the 3D scene, and respawn after 18 seconds.
+- Replaced the remaining zombie face-plate approach by repainting the real named **Head** component in place and placing larger protruding eye/pupil geometry just beyond the face plane. Fallback people receive a complete zombie head volume rather than a neck-level card.
+- Added obstacle-aware corpse drift to the kill-frame death animation so enemies killed beside machines slide away from nearby collision volumes while falling instead of clipping into equipment and appearing frozen upright.
+- Enabled authored Designer envelopes on **bridgeCrane** and **craneMachine** objects as real first-person/combat collision and bullet/AI cover. Cranes without explicit envelopes remain pass-through, preserving open overhead structures.
+- Polished both end-screen actions: Restart/Play Again and Exit Mode now share matched icon, two-line label, depth, hover sheen, and pressed-state styling.
+
 ## 0.13.64 - 2026-10-07
 
 - Anchored Zombie Mode face skin, eyes, pupils, and wound marks to the actual custom-person **Head** component through the design-placement transform, with a corrected built-in-person fallback. This prevents the zombie face layer from appearing as a flat plate around the neck on differently scaled employee models.

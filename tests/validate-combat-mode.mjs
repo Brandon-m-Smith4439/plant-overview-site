@@ -118,7 +118,7 @@ assert.ok(combat.includes("bloodFountains") && plant.includes("effects.bloodFoun
 assert.ok(combat.includes('rocket: Object.freeze') && combat.includes("pushExplosiveProjectile") && combat.includes("resolveExplosionDamage"), "Rocket Launcher projectile/explosion behavior is missing.");
 assert.ok(combat.includes("sightRange: 145") && combat.includes("moveSpeed: 2") && combat.includes("const sightRange = loadout.sightRange"), "Melee enemies must detect farther and rush at double-speed loadout weighting.");
 assert.ok(combat.includes("triggerCombatRoll") && combat.includes("rollStartedAt") && plant.includes("rollProgress") && plant.includes("rotationZ"), "Enemy combat-roll behavior/animation is missing.");
-assert.ok(plant.includes("Facial combat details are anchored to the actual Head design component") && plant.includes("#f5f6f2"), "Combat people must retain visible eyes.");
+assert.ok(plant.includes("large protruding eyes") && plant.includes("#f5f6f2"), "Combat people must retain visible eyes.");
 assert.ok(css.includes("combat-holo-sight") && css.includes("combat-holo-glass") && !css.includes("border-radius:50%;\n  border:clamp(3px,.4vw,6px)"), "Rifle ADS must use a holographic sight instead of the old circular scope.");
 assert.ok(combat.includes("function playerMuzzleOrigin") && combat.includes("rightOffset"), "Player tracer muzzle must originate at the rendered gun and follow ADS/hip-fire position.");
 assert.ok(css.includes("combat-hitmarker.visible i") && css.includes("#ff4e55"), "Person hits must use a red hit marker instead of bullet-hole decals.");
@@ -129,7 +129,7 @@ assert.ok(css.includes(".combat-round-overlay.victory") && css.includes(".combat
 assert.ok(plant.includes('data-touch-combat="fire"') && plant.includes('data-touch-combat="aim"') && plant.includes('data-touch-combat="reload"') && plant.includes('data-touch-combat="swap"'), "Mobile Combat Mode action controls are missing.");
 assert.ok(plant.includes("navigator.maxTouchPoints") && combat.includes("setTriggerHeld") && combat.includes("setAiming: (enabled)"), "Touch players must be combat-engaged without desktop pointer lock and expose fire/aim APIs.");
 assert.ok(css.includes(".combat-mode-active .touch-combat-actions") && css.includes(".touch-combat-fire"), "Mobile Combat Mode controls are not styled for touch screens.");
-assert.ok(plant.includes("canAnchorFaceToHead") && plant.includes("const eyeY = hy + hh*.58") && plant.includes("const eyeZ = faceZ-eyeD*.72"), "Combat eyes must stay anchored high on the actual head face plane.");
+assert.ok(plant.includes("const eyeY=hy+hh*.57") && plant.includes("const eyeZ=hz-eyeD*1.38"), "Combat eyes must stay anchored high and visibly in front of the actual head face plane.");
 assert.ok(plant.includes("Large shoulder-fired launcher") && plant.includes("weaponMuzzleZ=-3.18"), "Enemy Rocket Launcher must render as a large shoulder-fired 3D weapon.");
 assert.ok(plant.includes("Thick right-side service rifle") && plant.includes('enemyWeapon === "sniper"') && plant.includes('enemyWeapon === "chainsaw"'), "AI rifle, sniper, and chainsaw models must have distinct detailed right-hand 3D geometry.");
 // v0.13.61: shared envelopes, reliable owner Combat entry, stronger weapon placement, and deterministic deaths.
@@ -153,14 +153,14 @@ assert.ok(plant.includes("shotPulse") && plant.includes("reloadWave") && plant.i
 assert.ok(plant.includes("Heavy layered motor housing") && plant.includes("chainOffset") && plant.includes("Full 3D service rifle") && plant.includes("multiple 3D collars"), "Chainsaw, rifle, sniper, and rocket launcher 3D revamps are incomplete.");
 
 
-// v0.13.64: separate Zombie Mode, persistent clear times, true headshots, gun-side tracers, and end-screen kill stats.
+// v0.13.63: separate Zombie Mode, persistent clear times, true headshots, gun-side tracers, and end-screen kill stats.
 assert.ok(plant.includes('data-toggle="zombie" class="zombie-mode-button"') && plant.includes('setCombatMode(!sameMode, "zombie")'), "Owner controls must expose a separate Zombie Mode beside Combat Mode.");
 assert.ok(combat.includes('zombie: Object.freeze') && combat.includes('defaultWeapon: "shotgun"') && combat.includes('loadout: Object.freeze(["shotgun", "handgun"])'), "Zombie Mode must use the shotgun + pistol player loadout.");
 assert.ok(combat.includes('record.weaponKey = record.zombie ? "chainsaw"') && combat.includes('record.modeSpeedMultiplier = record.zombie ? 1.55 : 1'), "Zombie AI must be chainsaw-only and significantly faster than normal Combat Mode enemies.");
-assert.ok(plant.includes('canAnchorFaceToHead') && plant.includes('drawDesignBox(actor,facePart,design') && plant.includes('const eyeWhite = zombie ? "#efd85f"'), "Zombie face/eye overlays must anchor to the actual custom-person Head component.");
+assert.ok(plant.includes('headCandidates') && plant.includes('drawDesignBox(actor,{...headPart,color:skin}') && plant.includes('const eyeWhite = zombie ? "#f7e76f"'), "Zombie face/eye overlays must anchor to the actual custom-person Head component.");
 assert.ok(combat.includes('function enemyHitVolumes') && combat.includes('zone: "head"') && combat.includes('zone: "body"') && combat.includes('HEADSHOT_DAMAGE_MULTIPLIER = 3'), "Combat hit detection must have separate head/body volumes and real headshot damage.");
 assert.ok(combat.includes('headshotKills += 1') && combat.includes('regularKills += 1') && combat.includes('data-combat-headshot-kills') && combat.includes('data-combat-regular-kills'), "Regular-kill and headshot-kill statistics must be tracked separately.");
-assert.ok(combat.includes('HIGH_SCORE_STORAGE_KEY') && combat.includes('recordClearTime') && combat.includes('bestClearTime') && combat.includes('highScores[gameMode]'), "Combat and Zombie Mode clear times must persist independently as high scores.");
+assert.ok(combat.includes('HIGH_SCORE_STORAGE_KEY') && combat.includes('recordRoundTime') && combat.includes('bestClearTime') && combat.includes('highScores[gameMode]'), "Combat and Zombie Mode clear times must persist independently as high scores.");
 assert.ok(combat.includes('function playerMuzzleOrigin') && combat.includes('const ads = weapon?.key === "rifle" && Boolean(isAiming)') && combat.includes('const rightOffset'), "Player tracers must follow the rendered gun muzzle in hip-fire and rifle ADS.");
 assert.ok(plant.includes('Hip fire keeps the physical holographic sight on the rifle model') && plant.includes('drawViewmodelPolygon(glassLocal') && plant.includes('reticleRadius'), "The player rifle must keep its holographic glass and reticle on the 3D model outside ADS.");
 assert.ok(css.includes('.combat-restart-button') && css.includes('.combat-restart-icon') && css.includes('.combat-restart-copy'), "Victory/death restart control must use the polished replay button presentation.");
@@ -172,3 +172,16 @@ assert.ok(plant.includes('const rifleAds = combat.weapon === "rifle" && aim > .5
 assert.ok(combat.includes("function playerMuzzleOrigin") && combat.includes("ads ? 1.66 : 1.34") && combat.includes("ads ? .06 : .42"), "Rifle tracer origin must move with the muzzle between ADS and hip fire.");
 assert.ok(combat.includes("pellets: 8") && combat.includes("spread: .09") && combat.includes("pelletEndpoints.forEach") && combat.includes('pushTracer(muzzle, endpoint, now + pelletIndex * 2, "player-shotgun")'), "Shotgun must fire a wide eight-pellet spread with separate visible tracers.");
 assert.ok(combat.includes("enemy.deathAnimationStartedAt = now") && !combat.includes("enemy.deathAnimationStartedAt = 0;\n      enemy.movementBlend = 0;"), "Enemy death animation must begin on the kill frame rather than waiting for a later render pass.");
+
+
+// v0.13.65: continuous survival spawns, ammo pickups, real zombie heads, crane envelopes, and machine-safe death falls.
+assert.ok(combat.includes("function updateZombieSpawns") && combat.includes("spawnZombie(now)") && combat.includes("zombieAliveCap(now)"), "Zombie Mode must continuously spawn additional edge zombies during survival.");
+assert.ok(combat.includes("function resetAmmoPickups") && combat.includes("function updateAmmoPickups") && combat.includes("AMMO_PICKUP_RESPAWN_MS = 18000"), "Survival mode must provide respawning ammo pickups around the layout.");
+assert.ok(combat.includes('mode === "zombie" ? Math.max(...scores)') && combat.includes("recordRoundTime(survivalSeconds)"), "Zombie high score must track longest survival time.");
+assert.ok(plant.includes("drawDesignBox(actor,{...headPart,color:skin}") && plant.includes("large protruding eyes"), "Zombie visuals must repaint the actual Head geometry and show visible eyes.");
+assert.ok(combat.includes("deathPushX") && combat.includes("deathPushZ") && plant.includes("deathPushX * eased"), "Death falls near machines must include obstacle-aware corpse drift.");
+assert.ok(plant.includes('["bridgeCrane", "craneMachine"].includes(machine.type)') && plant.includes("designCollisionEnvelopes(design).length"), "Authored crane pillar envelopes must become real collision while envelope-free cranes remain pass-through.");
+assert.ok(css.includes(".combat-exit-button") && css.includes(".combat-exit-copy"), "Exit Mode must receive the same polished end-screen control treatment as Restart.");
+
+assert.ok(combat.includes("function cleanupZombieCorpses") && combat.includes("now - enemy.defeatedAt > 5200"), "Spawned zombie corpses must retire after their fall so survival mode does not accumulate actors forever.");
+assert.ok(plant.includes("service gap between the tables") && plant.includes("component?.type === \"box\""), "Cutting-line fallback collision must use its separate table/console geometry instead of one oversized footprint.");

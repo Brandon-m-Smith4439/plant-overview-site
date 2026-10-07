@@ -79,7 +79,9 @@ assert.equal(connection.flowSpeed, 74);
 assert.deepEqual(machineLabel, labelBefore, "Editing an object-to-object process pointer must not change any machine-label pointer property.");
 
 assert.equal(applyProcessConnectionField(connection, "startAnchorXPercent", "9999"), true);
-assert.equal(connection.startAnchorXPercent, 1100, "Connection anchors must support endpoints far beyond the object while still clamping to the expanded safety range.");\nassert.equal(applyProcessConnectionField(connection, "endAnchorYPercent", "-9999"), true);\nassert.equal(connection.endAnchorYPercent, -1000, "Connection anchors must support large negative percentages outside the destination object.");
+assert.equal(connection.startAnchorXPercent, 1100, "Connection anchors must support endpoints far beyond the object while still clamping to the expanded safety range.");
+assert.equal(applyProcessConnectionField(connection, "endAnchorYPercent", "-9999"), true);
+assert.equal(connection.endAnchorYPercent, -1000, "Connection anchors must support large negative percentages outside the destination object.");
 assert.equal(applyProcessConnectionField(connection, "flowTurn2Offset", "900"), true);
 assert.equal(connection.flowTurn2Offset, 500, "Floor-route turn offsets must clamp to the extended routing range.");
 assert.equal(applyProcessConnectionField(connection, "flowFloorHeight", "0"), true);

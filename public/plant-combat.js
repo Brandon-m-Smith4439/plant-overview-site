@@ -7,14 +7,14 @@
   const SHIELD_RECHARGE_PER_SECOND = 7;
 
   const ENEMY_WEAPONS = Object.freeze({
-    rifle: Object.freeze({ key: "rifle", label: "Rifle", range: 125, preferredMin: 28, preferredMax: 62, moveSpeed: 1, fireMin: 720, fireMax: 1320, damageMin: 6, damageMax: 11, accuracyNear: .76, accuracyFalloff: 225, tracer: "rifle" }),
-    smg: Object.freeze({ key: "smg", label: "SMG", range: 95, preferredMin: 18, preferredMax: 44, moveSpeed: 1.16, fireMin: 280, fireMax: 520, damageMin: 4, damageMax: 7, accuracyNear: .68, accuracyFalloff: 170, tracer: "smg" }),
-    shotgun: Object.freeze({ key: "shotgun", label: "Shotgun", range: 58, preferredMin: 11, preferredMax: 28, moveSpeed: 1.08, fireMin: 1050, fireMax: 1550, damageMin: 10, damageMax: 18, accuracyNear: .84, accuracyFalloff: 92, tracer: "shotgun" }),
-    sniper: Object.freeze({ key: "sniper", label: "Sniper", range: 180, preferredMin: 72, preferredMax: 125, moveSpeed: .78, fireMin: 2200, fireMax: 3300, damageMin: 18, damageMax: 27, accuracyNear: .9, accuracyFalloff: 360, tracer: "sniper" }),
-    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, sightRange: 150, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka", explosive: true, projectileSpeed: 92, explosionRadius: 9 }),
-    rocket: Object.freeze({ key: "rocket", label: "Rocket Launcher", range: 155, sightRange: 170, preferredMin: 58, preferredMax: 108, moveSpeed: .68, fireMin: 3100, fireMax: 4500, damageMin: 22, damageMax: 34, accuracyNear: .78, accuracyFalloff: 285, tracer: "rocket", explosive: true, projectileSpeed: 76, explosionRadius: 11 }),
-    pistol: Object.freeze({ key: "pistol", label: "Pistol", range: 88, preferredMin: 18, preferredMax: 42, moveSpeed: 1.08, fireMin: 760, fireMax: 1180, damageMin: 7, damageMax: 11, accuracyNear: .74, accuracyFalloff: 165, tracer: "pistol" }),
-    chainsaw: Object.freeze({ key: "chainsaw", label: "Chainsaw", melee: true, range: 5.4, sightRange: 145, preferredMin: 0, preferredMax: 4.6, moveSpeed: 2, fireMin: 520, fireMax: 760, damageMin: 13, damageMax: 20, accuracyNear: 1, accuracyFalloff: 1, tracer: null }),
+    rifle: Object.freeze({ key: "rifle", label: "Rifle", range: 125, preferredMin: 28, preferredMax: 62, moveSpeed: 1, fireMin: 720, fireMax: 1320, magazine: 24, reloadMs: 1900, damageMin: 6, damageMax: 11, accuracyNear: .76, accuracyFalloff: 225, tracer: "rifle" }),
+    smg: Object.freeze({ key: "smg", label: "SMG", range: 95, preferredMin: 18, preferredMax: 44, moveSpeed: 1.16, fireMin: 280, fireMax: 520, magazine: 32, reloadMs: 1700, damageMin: 4, damageMax: 7, accuracyNear: .68, accuracyFalloff: 170, tracer: "smg" }),
+    shotgun: Object.freeze({ key: "shotgun", label: "Shotgun", range: 58, preferredMin: 11, preferredMax: 28, moveSpeed: 1.08, fireMin: 1050, fireMax: 1550, magazine: 6, reloadMs: 2350, damageMin: 10, damageMax: 18, accuracyNear: .84, accuracyFalloff: 92, tracer: "shotgun" }),
+    sniper: Object.freeze({ key: "sniper", label: "Sniper", range: 180, preferredMin: 72, preferredMax: 125, moveSpeed: .78, fireMin: 2200, fireMax: 3300, magazine: 5, reloadMs: 2750, damageMin: 18, damageMax: 27, accuracyNear: .9, accuracyFalloff: 360, tracer: "sniper" }),
+    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, sightRange: 150, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, magazine: 1, reloadMs: 3100, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka", explosive: true, projectileSpeed: 92, explosionRadius: 9 }),
+    rocket: Object.freeze({ key: "rocket", label: "Rocket Launcher", range: 155, sightRange: 170, preferredMin: 58, preferredMax: 108, moveSpeed: .68, fireMin: 3100, fireMax: 4500, magazine: 1, reloadMs: 3500, damageMin: 22, damageMax: 34, accuracyNear: .78, accuracyFalloff: 285, tracer: "rocket", explosive: true, projectileSpeed: 76, explosionRadius: 11 }),
+    pistol: Object.freeze({ key: "pistol", label: "Pistol", range: 88, preferredMin: 18, preferredMax: 42, moveSpeed: 1.08, fireMin: 760, fireMax: 1180, magazine: 12, reloadMs: 1500, damageMin: 7, damageMax: 11, accuracyNear: .74, accuracyFalloff: 165, tracer: "pistol" }),
+    chainsaw: Object.freeze({ key: "chainsaw", label: "Chainsaw", melee: true, range: 5.4, sightRange: 165, preferredMin: 0, preferredMax: 4.9, moveSpeed: 2.8, fireMin: 430, fireMax: 650, damageMin: 13, damageMax: 20, accuracyNear: 1, accuracyFalloff: 1, tracer: null }),
   });
   const ENEMY_WEAPON_KEYS = Object.freeze(Object.keys(ENEMY_WEAPONS));
 
@@ -330,12 +330,17 @@
       record.firingUntil = 0;
       record.muzzleFlashUntil = 0;
       record.recoilUntil = 0;
+      record.shotStartedAt = 0;
+      record.shotEndsAt = 0;
+      record.reloadStartedAt = 0;
+      record.reloadUntil = 0;
       record.hitReactUntil = 0;
       record.defeatedAt = 0;
       record.deathAnimationStartedAt = 0;
       record.deathDirection = unit > .5 ? 1 : -1;
       record.weaponKey = ENEMY_WEAPON_KEYS[Math.floor(Math.random() * ENEMY_WEAPON_KEYS.length)] || "rifle";
       record.weaponLabel = ENEMY_WEAPONS[record.weaponKey]?.label || "Rifle";
+      record.ammoInMagazine = Math.max(0, Math.floor(number(ENEMY_WEAPONS[record.weaponKey]?.magazine, 0)));
       record.tracerUntil = 0;
       record.tracerTarget = null;
       record.tracerStyle = "rifle";
@@ -643,7 +648,10 @@
         aimLocked = true;
         if (loadout.melee) {
           if (distance > loadout.preferredMax) {
-            moveX = towardX; moveZ = towardZ; speed = 5.8 * enemy.speedBias * loadout.moveSpeed;
+            // Chainsaw AI is intentionally a high-pressure melee threat. Its
+            // weapon weighting now produces a true sprint instead of a slightly
+            // faster version of the normal ranged advance.
+            moveX = towardX; moveZ = towardZ; speed = 6.2 * enemy.speedBias * loadout.moveSpeed;
           }
         } else if (distance > loadout.preferredMax) {
           moveX = towardX * .88 + strafeX * .22;
@@ -666,7 +674,7 @@
         if (rememberedDistance > 4) {
           moveX = rememberedDx / rememberedDistance;
           moveZ = rememberedDz / rememberedDistance;
-          speed = 3.15 * enemy.speedBias;
+          speed = (loadout.melee ? 4.45 : 3.15) * enemy.speedBias * (loadout.melee ? loadout.moveSpeed : 1);
         }
       } else {
         if (now >= enemy.nextHeadingAt) {
@@ -724,6 +732,13 @@
       const hitReact = !defeated && now < enemy.hitReactUntil
         ? clamp((enemy.hitReactUntil - now) / 220, 0, 1)
         : 0;
+      const shotProgress = !defeated && enemy.shotStartedAt > 0 && now < enemy.shotEndsAt
+        ? clamp((now - enemy.shotStartedAt) / Math.max(1, enemy.shotEndsAt - enemy.shotStartedAt), 0, 1)
+        : 0;
+      const reloading = !defeated && enemy.reloadStartedAt > 0 && now < enemy.reloadUntil;
+      const reloadProgress = reloading
+        ? clamp((now - enemy.reloadStartedAt) / Math.max(1, enemy.reloadUntil - enemy.reloadStartedAt), 0, 1)
+        : 0;
       return {
         id: enemy.id,
         x: enemy.x,
@@ -734,6 +749,11 @@
         firing: now < enemy.firingUntil,
         muzzleFlash: now < enemy.muzzleFlashUntil,
         recoil: now < enemy.recoilUntil,
+        shotProgress,
+        reloading,
+        reloadProgress,
+        ammoInMagazine: Math.max(0, Math.floor(number(enemy.ammoInMagazine, 0))),
+        magazineSize: Math.max(0, Math.floor(number(ENEMY_WEAPONS[enemy.weaponKey]?.magazine, 0))),
         hitReact,
         defeated,
         deathProgress,
@@ -897,7 +917,7 @@
       if (reloadStartedAt) reloadStartedAt += duration;
       if (reloadEndsAt) reloadEndsAt += duration;
       enemies.forEach((enemy) => {
-        for (const key of ["nextHeadingAt","nextShotAt","firingUntil","muzzleFlashUntil","recoilUntil","hitReactUntil","tracerUntil","aimLockUntil","blockedUntil"]) {
+        for (const key of ["nextHeadingAt","nextShotAt","firingUntil","muzzleFlashUntil","recoilUntil","shotStartedAt","shotEndsAt","reloadStartedAt","reloadUntil","hitReactUntil","tracerUntil","aimLockUntil","blockedUntil"]) {
           if (enemy[key]) enemy[key] += duration;
         }
       });
@@ -1152,18 +1172,50 @@
       syncHud();
     }
 
+    function beginEnemyReload(enemy, loadout, now) {
+      const magazine = Math.max(0, Math.floor(number(loadout?.magazine, 0)));
+      if (!enemy || loadout?.melee || magazine <= 0 || enemy.reloadUntil > now) return false;
+      enemy.reloadStartedAt = now;
+      enemy.reloadUntil = now + Math.max(500, number(loadout.reloadMs, 1900));
+      enemy.nextShotAt = Math.max(enemy.nextShotAt || 0, enemy.reloadUntil + 140);
+      enemy.aimLockUntil = Math.max(enemy.aimLockUntil || 0, now + 260);
+      return true;
+    }
+
+    function updateEnemyReload(enemy, loadout, now) {
+      if (!enemy?.reloadUntil) return false;
+      if (now < enemy.reloadUntil) return true;
+      enemy.ammoInMagazine = Math.max(0, Math.floor(number(loadout?.magazine, 0)));
+      enemy.reloadStartedAt = 0;
+      enemy.reloadUntil = 0;
+      enemy.nextShotAt = Math.max(enemy.nextShotAt || 0, now + 120);
+      return false;
+    }
+
     function fireEnemy(enemy, playerTarget, distance, now) {
       const loadout = ENEMY_WEAPONS[enemy.weaponKey] || ENEMY_WEAPONS.rifle;
+      if (!loadout.melee) {
+        if (updateEnemyReload(enemy, loadout, now)) return;
+        if (enemy.ammoInMagazine <= 0) {
+          beginEnemyReload(enemy, loadout, now);
+          return;
+        }
+        enemy.ammoInMagazine = Math.max(0, enemy.ammoInMagazine - 1);
+      }
       const source = enemyCenter(enemy);
       enemy.rotationY = faceAngle(source, playerTarget);
       enemy.lastSeenAt = now;
       enemy.lastKnownPlayerX = playerTarget.x;
       enemy.lastKnownPlayerZ = playerTarget.z;
-      enemy.aimLockUntil = now + (loadout.melee ? 260 : 520);
-      enemy.firingUntil = now + (loadout.melee ? 260 : 150);
-      enemy.muzzleFlashUntil = loadout.melee ? 0 : now + (loadout.key === "bazooka" ? 135 : 85);
-      enemy.recoilUntil = now + (loadout.key === "sniper" || loadout.key === "bazooka" ? 260 : 180);
+      enemy.aimLockUntil = now + (loadout.melee ? 300 : 560);
+      const shotDuration = loadout.melee ? 360 : loadout.explosive ? 390 : loadout.key === "sniper" ? 320 : 230;
+      enemy.shotStartedAt = now;
+      enemy.shotEndsAt = now + shotDuration;
+      enemy.firingUntil = now + shotDuration;
+      enemy.muzzleFlashUntil = loadout.melee ? 0 : now + (loadout.explosive ? 145 : loadout.key === "sniper" ? 105 : 88);
+      enemy.recoilUntil = now + (loadout.key === "sniper" || loadout.explosive ? 290 : 195);
       enemy.nextShotAt = now + loadout.fireMin + Math.random() * Math.max(0, loadout.fireMax - loadout.fireMin);
+      if (!loadout.melee && enemy.ammoInMagazine <= 0) enemy.nextShotAt = Math.min(enemy.nextShotAt, now + shotDuration + 90);
       const player = options.getPlayer?.() || playerTarget;
 
       if (loadout.melee) {
@@ -1230,6 +1282,10 @@
         let source = enemyCenter(enemy);
         let distance = Math.hypot(playerTarget.x - source.x, playerTarget.y - source.y, playerTarget.z - source.z);
         const loadout = ENEMY_WEAPONS[enemy.weaponKey] || ENEMY_WEAPONS.rifle;
+        let reloading = updateEnemyReload(enemy, loadout, now);
+        if (!loadout.melee && !reloading && enemy.ammoInMagazine <= 0 && now >= enemy.nextShotAt) {
+          reloading = beginEnemyReload(enemy, loadout, now);
+        }
         const sightRange = loadout.sightRange || Math.max(loadout.range + 22, 42);
         let lineOfSight = distance <= sightRange && hasLineOfSight(source, playerTarget);
         updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, lineOfSight);
@@ -1246,7 +1302,7 @@
         enemy.lastKnownPlayerZ = playerTarget.z;
         enemy.aimLockUntil = Math.max(enemy.aimLockUntil, now + 320);
         enemy.rotationY = faceAngle(source, playerTarget);
-        if (now >= enemy.nextShotAt) fireEnemy(enemy, playerTarget, distance, now);
+        if (!reloading && now >= enemy.nextShotAt) fireEnemy(enemy, playerTarget, distance, now);
       }
       lastThreatCount = threats;
       syncHud();

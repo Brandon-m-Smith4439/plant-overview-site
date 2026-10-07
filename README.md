@@ -1,3 +1,7 @@
+## Version 0.13.63
+
+Version 0.13.63 adds a separate owner-only **Zombie mode** beside Combat Mode. Zombie rounds turn every person into a chainsaw-only, extra-fast zombie while the player uses a shotgun and pistol. Combat hit detection now uses distinct head/body hit volumes with headshot damage and separate regular-kill/headshot-kill statistics on both victory and death screens. Clear times are persisted as per-mode high scores, the restart action is visually upgraded, combat eyes are raised/recessed onto the face again, the player rifle now carries a visible holographic glass/reticle on the 3D weapon itself, and player tracers originate from the rendered gun side instead of the mirrored left side.
+
 ## Version 0.13.62
 
 Version 0.13.62 restores the owner Combat Mode handoff and deepens enemy combat behavior. Already-authenticated visits to the private owner workspace now stamp the owner session before returning to the plant so the desktop **Combat mode** button reliably reappears beside **First person**. Enemy rifle, sniper, rocket-launcher, and chainsaw models now use more substantial layered 3D geometry, firing visibly kicks or lunges the weapon/arms, ranged AI uses real magazines with animated reload cycles, and chainsaw enemies sprint much more aggressively while chasing or pursuing the player's last-known position.

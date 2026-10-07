@@ -58,7 +58,8 @@
       reloadMs: 1850,
       automatic: false,
       pellets: 8,
-      spread: .042,
+      // Wide zombie-mode buckshot cone. Every pellet gets its own visible tracer.
+      spread: .09,
     }),
   });
 
@@ -533,7 +534,9 @@
       if (!enemy || enemy.defeatedAt > 0) return;
       enemy.health = 0;
       enemy.defeatedAt = now;
-      enemy.deathAnimationStartedAt = 0;
+      // Start the fall on the exact kill frame. Waiting for enemyRenderState()
+      // to notice the defeat caused occasional one-frame (or longer) standing stalls.
+      enemy.deathAnimationStartedAt = now;
       enemy.movementBlend = 0;
       enemy.rollUntil = 0;
       enemy.rollStartedAt = 0;
@@ -1256,6 +1259,24 @@
       return { defeated, headshot, point: finalPoint };
     }
 
+    function playerMuzzleOrigin(origin, direction, yaw, pitch, weapon, isAiming) {
+      const right = { x: -Math.cos(yaw), y: 0, z: Math.sin(yaw) };
+      const up = normalizeDirection({
+        x: -Math.sin(yaw) * Math.sin(pitch),
+        y: Math.cos(pitch),
+        z: -Math.cos(yaw) * Math.sin(pitch),
+      });
+      const ads = weapon?.key === "rifle" && Boolean(isAiming);
+      const forwardOffset = weapon?.key === "shotgun" ? 1.46 : weapon?.key === "handgun" ? .94 : (ads ? 1.66 : 1.34);
+      const rightOffset = weapon?.key === "shotgun" ? .18 : weapon?.key === "handgun" ? .28 : (ads ? .06 : .42);
+      const upOffset = weapon?.key === "shotgun" ? -.20 : weapon?.key === "handgun" ? -.24 : (ads ? -.13 : -.30);
+      return {
+        x: origin.x + direction.x * forwardOffset + right.x * rightOffset + up.x * upOffset,
+        y: origin.y + direction.y * forwardOffset + right.y * rightOffset + up.y * upOffset,
+        z: origin.z + direction.z * forwardOffset + right.z * rightOffset + up.z * upOffset,
+      };
+    }
+
     function fire() {
       if (!active || reloading || roundState !== "playing") return;
       const player = options.getPlayer?.();
@@ -1273,19 +1294,18 @@
       const origin = { x: number(player.x), y: number(player.y, 5.5), z: number(player.z) };
       const direction = directionFromCamera(player);
       const yaw = number(player.yaw);
-      // Walk projection mirrors horizontal world X. Using the negative camera-right
-      // basis aligns the world tracer with the weapon drawn on the player's right.
-      const muzzle = {
-        x: origin.x + direction.x * 1.18 - Math.cos(yaw) * .42,
-        y: origin.y - .31,
-        z: origin.z + direction.z * 1.18 + Math.sin(yaw) * .42,
-      };
+      const pitch = number(player.pitch);
+      // Muzzle origin follows the rendered gun: hip-fire stays at the visible
+      // right-side barrel, while rifle ADS moves the tracer forward/center with
+      // the lowered aiming viewmodel instead of leaving it at the hip position.
+      const muzzle = playerMuzzleOrigin(origin, direction, yaw, pitch, weapon, aiming);
 
       const pelletCount = Math.max(1, Math.floor(number(weapon.pellets, 1)));
       const hits = [];
+      const pelletEndpoints = [];
       let centerFinalPoint = resolveWorldImpact(origin, direction, weapon.range).point;
       for (let pellet = 0; pellet < pelletCount; pellet += 1) {
-        const pelletDirection = shotDirection(direction, yaw, number(player.pitch), number(weapon.spread));
+        const pelletDirection = shotDirection(direction, yaw, pitch, number(weapon.spread));
         const target = findTarget(origin, pelletDirection, weapon.range);
         const worldImpact = resolveWorldImpact(origin, pelletDirection, weapon.range);
         let finalPoint = worldImpact.point;
@@ -1298,6 +1318,7 @@
           const dodge = nearMissEnemy(origin,pelletDirection,weapon.range,null);
           if (dodge && pellet === 0) triggerCombatRoll(dodge,now,.62);
         }
+        pelletEndpoints.push(finalPoint);
         if (pellet === 0) centerFinalPoint = finalPoint;
       }
 
@@ -1309,7 +1330,16 @@
         else setTransientStatus(headshotHit ? "Headshot" : "Hit", headshotHit ? 650 : 420);
         if (defeatedHit && aliveEnemies().length === 0 && enemies.size > 0) scheduleVictory();
       }
-      pushTracer(muzzle, centerFinalPoint, now, aiming ? "player-aim" : (weapon.key === "shotgun" ? "player-shotgun" : "player"));
+      if (weapon.key === "shotgun") {
+        // Render the actual buckshot cone rather than collapsing all pellets into
+        // one center tracer. Eight pellets are fired; at least six remain visible
+        // even when some impacts are close together.
+        pelletEndpoints.forEach((endpoint, pelletIndex) => {
+          pushTracer(muzzle, endpoint, now + pelletIndex * 2, "player-shotgun");
+        });
+      } else {
+        pushTracer(muzzle, centerFinalPoint, now, aiming ? "player-aim" : "player");
+      }
       if (ammo.magazine <= 0 && ammo.reserve > 0) setTransientStatus("Magazine empty - R to reload", 1300);
       syncHud();
       options.invalidate?.();

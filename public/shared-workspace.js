@@ -39,8 +39,8 @@
   function localPayload() {
     const transfer = window.PLANT_WORKSPACE_TRANSFER;
     const payload = transfer?.createPayload
-      ? transfer.createPayload(localStorage, { appVersion: window.PLANT_APP_VERSION || "0.13.62", sourceOrigin: window.location.origin })
-      : { kind: "monroe-glass-plant-workspace", version: 1, appVersion: "0.13.62", exportedAt: new Date().toISOString(), sourceOrigin: window.location.origin, items: localItems() };
+      ? transfer.createPayload(localStorage, { appVersion: window.PLANT_APP_VERSION || "0.13.63", sourceOrigin: window.location.origin })
+      : { kind: "monroe-glass-plant-workspace", version: 1, appVersion: "0.13.63", exportedAt: new Date().toISOString(), sourceOrigin: window.location.origin, items: localItems() };
     payload.items = Object.fromEntries(Object.entries(payload.items || {}).filter(([key]) => WORKSPACE_KEYS.includes(key)));
     payload.sourceUpdatedAt = localRevision() ? new Date(localRevision()).toISOString() : "";
     return payload;

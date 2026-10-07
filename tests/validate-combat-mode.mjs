@@ -139,3 +139,10 @@ assert.ok(plant.includes("Oversized shoulder-fired launcher") && plant.includes(
 assert.ok(plant.includes("Open-window holographic optic") && plant.includes("magazine:true") && plant.includes("no center box to block the sight picture"), "Player rifle must use a clear open holographic sight window and stable magazine animation tagging.");
 assert.ok(plant.includes("aim*.145") && plant.includes("aim*.355"), "ADS must lower/center the player rifle so the holographic sight remains unobstructed.");
 
+assert.ok(
+  plant.includes('const ownerCombatAllowed = window.monroeEditorAccess?.isOwner?.() === true;')
+    && plant.includes('data-toggle="combat" class="combat-mode-button"')
+    && plant.includes('data-toggle="walk" aria-pressed="false">First person</button>'),
+  "Desktop owner controls must keep Combat mode beside First person."
+);
+

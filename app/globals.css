@@ -8835,3 +8835,29 @@ body.viewer-fullscreen-fallback-active {
     linear-gradient(135deg, #7da654, #456c3c 72%);
   box-shadow: 0 .75rem 2.1rem rgba(65,95,48,.31), 0 0 0 1px rgba(255,255,255,.07) inset;
 }
+
+
+/* v0.13.65 survival controls + ammo pickups */
+.combat-round-actions { gap: .72rem; align-items: stretch; }
+.combat-round-actions .combat-restart-button,
+.combat-round-actions .combat-exit-button {
+  min-width: 12.6rem; min-height: 3.35rem; border-radius: .82rem; padding: .5rem .82rem .5rem .58rem;
+  display: inline-grid; grid-template-columns: 2.15rem 1fr; align-items: center; gap: .64rem;
+  position: relative; overflow: hidden; text-align: left; transition: transform .16s ease, box-shadow .16s ease, filter .16s ease, border-color .16s ease;
+}
+.combat-round-actions .combat-exit-button {
+  border: 1px solid rgba(164,190,205,.34);
+  background: radial-gradient(circle at 14% 18%,rgba(255,255,255,.09),transparent 30%),linear-gradient(135deg,rgba(49,63,72,.98),rgba(25,34,40,.98));
+  color: #e8f0f3; box-shadow: 0 .58rem 1.7rem rgba(3,12,17,.25), 0 0 0 1px rgba(255,255,255,.035) inset;
+}
+.combat-round-actions .combat-exit-button::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(112deg,transparent 22%,rgba(255,255,255,.10) 49%,transparent 74%); transform:translateX(-130%); transition:transform .45s ease; }
+.combat-round-actions .combat-exit-button:hover { transform:translateY(-2px); border-color:rgba(192,218,231,.55); filter:brightness(1.07); box-shadow:0 .85rem 2rem rgba(3,12,17,.33),0 0 0 1px rgba(255,255,255,.055) inset; }
+.combat-round-actions .combat-exit-button:hover::after { transform:translateX(130%); }
+.combat-round-actions .combat-exit-button:active { transform:translateY(0) scale(.985); }
+.combat-exit-icon { display:grid !important; place-items:center; width:2.05rem; height:2.05rem; border-radius:50%; border:1px solid rgba(205,225,235,.18); background:rgba(1,10,15,.25); color:#dce9ee !important; font-size:1rem; font-weight:900; }
+.combat-exit-copy { display:block !important; color:inherit !important; }
+.combat-exit-copy strong,.combat-exit-copy small { display:block; }
+.combat-exit-copy strong { font-size:.86rem; letter-spacing:.02em; }
+.combat-exit-copy small { margin-top:.08rem; color:rgba(224,237,242,.54); font-size:.58rem; letter-spacing:.04em; }
+.zombie-mode-active .combat-high-score { border-color:rgba(190,225,113,.24); background:rgba(112,146,65,.10); color:#dff1a7; }
+@media (max-width:640px){ .combat-round-actions .combat-restart-button,.combat-round-actions .combat-exit-button{min-width:min(15rem,100%);} }

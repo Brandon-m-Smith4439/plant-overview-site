@@ -1,3 +1,7 @@
+## Version 0.13.64
+
+Version 0.13.64 fixes the first Zombie Mode visual/combat follow-up. Zombie skin, eyes, pupils, and wound marks are now anchored directly to each custom person's actual **Head** component instead of the overall person envelope, preventing masks from appearing flat at neck level. Rifle ADS hides the physical viewmodel optic and lowers the rifle so the dedicated holographic aiming sight remains unobstructed, while player tracer origins now follow the visible muzzle in both hip-fire and ADS. Zombie Mode shotgun fire keeps eight pellets, widens the buckshot cone, and renders every pellet as its own tracer. Enemy death animation now starts on the exact kill frame to eliminate the standing pause before a defeated person falls.
+
 ## Version 0.13.63
 
 Version 0.13.63 adds a separate owner-only **Zombie mode** beside Combat Mode. Zombie rounds turn every person into a chainsaw-only, extra-fast zombie while the player uses a shotgun and pistol. Combat hit detection now uses distinct head/body hit volumes with headshot damage and separate regular-kill/headshot-kill statistics on both victory and death screens. Clear times are persisted as per-mode high scores, the restart action is visually upgraded, combat eyes are raised/recessed onto the face again, the player rifle now carries a visible holographic glass/reticle on the 3D weapon itself, and player tracers originate from the rendered gun side instead of the mirrored left side.

@@ -1,3 +1,9 @@
+## 0.13.68 - 2026-10-07
+
+- Hardened `/api/combat-lobby` authorization to require the signed HttpOnly owner-session cookie issued by `/api/editor-session` after the owner password is validated.
+- Removed the legacy `x-monroe-owner-session`/same-origin shortcut from the multiplayer lobby API so client-supplied headers cannot authorize lobby reads or mutations.
+- Bumped viewer/editor release tokens to v0.13.68 so the secured lobby route and matching client assets deploy together without stale caching.
+
 ## 0.13.67 - 2026-10-07
 
 - Fixed the pre-match setup overlay by restoring pointer interaction on top of the combat HUD. Combat and Zombie Mode now use the same setup surface for difficulty, character selection, match type, and multiplayer lobby controls.
@@ -991,13 +997,13 @@
 - Divided Plant Layout object editing into Select, Transform, Animation, and Add tabs.
 - Advanced the machine-design payload version to 11 while preserving the existing browser-storage key.
 - Automatically migrates older single-animation part settings into a timeline clip.
-
 ### Validation
 
 - Added animation-engine regression tests for migration, interpolation, clip overlap, rotation, pulse, blink, visibility, and four-step paths.
 - Added panel-organization and script-order regression tests for both application entry points.
 
 ## 0.12.1 - 2026-08-05
+
 ### Improved
 
 - Reduced the minimum Machine Design Studio envelope dimension from 0.5 ft to 0.01 ft.

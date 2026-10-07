@@ -54,15 +54,6 @@ export function ProtectedEditorLink({ href, children, className }: { href: strin
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // An editor session may already be authenticated before the private owner
-  // route is opened. Re-granting while that route is active stamps the
-  // owner-session marker as well, so returning to the plant keeps owner-only
-  // controls such as Combat Mode available without asking for the password a
-  // second time.
-  useEffect(() => {
-    if (!editingAvailable || !hasEditorAccess()) return;
-    grantEditorAccess();
-  }, [editingAvailable]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!(await verifyEditorPassword(password))) { setError("That password is not correct."); return; }
@@ -91,6 +82,16 @@ export function EditorAccessGate({ children }: { children: ReactNode }) {
   const [granted, setGranted] = useState(() => typeof window !== "undefined" && hasEditorAccess());
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  // An editor session may already be authenticated before the private owner
+  // route is opened. Re-granting while that route is active stamps the
+  // owner-session marker as well, so returning to the plant keeps owner-only
+  // controls such as Combat Mode available without asking for the password a
+  // second time.
+  useEffect(() => {
+    if (!editingAvailable || !hasEditorAccess()) return;
+    grantEditorAccess();
+  }, [editingAvailable]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!(await verifyEditorPassword(password))) { setError("That password is not correct."); return; }

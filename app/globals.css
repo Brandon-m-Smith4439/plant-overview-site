@@ -997,8 +997,7 @@ body {
 .model-frame:-webkit-full-screen {
   width: 100vw;
   height: 100vh;
-  min-height: 100vh;
-  border-radius: 0;
+  min-height: 100vh;  border-radius: 0;
   background: #c8d0cc;
 }
 
@@ -1997,8 +1996,7 @@ summary:focus-visible {
 }
 
 .design-list > .design-list-row > .design-list-delete:hover {
-  background: #fbe8e8;
-  color: #7d2828;
+  background: #fbe8e8;  color: #7d2828;
 }
 
 .component-tree-row {
@@ -2997,8 +2995,7 @@ summary:focus-visible {
   border-radius: 4px;
   color: #48726a;
   background: #edf4f1;
-  transition: transform .16s ease;
-  font-size: 15px;
+  transition: transform .16s ease;  font-size: 15px;
   line-height: 1;
 }
 
@@ -3997,8 +3994,7 @@ summary:focus-visible {
   color: #35635d;
 }
 
-@media (max-width: 520px) {
-  .scale-axis-fields { grid-template-columns: 1fr !important; }
+@media (max-width: 520px) {  .scale-axis-fields { grid-template-columns: 1fr !important; }
 }
 .editor-transform-properties > .wide { grid-column: 1 / -1; }
 
@@ -4997,8 +4993,7 @@ summary:focus-visible {
 .timeline-workspace-title {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  min-width: 0;
+  gap: 8px;  min-width: 0;
 }
 
 .timeline-workspace-title strong {
@@ -5997,8 +5992,7 @@ body.timeline-dragging[data-timeline-drag-mode="end"] {
   display: none;
 }
 
-/* v0.13 viewer controls, labels, sky, and editable roof */
-.model-frame {
+/* v0.13 viewer controls, labels, sky, and editable roof */.model-frame {
   --sky-x: 0px;
   --sky-y: 0px;
   background:
@@ -6997,8 +6991,7 @@ body.viewer-fullscreen-fallback-active {
     height: 8px;
   }
 
-  .site-shell.viewer-fullscreen-fallback,
-  .site-shell:fullscreen,
+  .site-shell.viewer-fullscreen-fallback,  .site-shell:fullscreen,
   .site-shell:-webkit-full-screen {
     box-sizing: border-box;
     position: fixed;
@@ -7997,8 +7990,7 @@ body.viewer-fullscreen-fallback-active {
     left: auto;
     transform: none;
   }
-  .combat-weapon-panel {
-    right: .65rem;
+  .combat-weapon-panel {    right: .65rem;
     bottom: .65rem;
     grid-template-columns: auto auto;
     min-width: 0;
@@ -8692,7 +8684,6 @@ body.viewer-fullscreen-fallback-active {
   .combat-victory-stats > div { padding: .55rem .3rem; }
 }
 
-
 /* v0.13.63 Combat + Zombie mode score and restart polish */
 .zombie-mode-button {
   border-color: rgba(146, 207, 101, .58) !important;
@@ -8861,3 +8852,125 @@ body.viewer-fullscreen-fallback-active {
 .combat-exit-copy small { margin-top:.08rem; color:rgba(224,237,242,.54); font-size:.58rem; letter-spacing:.04em; }
 .zombie-mode-active .combat-high-score { border-color:rgba(190,225,113,.24); background:rgba(112,146,65,.10); color:#dff1a7; }
 @media (max-width:640px){ .combat-round-actions .combat-restart-button,.combat-round-actions .combat-exit-button{min-width:min(15rem,100%);} }
+
+/* v0.13.66 Zombie difficulty + run setup */
+.combat-zombie-setup {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(73,104,57,.16), transparent 36%),
+    rgba(5,10,8,.72);
+  backdrop-filter: blur(8px);
+}
+.combat-zombie-setup[hidden] { display: none; }
+.combat-zombie-setup-card {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: min(44rem, calc(100vh - 2rem));
+  overflow: auto;
+  padding: 1.15rem;
+  border: 1px solid rgba(177,218,119,.28);
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(25,37,27,.98), rgba(13,22,17,.98));
+  box-shadow: 0 1.5rem 4.5rem rgba(0,0,0,.52), 0 0 0 1px rgba(255,255,255,.035) inset;
+  color: #eef6e8;
+}
+.combat-zombie-setup-card > p {
+  margin: 0;
+  color: #b9dd7f;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+.combat-zombie-setup-card > h2 {
+  margin: .18rem 0 .24rem;
+  font-size: 1.55rem;
+  letter-spacing: -.025em;
+}
+.combat-zombie-setup-card > span {
+  display: block;
+  max-width: 39rem;
+  color: rgba(231,241,225,.65);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.combat-zombie-setup-section { margin-top: 1rem; }
+.combat-zombie-setup-section > strong {
+  display: block;
+  margin-bottom: .42rem;
+  color: rgba(225,239,214,.78);
+  font-size: .62rem;
+  letter-spacing: .11em;
+}
+.combat-zombie-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: .5rem;
+}
+.combat-zombie-choice-grid.run-type { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.combat-zombie-choice-grid button {
+  min-height: 4.2rem;
+  padding: .62rem .68rem;
+  border: 1px solid rgba(183,206,174,.16);
+  border-radius: .68rem;
+  background: rgba(255,255,255,.035);
+  color: #e8f0e4;
+  text-align: left;
+  transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.combat-zombie-choice-grid button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(188,223,133,.42);
+  background: rgba(169,208,107,.07);
+}
+.combat-zombie-choice-grid button.active {
+  border-color: rgba(190,229,126,.74);
+  background: linear-gradient(180deg, rgba(105,143,66,.36), rgba(63,94,49,.28));
+  box-shadow: 0 0 0 1px rgba(190,229,126,.08) inset, 0 .35rem 1.2rem rgba(29,48,23,.26);
+}
+.combat-zombie-choice-grid button b,
+.combat-zombie-choice-grid button small { display: block; }
+.combat-zombie-choice-grid button b { font-size: .78rem; }
+.combat-zombie-choice-grid button small {
+  margin-top: .18rem;
+  color: rgba(231,240,226,.54);
+  font-size: .6rem;
+  line-height: 1.35;
+}
+.combat-zombie-setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .55rem;
+  margin-top: 1rem;
+  padding-top: .85rem;
+  border-top: 1px solid rgba(255,255,255,.07);
+}
+.combat-zombie-setup-actions button {
+  min-height: 2.65rem;
+  padding: 0 1rem;
+  border-radius: .65rem;
+  border: 1px solid rgba(203,220,196,.2);
+  background: rgba(255,255,255,.05);
+  color: #eaf1e7;
+  font-weight: 800;
+}
+.combat-zombie-setup-actions button.primary {
+  border-color: rgba(187,229,120,.7);
+  background: linear-gradient(135deg,#6f9a4b,#426b38);
+  color: #fff;
+  box-shadow: 0 .45rem 1.5rem rgba(61,92,43,.28);
+}
+@media (max-width: 760px) {
+  .combat-zombie-choice-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 520px) {
+  .combat-zombie-setup-card { padding: .9rem; }
+  .combat-zombie-choice-grid,
+  .combat-zombie-choice-grid.run-type { grid-template-columns: 1fr; }
+  .combat-zombie-setup-actions { flex-direction: column; }
+  .combat-zombie-setup-actions button { width: 100%; }
+}

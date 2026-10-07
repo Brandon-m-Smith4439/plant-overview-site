@@ -1,3 +1,7 @@
+## Version 0.13.62
+
+Version 0.13.62 restores the owner Combat Mode handoff and deepens enemy combat behavior. Already-authenticated visits to the private owner workspace now stamp the owner session before returning to the plant so the desktop **Combat mode** button reliably reappears beside **First person**. Enemy rifle, sniper, rocket-launcher, and chainsaw models now use more substantial layered 3D geometry, firing visibly kicks or lunges the weapon/arms, ranged AI uses real magazines with animated reload cycles, and chainsaw enemies sprint much more aggressively while chasing or pursuing the player's last-known position.
+
 ## Version 0.13.61
 
 Version 0.13.61 completes the shared machine-envelope rollout and the Combat Mode reliability pass. Desktop and mobile now hydrate the same published Machine Studio/layout workspace, the owner-only desktop **Combat mode** button reliably appears immediately after **First person**, enemy weapons use thicker right-hand geometry, the player rifle keeps the holographic sight window clear while aiming, and defeated enemies consistently complete their fall before the victory screen can take over.

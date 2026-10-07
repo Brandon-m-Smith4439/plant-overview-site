@@ -74,9 +74,9 @@ function cookieValue(request: Request, name: string) {
 }
 
 function ownerSessionValid(request: Request) {
-  const clientOwner = request.headers.get("x-monroe-owner-session") === "granted";
-  const sameOrigin = request.headers.get("sec-fetch-site") === "same-origin" || request.headers.get("sec-fetch-site") === "same-site";
-  if (clientOwner && sameOrigin) return true;
+  // Combat multiplayer is intentionally stricter than ordinary workspace sync:
+  // only the signed HttpOnly cookie issued after the owner password is accepted.
+  // Client-set headers are never sufficient to enter or mutate a lobby.
   const token = cookieValue(request, SESSION_COOKIE);
   const match = /^owner:(\d+)\.([0-9a-f]{64})$/i.exec(token);
   if (!match) return false;

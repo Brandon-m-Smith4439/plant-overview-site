@@ -1,3 +1,13 @@
+## 0.13.62 - 2026-10-07
+
+- Fixed the private-owner session handoff so an already-authenticated editor who opens the owner workspace receives the owner-session marker before returning to the plant. The owner-only **Combat mode** button therefore reliably reappears immediately after **First person** without weakening the public/editor access boundary.
+- Added real enemy firearm magazines and reload cycles. Rifle, SMG, shotgun, sniper, launcher, and pistol AI now consume ammunition, pause firing while reloading, refill their magazines on completion, and preserve reload timing through Combat Mode pause/resume.
+- Exposed enemy `shotProgress` and `reloadProgress` render state and added visible firing/reload animation: recoil or melee lunge, weapon tilt/drop, support-hand movement, detachable magazine motion, and rocket-round insertion.
+- Rebuilt the most visible enemy weapons with deeper layered 3D geometry. Rifles now have a stock, receiver, handguard, rail, optic, magazine, barrel, and muzzle brake; snipers add a long barrel, scope/rings, magazine and bipod; rocket launchers add a large layered tube, collars, rails, grips and exhaust section; chainsaws add a substantial motor body, handles, thick guide bar and animated chain teeth.
+- Increased chainsaw enemy pressure substantially by raising its movement weighting from 2.0x to 2.8x, increasing close-range chase speed, extending sight range, and keeping the melee speed weighting while pursuing the player's last-known position.
+- Expanded Combat Mode regression checks for owner-session recovery, enemy magazines/reloads, render animation progress, the weapon-model revamp, and the faster chainsaw pursuit profile.
+- Repaired stale validation coverage left behind by the earlier 3D route/label/shared-workspace migrations, including the malformed process-connection runtime test, so the current source-only validation suite can execute cleanly against the systems actually in production.
+
 ## 0.13.61 - 2026-10-07
 
 - Completed the cross-device envelope rollout by shipping the shared workspace API/storage path with the viewer and Machine Studio hydration hooks, so phones and desktops resolve the same saved machine-design envelopes instead of browser-local copies.

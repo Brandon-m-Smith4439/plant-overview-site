@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.64";
+  const APP_VERSION = "0.13.65";
 
   function editorProfileProtected() {
     try {
@@ -2336,7 +2336,14 @@
     // owning explicit hitboxes; do not discard the whole machine before those
     // envelopes are evaluated.
     if (isAnimationType(machine.type) && !(machine.designId && designLibrary[machine.designId])) return false;
-    if (["person", "bridgeCrane", "craneMachine"].includes(machine.type)) return false;
+    if (machine.type === "person") return false;
+    if (["bridgeCrane", "craneMachine"].includes(machine.type)) {
+      const design = machine.designId ? designLibrary[machine.designId] : null;
+      // Open crane structures remain walk-through unless the Designer has real
+      // envelopes. Once pillar/post envelopes are authored, those boxes become
+      // authoritative for first-person, bullets, and enemy pathing.
+      if (!designCollisionEnvelopes(design).length) return false;
+    }
     return stageAlpha(machine.reveal, machine.retire) > 0.08;
   }
 
@@ -2367,8 +2374,20 @@
 
   function walkHitboxesForMachine(machine) {
     const design = machine.designId ? designLibrary[machine.designId] : null;
-    const envelopes = designCollisionEnvelopes(design);
-    if (!design || !envelopes.length) return [machine];
+    let envelopes = designCollisionEnvelopes(design);
+    if (!design) return [machine];
+    if (!envelopes.length) {
+      const identity = `${machine.type || ""} ${machine.name || ""} ${design.machineType || ""} ${design.name || ""}`;
+      if (/cutting/i.test(identity)) {
+        // A cutting-line design is two separate physical tables plus a console.
+        // Treating the complete design base as one huge collision box blocked the
+        // service gap between the tables and made its envelope feel offset/oversized.
+        envelopes = (design.components || []).filter((component) => (
+          component?.type === "box" && /(?:cutting table base|operator console|left-base|right-base|console)/i.test(`${component.name || ""} ${component.id || ""}`)
+        )).map((component) => ({ x:component.x, y:component.y, z:component.z, w:component.w, h:component.h, d:component.d, automatic:true }));
+      }
+    }
+    if (!envelopes.length) return [machine];
     const placement = designPlacement(machine, design);
     const hitboxes = envelopes.map((envelope) => {
       const width = Math.max(.01, (Number(envelope.w) || .01) * placement.scaleX);
@@ -2551,7 +2570,7 @@
     return type === "person" || type === "animatedperson" || designType === "person";
   }
 
-  function combatEnemyMachines() {
+  function combatBaseEnemyMachines() {
     const stage = Number.isFinite(Number(state.stageFloat)) ? Number(state.stageFloat) : Number(state.stage) || 0;
     return machines.filter((machine) => {
       if (!combatEnemyMachine(machine) || machine.visible === false) return false;
@@ -2559,6 +2578,12 @@
       const retire = Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99;
       return reveal <= stage && retire > stage;
     });
+  }
+
+  function combatEnemyMachines() {
+    const base = combatBaseEnemyMachines();
+    const spawned = combatController?.isActive?.() ? (combatController.spawnedEnemyMachines?.() || []) : [];
+    return spawned.length ? [...base, ...spawned] : base;
   }
 
   function combatOccluders() {
@@ -6734,7 +6759,7 @@
           || Number(navigator.maxTouchPoints || 0) > 0
         ),
       }),
-      getEnemies: combatEnemyMachines,
+      getEnemies: combatBaseEnemyMachines,
       getOccluders: combatOccluders,
       getBounds: floorBounds,
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
@@ -10301,6 +10326,8 @@
     }
     const eased = 1 - Math.pow(1 - death, 3);
     const direction = Number(combat?.deathDirection) < 0 ? -1 : 1;
+    const deathPushX = Number(combat?.deathPushX) || 0;
+    const deathPushZ = Number(combat?.deathPushZ) || 0;
     const width = Math.max(.01, Number(machine.w) || 1.8);
     const depth = Math.max(.01, Number(machine.d) || 1.8);
     const height = Math.max(.01, Number(machine.h) || 6.5);
@@ -10308,7 +10335,7 @@
     const rotationY = Number(machine.rotationY ?? machine.rotation) || 0;
     const rotationZ = Number(machine.rotationZ) || 0;
     const baseY = Number(machine.renderY ?? machine.y) || 0;
-    const pivot = [Number(machine.x) + width / 2, baseY + eased * .28, Number(machine.z) + depth / 2];
+    const pivot = [Number(machine.x) + width / 2 + deathPushX * eased, baseY + eased * .28, Number(machine.z) + depth / 2 + deathPushZ * eased];
     const footOffset = rotateVector3([0, -height / 2, 0], rotationX, rotationY, rotationZ);
     const center = [pivot[0] - footOffset[0], pivot[1] - footOffset[1], pivot[2] - footOffset[2]];
     return {
@@ -10362,68 +10389,55 @@
       box(localBox3d(actor,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
     }
 
-    // Facial combat details are anchored to the actual Head design component when
-    // one exists. This keeps zombie skin/eyes attached to custom employee faces
-    // instead of guessing from the overall person envelope (which could put the
-    // old flat plate down around the neck on differently scaled people).
-    const headPart = designParts.find((part) => /^head$/i.test(String(part?.name || "")))
-      || designParts.find((part) => /\bhead\b/i.test(String(part?.name || "")) && !/hard\s*hat/i.test(String(part?.name || "")));
-    const eyeWhite = zombie ? "#efd85f" : "#f5f6f2";
-    const pupil = zombie ? "#8f171a" : "#172228";
-    const canAnchorFaceToHead = Boolean(design && headPart
-      && ["x","y","z","w","h","d"].every((key) => Number.isFinite(Number(headPart[key]))));
-    if (canAnchorFaceToHead) {
-      const hx = Number(headPart.x);
-      const hy = Number(headPart.y);
-      const hz = Number(headPart.z);
-      const hw = Math.max(.05, Number(headPart.w));
-      const hh = Math.max(.05, Number(headPart.h));
-      const hd = Math.max(.05, Number(headPart.d));
-      const faceDepth = Math.max(.035, hd*.055);
-      const faceZ = hz - faceDepth*.72;
-      const inheritedRotation = {
+    // Zombie treatment is applied to the actual rendered head volume, not to a
+    // flat mask guessed from the person's overall bounds. The largest named
+    // Head box is selected, re-tinted in-place, then large protruding eyes are
+    // placed just in front of that box so they stay visible on custom models.
+    const headCandidates = designParts.filter((part) => /^head$/i.test(String(part?.name || ""))
+      && ["x","y","z","w","h","d"].every((key) => Number.isFinite(Number(part?.[key]))));
+    const headPart = headCandidates.sort((a,b) => (Number(b.w)*Number(b.h)*Number(b.d)) - (Number(a.w)*Number(a.h)*Number(a.d)))[0] || null;
+    const eyeWhite = zombie ? "#f7e76f" : "#f5f6f2";
+    const pupil = zombie ? "#b31318" : "#172228";
+    if (design && headPart) {
+      const hx=Number(headPart.x), hy=Number(headPart.y), hz=Number(headPart.z);
+      const hw=Math.max(.05,Number(headPart.w)), hh=Math.max(.05,Number(headPart.h)), hd=Math.max(.05,Number(headPart.d));
+      const inheritedRotation={
         rotationX:Number(headPart.rotationX)||0,
         rotationY:Number.isFinite(Number(headPart.rotationY))?Number(headPart.rotationY):(Number(headPart.rotation)||0),
         rotationZ:Number(headPart.rotationZ)||0,
       };
-      const facePart = {
-        ...inheritedRotation, x:hx+hw*.08, y:hy+hh*.08, z:faceZ,
-        w:hw*.84, h:hh*.80, d:faceDepth, color:skin,
-      };
-      if (zombie) drawDesignBox(actor,facePart,design,alpha*.95,grow);
-      const eyeY = hy + hh*.58;
-      const eyeH = Math.max(.035,hh*.085);
-      const eyeW = Math.max(.055,hw*.16);
-      const eyeD = Math.max(.025,hd*.045);
-      const leftEyeX = hx + hw*.22;
-      const rightEyeX = hx + hw*.62;
-      const eyeZ = faceZ-eyeD*.72;
-      [leftEyeX,rightEyeX].forEach((eyeX) => {
+      if (zombie) drawDesignBox(actor,{...headPart,color:skin},design,alpha*.995,grow);
+      const eyeW=Math.max(.10,hw*.19), eyeH=Math.max(.08,hh*.12), eyeD=Math.max(.055,hd*.075);
+      const eyeY=hy+hh*.57;
+      const eyeZ=hz-eyeD*1.38;
+      const eyes=[hx+hw*.18,hx+hw*.63];
+      eyes.forEach((eyeX) => {
         drawDesignBox(actor,{...inheritedRotation,x:eyeX,y:eyeY,z:eyeZ,w:eyeW,h:eyeH,d:eyeD,color:eyeWhite},design,alpha,grow);
-        drawDesignBox(actor,{...inheritedRotation,x:eyeX+eyeW*.37,y:eyeY+eyeH*.18,z:eyeZ-eyeD*.75,w:eyeW*.28,h:eyeH*.66,d:eyeD*.66,color:pupil},design,alpha,grow);
+        drawDesignBox(actor,{...inheritedRotation,x:eyeX+eyeW*.34,y:eyeY+eyeH*.12,z:eyeZ-eyeD*.72,w:eyeW*.34,h:eyeH*.76,d:eyeD*.72,color:pupil},design,alpha,grow);
       });
       if (zombie) {
-        const woundA = [
-          designLocalPointToWorld(actor,design,[hx+hw*.18,hy+hh*.36,hz-faceDepth],grow),
-          designLocalPointToWorld(actor,design,[hx+hw*.43,hy+hh*.18,hz-faceDepth*1.15],grow),
+        const faceFront=hz-eyeD*.92;
+        const woundA=[
+          designLocalPointToWorld(actor,design,[hx+hw*.12,hy+hh*.39,faceFront],grow),
+          designLocalPointToWorld(actor,design,[hx+hw*.43,hy+hh*.20,faceFront-eyeD*.18],grow),
         ];
-        const woundB = [
-          designLocalPointToWorld(actor,design,[hx+hw*.80,hy+hh*.31,hz-faceDepth],grow),
-          designLocalPointToWorld(actor,design,[hx+hw*.62,hy+hh*.13,hz-faceDepth*1.12],grow),
+        const woundB=[
+          designLocalPointToWorld(actor,design,[hx+hw*.84,hy+hh*.36,faceFront],grow),
+          designLocalPointToWorld(actor,design,[hx+hw*.64,hy+hh*.15,faceFront-eyeD*.14],grow),
         ];
-        line3d(woundA[0],woundA[1],"#5f2727",2.2,alpha*.82);
-        line3d(woundB[0],woundB[1],"#382c27",2.3,alpha*.72);
+        line3d(woundA[0],woundA[1],"#681d20",2.7,alpha*.9);
+        line3d(woundB[0],woundB[1],"#4b2523",2.5,alpha*.82);
       }
     } else {
-      // Generic fallback matches the built-in person's real head box: head base
-      // near 73% of height, eyes near 81%, and the face on the negative-Z side.
-      const eyeY = height*.81;
-      const eyeZ = depth*.285;
-      if (zombie) box(localBox3d(actor,width*.315,depth*.27,width*.37,depth*.055,height*.12,skin,height*.745),alpha*.95,1);
-      box(localBox3d(actor,width*.35,eyeZ,width*.12,.05,height*.022,eyeWhite,eyeY),alpha,1);
-      box(localBox3d(actor,width*.53,eyeZ,width*.12,.05,height*.022,eyeWhite,eyeY),alpha,1);
-      box(localBox3d(actor,width*.392,eyeZ-.02,width*.038,.016,height*.014,pupil,eyeY+height*.002),alpha,1);
-      box(localBox3d(actor,width*.572,eyeZ-.02,width*.038,.016,height*.014,pupil,eyeY+height*.002),alpha,1);
+      // Built-in/fallback people get a complete green head cube plus large
+      // protruding eyes so Zombie Mode remains readable without a design.
+      const headX=width*.32, headY=height*.73, headZ=depth*.30, headW=width*.36, headH=height*.14, headD=depth*.38;
+      if (zombie) box(localBox3d(actor,headX,headZ,headW,headD,headH,skin,headY),alpha*.995,1);
+      const eyeY=headY+headH*.56, eyeZ=headZ-.065;
+      [width*.37,width*.55].forEach((eyeX) => {
+        box(localBox3d(actor,eyeX,eyeZ,width*.105,.07,height*.026,eyeWhite,eyeY),alpha,1);
+        box(localBox3d(actor,eyeX+width*.034,eyeZ-.035,width*.037,.034,height*.019,pupil,eyeY+height*.003),alpha,1);
+      });
     }
 
     // Two-segment legs create an actual walking gait instead of sliding feet.
@@ -10682,7 +10696,7 @@
 
   function drawCombatKillerOverlay(time) {
     if (!combatController?.isActive?.()) return;
-    for (const machine of machines) {
+    for (const machine of combatEnemyMachines()) {
       if (!combatEnemyMachine(machine) || machine.visible === false) continue;
       const combat = combatController.enemyRenderState?.(machine.instanceId, time);
       if (!combat?.killerReveal) continue;
@@ -10803,6 +10817,21 @@
       if (nx >= nz) return [[0,1,0],[0,0,1]];
       return [[1,0,0],[0,1,0]];
     };
+
+    for (const pickup of effects.pickups || []) {
+      if (!pickup.active) continue;
+      const pulse=.5+.5*Math.sin(time*.005 + Number(String(pickup.id||"").replace(/\D/g,""))*.7);
+      const hover=.18+Math.sin(time*.003 + pulse)*.08;
+      const crate={x:Number(pickup.x)-.62,y:Number(pickup.y)+hover,z:Number(pickup.z)-.48,w:1.24,h:.72,d:.96,color:"#d6a72f",rotationY:0};
+      box(crate,.98,1);
+      const y=crate.y+crate.h+.045;
+      line3d([pickup.x-.34,y,pickup.z],[pickup.x+.34,y,pickup.z],"rgba(255,245,182,.98)",5.2,1);
+      line3d([pickup.x,y,pickup.z-.34],[pickup.x,y,pickup.z+.34],"rgba(255,245,182,.98)",5.2,1);
+      const ring=[];
+      const radius=1.05+pulse*.22;
+      for(let i=0;i<18;i++){const a=i/18*Math.PI*2;ring.push([pickup.x+Math.cos(a)*radius,.055,pickup.z+Math.sin(a)*radius]);}
+      polygon(ring,"rgba(227,174,48,.08)","rgba(247,207,88,.5)",1.4,.55+pulse*.25,{transparent:true});
+    }
 
     for (const effect of effects.tracers || []) {
       const progress = clamp((time - effect.startAt) / Math.max(1,effect.duration),0,1);
@@ -11665,6 +11694,7 @@
     machines.forEach((machine) => {
       if (machineHasLayoutMotion(machine) || (combatController?.isActive?.() && combatEnemyMachine(machine))) sourceMachines.add(machine);
     });
+    if (combatController?.isActive?.()) combatEnemyMachines().forEach((machine) => sourceMachines.add(machine));
     for (const machine of sourceMachines) {
       if (machine.visible === false) continue;
       const alpha = stageAlpha(machine.reveal,machine.retire);

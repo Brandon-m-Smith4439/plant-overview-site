@@ -1,3 +1,15 @@
+## 0.13.63 - 2026-10-07
+
+- Added owner-only **Zombie mode** beside Combat Mode. Zombie rounds force every person AI to use a chainsaw, apply an additional 1.55x zombie sprint multiplier on top of the already-fast chainsaw movement profile, tint/mark people with sickly zombie faces and eyes, and give the player a dedicated shotgun + pistol loadout.
+- Added persistent per-mode clear-time high scores in browser storage. Combat and Zombie Mode keep separate top-ten clear-time lists, the best time is shown live in the HUD, and victory records a new time without overwriting the other mode.
+- Expanded end-of-round statistics on both victory and death screens with survival/clear time, best clear time, **Regular Kills**, **Headshot Kills**, health, and shield.
+- Replaced the single oversized enemy target sphere with separate head and body hit volumes. Headshots now register independently, receive a 3x damage multiplier, drive distinct hit feedback, and count correctly when the headshot is the killing hit.
+- Added an 8-pellet Zombie Mode shotgun with spread, close-range stopping power, reload/ammo state, a dedicated first-person 3D shotgun model, and normal 1/2 weapon switching with the pistol.
+- Corrected the player's world-space muzzle/tracer offset for the mirrored walk-camera X basis so tracers now leave the gun on the player's right instead of appearing from the left side.
+- Raised and recessed combat eyes back onto the head face plane, and added zombie-specific face tinting, eye colors, and wound marks so Zombie Mode reads immediately without replacing each employee's full custom identity.
+- Upgraded the player rifle viewmodel with translucent holographic glass and a red reticle physically attached to the weapon model itself.
+- Redesigned the restart action as a larger replay control with icon, two-line label, hover sheen, depth, and mode-specific styling instead of the plain button used by the earlier victory screen.
+
 ## 0.13.62 - 2026-10-07
 
 - Fixed the private-owner session handoff so an already-authenticated editor who opens the owner workspace receives the owner-session marker before returning to the plant. The owner-only **Combat mode** button therefore reliably reappears immediately after **First person** without weakening the public/editor access boundary.

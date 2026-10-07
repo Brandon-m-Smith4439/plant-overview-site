@@ -18,7 +18,7 @@ type EnemySyncState = {
 type PlayerState = {
   x?: number; y?: number; z?: number; yaw?: number; pitch?: number; vx?: number; vz?: number;
   health?: number; shield?: number; moving?: boolean; weapon?: string;
-  alive?: boolean; kills?: number; headshots?: number; worldSeq?: number;
+  alive?: boolean; kills?: number; headshots?: number; deaths?: number; worldSeq?: number;
   enemies?: EnemySyncState[]; glass?: string[];
 };
 
@@ -150,6 +150,7 @@ function sanitizeState(value: unknown): PlayerState {
     alive: source.alive !== false,
     kills: Math.max(0, Math.floor(finite(source.kills))),
     headshots: Math.max(0, Math.floor(finite(source.headshots))),
+    deaths: Math.max(0, Math.floor(finite(source.deaths))),
     worldSeq: Math.max(0, Math.floor(finite(source.worldSeq))),
     ...(enemies ? { enemies } : {}),
     ...(glass ? { glass } : {}),

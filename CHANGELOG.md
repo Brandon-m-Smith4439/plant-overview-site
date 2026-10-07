@@ -1,3 +1,16 @@
+## 0.13.75 - 2026-10-07
+
+- Made co-op round completion host-authoritative and broadcast a `coop-victory` result so every teammate receives the same victory screen when the shared enemy world is cleared.
+- Added synchronized per-player death counts alongside existing kills/headshots, plus a round-end multiplayer leaderboard sorted by kills with `KILL LEADER` and `MOST DEATHS` callouts and each player’s selected plant character.
+- Added a three-second downed/respawn lifecycle for AI Combat and Normal Zombie mode. Respawning players are temporarily advertised as not alive, movement/fire are locked during the death cinematic, health/shield are restored automatically, and the death counter persists until the round ends. Private PvP and Endless Zombie keep terminal death behavior.
+- Added host-side stat reconciliation for remote kills/deaths so the final co-op leaderboard does not regress when a late heartbeat contains older stats.
+- Expanded destructible glass recognition for carrier objects and sparse/custom component metadata (`lite`, `sheet`, `load`, `pane`) and added procedural glass hitboxes for raw-glass racks, A-frame carts/trucks, shipping racks/windshields, and animated-glass objects when authored glass geometry is unavailable.
+- Made procedural carrier glass disappear after shattering using the same glass IDs as its hitboxes, and aligned custom-design rendering with the carrier-aware glass detector.
+- Increased rocket/explosion and glass-shatter visual scale to 300% while leaving their damage radius unchanged.
+- Updated Normal Zombie setup/status copy to reflect that respawns are enabled.
+- Added regression coverage for synchronized co-op victory, kills/deaths leaderboard data, respawn rules, carrier glass destruction, and 3x visual explosion scaling.
+- Bumped viewer/editor release tokens to v0.13.75.
+
 ## 0.13.74 - 2026-10-07
 
 - Fixed stale Combat/Zombie round-end UI surviving an exit/re-entry cycle.

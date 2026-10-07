@@ -9080,3 +9080,21 @@ body.viewer-fullscreen-fallback-active {
 @media (max-width: 520px) {
   .combat-zombie-choice-grid.weapon-type { grid-template-columns: 1fr; }
 }
+
+
+/* v0.13.75 multiplayer round leaderboard */
+.combat-scoreboard[hidden] { display:none !important; }
+.combat-round-overlay.victory .combat-scoreboard { display:grid; gap:.4rem; margin-top:.8rem; padding:.65rem; border:1px solid rgba(130,226,178,.2); border-radius:.75rem; background:rgba(3,13,13,.55); }
+.combat-scoreboard-heading { display:flex; align-items:end; justify-content:space-between; gap:.75rem; }
+.combat-scoreboard-heading strong { color:#f4d77f; font-size:.66rem; letter-spacing:.15em; }
+.combat-scoreboard-heading span { color:rgba(228,244,238,.48) !important; font-size:.5rem; letter-spacing:.08em; }
+.combat-scoreboard-row { display:grid; grid-template-columns:1.5rem minmax(7rem,1fr) 2.7rem 2.7rem 2.7rem minmax(5.4rem,auto); align-items:center; gap:.35rem; min-height:2.55rem; padding:.35rem .45rem; border-radius:.55rem; background:rgba(255,255,255,.045); }
+.combat-scoreboard-row > b { color:#80ddb0; text-align:center; }
+.combat-scoreboard-row > div { min-width:0; display:flex; flex-direction:column; }
+.combat-scoreboard-row > div strong { overflow:hidden; color:#fff; font-size:.78rem; text-overflow:ellipsis; white-space:nowrap; }
+.combat-scoreboard-row > div small { overflow:hidden; color:rgba(230,242,239,.48); font-size:.58rem; text-overflow:ellipsis; white-space:nowrap; }
+.combat-scoreboard-row > span { display:flex; align-items:baseline; justify-content:center; gap:.15rem; color:#fff !important; }
+.combat-scoreboard-row > span small { color:rgba(255,255,255,.4); font-size:.5rem; font-weight:900; }
+.combat-scoreboard-row > span strong { font-size:.85rem; }
+.combat-scoreboard-row > em { color:#f1c95e; font-size:.5rem; font-style:normal; font-weight:900; letter-spacing:.06em; text-align:right; }
+@media (max-width:620px) { .combat-scoreboard-row { grid-template-columns:1.25rem minmax(5.5rem,1fr) 2.2rem 2.2rem 2.2rem; } .combat-scoreboard-row > em { grid-column:2 / -1; text-align:left; } .combat-scoreboard-heading span { display:none; } }

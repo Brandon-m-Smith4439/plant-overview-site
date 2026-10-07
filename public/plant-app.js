@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.74";
+  const APP_VERSION = "0.13.75";
 
   function editorProfileProtected() {
     try {
@@ -2608,20 +2608,61 @@
     const opacity=Number(component.opacity ?? 1);
     return component.type === "glassPanel"
       || /glass|window|windshield|cutting surface|observation/.test(name)
-      || (opacity < .82 && String(component.color || "").toLowerCase() === "#8fc6d4");
+      || (opacity < .9 && ["#8fc6d4","#9ed8e6","#a8dce8"].includes(String(component.color || "").toLowerCase()));
+  }
+
+  function carrierGlassComponent(machine, component) {
+    if (combatGlassComponent(component)) return true;
+    const carrier=/^(?:glassRack|aFrame|aFrameTruck|shipping)$/i.test(String(machine?.type || ""));
+    if (!carrier || component?.visible === false) return false;
+    const name=String(component?.name || component?.id || "").toLowerCase();
+    return /(?:lite|sheet|load|pane)/.test(name) && ["box","glassPanel"].includes(component?.type);
+  }
+
+  function proceduralGlassShattered(machine, componentId) {
+    const machineId=String(machine?.instanceId || machine?.id || machine?.name || "machine");
+    return combatController?.isActive?.() && combatController.isGlassShattered?.(machineId,componentId);
+  }
+
+  function proceduralCombatGlassOccluders(machine) {
+    const type=String(machine?.type || "");
+    const specs=[];
+    if (type === "glassRack") {
+      const count=state.stageFloat >= stages.length-1 ? 5 : 3;
+      for(let panel=0;panel<count;panel+=1){
+        const offset=2.2+panel*Math.max(1.3,(machine.w-5)/Math.max(1,count-1));
+        specs.push({id:`procedural-lite-${panel}`,box:localBox3d(machine,Math.min(offset,machine.w-1),.55,.55,Math.max(.5,machine.d-2),Math.max(2,machine.h+4),colors.glass,1)});
+      }
+    } else if (type === "aFrame" || type === "aFrameTruck") {
+      const panelDepth=Math.max(.3,machine.d*.12);
+      specs.push({id:"procedural-glass-left",box:localBox3d(machine,1,.9,Math.max(.5,machine.w-2),panelDepth,Math.max(2,machine.h*.72),colors.glass,1.4)});
+      specs.push({id:"procedural-glass-right",box:localBox3d(machine,1,machine.d-panelDepth-.9,Math.max(.5,machine.w-2),panelDepth,Math.max(2,machine.h*.72),colors.glass,1.4)});
+    } else if (type === "shipping") {
+      const cabWidth=machine.w*.3;
+      specs.push({id:"procedural-windshield",box:localBox3d(machine,cabWidth*.15,.55,cabWidth*.65,.3,1.5,colors.glass,3.5)});
+      const rackStart=cabWidth+.6;
+      for(let panel=0;panel<4;panel+=1){
+        const offset=rackStart+1.2+panel*Math.max(1.4,(machine.w-rackStart-3)/3);
+        specs.push({id:`procedural-glass-${panel}`,box:localBox3d(machine,Math.min(offset,machine.w-1.3),1.2,.45,Math.max(.5,machine.d-2.4),Math.max(2,machine.h*.72),colors.glass,1.45)});
+      }
+    } else if (type === "animatedGlass") {
+      specs.push({id:"procedural-glass-body",box:{...machine,y:Number(machine.renderY ?? machine.y)||0}});
+    }
+    const machineId=String(machine.instanceId || machine.id || machine.name || "machine");
+    return specs.map(({id,box})=>({kind:"glass",machineId,componentId:id,glassId:`${machineId}:${id}`,glassRadius:Math.max(.8,Math.min(5,Math.hypot(Number(box.w),Number(box.h),Number(box.d))*.14)),...box}));
   }
 
   function combatGlassOccluders(machine, time = performance.now()) {
     const renderedMachine = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
     const design=renderedMachine?.designId ? designLibrary[renderedMachine.designId] : null;
-    if (!design) return [];
+    if (!design) return proceduralCombatGlassOccluders(renderedMachine);
     // Use the exact animated/nested parts that are visible this frame. This makes
     // glass stay shootable while groups, carts, bridges, racks, and machine parts
     // move through timeline/legacy animation states.
     const glassParts = visibleDesignComponents(design, time).flatMap((component) => (
       component?.type === "group" ? flattenDesignComponents([component]) : [component]
     ));
-    return glassParts.filter((component) => ["box", "glassPanel"].includes(component.type) && combatGlassComponent(component)).map((component) => {
+    const authored=glassParts.filter((component) => ["box", "glassPanel"].includes(component.type) && carrierGlassComponent(renderedMachine,component)).map((component) => {
       const spec=scaledComponentBox(renderedMachine,component,design);
       const angle=angleRadians(spec);
       const halfWidth=Math.max(.025,Number(spec.w)/2), halfDepth=Math.max(.025,Number(spec.d)/2);
@@ -2635,6 +2676,7 @@
         x:centerX-extentX,y:Number(spec.y),z:centerZ-extentZ,w:extentX*2,h:Math.max(.04,Number(spec.h)),d:extentZ*2,
       };
     });
+    return authored.length ? authored : proceduralCombatGlassOccluders(renderedMachine);
   }
 
   function combatEnemyMachines() {
@@ -10166,7 +10208,7 @@
     const renderComponents = lodLevel >= 2 ? visibleComponents : representativeDesignComponents(visibleComponents);
     try {
       renderComponents.forEach((component) => {
-      if (combatController?.isActive?.() && combatGlassComponent(component) && combatController.isGlassShattered?.(machine.instanceId,component.id)) return;
+      if (combatController?.isActive?.() && carrierGlassComponent(machine,component) && combatController.isGlassShattered?.(machine.instanceId,component.id)) return;
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
       if (component.type === "box" || component.type === "glassPanel" || component.type === "text") {
         drawDesignBox(machine, component, design, componentAlpha, grow);
@@ -11001,6 +11043,9 @@
     }
   }
 
+  const COMBAT_EXPLOSION_VISUAL_SCALE = 3;
+  const COMBAT_GLASS_SHATTER_VISUAL_SCALE = 3;
+
   function drawCombatWorldEffects(time) {
     if (!combatController?.isActive?.()) return;
     const effects = combatController.combatEffects?.(time);
@@ -11060,7 +11105,7 @@
       const t=clamp((time-effect.startAt)/Math.max(1,effect.duration),0,1);
       const center=[Number(effect.point.x),Number(effect.point.y),Number(effect.point.z)];
       const normal=[Number(effect.normal?.x)||0,Number(effect.normal?.y)||0,Number(effect.normal?.z)||0];
-      const radius=Number(effect.radius)||1.8;
+      const radius=(Number(effect.radius)||1.8)*COMBAT_GLASS_SHATTER_VISUAL_SCALE;
       for(let i=0;i<20;i++){
         const a=i/20*Math.PI*2+(Number(effect.seed)||0)*.01;
         const speed=.35+(i%6)*.12;
@@ -11137,7 +11182,7 @@
     for (const explosion of effects.explosions || []) {
       if (time < explosion.startAt) continue;
       const t=clamp((time-explosion.startAt)/Math.max(1,explosion.duration),0,1);
-      const radius=(.5+Math.sin(t*Math.PI)*3.8)*(Number(explosion.radius||9)/9);
+      const radius=(.5+Math.sin(t*Math.PI)*3.8)*(Number(explosion.radius||9)/9)*COMBAT_EXPLOSION_VISUAL_SCALE;
       const center=[Number(explosion.point.x),Number(explosion.point.y)+.35,Number(explosion.point.z)];
       for(let i=0;i<12;i++){
         const a=i/12*Math.PI*2 + (explosion.seed||0)*.01;
@@ -11448,7 +11493,7 @@
       box(localBox(machine,0,0,machine.w,machine.d,1.3*grow,"#333a3c"),alpha,1);
       const cabWidth = machine.w*.3;
       box(localBox(machine,0,.8,cabWidth,Math.max(.5,machine.d-1.6),4.3*grow,"#e1e5e2",1.2*grow),alpha,1);
-      box(localBox(machine,cabWidth*.15,.55,cabWidth*.65,.3,1.5*grow,"#8fc6d4",3.5*grow),alpha*.9,1);
+      if (!proceduralGlassShattered(machine,"procedural-windshield")) box(localBox(machine,cabWidth*.15,.55,cabWidth*.65,.3,1.5*grow,"#8fc6d4",3.5*grow),alpha*.9,1);
       const rackStart = cabWidth+.6;
       const peak = Math.max(3,topHeight);
       localLine(machine,[rackStart,1.3*grow,.5],[machine.w-.5,1.3*grow,.5],"#cfd5d2",3,alpha);
@@ -11459,7 +11504,7 @@
       }
       for (let panel=0; panel<4; panel++) {
         const offset = rackStart+1.2+panel*Math.max(1.4,(machine.w-rackStart-3)/3);
-        box(localBox(machine,Math.min(offset,machine.w-1.3),1.2,.45,Math.max(.5,machine.d-2.4),Math.max(2,machine.h*.72*grow),colors.glass,1.45*grow),alpha*.72,1);
+        if (!proceduralGlassShattered(machine,`procedural-glass-${panel}`)) box(localBox(machine,Math.min(offset,machine.w-1.3),1.2,.45,Math.max(.5,machine.d-2.4),Math.max(2,machine.h*.72*grow),colors.glass,1.45*grow),alpha*.72,1);
       }
       [[cabWidth*.25,.2],[cabWidth*.75,.2],[machine.w*.65,.2],[machine.w*.88,.2]].forEach(([x,z]) => {
         box(localBox(machine,x-.55,z,.95,1.2,1.0*grow,"#1d2224",-.15),alpha,1);
@@ -11476,8 +11521,8 @@
         localLine(machine,[x,1,machine.d-.6],[x,topHeight,machine.d/2],machine.color,isTruck ? 3 : 2.5,alpha);
       }
       localLine(machine,[.5,topHeight,machine.d/2],[machine.w-.5,topHeight,machine.d/2],machine.color,isTruck ? 4 : 3,alpha);
-      box(localBox(machine,1,1.4,.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
-      box(localBox(machine,1,1.4,machine.d-Math.max(.4,machine.d*.12)-.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
+      if (!proceduralGlassShattered(machine,"procedural-glass-left")) box(localBox(machine,1,1.4,.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
+      if (!proceduralGlassShattered(machine,"procedural-glass-right")) box(localBox(machine,1,1.4,machine.d-Math.max(.4,machine.d*.12)-.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
       const wheelXs = isTruck ? [1.5,machine.w/2,machine.w-1.5] : [1,machine.w-1];
       wheelXs.forEach((x) => {
         [0.7,machine.d-.7].forEach((z) => {
@@ -11524,7 +11569,7 @@
       const panelCount = state.stageFloat >= stages.length - 1 ? 5 : 3;
       for (let panel=0; panel<panelCount; panel++) {
         const offset = 2.2 + panel * Math.max(1.3,(machine.w-5)/Math.max(1,panelCount-1));
-        box(localBox(machine,Math.min(offset,machine.w-1),1,.55,Math.max(.5,machine.d-2),(machine.h+4)*grow,colors.glass),alpha*.82,1);
+        if (!proceduralGlassShattered(machine,`procedural-lite-${panel}`)) box(localBox(machine,Math.min(offset,machine.w-1),1,.55,Math.max(.5,machine.d-2),(machine.h+4)*grow,colors.glass),alpha*.82,1);
       }
     } else if (machine.type === "room") {
       box(machine,alpha,grow);
@@ -11556,7 +11601,7 @@
         localLine3d(machine,[machine.w*.12,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],[machine.w*.88,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],"#879194",1,alpha);
       }
     } else if (machine.type === "animatedGlass") {
-      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, color: machine.color || colors.glass, y: Number(machine.renderY ?? machine.y) || 0 }, alpha * .72, grow);
+      if (!proceduralGlassShattered(machine,"procedural-glass-body")) box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, color: machine.color || colors.glass, y: Number(machine.renderY ?? machine.y) || 0 }, alpha * .72, grow);
       localLine3d(machine,[machine.w/2,0,machine.d/2],[machine.w/2,machine.h*grow,machine.d/2],"rgba(255,255,255,.6)",1.2,alpha*.65);
     } else if (machine.type === "animatedBox") {
       box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, y: Number(machine.renderY ?? machine.y) || 0 },alpha,grow);

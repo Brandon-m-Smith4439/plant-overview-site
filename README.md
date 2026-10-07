@@ -1,3 +1,9 @@
+## Version 0.13.75
+
+Version 0.13.75 expands multiplayer round flow and destructible-glass feedback. Co-op victory is now host-authoritative and broadcast to every teammate so all players receive the same victory screen. Multiplayer round stats track kills, headshots, and deaths per player and the victory screen includes a ranked team leaderboard with kill-leader and most-deaths callouts. AI Combat and Normal Zombie runs now use a three-second downed/respawn flow instead of ending the round on the first death; Endless Zombie remains the survival mode where death ends the run.
+
+Glass destruction now treats glass racks, A-frame carts/trucks, shipping racks, animated glass, and carrier-authored lite/sheet/load components as first-class destructible panes, with procedural fallback hitboxes and visual removal when custom design metadata is incomplete. Rocket/explosion and glass-shatter visuals render at 300% of their previous visual size while gameplay damage radii remain unchanged.
+
 ## Version 0.13.74
 
 Version 0.13.74 fixes Combat/Zombie re-entry after leaving a completed or failed round. The controller now performs one idempotent session-UI reset on both exit and entry, clearing stale restart/exit overlays, victory/death classes, countdown/pause state, killer reveal state, delayed death-screen timers, and death-cinematic presentation before the next setup screen opens. The reset also runs before an inactive `stop()` can return, so double-exit or first-person transition paths cannot skip cleanup.

@@ -18,6 +18,7 @@
   const AMMO_PICKUP_RADIUS = 3.25;
   const ZOMBIE_SETTINGS_STORAGE_KEY = "monroe-glass-zombie-settings-v2";
   const COMBAT_SETTINGS_STORAGE_KEY = "monroe-glass-combat-settings-v1";
+  const RESPAWN_DELAY_MS = 3000;
   const HOST_ENEMY_SYNC_INTERVAL_MS = 180;
   const COOP_ENEMY_PREDICTION_MS = 240;
   const ZOMBIE_DIFFICULTIES = Object.freeze({
@@ -239,7 +240,7 @@
           '<div class="combat-zombie-setup-section" data-zombie-run-section>',
             '<strong>ZOMBIE RUN</strong>',
             '<div class="combat-zombie-choice-grid run-type" data-zombie-run-options>',
-              '<button type="button" data-zombie-run="normal"><b>Normal · Clear Plant</b><small>Kill every zombie. No respawns.</small></button>',
+              '<button type="button" data-zombie-run="normal"><b>Normal · Clear Plant</b><small>Kill every zombie · respawns enabled</small></button>',
               '<button type="button" data-zombie-run="endless" class="active"><b>Endless Survival</b><small>Edge spawns continue until you die.</small></button>',
             '</div>',
           '</div>',
@@ -320,7 +321,9 @@
             '<div><span>HEADSHOT KILLS</span><strong data-combat-headshot-kills>0</strong></div>',
             '<div><span>HEALTH</span><strong data-combat-victory-health>100</strong></div>',
             '<div><span>SHIELD</span><strong data-combat-victory-shield>22</strong></div>',
+            '<div><span>DEATHS</span><strong data-combat-deaths>0</strong></div>',
           '</div>',
+          '<div class="combat-scoreboard" data-combat-scoreboard hidden></div>',
           '<div class="combat-killer-reveal" data-combat-killer hidden>',
             '<span>ELIMINATED BY</span>',
             '<strong data-combat-killer-name>Enemy</strong>',
@@ -356,6 +359,7 @@
     const damageVignette = hud.querySelector("[data-combat-damage]");
     const countdownOverlay = hud.querySelector("[data-combat-countdown]");
     const countdownValue = hud.querySelector("[data-combat-countdown-value]");
+    const countdownLabel = countdownOverlay?.querySelector("span");
     const roundOverlay = hud.querySelector("[data-combat-round]");
     const roundKicker = hud.querySelector("[data-combat-round-kicker]");
     const roundTitle = hud.querySelector("[data-combat-round-title]");
@@ -394,6 +398,8 @@
     const headshotKillsCopy = hud.querySelector("[data-combat-headshot-kills]");
     const victoryHealth = hud.querySelector("[data-combat-victory-health]");
     const victoryShield = hud.querySelector("[data-combat-victory-shield]");
+    const deathCountCopy = hud.querySelector("[data-combat-deaths]");
+    const scoreboard = hud.querySelector("[data-combat-scoreboard]");
 
     const enemies = new Map();
     const ammunition = Object.fromEntries(Object.entries(WEAPONS).map(([key, weapon]) => [key, { magazine: weapon.magazine, reserve: weapon.reserve }]));
@@ -413,6 +419,7 @@
     let selectedWeapon = "rifle";
     let regularKills = 0;
     let headshotKills = 0;
+    let playerDeaths = 0;
     let reloading = false;
     let reloadSerial = 0;
     let nextPlayerShotAt = 0;
@@ -430,6 +437,8 @@
     let transientStatusUntil = 0;
     let playerDeathStartedAt = 0;
     let playerDeathDuration = 5000;
+    let respawnEndsAt = 0;
+    let respawnDisplay = 0;
     let directionCalloutTimer = 0;
     let roundRevealSerial = 0;
     let roundStartedAt = 0;
@@ -450,6 +459,7 @@
     let hostWorldSeq = 0;
     let lastAppliedHostWorldSeq = -1;
     const hostEnemySyncSamples = new Map();
+    const roundStatOverrides = new Map();
 
     function readZombieSettings() {
       try {
@@ -1501,9 +1511,149 @@
     function handleEscape(reason = "escape-key") {
       if (!active) return false;
       options.hideWalkMenu?.();
-      if (["lost","won"].includes(roundState)) return true;
+      if (["lost","won","respawning"].includes(roundState)) return true;
       if (paused && reason === "pointer-lock-released") return true;
       return setPaused(!paused);
+    }
+
+    function canRespawnAfterDeath() {
+      return matchType !== "private" && (gameMode === "combat" || (gameMode === "zombie" && zombieRunType === "normal"));
+    }
+
+    function localRoundStats() {
+      return { kills:regularKills+headshotKills, headshots:headshotKills, deaths:playerDeaths };
+    }
+
+    function rememberRemoteRoundStats(playerId, stats = {}) {
+      const id=String(playerId || "");
+      if (!id) return;
+      const previous=roundStatOverrides.get(id) || {kills:0,headshots:0,deaths:0};
+      roundStatOverrides.set(id,{
+        kills:Math.max(previous.kills,Math.max(0,Math.floor(number(stats.kills)))),
+        headshots:Math.max(previous.headshots,Math.max(0,Math.floor(number(stats.headshots)))),
+        deaths:Math.max(previous.deaths,Math.max(0,Math.floor(number(stats.deaths)))),
+      });
+    }
+
+    function roundLeaderboard() {
+      if (matchType === "solo" || !multiplayer?.getLobby?.()) return [];
+      const lobby=multiplayer.getLobby();
+      const localId=String(multiplayer.playerId || "");
+      return (lobby?.players || []).map((entry) => {
+        const state=entry.state || {};
+        const override=entry.id===localId ? localRoundStats() : roundStatOverrides.get(String(entry.id || ""));
+        const stats=override || state;
+        return {
+          id:String(entry.id || ""),
+          name:String(entry.name || "Player"),
+          character:String(characterNameForId(entry.characterId) || "Plant character"),
+          kills:Math.max(0,Math.floor(number(stats.kills))),
+          headshots:Math.max(0,Math.floor(number(stats.headshots))),
+          deaths:Math.max(0,Math.floor(number(stats.deaths))),
+        };
+      }).sort((a,b) => b.kills-a.kills || a.deaths-b.deaths || a.name.localeCompare(b.name));
+    }
+
+    function renderRoundLeaderboard(entries = roundLeaderboard()) {
+      if (!scoreboard) return entries;
+      scoreboard.innerHTML="";
+      scoreboard.hidden=!Array.isArray(entries) || entries.length < 2;
+      if (scoreboard.hidden) return entries;
+      const mostKills=Math.max(...entries.map((entry)=>number(entry.kills)));
+      const mostDeaths=Math.max(...entries.map((entry)=>number(entry.deaths)));
+      const title=document.createElement("div");
+      title.className="combat-scoreboard-heading";
+      title.innerHTML='<strong>TEAM LEADERBOARD</strong><span>KILLS · DEATHS · HEADSHOTS</span>';
+      scoreboard.appendChild(title);
+      entries.forEach((entry,index) => {
+        const row=document.createElement("div");
+        row.className="combat-scoreboard-row";
+        const rank=document.createElement("b"); rank.textContent=String(index+1);
+        const identity=document.createElement("div");
+        const playerName=document.createElement("strong"); playerName.textContent=entry.name;
+        const character=document.createElement("small"); character.textContent=entry.character;
+        identity.append(playerName,character);
+        const kills=document.createElement("span"); kills.innerHTML=`<small>K</small><strong>${entry.kills}</strong>`;
+        const deaths=document.createElement("span"); deaths.innerHTML=`<small>D</small><strong>${entry.deaths}</strong>`;
+        const headshots=document.createElement("span"); headshots.innerHTML=`<small>HS</small><strong>${entry.headshots}</strong>`;
+        const badges=document.createElement("em");
+        const labels=[];
+        if (entry.kills===mostKills) labels.push("KILL LEADER");
+        if (mostDeaths>0 && entry.deaths===mostDeaths) labels.push("MOST DEATHS");
+        badges.textContent=labels.join(" · ");
+        row.append(rank,identity,kills,deaths,headshots,badges);
+        scoreboard.appendChild(row);
+      });
+      return entries;
+    }
+
+    function recordPlayerDeath() {
+      playerDeaths += 1;
+      const stats=localRoundStats();
+      if (matchType === "coop" && multiplayer?.getLobby?.()) {
+        multiplayer.sendEvent?.("player-death",stats,"").catch(()=>{});
+      }
+      return stats;
+    }
+
+    function beginPlayerRespawn(killer, player) {
+      const now=performance.now();
+      roundState="respawning";
+      respawnEndsAt=now+RESPAWN_DELAY_MS;
+      respawnDisplay=Math.ceil(RESPAWN_DELAY_MS/1000);
+      playerDeathStartedAt=now;
+      playerDeathDuration=Math.min(2200,RESPAWN_DELAY_MS-350);
+      paused=false;
+      pausedAt=0;
+      mouseHeld=false;
+      setAiming(false);
+      frame.classList.remove("combat-paused");
+      frame.classList.add("combat-death-cinematic","combat-player-dead");
+      if (roundOverlay) roundOverlay.hidden=true;
+      if (pauseOverlay) pauseOverlay.hidden=true;
+      if (countdownLabel) countdownLabel.textContent="RESPAWNING IN";
+      if (countdownValue) countdownValue.textContent=String(respawnDisplay);
+      if (countdownOverlay) countdownOverlay.hidden=false;
+      options.hideWalkMenu?.();
+      options.setMovementLocked?.(true);
+      options.releasePointer?.();
+      const source=killer ? enemyCenter(killer) : null;
+      options.playDeathCinematic?.({target:source,killerId:killer?.id||null,killerName:String(killer?.machine?.name||"Enemy"),durationMs:playerDeathDuration});
+      setTransientStatus(`Downed · respawning in ${respawnDisplay}`,900);
+      multiplayer?.heartbeat?.();
+      options.invalidate?.();
+    }
+
+    function updatePlayerRespawn(now) {
+      if (roundState !== "respawning") return false;
+      const remaining=Math.max(0,respawnEndsAt-now);
+      if (remaining>0) {
+        const nextDisplay=Math.max(1,Math.ceil(remaining/1000));
+        if (nextDisplay!==respawnDisplay) {
+          respawnDisplay=nextDisplay;
+          if (countdownValue) countdownValue.textContent=String(nextDisplay);
+        }
+        return true;
+      }
+      respawnEndsAt=0;
+      respawnDisplay=0;
+      playerHealth=100;
+      playerShield=SHIELD_MAX;
+      lastDamageAt=now;
+      lastShieldUpdateAt=now;
+      playerDeathStartedAt=0;
+      roundState="playing";
+      frame.classList.remove("combat-death-cinematic","combat-player-dead");
+      if (countdownLabel) countdownLabel.textContent="COMBAT STARTS IN";
+      if (countdownOverlay) countdownOverlay.hidden=true;
+      options.resetDeathCinematic?.();
+      options.setMovementLocked?.(false);
+      setTransientStatus("RESPAWNED",900);
+      syncHud();
+      multiplayer?.heartbeat?.();
+      window.requestAnimationFrame(()=>options.capture?.());
+      options.invalidate?.();
+      return false;
     }
 
     function scheduleVictory() {
@@ -1517,9 +1667,11 @@
       }, 1325);
     }
 
-    function finishRound(kind, killer = null, player = null) {
+    function finishRound(kind, killer = null, player = null, leaderboardOverride = null) {
       const endedAt = performance.now();
       roundState = kind;
+      respawnEndsAt = 0;
+      respawnDisplay = 0;
       paused = false;
       setAiming(false);
       pausedAt = 0;
@@ -1537,6 +1689,8 @@
         playerDeathStartedAt = 0;
         frame.classList.remove("combat-death-cinematic");
         options.resetDeathCinematic?.();
+        if (countdownLabel) countdownLabel.textContent="COMBAT STARTS IN";
+        if (countdownOverlay) countdownOverlay.hidden=true;
         roundOverlay.hidden = false;
         roundOverlay.classList.remove("killer-reveal");
         options.releasePointer?.();
@@ -1552,6 +1706,9 @@
         if (headshotKillsCopy) headshotKillsCopy.textContent = String(headshotKills);
         if (victoryHealth) victoryHealth.textContent = String(Math.round(playerHealth));
         if (victoryShield) victoryShield.textContent = String(Math.round(playerShield));
+        if (deathCountCopy) deathCountCopy.textContent = String(playerDeaths);
+        const leaderboard=renderRoundLeaderboard(Array.isArray(leaderboardOverride) ? leaderboardOverride : roundLeaderboard());
+        if (matchType === "coop" && multiplayer?.isHost?.() && !leaderboardOverride) multiplayer.sendEvent?.("coop-victory",{leaderboard},"").catch(()=>{});
         if (roundKicker) roundKicker.textContent = gameMode === "zombie" ? "ZOMBIE PLANT CLEARED" : "VICTORY";
         if (roundTitle) roundTitle.textContent = gameMode === "zombie" ? "FLOOR RECLAIMED" : "PLANT SECURED";
         if (roundCopy) roundCopy.textContent = gameMode === "zombie" ? `${zombieDifficultyConfig().label} clear complete. Every zombie in the plant is down.` : "All hostiles neutralized. The production floor is secure.";
@@ -1584,6 +1741,8 @@
         if (headshotKillsCopy) headshotKillsCopy.textContent = String(headshotKills);
         if (victoryHealth) victoryHealth.textContent = String(Math.round(playerHealth));
         if (victoryShield) victoryShield.textContent = String(Math.round(playerShield));
+        if (deathCountCopy) deathCountCopy.textContent = String(playerDeaths);
+        renderRoundLeaderboard();
         syncRestartButton();
         roundActions?.classList.remove("locked");
         roundOverlay.hidden = true;
@@ -1688,7 +1847,7 @@
       }
       pushBloodBurst(target.enemy, finalPoint, now, defeated);
       if (matchType === "coop" && multiplayer?.getLobby?.()) {
-        multiplayer.sendEvent?.("enemy-hit",{enemyId:target.enemy.id,damage:appliedDamage,headshot},"").catch(()=>{});
+        multiplayer.sendEvent?.("enemy-hit",{enemyId:target.enemy.id,damage:appliedDamage,headshot,defeated,kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths},"").catch(()=>{});
       }
       return { defeated, headshot, point: finalPoint };
     }
@@ -1772,7 +1931,7 @@
         showHitmarker(Boolean(defeatedHit), Boolean(headshotHit));
         if (defeatedHit) setTransientStatus(defeatedHit.headshot ? "HEADSHOT KILL" : "Enemy down", 950);
         else setTransientStatus(headshotHit ? "Headshot" : "Hit", headshotHit ? 650 : 420);
-        if (defeatedHit && aliveEnemies().length === 0 && enemies.size > 0 && (gameMode !== "zombie" || zombieRunType === "normal")) scheduleVictory();
+        if (defeatedHit && aliveEnemies().length === 0 && enemies.size > 0 && (gameMode !== "zombie" || zombieRunType === "normal") && (matchType !== "coop" || multiplayer?.isHost?.())) scheduleVictory();
       }
       if (weapon.key === "shotgun") {
         // Render the actual buckshot cone rather than collapsing all pellets into
@@ -1816,7 +1975,11 @@
       if (absorbed > 0 && playerShield <= 0) setTransientStatus("Shield broken - " + sourceName, 800);
       else if (absorbed > 0 && healthDamage <= 0) setTransientStatus("Shield hit - " + sourceName, 520);
       else setTransientStatus("Incoming fire - " + sourceName, 600);
-      if (playerHealth <= 0) finishRound("lost", enemy, player);
+      if (playerHealth <= 0) {
+        recordPlayerDeath();
+        if (canRespawnAfterDeath()) beginPlayerRespawn(enemy,player);
+        else finishRound("lost", enemy, player);
+      }
       syncHud();
     }
 
@@ -2010,6 +2173,10 @@
       selectedWeapon = selectedPrimaryWeapon;
       regularKills = 0;
       headshotKills = 0;
+      playerDeaths = 0;
+      respawnEndsAt = 0;
+      respawnDisplay = 0;
+      roundStatOverrides.clear();
       reloading = false;
       reloadStartedAt = 0;
       reloadEndsAt = 0;
@@ -2050,6 +2217,9 @@
         roundOverlay.classList.remove("killer-reveal", "victory");
       }
       if (killerReveal) killerReveal.hidden = true;
+      if (scoreboard) { scoreboard.hidden=true; scoreboard.innerHTML=""; }
+      if (deathCountCopy) deathCountCopy.textContent="0";
+      if (countdownLabel) countdownLabel.textContent="COMBAT STARTS IN";
       if (roundActions) roundActions.classList.remove("locked");
       syncRestartButton();
       roundRevealSerial += 1;
@@ -2084,7 +2254,7 @@
         countdownEndsAt = 0;
         countdownDisplay = 0;
         if (countdownValue) countdownValue.textContent = "FIGHT";
-        setTransientStatus(gameMode === "zombie" ? (zombieEndless() ? "Survive! Zombies will keep spawning." : "Clear the plant! No respawns.") : "Fight!", 1000);
+        setTransientStatus(gameMode === "zombie" ? (zombieEndless() ? "Survive! Zombies will keep spawning." : "Clear the plant! Respawns enabled.") : "Fight!", 1000);
         window.setTimeout(() => {
           if (countdownOverlay && roundState !== "countdown") countdownOverlay.hidden = true;
         }, 350);
@@ -2110,6 +2280,12 @@
       if (paused) {
         lastFrameAt = now;
         lastShieldUpdateAt = now;
+        options.invalidate?.();
+        frameRequest = window.requestAnimationFrame(loop);
+        return;
+      }
+      if (updatePlayerRespawn(now)) {
+        multiplayer?.heartbeat?.();
         options.invalidate?.();
         frameRequest = window.requestAnimationFrame(loop);
         return;
@@ -2420,20 +2596,34 @@
         applyGlassShatterPayload(event.payload, performance.now(), false);
         return;
       }
-      if (event.type === "enemy-hit" && matchType === "coop" && roundState === "playing") {
+      if (event.type === "player-death" && matchType === "coop") {
+        rememberRemoteRoundStats(event.senderId,event.payload || {});
+        return;
+      }
+      if (event.type === "coop-victory" && matchType === "coop") {
+        if (event.senderId === multiplayer?.playerId || roundState === "won") return;
+        finishRound("won",null,null,Array.isArray(event.payload?.leaderboard) ? event.payload.leaderboard : null);
+        return;
+      }
+      if (event.type === "enemy-hit" && matchType === "coop" && ["playing","respawning"].includes(roundState)) {
         if (!multiplayer?.isHost?.()) return;
+        rememberRemoteRoundStats(event.senderId,event.payload || {});
         const enemy=enemies.get(String(event.payload?.enemyId || ""));
         if (!enemy || enemy.health <= 0) return;
         const damage=Math.max(0,number(event.payload?.damage));
         enemy.health=Math.max(0,enemy.health-damage);
         enemy.hitReactUntil=performance.now()+180;
-        if (enemy.health<=0) markEnemyDefeated(enemy,performance.now());
+        if (enemy.health<=0) {
+          markEnemyDefeated(enemy,performance.now());
+          if (aliveEnemies().length===0 && enemies.size>0 && (gameMode!=="zombie" || zombieRunType==="normal")) scheduleVictory();
+        }
       }
     }
 
     function multiplayerUpdate(lobby) {
       if (roundState === "setup") syncLobbyUi(lobby);
       if (!active || !lobby) return;
+      (lobby.players || []).forEach((entry)=>{ if (entry.id !== multiplayer?.playerId) rememberRemoteRoundStats(entry.id,entry.state || {}); });
       if (lobby.status === "started" && roundState !== "setup") applyHostEnemySyncState(lobby);
       if (lobby.status === "started" && roundState === "setup" && multiplayerStartedRevision !== lobby.revision) {
         multiplayerStartedRevision=lobby.revision;
@@ -2452,7 +2642,7 @@
       lastLocalSyncSample={x,z,at:now};
       const state={
         x,y:number(player.y,5.5),z,yaw:number(player.yaw),pitch:number(player.pitch),vx,vz,moving:Boolean(player.moving),
-        health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,alive:roundState!=="lost",kills:regularKills+headshotKills,headshots:headshotKills,
+        health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,alive:!["lost","respawning"].includes(roundState),kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths,
       };
       if (matchType === "coop" && multiplayer?.isHost?.() && roundState !== "setup") {
         const worldPacket=hostEnemySyncPacket(now);
@@ -2498,11 +2688,14 @@
       countdownEndsAt = 0;
       countdownDisplay = 0;
       playerDeathStartedAt = 0;
+      respawnEndsAt = 0;
+      respawnDisplay = 0;
       paused = false;
       pausedAt = 0;
       frame.classList.remove("combat-under-fire", "combat-death-cinematic", "combat-paused", "combat-player-dead");
       if (hud) hud.hidden = true;
       if (countdownOverlay) countdownOverlay.hidden = true;
+      if (countdownLabel) countdownLabel.textContent="COMBAT STARTS IN";
       if (pauseOverlay) pauseOverlay.hidden = true;
       if (roundOverlay) {
         roundOverlay.hidden = true;

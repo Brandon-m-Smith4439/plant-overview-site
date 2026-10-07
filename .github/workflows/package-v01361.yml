@@ -26,7 +26,25 @@ jobs:
           set -euo pipefail
           cat .github/v01361.patch.part00 .github/v01361.patch.part01 .github/v01361.patch.part02 .github/v01361.patch.part03 > /tmp/v01361.patch.b64
           base64 -d /tmp/v01361.patch.b64 | xz -d > /tmp/v01361.patch
+          set +e
           git apply --3way --index /tmp/v01361.patch
+          apply_status=$?
+          set -e
+          if [ "$apply_status" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [ -z "$conflicts" ]; then
+              echo "Patch failed without merge conflicts."
+              exit "$apply_status"
+            fi
+            echo "Resolving reviewed v0.13.61 files to the release version:"
+            printf '%s\n' "$conflicts"
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              git checkout --theirs -- "$file"
+              git add "$file"
+            done <<< "$conflicts"
+          fi
+          git add -A
           git diff --check --cached
 
       - name: Set up Node

@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.62";
+  const APP_VERSION = "0.13.63";
 
   function editorProfileProtected() {
     try {
@@ -6286,6 +6286,7 @@
       <button type="button" data-view="overview" aria-label="Reset to overview">Overview</button>
       <button type="button" data-toggle="walk" aria-pressed="false">First person</button>
       <button type="button" data-toggle="combat" class="combat-mode-button" aria-pressed="false" hidden>Combat mode</button>
+      <button type="button" data-toggle="zombie" class="zombie-mode-button" aria-pressed="false" hidden>Zombie mode</button>
     `;
     frame.appendChild(controls);
     const fullscreenToggle = document.createElement("button");
@@ -6662,22 +6663,33 @@
       updateEditorHelp();
     };
 
-    const syncCombatButton = (active) => {
-      const button = frame.querySelector("[data-toggle='combat']");
-      if (!button) return;
-      button.classList.toggle("active", active);
-      button.classList.remove("combat-ready");
-      button.setAttribute("aria-pressed", String(active));
-      button.textContent = active ? "Exit combat" : "Combat mode";
+    const syncCombatButtons = (active, mode = combatController?.getMode?.() || "combat") => {
+      const combatButton = frame.querySelector("[data-toggle='combat']");
+      const zombieButton = frame.querySelector("[data-toggle='zombie']");
+      if (combatButton) {
+        const selected = Boolean(active && mode === "combat");
+        combatButton.classList.toggle("active", selected);
+        combatButton.classList.remove("combat-ready");
+        combatButton.setAttribute("aria-pressed", String(selected));
+        combatButton.textContent = selected ? "Exit combat" : "Combat mode";
+      }
+      if (zombieButton) {
+        const selected = Boolean(active && mode === "zombie");
+        zombieButton.classList.toggle("active", selected);
+        zombieButton.setAttribute("aria-pressed", String(selected));
+        zombieButton.textContent = selected ? "Exit zombies" : "Zombie mode";
+      }
       updateEditorHelp();
     };
 
     const syncCombatAvailability = () => {
-      const button = frame.querySelector("[data-toggle='combat']");
-      if (!button) return;
       const allowed = ownerCombatAllowed();
-      button.hidden = !allowed;
-      button.setAttribute("aria-hidden", String(!allowed));
+      ["combat", "zombie"].forEach((mode) => {
+        const button = frame.querySelector(`[data-toggle='${mode}']`);
+        if (!button) return;
+        button.hidden = !allowed;
+        button.setAttribute("aria-hidden", String(!allowed));
+      });
       if (!allowed && combatController?.isActive?.()) combatController.stop();
     };
     syncCombatAvailability();
@@ -6685,21 +6697,22 @@
     addLifecycleListener(window, "pageshow", syncCombatAvailability);
     addLifecycleListener(window, "focus", syncCombatAvailability);
 
-    const setCombatMode = (enabled) => {
+    const setCombatMode = (enabled, mode = "combat") => {
       if (!ownerCombatAllowed() || !combatController) return;
       if (enabled) {
+        if (combatController.isActive?.()) combatController.stop();
         setStage(stages.length - 1);
         state.stageFloat = stages.length - 1;
         if (state.cameraMode !== "walk") setWalkMode(true);
         window.requestAnimationFrame(() => {
           if (state.cameraMode !== "walk" || combatController?.isActive?.()) return;
-          combatController.start();
-          syncCombatButton(true);
-          showToast("Combat starts in 2 seconds. Get ready.");
+          combatController.start(mode);
+          syncCombatButtons(true, mode);
+          showToast(mode === "zombie" ? "Zombie Mode starts in 2 seconds. Shotgun and pistol ready." : "Combat starts in 2 seconds. Get ready.");
         });
       } else {
         combatController.stop();
-        syncCombatButton(false);
+        syncCombatButtons(false, mode);
         if (state.cameraMode === "walk") setWalkMode(false);
       }
     };
@@ -6793,16 +6806,18 @@
         state.pitch = clamp(Number(state.pitch) || 0, -.35, .35);
         renderPerformance.invalidate?.("combat-death-reset");
       },
-      exitCombat: () => setCombatMode(false),
+      exitCombat: () => setCombatMode(false, combatController?.getMode?.() || "combat"),
       invalidate: () => renderPerformance.invalidate?.("combat-mode"),
-      onStateChange: syncCombatButton,
-      onCombatStart: () => showToast("Fight! Defeat every enemy AI to complete the round."),
+      onStateChange: syncCombatButtons,
+      onCombatStart: () => showToast(combatController?.getMode?.() === "zombie" ? "Zombie wave active! Keep moving and use the shotgun up close." : "Fight! Defeat every enemy AI to complete the round."),
     }) || null;
 
     if (ownerCombatAllowed() && new URLSearchParams(window.location.search).get("owner") === "combat") {
       const combatButton = frame.querySelector("[data-toggle='combat']");
+      const zombieButton = frame.querySelector("[data-toggle='zombie']");
       combatButton?.classList.add("combat-ready");
-      showToast("Owner Combat Mode is ready. Select Combat mode to begin.");
+      zombieButton?.classList.add("combat-ready");
+      showToast("Owner modes are ready. Choose Combat mode or Zombie mode.");
     }
 
     const touchMoveState = { forward: false, back: false, left: false, right: false };
@@ -6904,8 +6919,7 @@
     });
     firstPersonTouchControls.querySelector("[data-touch-combat='swap']")?.addEventListener("click", (event) => {
       event.preventDefault();
-      const weapon = combatController?.playerRenderState?.()?.weapon;
-      combatController?.switchWeapon?.(weapon === "rifle" ? "handgun" : "rifle");
+      combatController?.toggleWeapon?.();
       if (touchAimButton) {
         touchAimButton.setAttribute("aria-pressed", "false");
         touchAimButton.classList.remove("active");
@@ -6980,7 +6994,13 @@
           return;
         }
         if (button.dataset.toggle === "combat") {
-          setCombatMode(!combatController?.isActive?.());
+          const sameMode = combatController?.isActive?.() && combatController?.getMode?.() === "combat";
+          setCombatMode(!sameMode, "combat");
+          return;
+        }
+        if (button.dataset.toggle === "zombie") {
+          const sameMode = combatController?.isActive?.() && combatController?.getMode?.() === "zombie";
+          setCombatMode(!sameMode, "zombie");
           return;
         }
         if (button.dataset.toggle === "walk") {
@@ -10318,9 +10338,10 @@
     const design = machine.designId ? designLibrary[machine.designId] : null;
     const designParts = Array.isArray(design?.components) ? design.components : [];
     const namedPart = (pattern) => designParts.find((part) => pattern.test(String(part?.name || "")));
-    const bodyColor = namedPart(/torso/i)?.color || machine.color || "#1e7b78";
-    const skin = namedPart(/head/i)?.color || "#e6b993";
-    const pants = namedPart(/(?:left|right) leg/i)?.color || "#26363d";
+    const zombie = Boolean(combat.zombie);
+    const bodyColor = zombie ? "#465744" : (namedPart(/torso/i)?.color || machine.color || "#1e7b78");
+    const skin = zombie ? "#839b68" : (namedPart(/head/i)?.color || "#e6b993");
+    const pants = zombie ? "#2a332d" : (namedPart(/(?:left|right) leg/i)?.color || "#26363d");
     const boot = "#161d21";
     const weapon = "#20282d";
     const weaponLight = "#4b5960";
@@ -10341,14 +10362,26 @@
       box(localBox3d(actor,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
     }
 
-    // Combat faces keep visible eyes even when custom-person LOD/design parts omit tiny facial pieces.
-    // The face points toward negative local Z, so positive Z tucks the eyes back into the head.
-    const eyeY = height*.865;
-    const eyeZ = depth*.035;
-    box(localBox3d(actor,width*.35,eyeZ,width*.12,.055,height*.022,"#f5f6f2",eyeY),alpha,1);
-    box(localBox3d(actor,width*.53,eyeZ,width*.12,.055,height*.022,"#f5f6f2",eyeY),alpha,1);
-    box(localBox3d(actor,width*.392,eyeZ-.022,width*.038,.018,height*.014,"#172228",eyeY+height*.002),alpha,1);
-    box(localBox3d(actor,width*.572,eyeZ-.022,width*.038,.018,height*.014,"#172228",eyeY+height*.002),alpha,1);
+    // Keep the combat eyes seated on the actual face instead of floating near
+    // mouth level. The head front starts near 0.30 local depth, so these eyes
+    // are raised and pushed back close to that face plane.
+    const eyeY = height*.91;
+    const eyeZ = depth*.275;
+    if (zombie) {
+      // A thin sickly face plate preserves each person's silhouette while making
+      // Zombie Mode instantly readable even on custom employee models.
+      box(localBox3d(actor,width*.315,depth*.255,width*.37,depth*.065,height*.15,skin,height*.78),alpha*.94,1);
+    }
+    const eyeWhite = zombie ? "#efd85f" : "#f5f6f2";
+    const pupil = zombie ? "#8f171a" : "#172228";
+    box(localBox3d(actor,width*.35,eyeZ,width*.12,.055,height*.022,eyeWhite,eyeY),alpha,1);
+    box(localBox3d(actor,width*.53,eyeZ,width*.12,.055,height*.022,eyeWhite,eyeY),alpha,1);
+    box(localBox3d(actor,width*.392,eyeZ-.022,width*.038,.018,height*.014,pupil,eyeY+height*.002),alpha,1);
+    box(localBox3d(actor,width*.572,eyeZ-.022,width*.038,.018,height*.014,pupil,eyeY+height*.002),alpha,1);
+    if (zombie) {
+      localLine3d(actor,[width*.34,height*.73,depth*.255],[width*.47,height*.63,depth*.245],"#5f2727",2.2,alpha*.82);
+      localLine3d(actor,[width*.68,height*.58,depth*.28],[width*.57,height*.48,depth*.25],"#382c27",2.5,alpha*.7);
+    }
 
     // Two-segment legs create an actual walking gait instead of sliding feet.
     const hipY = height * .43;
@@ -10858,6 +10891,16 @@
       {x:.02,y:.01,z:-.77,w:.12,h:.1,d:.08,color:"#222b2f"},
       {x:.0,y:-.22,z:.12,w:.22,h:.17,d:.26,color:skin,rotationX:-8},
       {x:-.18,y:-.16,z:.12,w:.17,h:.15,d:.24,color:skin,rotationZ:-12},
+    ] : combat.weapon === "shotgun" ? [
+      // Zombie Mode pump shotgun: broad stock, receiver, wood fore-end and twin barrel silhouette.
+      {x:0,y:-.055,z:.62,w:.36,h:.28,d:.72,color:"#4d3526"},
+      {x:0,y:-.04,z:.18,w:.36,h:.24,d:.58,color:metal},
+      {x:0,y:-.025,z:-.42,w:.30,h:.19,d:.62,color:"#6a4930"},
+      {x:0,y:.025,z:-.78,w:.11,h:.10,d:.92,color:dark},
+      {x:.07,y:.085,z:-.80,w:.08,h:.07,d:.88,color:steel},
+      {x:0,y:-.20,z:.15,w:.17,h:.36,d:.22,color:dark,rotationX:-12},
+      {x:.03,y:-.30,z:.18,w:.24,h:.18,d:.30,color:skin,rotationX:-8},
+      {x:-.23,y:-.15,z:-.39,w:.20,h:.18,d:.38,color:skin,rotationZ:-12},
     ] : [
       // Stock and buffer tube.
       {x:0,y:-.055,z:.68,w:.33,h:.27,d:.58,color:dark},
@@ -10894,8 +10937,28 @@
       }
       drawViewmodelBox(spec,root,1);
     });
+    if (combat.weapon === "rifle") {
+      // The holographic sight now lives on the rifle model itself: translucent
+      // glass is framed by the physical sight posts and carries its own red reticle.
+      const glassLocal = [
+        [-.092,.245,-.275],[.092,.245,-.275],[.092,.405,-.275],[-.092,.405,-.275],
+      ].map((point) => viewmodelPoint(point,root));
+      drawViewmodelPolygon(glassLocal,"rgba(75,177,193,.11)","rgba(152,226,236,.38)",.94);
+      const reticleWorld = viewmodelPoint([0,.325,-.283],root);
+      const reticlePoint = viewmodelProject(reticleWorld);
+      const reticleRadius = Math.max(3.2, canvas.width/390);
+      ctx.save();
+      ctx.strokeStyle="rgba(255,66,72,.96)";
+      ctx.fillStyle="rgba(255,72,76,.94)";
+      ctx.shadowColor="rgba(255,54,60,.72)";
+      ctx.shadowBlur=Math.max(5,canvas.width/260);
+      ctx.lineWidth=Math.max(1.2,canvas.width/1500);
+      ctx.beginPath();ctx.arc(reticlePoint[0],reticlePoint[1],reticleRadius,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.arc(reticlePoint[0],reticlePoint[1],Math.max(1.2,reticleRadius*.22),0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    }
     if (combat.muzzleFlash) {
-      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78] : [0,-.025,-1.49];
+      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78] : combat.weapon === "shotgun" ? [0,.04,-1.26] : [0,-.025,-1.49];
       const muzzle = viewmodelPoint(muzzleLocal,root);
       const p=viewmodelProject(muzzle);
       const radius=Math.max(16,42*pixelRatio);

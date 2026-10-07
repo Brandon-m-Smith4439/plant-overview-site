@@ -77,7 +77,7 @@ assert.ok(flowBody.includes("entriesById.get(connection.sourceId)"), "Today flow
 assert.ok(flowBody.includes("entriesById.get(connection.targetId)"), "Today flow must resolve the exact destination object by instance ID.");
 assert.ok(flowBody.includes("processConnectionEndpointText"), "Route tags must support arbitrary object names as endpoints.");
 assert.ok(flowBody.includes("drawFloorProcessFlow(fromEntry,toEntry,connection,time)") || flowBody.includes("drawFloorProcessFlow(fromEntry, toEntry, connection, time)"), "Renderer must pass each saved connection into the animated floor-flow renderer.");
-assert.ok(flowBody.includes("collectProcessStepNodes(entriesById,routes).forEach(drawProcessStepLabel)"), "Automatic process-step labels must render after the glowing floor routes.");
+assert.ok(flowBody.includes("collectProcessStepNodes(entriesById,routes).forEach((node)=>drawProcessStepLabel(node,protectedMachineRects))"), "Automatic process-step labels must render after the glowing floor routes.");
 assert.ok(flowBody.includes("processFlowControlPoints") && flowBody.includes("roundedProcessFlowPath"), "Floor routes must support editable turn points and rounded arches.");
 assert.ok(flowBody.includes("lineDashOffset=-dashTravel") || flowBody.includes("lineDashOffset = -dashTravel"), "Floor routes must animate directional highlights along the path.");
 assert.ok(flowBody.includes("flowFloorHeight") && flowBody.includes("processFlowFloorAnchor"), "Process routes must be projected from a configurable floor height instead of floating between machine anchors.");

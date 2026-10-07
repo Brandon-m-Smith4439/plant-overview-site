@@ -1,3 +1,7 @@
+## Version 0.13.69
+
+Version 0.13.69 keeps the Combat/Zombie pre-match setup fully mouse-driven. Entering either owner game mode can still switch into first-person/fullscreen, but pointer lock is deliberately deferred while the difficulty, character, match type, and lobby controls are on screen. The existing **Start Match** path becomes the single handoff into captured first-person controls, so the cursor disappears only when gameplay actually begins.
+
 ## Version 0.13.68
 
 Version 0.13.68 hardens the new Combat/Zombie multiplayer lobby so joining, creating, configuring, starting, and mutating a match now requires the signed **HttpOnly owner-session cookie** issued after the owner password is accepted. The lobby API no longer accepts a client-supplied owner marker as an authorization shortcut, so the owner-password requirement is enforced server-side.

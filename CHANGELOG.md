@@ -1,3 +1,10 @@
+## 0.13.69 - 2026-10-07
+
+- Fixed Combat/Zombie pre-match setup so entering either mode transitions to first person/fullscreen without capturing the desktop mouse. Difficulty, character, match-type, and lobby controls remain clickable with a visible cursor until the match actually begins.
+- Kept pointer lock tied to the existing **Start Match** path, so gameplay still captures the mouse immediately when the configured round starts while pause/end/setup overlays continue to release it.
+- Added regression coverage ensuring `capture: false` is honored by first-person startup and used by Combat/Zombie setup, preventing the delayed fullscreen callback from recapturing the cursor.
+- Bumped viewer/editor release tokens to v0.13.69 so the pointer-lock fix deploys without stale browser assets.
+
 ## 0.13.68 - 2026-10-07
 
 - Hardened `/api/combat-lobby` authorization to require the signed HttpOnly owner-session cookie issued by `/api/editor-session` after the owner password is validated.

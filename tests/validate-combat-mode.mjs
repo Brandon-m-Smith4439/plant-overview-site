@@ -61,6 +61,8 @@ const controlsMarkup = plant.slice(controlsStart, controlsEnd);
 assert.ok(controlsMarkup.indexOf('data-toggle="walk"') >= 0, "First person control is missing.");
 assert.ok(controlsMarkup.indexOf('data-toggle="combat"') > controlsMarkup.indexOf('data-toggle="walk"'), "Combat mode must render immediately after First person for owners.");
 assert.ok(plant.includes('window.requestAnimationFrame(() => {') && plant.includes('combatController.start(mode);'), "Combat should enter first person before starting the countdown.");
+assert.ok(plant.includes('setWalkMode(true, { capture: false })'), "Combat/Zombie setup must enter first person without capturing the mouse.");
+assert.ok(plant.includes('const capturePointer = options.capture !== false;') && plant.includes('if (capturePointer && !touchWalk) firstPersonController?.capture();'), "First-person startup must honor capture:false so the setup cursor stays free until Start Match.");
 
 // v0.13.55: every custom person must bypass retained instancing so combat-owned
 // movement/rotation/weapons are actually rendered. Published Helper instances

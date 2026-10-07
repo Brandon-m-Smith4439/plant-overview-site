@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.68";
+  const APP_VERSION = "0.13.69";
 
   function editorProfileProtected() {
     try {
@@ -6648,10 +6648,11 @@
     }) || null;
 
     setWalkMode = (enabled, options = {}) => {
+      const capturePointer = options.capture !== false;
       const experience = frame.closest(".experience");
       const siteShell = frame.closest(".site-shell");
       if (enabled === (state.cameraMode === "walk")) {
-        if (enabled && !isTouchWalkViewport()) firstPersonController?.capture();
+        if (enabled && capturePointer && !isTouchWalkViewport()) firstPersonController?.capture();
         return;
       }
       state.cameraMode = enabled ? "walk" : "orbit";
@@ -6694,7 +6695,7 @@
         const captureWalkthrough = () => {
           canvasSizeDirty = true;
           renderPerformance.invalidate?.("first-person-fullscreen");
-          if (!touchWalk) firstPersonController?.capture();
+          if (capturePointer && !touchWalk) firstPersonController?.capture();
         };
         walkStartedFullscreen = false;
         Promise.resolve(enterViewerFullscreen(frame)).then((active) => {
@@ -6774,7 +6775,7 @@
         if (combatController.isActive?.()) combatController.stop();
         setStage(stages.length - 1);
         state.stageFloat = stages.length - 1;
-        if (state.cameraMode !== "walk") setWalkMode(true);
+        if (state.cameraMode !== "walk") setWalkMode(true, { capture: false });
         window.requestAnimationFrame(() => {
           if (state.cameraMode !== "walk" || combatController?.isActive?.()) return;
           combatController.start(mode);

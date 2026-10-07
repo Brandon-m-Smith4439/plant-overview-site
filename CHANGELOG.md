@@ -1,3 +1,11 @@
+## 0.13.74 - 2026-10-07
+
+- Fixed stale Combat/Zombie round-end UI surviving an exit/re-entry cycle.
+- Added an idempotent `resetCombatSessionUi()` lifecycle reset that hides round, pause, countdown, killer-reveal, and setup overlays; clears victory/death presentation classes; unlocks restart controls; resets the death cinematic; and invalidates delayed round reveal callbacks.
+- Run the session UI reset before every new combat session becomes active and before `stop()` can early-return when the controller is already inactive. This makes toolbar exits, end-screen exits, and first-person transition exits converge on the same cleanup path.
+- Added regression coverage proving combat entry clears stale end-screen state and combat exit performs cleanup even on repeated/inactive stop calls.
+- Bumped viewer/editor release tokens to v0.13.74.
+
 ## 0.13.73 - 2026-10-07
 
 - Fixed the severe co-op host FPS regression by caching combat occluders for 34 ms. Enemy line-of-sight, movement collision, projectile, and related AI queries now reuse one animated-machine/glass geometry result instead of rebuilding the entire plant geometry multiple times per enemy every frame.

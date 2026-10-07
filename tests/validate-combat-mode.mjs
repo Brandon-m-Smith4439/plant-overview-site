@@ -31,6 +31,14 @@ assert.ok(plant.includes("rgba(255,231,151,.98)") && plant.includes("tracerTarge
 assert.ok(combat.includes("hitReactUntil") && combat.includes("defeatedAt") && combat.includes("deathProgress"), "Enemy hit/death animations are incomplete.");
 assert.ok(combat.includes("playerRenderState") && combat.includes("reloadProgress") && combat.includes("recoilProgress"), "Player weapon animation state is missing.");
 assert.ok(combat.includes("roundState") && combat.includes("data-combat-restart"), "Win/defeat restart flow is missing.");
+assert.ok(combat.includes("function resetCombatSessionUi()"), "Combat needs one idempotent session-UI reset so stale end screens cannot survive an exit/re-entry cycle.");
+const startLifecycleStart = combat.indexOf("function start(mode = \\\"combat\\\")");
+const stopLifecycleStart = combat.indexOf("function stop()", startLifecycleStart);
+const startLifecycleBody = combat.slice(startLifecycleStart, stopLifecycleStart);
+const stopLifecycleEnd = combat.indexOf("function handleKeyDown", stopLifecycleStart);
+const stopLifecycleBody = combat.slice(stopLifecycleStart, stopLifecycleEnd);
+assert.ok(startLifecycleBody.includes("resetCombatSessionUi()") && startLifecycleBody.indexOf("resetCombatSessionUi()") < startLifecycleBody.indexOf("active = true"), "Entering combat must clear stale victory/death UI before the new session becomes active.");
+assert.ok(stopLifecycleBody.includes("resetCombatSessionUi()") && stopLifecycleBody.indexOf("resetCombatSessionUi()") < stopLifecycleBody.indexOf("if (!active) return"), "Leaving combat must clear stale session UI even when stop() is called after combat is already inactive.");
 assert.ok(combat.includes("countdownEndsAt") && combat.includes("COMBAT STARTS IN"), "Two-second combat countdown is missing.");
 assert.ok(combat.includes('resetRound({ countdown: true })'), "Combat and restart must enter the countdown state before AI becomes active.");
 assert.ok(combat.includes('roundState !== "playing"'), "Weapons and enemy damage must stay locked until the countdown ends.");

@@ -1,3 +1,7 @@
+## Version 0.13.74
+
+Version 0.13.74 fixes Combat/Zombie re-entry after leaving a completed or failed round. The controller now performs one idempotent session-UI reset on both exit and entry, clearing stale restart/exit overlays, victory/death classes, countdown/pause state, killer reveal state, delayed death-screen timers, and death-cinematic presentation before the next setup screen opens. The reset also runs before an inactive `stop()` can return, so double-exit or first-person transition paths cannot skip cleanup.
+
 ## Version 0.13.73
 
 Version 0.13.73 is a co-op performance and synchronization pass. Host-side AI no longer rebuilds the entire animated machine/glass occluder set for every enemy sight and movement query; combat occluders are cached for roughly one 30 FPS geometry sample and reused across all AI queries in that frame window. This removes the worst frame-time multiplier that appeared after live animated glass was added.

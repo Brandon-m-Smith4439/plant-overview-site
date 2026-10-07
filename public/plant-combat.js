@@ -2486,6 +2486,35 @@
       if (remotes.every((player) => player.state?.alive === false || number(player.state?.health,100)<=0)) scheduleVictory();
     }
 
+    function resetCombatSessionUi() {
+      // This reset is intentionally idempotent. Combat can be exited through
+      // several paths (round-end buttons, toolbar toggle, first-person exit),
+      // and some of those paths can call stop() after the controller is already
+      // inactive. Always clear the end-of-round presentation before either
+      // returning or starting another session so stale restart/exit UI cannot
+      // leak into the next setup screen.
+      roundRevealSerial += 1;
+      roundState = "setup";
+      countdownEndsAt = 0;
+      countdownDisplay = 0;
+      playerDeathStartedAt = 0;
+      paused = false;
+      pausedAt = 0;
+      frame.classList.remove("combat-under-fire", "combat-death-cinematic", "combat-paused", "combat-player-dead");
+      if (hud) hud.hidden = true;
+      if (countdownOverlay) countdownOverlay.hidden = true;
+      if (pauseOverlay) pauseOverlay.hidden = true;
+      if (roundOverlay) {
+        roundOverlay.hidden = true;
+        roundOverlay.classList.remove("killer-reveal", "victory");
+      }
+      if (killerReveal) killerReveal.hidden = true;
+      if (roundActions) roundActions.classList.remove("locked");
+      if (matchSetup) matchSetup.hidden = true;
+      restartButton && (restartButton.disabled = false);
+      options.resetDeathCinematic?.();
+    }
+
     function openMatchSetup() {
       roundState="setup";
       ensureSelectedCharacter();
@@ -2500,6 +2529,7 @@
     function start(mode = "combat") {
       if (active || options.isOwner?.() !== true) return false;
       gameMode = GAME_MODES[mode] ? mode : "combat";
+      resetCombatSessionUi();
       active = true;
       frame.classList.toggle("zombie-mode-active", gameMode === "zombie");
       hud.hidden = false;
@@ -2515,6 +2545,7 @@
     }
 
     function stop() {
+      resetCombatSessionUi();
       if (!active) return;
       if (victoryTimer) window.clearTimeout(victoryTimer);
       victoryTimer = 0;

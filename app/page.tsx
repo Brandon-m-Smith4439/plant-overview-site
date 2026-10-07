@@ -17,7 +17,7 @@ export default function Home() {
             <a className="active" href="/">Plant layout</a>
             <ProtectedEditorLink href="/machine-studio">Machine Design Studio</ProtectedEditorLink>
           </nav>
-          <SecretOwnerEntry version="0.13.73" />
+          <SecretOwnerEntry version="0.13.74" />
         </div>
       </header>
 

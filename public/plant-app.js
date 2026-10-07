@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.63";
+  const APP_VERSION = "0.13.64";
 
   function editorProfileProtected() {
     try {
@@ -10362,25 +10362,68 @@
       box(localBox3d(actor,width*.25,depth*.23,width*.5,depth*.52,height*.05,vest,height*.88),alpha,1);
     }
 
-    // Keep the combat eyes seated on the actual face instead of floating near
-    // mouth level. The head front starts near 0.30 local depth, so these eyes
-    // are raised and pushed back close to that face plane.
-    const eyeY = height*.91;
-    const eyeZ = depth*.275;
-    if (zombie) {
-      // A thin sickly face plate preserves each person's silhouette while making
-      // Zombie Mode instantly readable even on custom employee models.
-      box(localBox3d(actor,width*.315,depth*.255,width*.37,depth*.065,height*.15,skin,height*.78),alpha*.94,1);
-    }
+    // Facial combat details are anchored to the actual Head design component when
+    // one exists. This keeps zombie skin/eyes attached to custom employee faces
+    // instead of guessing from the overall person envelope (which could put the
+    // old flat plate down around the neck on differently scaled people).
+    const headPart = designParts.find((part) => /^head$/i.test(String(part?.name || "")))
+      || designParts.find((part) => /\bhead\b/i.test(String(part?.name || "")) && !/hard\s*hat/i.test(String(part?.name || "")));
     const eyeWhite = zombie ? "#efd85f" : "#f5f6f2";
     const pupil = zombie ? "#8f171a" : "#172228";
-    box(localBox3d(actor,width*.35,eyeZ,width*.12,.055,height*.022,eyeWhite,eyeY),alpha,1);
-    box(localBox3d(actor,width*.53,eyeZ,width*.12,.055,height*.022,eyeWhite,eyeY),alpha,1);
-    box(localBox3d(actor,width*.392,eyeZ-.022,width*.038,.018,height*.014,pupil,eyeY+height*.002),alpha,1);
-    box(localBox3d(actor,width*.572,eyeZ-.022,width*.038,.018,height*.014,pupil,eyeY+height*.002),alpha,1);
-    if (zombie) {
-      localLine3d(actor,[width*.34,height*.73,depth*.255],[width*.47,height*.63,depth*.245],"#5f2727",2.2,alpha*.82);
-      localLine3d(actor,[width*.68,height*.58,depth*.28],[width*.57,height*.48,depth*.25],"#382c27",2.5,alpha*.7);
+    const canAnchorFaceToHead = Boolean(design && headPart
+      && ["x","y","z","w","h","d"].every((key) => Number.isFinite(Number(headPart[key]))));
+    if (canAnchorFaceToHead) {
+      const hx = Number(headPart.x);
+      const hy = Number(headPart.y);
+      const hz = Number(headPart.z);
+      const hw = Math.max(.05, Number(headPart.w));
+      const hh = Math.max(.05, Number(headPart.h));
+      const hd = Math.max(.05, Number(headPart.d));
+      const faceDepth = Math.max(.035, hd*.055);
+      const faceZ = hz - faceDepth*.72;
+      const inheritedRotation = {
+        rotationX:Number(headPart.rotationX)||0,
+        rotationY:Number.isFinite(Number(headPart.rotationY))?Number(headPart.rotationY):(Number(headPart.rotation)||0),
+        rotationZ:Number(headPart.rotationZ)||0,
+      };
+      const facePart = {
+        ...inheritedRotation, x:hx+hw*.08, y:hy+hh*.08, z:faceZ,
+        w:hw*.84, h:hh*.80, d:faceDepth, color:skin,
+      };
+      if (zombie) drawDesignBox(actor,facePart,design,alpha*.95,grow);
+      const eyeY = hy + hh*.58;
+      const eyeH = Math.max(.035,hh*.085);
+      const eyeW = Math.max(.055,hw*.16);
+      const eyeD = Math.max(.025,hd*.045);
+      const leftEyeX = hx + hw*.22;
+      const rightEyeX = hx + hw*.62;
+      const eyeZ = faceZ-eyeD*.72;
+      [leftEyeX,rightEyeX].forEach((eyeX) => {
+        drawDesignBox(actor,{...inheritedRotation,x:eyeX,y:eyeY,z:eyeZ,w:eyeW,h:eyeH,d:eyeD,color:eyeWhite},design,alpha,grow);
+        drawDesignBox(actor,{...inheritedRotation,x:eyeX+eyeW*.37,y:eyeY+eyeH*.18,z:eyeZ-eyeD*.75,w:eyeW*.28,h:eyeH*.66,d:eyeD*.66,color:pupil},design,alpha,grow);
+      });
+      if (zombie) {
+        const woundA = [
+          designLocalPointToWorld(actor,design,[hx+hw*.18,hy+hh*.36,hz-faceDepth],grow),
+          designLocalPointToWorld(actor,design,[hx+hw*.43,hy+hh*.18,hz-faceDepth*1.15],grow),
+        ];
+        const woundB = [
+          designLocalPointToWorld(actor,design,[hx+hw*.80,hy+hh*.31,hz-faceDepth],grow),
+          designLocalPointToWorld(actor,design,[hx+hw*.62,hy+hh*.13,hz-faceDepth*1.12],grow),
+        ];
+        line3d(woundA[0],woundA[1],"#5f2727",2.2,alpha*.82);
+        line3d(woundB[0],woundB[1],"#382c27",2.3,alpha*.72);
+      }
+    } else {
+      // Generic fallback matches the built-in person's real head box: head base
+      // near 73% of height, eyes near 81%, and the face on the negative-Z side.
+      const eyeY = height*.81;
+      const eyeZ = depth*.285;
+      if (zombie) box(localBox3d(actor,width*.315,depth*.27,width*.37,depth*.055,height*.12,skin,height*.745),alpha*.95,1);
+      box(localBox3d(actor,width*.35,eyeZ,width*.12,.05,height*.022,eyeWhite,eyeY),alpha,1);
+      box(localBox3d(actor,width*.53,eyeZ,width*.12,.05,height*.022,eyeWhite,eyeY),alpha,1);
+      box(localBox3d(actor,width*.392,eyeZ-.02,width*.038,.016,height*.014,pupil,eyeY+height*.002),alpha,1);
+      box(localBox3d(actor,width*.572,eyeZ-.02,width*.038,.016,height*.014,pupil,eyeY+height*.002),alpha,1);
     }
 
     // Two-segment legs create an actual walking gait instead of sliding feet.
@@ -10871,10 +10914,13 @@
     const aim = combat.aiming ? 1 : 0;
     const death = clamp(Number(combat.deathProgress) || 0, 0, 1);
     const deathDrop = Math.sin(Math.min(1, death * 2) * Math.PI / 2);
+    const rifleAds = combat.weapon === "rifle" && aim > .5;
     const root = {
-      x: .34 + bobX*(1-aim*.78) - aim*.34 + deathDrop*.18,
-      y: -.25 - bobY*(1-aim*.8) - aim*.085 - reloadArc*.12 + recoil*.045 - deathDrop*.72,
-      z: 1.15 - aim*.22 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
+      // ADS keeps the rifle low enough that the dedicated HUD holographic sight
+      // stays completely open. Hip fire returns the weapon to the right side.
+      x: .34 + bobX*(1-aim*.78) - aim*(rifleAds?.27:.34) + deathDrop*.18,
+      y: -.25 - bobY*(1-aim*.8) - aim*(rifleAds?.19:.085) - reloadArc*.12 + recoil*.045 - deathDrop*.72,
+      z: 1.15 - aim*(rifleAds?.12:.22) - recoil*.11 + reloadArc*.08 + deathDrop*.12,
       rotationX: -4 - recoil*6 + reloadArc*18 + deathDrop*28,
       rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
       rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
@@ -10929,6 +10975,9 @@
     // During reload the magazine visibly drops and returns instead of the whole gun merely rotating.
     parts.forEach((part,index) => {
       const magazineIndex = combat.weapon === "rifle" ? 5 : -1;
+      // Rifle optic parts (10-14) disappear while zoomed/ADS so the separate
+      // screen-space holographic aiming sight cannot be blocked by the gun model.
+      if (combat.weapon === "rifle" && rifleAds && index >= 10 && index <= 14) return;
       const spec = {...part};
       if (index === magazineIndex && reload > .05) {
         const eject = reload < .5 ? reload*2 : (1-reload)*2;
@@ -10937,9 +10986,9 @@
       }
       drawViewmodelBox(spec,root,1);
     });
-    if (combat.weapon === "rifle") {
-      // The holographic sight now lives on the rifle model itself: translucent
-      // glass is framed by the physical sight posts and carries its own red reticle.
+    if (combat.weapon === "rifle" && !rifleAds) {
+      // Hip fire keeps the physical holographic sight on the rifle model; ADS
+      // hides it so the dedicated aiming sight remains completely unobstructed.
       const glassLocal = [
         [-.092,.245,-.275],[.092,.245,-.275],[.092,.405,-.275],[-.092,.405,-.275],
       ].map((point) => viewmodelPoint(point,root));

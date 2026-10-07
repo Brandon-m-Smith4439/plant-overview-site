@@ -15,6 +15,17 @@
   const ZOMBIE_INITIAL_EXTRA = 4;
   const AMMO_PICKUP_RESPAWN_MS = 18000;
   const AMMO_PICKUP_RADIUS = 3.25;
+  const ZOMBIE_SETTINGS_STORAGE_KEY = "monroe-glass-zombie-settings-v1";
+  const ZOMBIE_DIFFICULTIES = Object.freeze({
+    easy: Object.freeze({ key:"easy", label:"Easy", health:.72, speed:.82, damage:.70, spawnRate:1.30, aliveCap:.78, initialExtra:2, pickupRespawn:.78 }),
+    normal: Object.freeze({ key:"normal", label:"Normal", health:1, speed:1, damage:1, spawnRate:1, aliveCap:1, initialExtra:4, pickupRespawn:1 }),
+    hard: Object.freeze({ key:"hard", label:"Hard", health:1.28, speed:1.18, damage:1.22, spawnRate:.82, aliveCap:1.18, initialExtra:6, pickupRespawn:1.12 }),
+    nightmare: Object.freeze({ key:"nightmare", label:"Nightmare", health:1.58, speed:1.38, damage:1.48, spawnRate:.66, aliveCap:1.38, initialExtra:8, pickupRespawn:1.28 }),
+  });
+  const ZOMBIE_RUN_TYPES = Object.freeze({
+    normal: Object.freeze({ key:"normal", label:"Normal", description:"Clear every zombie currently in the plant. No respawns." }),
+    endless: Object.freeze({ key:"endless", label:"Endless", description:"Zombies keep spawning from the plant edges. Survive as long as possible." }),
+  });
 
   const ENEMY_WEAPONS = Object.freeze({
     rifle: Object.freeze({ key: "rifle", label: "Rifle", range: 125, preferredMin: 28, preferredMax: 62, moveSpeed: 1, fireMin: 720, fireMax: 1320, magazine: 24, reloadMs: 1900, damageMin: 6, damageMax: 11, accuracyNear: .76, accuracyFalloff: 225, tracer: "rifle" }),
@@ -187,6 +198,33 @@
       '<div class="combat-scope-overlay combat-holo-overlay" data-combat-scope hidden aria-hidden="true">',
         '<div class="combat-holo-sight"><span class="combat-holo-glass"></span><i class="horizontal"></i><i class="vertical"></i><b></b></div>',
       '</div>',
+      '<div class="combat-zombie-setup" data-zombie-setup hidden>',
+        '<div class="combat-zombie-setup-card">',
+          '<p>ZOMBIE MODE SETUP</p>',
+          '<h2>Choose your run</h2>',
+          '<span>Pick the zombie difficulty and whether this is a plant-clear round or an endless survival run.</span>',
+          '<div class="combat-zombie-setup-section">',
+            '<strong>DIFFICULTY</strong>',
+            '<div class="combat-zombie-choice-grid" data-zombie-difficulty-options>',
+              '<button type="button" data-zombie-difficulty="easy"><b>Easy</b><small>Slower, lighter zombies</small></button>',
+              '<button type="button" data-zombie-difficulty="normal" class="active"><b>Normal</b><small>Balanced pressure</small></button>',
+              '<button type="button" data-zombie-difficulty="hard"><b>Hard</b><small>Faster and tougher</small></button>',
+              '<button type="button" data-zombie-difficulty="nightmare"><b>Nightmare</b><small>Maximum pressure</small></button>',
+            '</div>',
+          '</div>',
+          '<div class="combat-zombie-setup-section">',
+            '<strong>MODE</strong>',
+            '<div class="combat-zombie-choice-grid run-type" data-zombie-run-options>',
+              '<button type="button" data-zombie-run="normal"><b>Normal · Clear Plant</b><small>Kill every zombie. No respawns.</small></button>',
+              '<button type="button" data-zombie-run="endless" class="active"><b>Endless Survival</b><small>Edge spawns continue until you die.</small></button>',
+            '</div>',
+          '</div>',
+          '<div class="combat-zombie-setup-actions">',
+            '<button type="button" data-zombie-start class="primary">Start Zombie Mode</button>',
+            '<button type="button" data-zombie-cancel>Cancel</button>',
+          '</div>',
+        '</div>',
+      '</div>',
       '<div class="combat-pause-overlay" data-combat-pause hidden>',
         '<div>',
           '<p>COMBAT PAUSED</p>',
@@ -267,6 +305,10 @@
     const roundActions = hud.querySelector("[data-combat-round-actions]");
     const restartButton = hud.querySelector("[data-combat-restart]");
     const pauseOverlay = hud.querySelector("[data-combat-pause]");
+    const zombieSetup = hud.querySelector("[data-zombie-setup]");
+    const zombieDifficultyOptions = [...hud.querySelectorAll("[data-zombie-difficulty]")];
+    const zombieRunOptions = [...hud.querySelectorAll("[data-zombie-run]")];
+    const zombieStartButton = hud.querySelector("[data-zombie-start]");
     const victoryTime = hud.querySelector("[data-combat-victory-time]");
     const bestTime = hud.querySelector("[data-combat-best-time]");
     const timeLabel = hud.querySelector("[data-combat-time-label]");
@@ -319,6 +361,37 @@
     let zombieSpawnSerial = 0;
     let zombieSpawnCount = 0;
     let nextZombieSpawnAt = 0;
+    let zombieDifficulty = "normal";
+    let zombieRunType = "endless";
+
+    function readZombieSettings() {
+      try {
+        const parsed = JSON.parse(window.localStorage?.getItem(ZOMBIE_SETTINGS_STORAGE_KEY) || "{}");
+        if (ZOMBIE_DIFFICULTIES[parsed?.difficulty]) zombieDifficulty = parsed.difficulty;
+        if (ZOMBIE_RUN_TYPES[parsed?.runType]) zombieRunType = parsed.runType;
+      } catch {}
+    }
+    readZombieSettings();
+
+    function zombieDifficultyConfig() {
+      return ZOMBIE_DIFFICULTIES[zombieDifficulty] || ZOMBIE_DIFFICULTIES.normal;
+    }
+
+    function zombieRunConfig() {
+      return ZOMBIE_RUN_TYPES[zombieRunType] || ZOMBIE_RUN_TYPES.endless;
+    }
+
+    function zombieEndless() {
+      return gameMode === "zombie" && zombieRunType === "endless";
+    }
+
+    function zombieScoreKey(mode = gameMode) {
+      return mode === "zombie" ? `zombie:${zombieRunType}:${zombieDifficulty}` : mode;
+    }
+
+    function saveZombieSettings() {
+      try { window.localStorage?.setItem(ZOMBIE_SETTINGS_STORAGE_KEY, JSON.stringify({ difficulty:zombieDifficulty, runType:zombieRunType })); } catch {}
+    }
 
     function modeConfig() {
       return GAME_MODES[gameMode] || GAME_MODES.combat;
@@ -348,21 +421,27 @@
     const highScores = readHighScores();
 
     function bestClearTime(mode = gameMode) {
-      const list = highScores[mode];
-      if (!Array.isArray(list) || !list.length) return mode === "zombie" ? 0 : Infinity;
+      const key = zombieScoreKey(mode);
+      let list = highScores[key];
+      // Preserve the old v0.13.65 Zombie survival score as the default Normal/Endless record.
+      if ((!Array.isArray(list) || !list.length) && mode === "zombie" && zombieDifficulty === "normal" && zombieRunType === "endless") list = highScores.zombie;
+      const survivalScore = mode === "zombie" && zombieRunType === "endless";
+      if (!Array.isArray(list) || !list.length) return survivalScore ? 0 : Infinity;
       const scores = list.filter(Number.isFinite);
-      if (!scores.length) return mode === "zombie" ? 0 : Infinity;
-      return mode === "zombie" ? Math.max(...scores) : Math.min(...scores);
+      if (!scores.length) return survivalScore ? 0 : Infinity;
+      return survivalScore ? Math.max(...scores) : Math.min(...scores);
     }
 
     function recordRoundTime(seconds) {
       const safeSeconds = Math.max(0, Math.round(number(seconds)));
-      const list = Array.isArray(highScores[gameMode]) ? highScores[gameMode].filter(Number.isFinite) : [];
+      const key = zombieScoreKey();
+      const survivalScore = zombieEndless();
+      const list = Array.isArray(highScores[key]) ? highScores[key].filter(Number.isFinite) : [];
       list.push(safeSeconds);
-      list.sort(gameMode === "zombie" ? (a, b) => b - a : (a, b) => a - b);
-      highScores[gameMode] = list.slice(0, 10);
+      list.sort(survivalScore ? (a, b) => b - a : (a, b) => a - b);
+      highScores[key] = list.slice(0, 10);
       try { window.localStorage?.setItem(HIGH_SCORE_STORAGE_KEY, JSON.stringify(highScores)); } catch {}
-      return highScores[gameMode][0];
+      return highScores[key][0];
     }
 
     function syncRestartButton() {
@@ -414,7 +493,7 @@
     function resetEnemyRecord(record, machine, index) {
       const unit = stableUnit(record.id || enemyId(machine, index));
       record.machine = machine;
-      record.health = 100;
+      record.health = gameMode === "zombie" ? 100 * zombieDifficultyConfig().health : 100;
       record.x = number(machine?.x);
       record.z = number(machine?.z);
       record.anchorX = record.x;
@@ -448,7 +527,7 @@
       record.zombie = gameMode === "zombie";
       record.weaponKey = record.zombie ? "chainsaw" : (ENEMY_WEAPON_KEYS[Math.floor(Math.random() * ENEMY_WEAPON_KEYS.length)] || "rifle");
       record.weaponLabel = ENEMY_WEAPONS[record.weaponKey]?.label || "Rifle";
-      record.modeSpeedMultiplier = record.zombie ? 1.55 : 1;
+      record.modeSpeedMultiplier = record.zombie ? 1.55 * zombieDifficultyConfig().speed : 1;
       record.ammoInMagazine = Math.max(0, Math.floor(number(ENEMY_WEAPONS[record.weaponKey]?.magazine, 0)));
       record.tracerUntil = 0;
       record.tracerTarget = null;
@@ -554,7 +633,8 @@
 
     function zombieAliveCap(now) {
       const elapsed = Math.max(0, (now - (roundStartedAt || now)) / 1000);
-      return Math.min(30, 12 + Math.floor(elapsed / 35) * 2);
+      const cap = (12 + Math.floor(elapsed / 35) * 2) * zombieDifficultyConfig().aliveCap;
+      return Math.min(38, Math.max(6, Math.round(cap)));
     }
 
     function cleanupZombieCorpses(now) {
@@ -566,9 +646,9 @@
     }
 
     function updateZombieSpawns(now) {
-      if (gameMode !== "zombie" || roundState !== "playing") return;
+      if (!zombieEndless() || roundState !== "playing") return;
       const elapsed = Math.max(0, (now - (roundStartedAt || now)) / 1000);
-      const interval = Math.max(1250, 3200 - elapsed * 5.5);
+      const interval = Math.max(850, (3200 - elapsed * 5.5) * zombieDifficultyConfig().spawnRate);
       if (nextZombieSpawnAt <= 0) nextZombieSpawnAt = now + 900;
       if (now < nextZombieSpawnAt || aliveEnemies().length >= zombieAliveCap(now)) return;
       spawnZombie(now);
@@ -622,7 +702,7 @@
         }
         const gained = ammunition.shotgun.reserve>beforeShotgun || ammunition.handgun.reserve>beforePistol || ammunition.rifle.reserve>beforeRifle;
         if (!gained) continue;
-        pickup.active=false; pickup.collectedAt=now; pickup.nextActiveAt=now+AMMO_PICKUP_RESPAWN_MS;
+        pickup.active=false; pickup.collectedAt=now; pickup.nextActiveAt=now+AMMO_PICKUP_RESPAWN_MS*zombieDifficultyConfig().pickupRespawn;
         setTransientStatus(gameMode === "zombie" ? "Ammo pickup: +12 shells / +30 pistol" : "Ammo pickup collected", 1200);
         syncHud();
       }
@@ -917,8 +997,7 @@
         enemy.lastKnownPlayerX = playerTarget.x;
         enemy.lastKnownPlayerZ = playerTarget.z;
         enemy.aimLockUntil = Math.max(enemy.aimLockUntil, now + 320);
-        desiredRotation = faceAngle(center, playerTarget);
-        aimLocked = true;
+        desiredRotation = faceAngle(center, playerTarget);        aimLocked = true;
         if (loadout.melee) {
           if (distance > loadout.preferredMax) {
             // Chainsaw AI is intentionally a high-pressure melee threat. Its
@@ -1069,7 +1148,9 @@
       const dx = source.x - number(player.x);
       const dz = source.z - number(player.z);
       const worldAngle = Math.atan2(dx, dz);
-      let relative = worldAngle - number(player.yaw);
+      // First-person rendering mirrors horizontal world X. Damage indicators must
+      // use that same camera basis or left/right appear reversed on screen.
+      let relative = number(player.yaw) - worldAngle;
       while (relative > Math.PI) relative -= Math.PI * 2;
       while (relative < -Math.PI) relative += Math.PI * 2;
       const indicator = document.createElement("span");
@@ -1160,12 +1241,13 @@
       if (shieldValue) shieldValue.textContent = String(Math.max(0, Math.ceil(playerShield)));
       if (shieldBar) shieldBar.style.width = (clamp(playerShield, 0, SHIELD_MAX) / SHIELD_MAX * 100) + "%";
       const mode = modeConfig();
-      if (modeBadge && modeBadge.dataset.mode !== gameMode) {
-        modeBadge.dataset.mode = gameMode;
-        modeBadge.innerHTML = '<span></span> ' + (gameMode === "zombie" ? "ZOMBIE MODE" : "OWNER COMBAT MODE");
+      const modeStamp = gameMode === "zombie" ? `zombie:${zombieDifficulty}:${zombieRunType}` : gameMode;
+      if (modeBadge && modeBadge.dataset.mode !== modeStamp) {
+        modeBadge.dataset.mode = modeStamp;
+        modeBadge.innerHTML = '<span></span> ' + (gameMode === "zombie" ? `ZOMBIE · ${zombieDifficultyConfig().label.toUpperCase()} · ${zombieRunConfig().label.toUpperCase()}` : "OWNER COMBAT MODE");
       }
       if (highScoreCopy) {
-        const nextHighScore = (gameMode === "zombie" ? "BEST SURVIVAL " : "BEST ") + formatTime(bestClearTime());
+        const nextHighScore = (gameMode === "zombie" ? (zombieEndless() ? "BEST SURVIVAL " : "BEST CLEAR ") : "BEST ") + formatTime(bestClearTime());
         if (highScoreCopy.textContent !== nextHighScore) highScoreCopy.textContent = nextHighScore;
       }
       if (enemyCounter) enemyCounter.textContent = gameMode === "zombie"
@@ -1232,6 +1314,7 @@
         pausedAt = 0;
         frame.classList.remove("combat-paused");
         if (pauseOverlay) pauseOverlay.hidden = true;
+      if (zombieSetup) zombieSetup.hidden = true;
         options.setMovementLocked?.(false);
         if (capture) window.requestAnimationFrame(() => options.capture?.());
       }
@@ -1293,9 +1376,9 @@
         if (headshotKillsCopy) headshotKillsCopy.textContent = String(headshotKills);
         if (victoryHealth) victoryHealth.textContent = String(Math.round(playerHealth));
         if (victoryShield) victoryShield.textContent = String(Math.round(playerShield));
-        if (roundKicker) roundKicker.textContent = gameMode === "zombie" ? "ZOMBIE WAVE CLEARED" : "VICTORY";
+        if (roundKicker) roundKicker.textContent = gameMode === "zombie" ? "ZOMBIE PLANT CLEARED" : "VICTORY";
         if (roundTitle) roundTitle.textContent = gameMode === "zombie" ? "FLOOR RECLAIMED" : "PLANT SECURED";
-        if (roundCopy) roundCopy.textContent = gameMode === "zombie" ? "Every zombie is down. New clear times are stored for Zombie Mode." : "All hostiles neutralized. The production floor is secure.";
+        if (roundCopy) roundCopy.textContent = gameMode === "zombie" ? `${zombieDifficultyConfig().label} clear complete. Every zombie in the plant is down.` : "All hostiles neutralized. The production floor is secure.";
       } else {
         const source = killer ? enemyCenter(killer) : null;
         const killerLabel = String(killer?.machine?.name || "Enemy");
@@ -1316,7 +1399,7 @@
         if (roundTitle) roundTitle.textContent = "Killed by " + killerLabel;
         if (roundCopy) roundCopy.textContent = "Death replay complete. Restart when ready.";
         const survivalSeconds = Math.max(0, Math.round((endedAt - (roundStartedAt || endedAt)) / 1000));
-        const bestSurvival = gameMode === "zombie" ? recordRoundTime(survivalSeconds) : bestClearTime();
+        const bestSurvival = zombieEndless() ? recordRoundTime(survivalSeconds) : bestClearTime();
         if (timeLabel) timeLabel.textContent = "SURVIVAL TIME";
         if (victoryTime) victoryTime.textContent = formatTime(survivalSeconds);
         if (bestTime) bestTime.textContent = formatTime(bestSurvival);
@@ -1498,7 +1581,7 @@
         showHitmarker(Boolean(defeatedHit), Boolean(headshotHit));
         if (defeatedHit) setTransientStatus(defeatedHit.headshot ? "HEADSHOT KILL" : "Enemy down", 950);
         else setTransientStatus(headshotHit ? "Headshot" : "Hit", headshotHit ? 650 : 420);
-        if (gameMode !== "zombie" && defeatedHit && aliveEnemies().length === 0 && enemies.size > 0) scheduleVictory();
+        if (defeatedHit && aliveEnemies().length === 0 && enemies.size > 0 && (gameMode !== "zombie" || zombieRunType === "normal")) scheduleVictory();
       }
       if (weapon.key === "shotgun") {
         // Render the actual buckshot cone rather than collapsing all pellets into
@@ -1518,7 +1601,7 @@
     function damagePlayer(amount, enemy, player) {
       if (!active || paused || roundState !== "playing") return;
       const now = performance.now();
-      const incoming = Math.max(0, number(amount));
+      const incoming = Math.max(0, number(amount)) * (gameMode === "zombie" ? zombieDifficultyConfig().damage : 1);
       lastDamageAt = now;
       const absorbed = Math.min(playerShield, incoming);
       playerShield = Math.max(0, playerShield - absorbed);
@@ -1733,8 +1816,9 @@
       ammunition.shotgun.reserve = WEAPONS.shotgun.reserve;
       syncEnemies(true);
       resetAmmoPickups();
-      if (gameMode === "zombie") {
-        for (let index=0; index<ZOMBIE_INITIAL_EXTRA; index+=1) spawnZombie(performance.now());
+      if (zombieEndless()) {
+        const initialExtra = Math.max(0, Math.round(zombieDifficultyConfig().initialExtra ?? ZOMBIE_INITIAL_EXTRA));
+        for (let index=0; index<initialExtra; index+=1) spawnZombie(performance.now());
       }
       if (roundOverlay) {
         roundOverlay.hidden = true;
@@ -1751,7 +1835,7 @@
         countdownDisplay = 2;
         if (countdownValue) countdownValue.textContent = "2";
         if (countdownOverlay) countdownOverlay.hidden = false;
-        setTransientStatus(gameMode === "zombie" ? "Zombies incoming" : "Get ready", 2200);
+        setTransientStatus(gameMode === "zombie" ? (zombieEndless() ? "Endless zombies incoming" : "Clear the plant") : "Get ready", 2200);
       } else {
         roundState = "playing";
         roundStartedAt = performance.now();
@@ -1759,7 +1843,7 @@
         countdownDisplay = 0;
         if (countdownOverlay) countdownOverlay.hidden = true;
       if (pauseOverlay) pauseOverlay.hidden = true;
-        setTransientStatus(enemies.size ? (gameMode === "zombie" ? "Survive as long as you can" : "Combat ready") : "No enemy AI found", 1000);
+        setTransientStatus(enemies.size ? (gameMode === "zombie" ? (zombieEndless() ? "Survive as long as you can" : "Clear every zombie in the plant") : "Combat ready") : "No enemy AI found", 1200);
       }
       syncHud();
       options.invalidate?.();
@@ -1771,11 +1855,11 @@
       if (remaining <= 0) {
         roundState = "playing";
         roundStartedAt = now;
-        nextZombieSpawnAt = gameMode === "zombie" ? now + 900 : 0;
+        nextZombieSpawnAt = zombieEndless() ? now + 900 : 0;
         countdownEndsAt = 0;
         countdownDisplay = 0;
         if (countdownValue) countdownValue.textContent = "FIGHT";
-        setTransientStatus(gameMode === "zombie" ? "Survive! Zombies will keep spawning." : "Fight!", 900);
+        setTransientStatus(gameMode === "zombie" ? (zombieEndless() ? "Survive! Zombies will keep spawning." : "Clear the plant! No respawns.") : "Fight!", 1000);
         window.setTimeout(() => {
           if (countdownOverlay && roundState !== "countdown") countdownOverlay.hidden = true;
         }, 350);
@@ -1792,6 +1876,13 @@
 
     function loop(now) {
       if (!active) return;
+      if (roundState === "setup") {
+        lastFrameAt = now;
+        lastShieldUpdateAt = now;
+        options.invalidate?.();
+        frameRequest = window.requestAnimationFrame(loop);
+        return;
+      }
       if (paused) {
         lastFrameAt = now;
         lastShieldUpdateAt = now;
@@ -1814,6 +1905,30 @@
       frameRequest = window.requestAnimationFrame(loop);
     }
 
+    function syncZombieSetupControls() {
+      zombieDifficultyOptions.forEach((button) => button.classList.toggle("active", button.dataset.zombieDifficulty === zombieDifficulty));
+      zombieRunOptions.forEach((button) => button.classList.toggle("active", button.dataset.zombieRun === zombieRunType));
+      syncHud();
+    }
+
+    function openZombieSetup() {
+      roundState = "setup";
+      syncZombieSetupControls();
+      if (zombieSetup) zombieSetup.hidden = false;
+      options.setMovementLocked?.(true);
+      options.releasePointer?.();
+      syncHud();
+      options.invalidate?.();
+    }
+
+    function beginZombieRound() {
+      saveZombieSettings();
+      if (zombieSetup) zombieSetup.hidden = true;
+      options.setMovementLocked?.(false);
+      resetRound({ countdown: true });
+      options.capture?.();
+    }
+
     function start(mode = "combat") {
       if (active || options.isOwner?.() !== true) return false;
       gameMode = GAME_MODES[mode] ? mode : "combat";
@@ -1824,7 +1939,8 @@
       pausedAt = 0;
       frame.classList.add("combat-mode-active");
       options.hideWalkMenu?.();
-      resetRound({ countdown: true });
+      if (gameMode === "zombie") openZombieSetup();
+      else resetRound({ countdown: true });
       options.onStateChange?.(true, gameMode);
       frameRequest = window.requestAnimationFrame(loop);
       return true;
@@ -1860,12 +1976,13 @@
       if (directionCalloutTimer) window.clearTimeout(directionCalloutTimer);
       directionCalloutTimer = 0;
       if (directionCallout) directionCallout.hidden = true;
+      if (zombieSetup) zombieSetup.hidden = true;
       options.onStateChange?.(false, gameMode);
       options.invalidate?.();
     }
 
     function handleKeyDown(event) {
-      if (!active) return;
+      if (!active || roundState === "setup") return;
       if (event.target?.matches?.("input, select, textarea, [contenteditable='true']")) return;
       if (event.code === "Digit1") {
         event.preventDefault();
@@ -1879,8 +1996,7 @@
       }
     }
 
-    function handleMouseDown(event) {
-      if (!active || paused || ["lost","won"].includes(roundState) || options.isPointerLocked?.() !== true) return;
+    function handleMouseDown(event) {      if (!active || paused || ["lost","won"].includes(roundState) || options.isPointerLocked?.() !== true) return;
       if (event.button === 2) { event.preventDefault(); setAiming(true); return; }
       if (event.button !== 0) return;
       event.preventDefault();
@@ -1920,6 +2036,19 @@
     document.addEventListener("contextmenu", handleContextMenu, true);
     window.addEventListener("blur", handleBlur);
 
+    zombieDifficultyOptions.forEach((button) => button.addEventListener("click", () => {
+      if (!ZOMBIE_DIFFICULTIES[button.dataset.zombieDifficulty]) return;
+      zombieDifficulty = button.dataset.zombieDifficulty;
+      syncZombieSetupControls();
+    }));
+    zombieRunOptions.forEach((button) => button.addEventListener("click", () => {
+      if (!ZOMBIE_RUN_TYPES[button.dataset.zombieRun]) return;
+      zombieRunType = button.dataset.zombieRun;
+      syncZombieSetupControls();
+    }));
+    zombieStartButton?.addEventListener("click", beginZombieRound);
+    hud.querySelector("[data-zombie-cancel]")?.addEventListener("click", () => { stop(); options.exitCombat?.(); });
+
     hud.querySelector("[data-combat-restart]")?.addEventListener("click", () => {
       resetRound({ countdown: true });
       options.capture?.();
@@ -1944,6 +2073,7 @@
         switchWeapon(selectedWeapon === loadout[0] ? loadout[1] : loadout[0]);
       },
       getMode: () => gameMode,
+      getZombieSettings: () => ({ difficulty:zombieDifficulty, runType:zombieRunType, endless:zombieEndless() }),
       reload: startReload,
       fire,
       setAiming: (enabled) => setAiming(Boolean(enabled)),

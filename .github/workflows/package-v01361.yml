@@ -24,7 +24,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base64 -d .github/v01361.patch.b64 | xz -d > /tmp/v01361.patch
+          cat .github/v01361.patch.part00 .github/v01361.patch.part01 .github/v01361.patch.part02 .github/v01361.patch.part03 > /tmp/v01361.patch.b64
+          base64 -d /tmp/v01361.patch.b64 | xz -d > /tmp/v01361.patch
           git apply --3way --index /tmp/v01361.patch
           git diff --check --cached
 
@@ -73,7 +74,7 @@ jobs:
           set -euo pipefail
           git config user.name "Brandon-m-Smith4439"
           git config user.email "masterchief4439@gmail.com"
-          rm -f .github/v01361.patch.b64 .github/workflows/package-v01361.yml
+          rm -f .github/v01361.patch.b64 .github/v01361.patch.part00 .github/v01361.patch.part01 .github/v01361.patch.part02 .github/v01361.patch.part03 .github/workflows/package-v01361.yml
           git add -A
           git commit -m "v0.13.61 finalize shared envelopes combat button and weapon polish"
           git push origin HEAD:release-v01361-envelope-combat-final

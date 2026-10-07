@@ -28,7 +28,7 @@ assert.ok(plant.includes("leftKnee") && plant.includes("rightKnee") && plant.inc
 assert.ok(plant.includes("rgba(255,231,151,.98)") && plant.includes("tracerTarget"), "Visible two-layer enemy bullet tracers are missing.");
 assert.ok(combat.includes("hitReactUntil") && combat.includes("defeatedAt") && combat.includes("deathProgress"), "Enemy hit/death animations are incomplete.");
 assert.ok(combat.includes("playerRenderState") && combat.includes("reloadProgress") && combat.includes("recoilProgress"), "Player weapon animation state is missing.");
-assert.ok(combat.includes("roundState") && combat.includes("Restart combat"), "Win/defeat restart flow is missing.");
+assert.ok(combat.includes("roundState") && combat.includes("data-combat-restart"), "Win/defeat restart flow is missing.");
 assert.ok(combat.includes("countdownEndsAt") && combat.includes("COMBAT STARTS IN"), "Two-second combat countdown is missing.");
 assert.ok(combat.includes('resetRound({ countdown: true })'), "Combat and restart must enter the countdown state before AI becomes active.");
 assert.ok(combat.includes('roundState !== "playing"'), "Weapons and enemy damage must stay locked until the countdown ends.");
@@ -58,7 +58,7 @@ const controlsEnd = plant.indexOf('frame.appendChild(controls)', controlsStart);
 const controlsMarkup = plant.slice(controlsStart, controlsEnd);
 assert.ok(controlsMarkup.indexOf('data-toggle="walk"') >= 0, "First person control is missing.");
 assert.ok(controlsMarkup.indexOf('data-toggle="combat"') > controlsMarkup.indexOf('data-toggle="walk"'), "Combat mode must render immediately after First person for owners.");
-assert.ok(plant.includes('window.requestAnimationFrame(() => {') && plant.includes('combatController.start();'), "Combat should enter first person before starting the countdown.");
+assert.ok(plant.includes('window.requestAnimationFrame(() => {') && plant.includes('combatController.start(mode);'), "Combat should enter first person before starting the countdown.");
 
 // v0.13.55: every custom person must bypass retained instancing so combat-owned
 // movement/rotation/weapons are actually rendered. Published Helper instances
@@ -100,7 +100,7 @@ assert.ok(firstPersonControllerSource.includes("setInputLocked") && firstPersonC
 // v0.13.58: player tracers/impacts, blood effects, ADS scope, enemy loadout variety, and reduced shield.
 assert.ok(combat.includes("SHIELD_MAX = 22") && combat.includes("SHIELD_RECHARGE_PER_SECOND = 7"), "Combat shield must be reduced to about half strength.");
 assert.ok(combat.includes("ENEMY_WEAPONS") && combat.includes("sniper") && combat.includes("bazooka") && combat.includes("chainsaw") && combat.includes("shotgun") && combat.includes("smg"), "Randomized enemy weapon catalog is incomplete.");
-assert.ok(combat.includes("record.weaponKey = ENEMY_WEAPON_KEYS") && combat.includes("loadout.melee"), "Enemy loadouts must randomize and drive melee/ranged AI behavior.");
+assert.ok(combat.includes("ENEMY_WEAPON_KEYS[Math.floor(Math.random() * ENEMY_WEAPON_KEYS.length)]") && combat.includes("loadout.melee"), "Combat Mode enemy loadouts must randomize and drive melee/ranged AI behavior.");
 assert.ok(combat.includes("pushTracer") && combat.includes("pushImpact") && combat.includes("resolveWorldImpact") && combat.includes("combatEffects"), "Player tracers and persistent impact decals are missing.");
 assert.ok(combat.includes("pushBloodBurst") && combat.includes("bloodPools") && combat.includes("startAt: now + 920"), "Enemy hit blood and delayed death pools are missing.");
 assert.ok(combat.includes("event.button === 2") && combat.includes("setAiming") && combat.includes("combat-scope-overlay"), "Right-click aim/scope flow is missing.");
@@ -118,18 +118,18 @@ assert.ok(combat.includes("bloodFountains") && plant.includes("effects.bloodFoun
 assert.ok(combat.includes('rocket: Object.freeze') && combat.includes("pushExplosiveProjectile") && combat.includes("resolveExplosionDamage"), "Rocket Launcher projectile/explosion behavior is missing.");
 assert.ok(combat.includes("sightRange: 145") && combat.includes("moveSpeed: 2") && combat.includes("const sightRange = loadout.sightRange"), "Melee enemies must detect farther and rush at double-speed loadout weighting.");
 assert.ok(combat.includes("triggerCombatRoll") && combat.includes("rollStartedAt") && plant.includes("rollProgress") && plant.includes("rotationZ"), "Enemy combat-roll behavior/animation is missing.");
-assert.ok(plant.includes("Combat faces keep visible eyes") && plant.includes("#f5f6f2"), "Combat people must retain visible eyes.");
+assert.ok(plant.includes("Keep the combat eyes seated on the actual face") && plant.includes("#f5f6f2"), "Combat people must retain visible eyes.");
 assert.ok(css.includes("combat-holo-sight") && css.includes("combat-holo-glass") && !css.includes("border-radius:50%;\n  border:clamp(3px,.4vw,6px)"), "Rifle ADS must use a holographic sight instead of the old circular scope.");
-assert.ok(plant.includes("direction.x * .96 + Math.cos(yaw) * .46") || combat.includes("direction.x * .96 + Math.cos(yaw) * .46"), "Player tracer muzzle must originate at the rendered gun side of the camera.");
+assert.ok(combat.includes("direction.x * 1.18 - Math.cos(yaw) * .42"), "Player tracer muzzle must originate at the rendered gun side of the camera.");
 assert.ok(css.includes("combat-hitmarker.visible i") && css.includes("#ff4e55"), "Person hits must use a red hit marker instead of bullet-hole decals.");
 
 // v0.13.59: celebratory victory, touch combat, corrected combat eyes, and loadout-specific 3D weapons.
-assert.ok(combat.includes('roundTitle.textContent = "PLANT SECURED"') && combat.includes('roundKicker.textContent = "VICTORY"') && combat.includes("victoryTime"), "Victory screen must present a celebratory PLANT SECURED state with round stats.");
+assert.ok(combat.includes('"FLOOR RECLAIMED" : "PLANT SECURED"') && combat.includes('"ZOMBIE WAVE CLEARED" : "VICTORY"') && combat.includes("victoryTime"), "Victory screen must present a celebratory PLANT SECURED state with round stats.");
 assert.ok(css.includes(".combat-round-overlay.victory") && css.includes(".combat-victory-confetti") && css.includes("@keyframes combat-confetti-fall"), "Victory screen celebratory animation styling is missing.");
 assert.ok(plant.includes('data-touch-combat="fire"') && plant.includes('data-touch-combat="aim"') && plant.includes('data-touch-combat="reload"') && plant.includes('data-touch-combat="swap"'), "Mobile Combat Mode action controls are missing.");
 assert.ok(plant.includes("navigator.maxTouchPoints") && combat.includes("setTriggerHeld") && combat.includes("setAiming: (enabled)"), "Touch players must be combat-engaged without desktop pointer lock and expose fire/aim APIs.");
 assert.ok(css.includes(".combat-mode-active .touch-combat-actions") && css.includes(".touch-combat-fire"), "Mobile Combat Mode controls are not styled for touch screens.");
-assert.ok(plant.includes("const eyeY = height*.865") && plant.includes("const eyeZ = depth*.035"), "Combat eyes must be moved higher and recessed into the face.");
+assert.ok(plant.includes("const eyeY = height*.91") && plant.includes("const eyeZ = depth*.275"), "Combat eyes must be moved higher and recessed into the face.");
 assert.ok(plant.includes("Large shoulder-fired launcher") && plant.includes("weaponMuzzleZ=-3.18"), "Enemy Rocket Launcher must render as a large shoulder-fired 3D weapon.");
 assert.ok(plant.includes("Thick right-side service rifle") && plant.includes('enemyWeapon === "sniper"') && plant.includes('enemyWeapon === "chainsaw"'), "AI rifle, sniper, and chainsaw models must have distinct detailed right-hand 3D geometry.");
 // v0.13.61: shared envelopes, reliable owner Combat entry, stronger weapon placement, and deterministic deaths.
@@ -151,3 +151,16 @@ assert.ok(combat.includes("shotProgress") && combat.includes("reloadProgress") &
 assert.ok(combat.includes('rifle: Object.freeze({ key: "rifle"') && combat.includes("magazine: 24, reloadMs: 1900") && combat.includes("magazine: 5, reloadMs: 2750") && combat.includes("magazine: 1, reloadMs: 3500"), "Rifle, sniper, and rocket enemy reload timings are missing.");
 assert.ok(plant.includes("shotPulse") && plant.includes("reloadWave") && plant.includes("support hand visibly leaves the fore-end") && plant.includes("magazineDrop"), "Enemy shooting and reloading must visibly animate arms and weapon geometry.");
 assert.ok(plant.includes("Heavy layered motor housing") && plant.includes("chainOffset") && plant.includes("Full 3D service rifle") && plant.includes("multiple 3D collars"), "Chainsaw, rifle, sniper, and rocket launcher 3D revamps are incomplete.");
+
+
+// v0.13.63: separate Zombie Mode, persistent clear times, true headshots, gun-side tracers, and end-screen kill stats.
+assert.ok(plant.includes('data-toggle="zombie" class="zombie-mode-button"') && plant.includes('setCombatMode(!sameMode, "zombie")'), "Owner controls must expose a separate Zombie Mode beside Combat Mode.");
+assert.ok(combat.includes('zombie: Object.freeze') && combat.includes('defaultWeapon: "shotgun"') && combat.includes('loadout: Object.freeze(["shotgun", "handgun"])'), "Zombie Mode must use the shotgun + pistol player loadout.");
+assert.ok(combat.includes('record.weaponKey = record.zombie ? "chainsaw"') && combat.includes('record.modeSpeedMultiplier = record.zombie ? 1.55 : 1'), "Zombie AI must be chainsaw-only and significantly faster than normal Combat Mode enemies.");
+assert.ok(plant.includes('const zombie = Boolean(combat.zombie)') && plant.includes('const eyeWhite = zombie ? "#efd85f"') && plant.includes('const eyeY = height*.91') && plant.includes('const eyeZ = depth*.275'), "Zombie faces and raised/recessed combat eyes are missing.");
+assert.ok(combat.includes('function enemyHitVolumes') && combat.includes('zone: "head"') && combat.includes('zone: "body"') && combat.includes('HEADSHOT_DAMAGE_MULTIPLIER = 3'), "Combat hit detection must have separate head/body volumes and real headshot damage.");
+assert.ok(combat.includes('headshotKills += 1') && combat.includes('regularKills += 1') && combat.includes('data-combat-headshot-kills') && combat.includes('data-combat-regular-kills'), "Regular-kill and headshot-kill statistics must be tracked separately.");
+assert.ok(combat.includes('HIGH_SCORE_STORAGE_KEY') && combat.includes('recordClearTime') && combat.includes('bestClearTime') && combat.includes('highScores[gameMode]'), "Combat and Zombie Mode clear times must persist independently as high scores.");
+assert.ok(combat.includes('x: origin.x + direction.x * 1.18 - Math.cos(yaw) * .42') && combat.includes('z: origin.z + direction.z * 1.18 + Math.sin(yaw) * .42'), "Player tracers must originate on the rendered gun side of the mirrored first-person camera.");
+assert.ok(plant.includes('The holographic sight now lives on the rifle model itself') && plant.includes('drawViewmodelPolygon(glassLocal') && plant.includes('reticleRadius'), "The player rifle must carry its holographic glass and reticle on the 3D model itself.");
+assert.ok(css.includes('.combat-restart-button') && css.includes('.combat-restart-icon') && css.includes('.combat-restart-copy'), "Victory/death restart control must use the polished replay button presentation.");

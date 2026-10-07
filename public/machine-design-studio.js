@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.65";
+  const APP_VERSION = "0.13.66";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -997,8 +997,7 @@
 
   function cloneComponentTreeForEmbedding(component) {
     const source = clone(component);
-    const copied = clone(source);
-    copied.id = uniqueId(source.type || "part");
+    const copied = clone(source);    copied.id = uniqueId(source.type || "part");
 
     // Clip ids only need to be unique within a target timeline, but refreshing
     // them here avoids duplicate editor state when the same machine is embedded
@@ -1997,8 +1996,7 @@
     if (component.type === "group") {
       return (component.children || []).flatMap((child) => envelopePointsForComponent(child, visibleOnly));
     }
-    return componentWorldPoints(component);
-  }
+    return componentWorldPoints(component);  }
 
   function designGeometryBounds(design, visibleOnly = false) {
     const points = (design?.components || []).flatMap((component) => envelopePointsForComponent(component, visibleOnly));
@@ -2997,8 +2995,7 @@
 
   function interpolatePoint(first, second, amount) {
     return [
-      first[0] + (second[0] - first[0]) * amount,
-      first[1] + (second[1] - first[1]) * amount,
+      first[0] + (second[0] - first[0]) * amount,      first[1] + (second[1] - first[1]) * amount,
       first[2] + (second[2] - first[2]) * amount,
     ];
   }
@@ -3997,8 +3994,7 @@
       }
     });
     state.selectAllParts = false;
-    state.selectedComponentIds = selectedIds;
-    state.componentId = [...selectedIds].at(-1) || null;
+    state.selectedComponentIds = selectedIds;    state.componentId = [...selectedIds].at(-1) || null;
     state.timelineTargetId = selectedIds.size === 1 ? state.componentId : null;
     state.timelineTargetPathIds = state.timelineTargetId ? [state.timelineTargetId] : [];
     state.timelineClipId = null;
@@ -4997,7 +4993,6 @@
     const initialHit = initialHitResult?.component || null;
     const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
     const panRequested = event.button === 1 || state.tool === "pan" || (event.shiftKey && !initialHit);
-
     if (orbitRequested) {
       state.drag = { kind: "orbit" };
     } else if (panRequested) {
@@ -5997,8 +5992,7 @@
   });
 
   document.getElementById("duplicate-design-envelope-piece")?.addEventListener("click", () => {
-    const design = currentDesign();
-    const source = selectedDesignEnvelopePiece(design);
+    const design = currentDesign();    const source = selectedDesignEnvelopePiece(design);
     if (!design || !source) return;
     pushHistory();
     const pieces = designEnvelopePieces(design);

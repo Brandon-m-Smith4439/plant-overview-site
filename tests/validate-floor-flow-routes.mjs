@@ -17,12 +17,12 @@ assert.ok(plant.includes("function drawFloorProcessFlow"), "Necessary process ro
 assert.ok(plant.includes("lineDashOffset=-dashTravel") || plant.includes("lineDashOffset = -dashTravel"), "Floor routes need a moving directional highlight.");
 assert.ok(plant.includes("ctx.shadowColor=route.color") || plant.includes("ctx.shadowColor = route.color"), "Floor routes need a visible glow treatment.");
 assert.ok(plant.includes("drawProcessFlowEditHandles") && plant.includes('drawProcessFlowHandle(route.startWorld,"S"') && plant.includes('drawProcessFlowHandle(route.endWorld,"E"'), "Selected routes must show S/E endpoint handles plus the intermediate turn handles.");
-assert.ok(plant.includes('if (isTodayStage() && state.todayLabelMode === "necessary")'), "Necessary floor routes must run on the Today stage.");
+assert.ok(plant.includes("const todayProductionFlow = isTodayStage() ? drawTodayProductionFlow(machineEntries, time) : null;"), "Floor routes must run on the Today stage.");
 assert.ok(plant.includes("drawTodayProductionFlow(machineEntries, time)"), "Overview and First Person must render the same floor-flow route system.");
 assert.ok(!plant.includes('labelsOnly: state.cameraMode === "walk"'), "First Person must not suppress the glowing floor paths.");
 assert.ok(plant.includes("processFlowAnimationActive()"), "Moving floor routes must keep the render loop active.");
 assert.ok(plant.includes("effectiveAnimationTime(time)"), "Flow animation must obey the global Pause Motion clock.");
-assert.ok(plant.includes("collectProcessStepNodes(entriesById,routes).forEach(drawProcessStepLabel)"), "Automatic process-step labels must render after the glowing floor paths.");
+assert.ok(plant.includes("collectProcessStepNodes(entriesById,routes).forEach((node)=>drawProcessStepLabel(node,protectedMachineRects))"), "Automatic process-step labels must render in the overlay after the glowing floor paths.");
 assert.ok(plant.includes("PROCESS_STEP_NUMBER_BY_ROLE"), "Standard process roles must map to stable numbered route steps.");
 assert.ok(plant.includes("function drawProcessStepLabel"), "Each process number must receive an adaptive machine-name label.");
 assert.ok(plant.includes("protectedMachineRects") && plant.includes("protectedRects.some((machineRect)=>rectanglesIntersect(padded,machineRect))"), "Process-step labels must avoid projected machine rectangles instead of covering equipment.");

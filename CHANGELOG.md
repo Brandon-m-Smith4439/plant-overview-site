@@ -1,3 +1,15 @@
+## 0.13.67 - 2026-10-07
+
+- Fixed the pre-match setup overlay by restoring pointer interaction on top of the combat HUD. Combat and Zombie Mode now use the same setup surface for difficulty, character selection, match type, and multiplayer lobby controls.
+- Added **Easy, Normal, Hard, and Nightmare** difficulty to Combat Mode. Difficulty scales enemy health, movement speed, incoming damage, accuracy, and firing cadence independently from Zombie Mode.
+- Rebalanced Zombie movement so the speed used before this release is now the **Nightmare** baseline. Easy, Normal, and Hard intentionally run slower multipliers while retaining their own health/damage/spawn-pressure profiles.
+- Reworked headshot hit volumes to query each enemy's actual rendered **Head** design component when available. The body hitbox now terminates below the neck, preventing torso/neck overlap from stealing headshots.
+- Added destructible machine glass. Named glass/window/cutting-surface components become combat hit surfaces, disappear after being shattered for the active round, stop blocking later shots as glass surfaces, and emit a world-space shard/explosion effect.
+- Added character selection for both Combat and Zombie Mode using the actual people currently present in the plant. Selected local and remote-player characters are excluded from the AI enemy pool.
+- Added password-gated multiplayer lobbies backed by the Railway volume. Owner-password users can create or join short-code lobbies, synchronize player name/character/position/health/weapon state, ready up, and start a match from the setup screen.
+- Added **Co-op** Combat/Zombie play with synchronized remote player characters plus shared enemy-hit events, and **Private Match** with synchronized player-vs-player damage/headshot events and end-of-round win/loss detection.
+- Added depth-tested remote-player rendering so other lobby participants appear in the plant using the character they selected from the layout.
+
 ## 0.13.66 - 2026-10-07
 
 - Added a dedicated Zombie Mode setup overlay with four difficulty presets: **Easy**, **Normal**, **Hard**, and **Nightmare**. Difficulty scales zombie health, sprint speed, incoming damage, Endless spawn cadence, alive-enemy cap, starting spawn pressure, and ammo-pickup respawn timing.
@@ -986,7 +998,6 @@
 - Added panel-organization and script-order regression tests for both application entry points.
 
 ## 0.12.1 - 2026-08-05
-
 ### Improved
 
 - Reduced the minimum Machine Design Studio envelope dimension from 0.5 ft to 0.01 ft.
@@ -998,6 +1009,7 @@
 - Preserved compact custom envelope dimensions through Plant Layout creation, synchronization, editing, and reload.
 
 ### Validation
+
 - Added compact-envelope regression coverage for the Designer UI, fit calculation, Plant Layout minimums, and versioned documentation.
 
 ## 0.12.0 - 2026-08-05

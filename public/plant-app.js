@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.65";
+  const APP_VERSION = "0.13.66";
 
   function editorProfileProtected() {
     try {
@@ -997,8 +997,7 @@
         color: "#8fc6d4",
         showLabel: false,
         collisionMode: "ignore",
-        placement_status: "illustrative",
-        evidence: "Editable production-flow animation replacing the former hard-coded final-stage motion.",
+        placement_status: "illustrative",        evidence: "Editable production-flow animation replacing the former hard-coded final-stage motion.",
         animationEnabled: true,
         animationMode: "pingPong",
         animationAxis: "x",
@@ -1998,7 +1997,6 @@
     normalizeSelection();
     return machines.find((machine) => machine.instanceId === state.selectedMachineId) || null;
   }
-
   function selectedMachines() {
     normalizeSelection();
     return machines.filter((machine) => state.selectedMachineIds.has(machine.instanceId));
@@ -2997,8 +2995,7 @@
         type: "cutting",
         w: 54, d: 66, h: 5,
         color: "#267e79",
-        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 19 },
-      },
+        crane: { system: "GORBEL bridge", capacity: "1000 lb", height: 19 },      },
       waterjet: {
         name: requestedName || "SQ4020 waterjet",
         short: requestedName || "Waterjet",
@@ -3997,8 +3994,7 @@
 
   function swapStageReferences(first, second) {
     machines.forEach((machine) => {
-      ["reveal", "retire", "labelReveal", "labelRetire"].forEach((field) => {
-        if (machine[field] === first) machine[field] = second;
+      ["reveal", "retire", "labelReveal", "labelRetire"].forEach((field) => {        if (machine[field] === first) machine[field] = second;
         else if (machine[field] === second) machine[field] = first;
       });
     });
@@ -4997,8 +4993,7 @@
         <div class="editor-actions timeline-actions">
           <button type="button" data-editor-action="stage-earlier">← Earlier</button>
           <button type="button" data-editor-action="stage-later">Later →</button>
-        </div>
-        <div class="editor-actions timeline-actions">
+        </div>        <div class="editor-actions timeline-actions">
           <button type="button" data-editor-action="stage-add">Add after</button>
           <button type="button" data-editor-action="stage-delete">Delete stage</button>
         </div>
@@ -5997,8 +5992,7 @@
     panel.querySelector("[data-editor-action='stage-later']").addEventListener("click",() => moveCurrentStage(1));
     panel.querySelector("[data-editor-action='stage-add']").addEventListener("click",addTimelineStage);
     panel.querySelector("[data-editor-action='stage-delete']").addEventListener("click",deleteTimelineStage);
-    panel.querySelector("[data-editor-action='refresh-add-designs']")?.addEventListener("click", () => {
-      refreshDesignLibrary();
+    panel.querySelector("[data-editor-action='refresh-add-designs']")?.addEventListener("click", () => {      refreshDesignLibrary();
       updateEditorPanel();
       showToast("Saved Machine Design Studio models refreshed.");
     });
@@ -6733,7 +6727,7 @@
           if (state.cameraMode !== "walk" || combatController?.isActive?.()) return;
           combatController.start(mode);
           syncCombatButtons(true, mode);
-          showToast(mode === "zombie" ? "Zombie Mode starts in 2 seconds. Shotgun and pistol ready." : "Combat starts in 2 seconds. Get ready.");
+          showToast(mode === "zombie" ? "Choose Zombie difficulty and Normal or Endless mode, then press Start." : "Combat starts in 2 seconds. Get ready.");
         });
       } else {
         combatController.stop();
@@ -6834,7 +6828,12 @@
       exitCombat: () => setCombatMode(false, combatController?.getMode?.() || "combat"),
       invalidate: () => renderPerformance.invalidate?.("combat-mode"),
       onStateChange: syncCombatButtons,
-      onCombatStart: () => showToast(combatController?.getMode?.() === "zombie" ? "Zombie wave active! Keep moving and use the shotgun up close." : "Fight! Defeat every enemy AI to complete the round."),
+      onCombatStart: () => {
+        if (combatController?.getMode?.() !== "zombie") { showToast("Fight! Defeat every enemy AI to complete the round."); return; }
+        const settings = combatController?.getZombieSettings?.() || {};
+        const difficulty = String(settings.difficulty || "normal").replace(/^./,(value)=>value.toUpperCase());
+        showToast(settings.endless ? `${difficulty} Endless started — survive as long as possible.` : `${difficulty} Normal started — clear every zombie in the plant.`);
+      },
     }) || null;
 
     if (ownerCombatAllowed() && new URLSearchParams(window.location.search).get("owner") === "combat") {
@@ -6992,8 +6991,7 @@
     });
 
     document.querySelectorAll("[data-view]").forEach((button) => {
-      button.addEventListener("click", () => {
-        if (state.cameraMode === "walk") setWalkMode(false);
+      button.addEventListener("click", () => {        if (state.cameraMode === "walk") setWalkMode(false);
         if (button.dataset.view === "top") {
           state.yaw = 0;
           state.pitch = 1.42;
@@ -7992,8 +7990,7 @@
       connection.flowPivotPoints=processConnectionExactPivotPoints(connection,time);
       connection.flowPivotMode="custom";
     }else connection.flowPivotPoints=normalizeProcessFlowPivotPoints(connection.flowPivotPoints);
-    return connection.flowPivotPoints;
-  }
+    return connection.flowPivotPoints;  }
 
   function createProcessPivotId(connection){
     const existing=new Set(normalizeProcessFlowPivotPoints(connection?.flowPivotPoints).map((item)=>item.id));
@@ -8992,8 +8989,7 @@
       else if (localTime < quarterDuration + pauseSeconds) position = 1;
       else if (localTime < quarterDuration + pauseSeconds + activeDuration / 2) {
         const progress = (localTime - quarterDuration - pauseSeconds) / (activeDuration / 2);
-        position = Math.sin(Math.PI / 2 + progress * Math.PI);
-      } else if (localTime < quarterDuration + pauseSeconds * 2 + activeDuration / 2) position = -1;
+        position = Math.sin(Math.PI / 2 + progress * Math.PI);      } else if (localTime < quarterDuration + pauseSeconds * 2 + activeDuration / 2) position = -1;
       else {
         const progress = (localTime - quarterDuration - pauseSeconds * 2 - activeDuration / 2) / quarterDuration;
         position = Math.sin(Math.PI * 1.5 + progress * Math.PI / 2);
@@ -9992,8 +9988,7 @@
     faces.forEach((indices,index)=>polygon(indices.map((vertexIndex)=>points[vertexIndex]),shades[index]?shade(component.color,shades[index]):component.color,"rgba(15,25,28,.16)",.5,alpha));
   }
 
-  function designRollerFrame(component, index, count) {
-    const safeCount = Math.max(2, Math.round(Number(count) || Number(component.count) || 2));
+  function designRollerFrame(component, index, count) {    const safeCount = Math.max(2, Math.round(Number(count) || Number(component.count) || 2));
     const ratio = safeCount === 1 ? 0 : clamp(Number(index) || 0, 0, safeCount - 1) / (safeCount - 1);
     const localCenter = [
       Number(component.x) + Number(component.w) * ratio,
@@ -10992,8 +10987,7 @@
       {x:0,y:-.025,z:-1.08,w:.1,h:.1,d:.62,color:dark},
       {x:0,y:-.025,z:-1.43,w:.145,h:.13,d:.12,color:"#252f33"},
       // Raised holographic sight: open center, two side posts, thin top and base.
-      {x:0,y:.18,z:-.22,w:.28,h:.045,d:.24,color:"#182126"},
-      {x:-.105,y:.305,z:-.22,w:.045,h:.25,d:.075,color:mid},
+      {x:0,y:.18,z:-.22,w:.28,h:.045,d:.24,color:"#182126"},      {x:-.105,y:.305,z:-.22,w:.045,h:.25,d:.075,color:mid},
       {x:.105,y:.305,z:-.22,w:.045,h:.25,d:.075,color:mid},
       {x:0,y:.43,z:-.22,w:.25,h:.04,d:.075,color:mid},
       {x:0,y:.325,z:-.255,w:.19,h:.035,d:.035,color:"#4b7780"},
@@ -11018,6 +11012,7 @@
     if (combat.weapon === "rifle" && !rifleAds) {
       // Hip fire keeps the physical holographic sight on the rifle model; ADS
       // hides it so the dedicated aiming sight remains completely unobstructed.
+      // glass is framed by the physical sight posts and carries its own red reticle.
       const glassLocal = [
         [-.092,.245,-.275],[.092,.245,-.275],[.092,.405,-.275],[-.092,.405,-.275],
       ].map((point) => viewmodelPoint(point,root));
@@ -11991,8 +11986,7 @@
   function drawSharedDesignInstances(machineEntries, time) {
     if (
       !depthRenderer.available
-      || typeof depthRenderer.beginTemplate !== "function"
-      || typeof depthRenderer.addGeometryInstances !== "function"
+      || typeof depthRenderer.beginTemplate !== "function"      || typeof depthRenderer.addGeometryInstances !== "function"
     ) return new Set();
     const groups = new Map();
     machineEntries.forEach((entry) => {
@@ -12991,8 +12985,7 @@
           state.dragOffsetX = worldX-machine.x;
           state.dragOffsetZ = worldZ-machine.z;
           state.dragAction = "machine";
-          state.dragSnapshot = snapshotLayout();
-          state.dragMoved = false;
+          state.dragSnapshot = snapshotLayout();          state.dragMoved = false;
         } else {
           state.dragAction = "pan";
         }

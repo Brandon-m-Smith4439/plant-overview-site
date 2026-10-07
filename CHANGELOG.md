@@ -1,3 +1,10 @@
+## 0.13.72 - 2026-10-07
+
+- Fixed a process-route migration regression that forced legacy route anchors back inside machine bounds. Legacy `processPointerAnchorXPercent`, `processPointerAnchorYPercent`, and `processPointerAnchorZPercent` values now retain the same `-1000%` to `1100%` range used by current object-to-object connections.
+- Preserved outside-machine start/end positions when older saved pointer geometry is converted into the modern process-connection model.
+- Added regression coverage proving legacy process-pointer X/Z anchors are no longer clamped to the old `0–100%` machine envelope during normalization.
+- Bumped viewer/editor release tokens to v0.13.72.
+
 ## 0.13.71 - 2026-10-07
 
 - Made co-op enemies host-authoritative. The host publishes enemy IDs, positions, facing, health, loadouts, movement/death state, synthetic zombie state, and shattered-glass IDs; follower clients consume that snapshot instead of independently running enemy AI, so both players see and shoot the same opponents.

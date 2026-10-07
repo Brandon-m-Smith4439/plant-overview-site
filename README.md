@@ -1,3 +1,7 @@
+## Version 0.13.72
+
+Version 0.13.72 restores unrestricted process-route endpoints for layouts that still carry legacy process-pointer geometry. The modern object-to-object route system already supported endpoints outside machine bounds, but legacy `processPointerAnchor*Percent` values were still normalized to `0–100%` before migration, silently pulling older saved start/end points back inside their machines. Legacy X/Y/Z anchors now preserve the same `-1000%` to `1100%` safety range as current process connections, so migrated routes retain outside-machine positions and remain draggable well beyond machine envelopes.
+
 ## Version 0.13.71
 
 Version 0.13.71 makes co-op share one authoritative enemy world instead of letting each browser independently simulate its own opponents. The host now publishes enemy identity, position, health, weapon, movement, and destroyed-glass state while the other player follows that snapshot. Remote teammates interpolate and briefly extrapolate between network updates for smoother walking, and ally identity UI now shrinks/fades with distance before transitioning to a blue character outline for long-range recognition. The lobby heartbeat path is also throttled and moved off per-update synchronous disk persistence to reduce movement latency.

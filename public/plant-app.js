@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.71";
+  const APP_VERSION = "0.13.72";
 
   function editorProfileProtected() {
     try {
@@ -842,9 +842,9 @@
       processStepLabelText: String(machine.processStepLabelText || "").trim().slice(0, 80),
       processPointerVisible: machine.processPointerVisible !== false,
       processPointerText: String(machine.processPointerText || "").trim(),
-      processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), 0, 100),
-      processPointerAnchorYPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorYPercent)) ? Number(machine.processPointerAnchorYPercent) : (Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100), 0, 100),
-      processPointerAnchorZPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorZPercent)) ? Number(machine.processPointerAnchorZPercent) : (Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50), 0, 100),
+      processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), -1000, 1100),
+      processPointerAnchorYPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorYPercent)) ? Number(machine.processPointerAnchorYPercent) : (Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100), -1000, 1100),
+      processPointerAnchorZPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorZPercent)) ? Number(machine.processPointerAnchorZPercent) : (Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50), -1000, 1100),
       processPointerLabelOffset: clamp(Number.isFinite(Number(machine.processPointerLabelOffset)) ? Number(machine.processPointerLabelOffset) : (Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4), 0, 60),
       processPointerScreenOffsetX: clamp(Number.isFinite(Number(machine.processPointerScreenOffsetX)) ? Number(machine.processPointerScreenOffsetX) : (Number.isFinite(Number(machine.labelScreenOffsetX)) ? Number(machine.labelScreenOffsetX) : 0), -500, 500),
       processPointerScreenOffsetY: clamp(Number.isFinite(Number(machine.processPointerScreenOffsetY)) ? Number(machine.processPointerScreenOffsetY) : (Number.isFinite(Number(machine.labelScreenOffsetY)) ? Number(machine.labelScreenOffsetY) : 0), -500, 500),

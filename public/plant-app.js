@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.61";
+  const APP_VERSION = "0.13.62";
 
   function editorProfileProtected() {
     try {
@@ -10314,7 +10314,6 @@
     const stride = Math.sin(phase) * .55 * movement;
     const liftLeft = Math.max(0, Math.sin(phase)) * .14 * movement;
     const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * .14 * movement;
-    const recoil = combat.recoil ? .22 : 0;
     const hit = clamp(Number(combat.hitReact) || 0, 0, 1);
     const design = machine.designId ? designLibrary[machine.designId] : null;
     const designParts = Array.isArray(design?.components) ? design.components : [];
@@ -10370,118 +10369,182 @@
     // Torso/head identity is rendered above; the articulated combat limbs and
     // weapon below share the same actor transform so rotation and death stay aligned.
 
+    const enemyWeapon = String(combat.weaponKey || "rifle");
+    const shotProgress = clamp(Number(combat.shotProgress) || 0, 0, 1);
+    const reloadProgress = clamp(Number(combat.reloadProgress) || 0, 0, 1);
+    const shotPulse = combat.firing ? Math.sin(Math.PI * shotProgress) : 0;
+    const reloadWave = combat.reloading ? Math.sin(Math.PI * reloadProgress) : 0;
+    const meleeLunge = enemyWeapon === "chainsaw" ? shotPulse : 0;
+    const recoil = (combat.recoil ? .10 : 0) + shotPulse * (enemyWeapon === "sniper" ? .28 : (enemyWeapon === "rocket" || enemyWeapon === "bazooka") ? .34 : .18);
     const shoulderY = height*.68;
-    const gripY = height*.58 - recoil;
+    const gripY = height*.58 - recoil*.68 - reloadWave*.12;
     const gripZ = -.08;
-    const weaponCenterX = width*.70;
+    const weaponCenterX = width*.72;
     const supportX = width*.58;
     const leftShoulder = [width*.28,shoulderY,depth*.48];
     const rightShoulder = [width*.72,shoulderY,depth*.48];
-    const leftGrip = [supportX - hit*.05,gripY-.035,-.72];
-    const rightGrip = [weaponCenterX + hit*.045,gripY+.025,gripZ];
+    const supportReloadBack = (enemyWeapon === "rocket" || enemyWeapon === "bazooka") ? 1.02 : .42;
+    const supportReloadDown = (enemyWeapon === "rocket" || enemyWeapon === "bazooka") ? .18 : .50;
+    const leftGrip = [
+      supportX - hit*.05 + reloadWave*width*.10,
+      gripY-.035-supportReloadDown*reloadWave,
+      -.72+supportReloadBack*reloadWave,
+    ];
+    const rightGrip = [weaponCenterX + hit*.045,gripY+.025,gripZ + meleeLunge*.08];
 
-    // Both arms now reach an actual right-side weapon rather than converging on
-    // the character's chest. This keeps the weapon silhouette outside the torso
-    // and makes facing/aiming readable from the player's viewpoint.
+    // Both arms reach a real right-hand weapon. During enemy reloads the
+    // support hand visibly leaves the fore-end and reaches toward the magazine
+    // or launcher breech; firing adds a short recoil/lunge pose instead of only
+    // flashing the muzzle.
     localLine3d(actor,leftShoulder,leftGrip,bodyColor,3.6,alpha);
     localLine3d(actor,rightShoulder,rightGrip,bodyColor,3.6,alpha);
 
-    const enemyWeapon = String(combat.weaponKey || "rifle");
+    const reloadTilt = combat.reloading
+      ? reloadWave * ((enemyWeapon === "rocket" || enemyWeapon === "bazooka") ? .19 : enemyWeapon === "sniper" ? .12 : .085)
+      : 0;
+    const reloadDrop = combat.reloading
+      ? -reloadWave * ((enemyWeapon === "rocket" || enemyWeapon === "bazooka") ? .42 : .18)
+      : 0;
+    const weaponZKick = shotPulse*.22 - meleeLunge*.72;
+    const weaponPoint = (x,y,z) => [x, y + reloadDrop + z*reloadTilt, z + weaponZKick];
     const weaponBox = (centerX, centerZ, w, d, h, color, centerY) => {
-      box(localBox3d(actor,centerX-w/2,centerZ-d/2,w,d,h,color,centerY-h/2),alpha,1);
+      const posed = weaponPoint(centerX, centerY, centerZ);
+      box(localBox3d(actor,posed[0]-w/2,posed[2]-d/2,w,d,h,color,posed[1]-h/2),alpha,1);
+    };
+    const weaponLine = (from,to,color=weapon,thickness=5,opacity=alpha) => {
+      localLine3d(actor,weaponPoint(from[0],from[1],from[2]),weaponPoint(to[0],to[1],to[2]),color,thickness,opacity);
     };
     const barrel = (fromZ,toZ,color=weapon,thickness=7,y=gripY+.025,x=weaponCenterX) => {
-      localLine3d(actor,[x,y,fromZ],[x,y,toZ],color,thickness,alpha);
+      weaponLine([x,y,fromZ],[x,y,toZ],color,thickness,alpha);
     };
+    const magazineDrop = combat.reloading && !["rocket","bazooka","chainsaw"].includes(enemyWeapon)
+      ? reloadWave * (enemyWeapon === "sniper" ? .72 : .88)
+      : 0;
     let weaponMuzzleX = weaponCenterX;
     let weaponMuzzleY = gripY+.025;
     let weaponMuzzleZ = -2.42;
 
     if (enemyWeapon === "chainsaw") {
+      // Heavy layered motor housing + thick guide bar + moving chain teeth.
       weaponMuzzleX = weaponCenterX;
       weaponMuzzleY = gripY-.02;
-      weaponBox(weaponCenterX,-.38,width*.52,.78,.58,"#d54b31",gripY-.03);
-      weaponBox(weaponCenterX+.02,-.38,width*.34,.46,.24,"#222a2d",gripY+.31);
-      weaponBox(weaponCenterX,-1.48,width*.25,1.72,.20,"#c5cbca",gripY-.03);
-      weaponBox(weaponCenterX,-1.52,width*.17,1.78,.09,"#535c60",gripY-.02);
-      localLine3d(actor,[weaponCenterX-width*.24,gripY+.34,-.18],[weaponCenterX+width*.2,gripY+.55,-.48],"#1b2326",5.8,alpha);
-      localLine3d(actor,[weaponCenterX+width*.2,gripY+.55,-.48],[weaponCenterX+width*.28,gripY+.18,-.75],"#1b2326",5.8,alpha);
-      for (let tooth=0; tooth<8; tooth+=1) {
-        const z=-.84-tooth*.21;
-        localLine3d(actor,[weaponCenterX,gripY-.08,z],[weaponCenterX-width*.05,gripY-.15,z-.09],"#f0c75c",2.1,alpha);
+      weaponBox(weaponCenterX,-.32,width*.62,.88,.66,"#b83f2c",gripY-.04);
+      weaponBox(weaponCenterX+width*.04,-.30,width*.44,.58,.38,"#e1603e",gripY+.08);
+      weaponBox(weaponCenterX-width*.10,-.18,width*.18,.40,.46,"#252c2f",gripY-.03);
+      weaponBox(weaponCenterX+width*.18,-.36,width*.15,.36,.34,"#171d20",gripY+.03);
+      weaponBox(weaponCenterX,-1.52,width*.31,1.92,.25,"#bcc5c5",gripY-.04);
+      weaponBox(weaponCenterX,-1.56,width*.20,1.98,.11,"#444e52",gripY-.025);
+      weaponLine([weaponCenterX-width*.27,gripY+.34,-.12],[weaponCenterX+width*.21,gripY+.62,-.44],"#1a2023",7.2);
+      weaponLine([weaponCenterX+width*.21,gripY+.62,-.44],[weaponCenterX+width*.30,gripY+.20,-.78],"#1a2023",7.2);
+      weaponLine([weaponCenterX-width*.26,gripY+.17,.10],[weaponCenterX-width*.31,gripY-.18,-.25],"#171d20",6.8);
+      const chainOffset = (time * .0018) % .16;
+      for (let tooth=0; tooth<12; tooth+=1) {
+        const z=-.68-((tooth*.16+chainOffset)%1.90);
+        const side = tooth % 2 === 0 ? -1 : 1;
+        weaponLine([weaponCenterX+side*width*.105,gripY+.08,z],[weaponCenterX+side*width*.15,gripY+.15,z-.075],"#f0c75c",2.25);
+        weaponLine([weaponCenterX-side*width*.105,gripY-.14,z],[weaponCenterX-side*width*.15,gripY-.20,z-.075],"#d8a941",2.0);
       }
-      weaponMuzzleZ=-2.42;
+      weaponMuzzleZ=-2.58;
     } else if (enemyWeapon === "bazooka") {
-      weaponCenterX && weaponBox(weaponCenterX,-1.0,width*.42,2.55,.52,"#536c57",gripY+.06);
-      weaponBox(weaponCenterX,.28,width*.5,.42,.62,"#34483a",gripY+.06);
-      weaponBox(weaponCenterX,-2.34,width*.52,.38,.62,"#b4c0b3",gripY+.06);
-      weaponBox(weaponCenterX+width*.08,-.22,width*.18,.34,.62,"#172019",gripY-.41);
-      barrel(-.38,-2.68,"#2c4233",13,gripY+.06);
-      weaponMuzzleY=gripY+.06;
-      weaponMuzzleZ=-2.68;
+      weaponBox(weaponCenterX,-1.04,width*.52,2.70,.60,"#48614e",gripY+.08);
+      weaponBox(weaponCenterX,.32,width*.64,.48,.72,"#2d4033",gripY+.08);
+      weaponBox(weaponCenterX,-2.46,width*.64,.42,.70,"#9aa99d",gripY+.08);
+      weaponBox(weaponCenterX,-.48,width*.18,1.60,.78,"#334a3a",gripY+.08);
+      weaponBox(weaponCenterX+width*.08,-.20,width*.20,.38,.68,"#172019",gripY-.42);
+      weaponBox(weaponCenterX-width*.12,-.54,width*.18,.36,.26,"#111a15",gripY+.53);
+      barrel(-.30,-2.82,"#273b2e",15,gripY+.08);
+      weaponMuzzleY=gripY+.08;
+      weaponMuzzleZ=-2.82;
     } else if (enemyWeapon === "rocket") {
-      // Large shoulder-fired launcher with a clearly visible tube and exhaust cone.
-      weaponBox(weaponCenterX,-1.1,width*.58,2.95,.76,"#405747",gripY+.11);
-      weaponBox(weaponCenterX,.39,width*.72,.48,.88,"#263a2d",gripY+.11);
-      weaponBox(weaponCenterX,-2.62,width*.68,.54,.82,"#667b6b",gripY+.11);
-      weaponBox(weaponCenterX,-2.98,width*.48,.32,.58,"#b7c5b6",gripY+.11);
-      weaponBox(weaponCenterX+width*.05,-.5,width*.22,.36,.3,"#121b16",gripY+.56);
-      weaponBox(weaponCenterX+width*.1,-.08,width*.2,.36,.72,"#202c24",gripY-.42);
-      barrel(.2,-3.18,"#17241c",17,gripY+.11);
-      localLine3d(actor,[weaponCenterX-width*.2,gripY+.12,.42],[weaponCenterX-width*.3,gripY+.12,.84],"#d49b48",6.2,alpha);
-      weaponMuzzleY=gripY+.11;
-      weaponMuzzleZ=-3.18;
+      // Large shoulder-fired launcher built from multiple 3D collars, rails,
+      // grips and a rear exhaust section so it reads as a weapon from every angle.
+      weaponBox(weaponCenterX,-1.12,width*.68,3.10,.82,"#354b3d",gripY+.12);
+      weaponBox(weaponCenterX,-1.12,width*.76,2.34,.56,"#4d6754",gripY+.12);
+      weaponBox(weaponCenterX,.46,width*.82,.56,.94,"#23352a",gripY+.12);
+      weaponBox(weaponCenterX,-2.74,width*.80,.56,.92,"#6f8574",gripY+.12);
+      weaponBox(weaponCenterX,-3.08,width*.58,.34,.66,"#b7c4b8",gripY+.12);
+      weaponBox(weaponCenterX,-1.10,width*.17,2.46,.98,"#26392e",gripY+.12);
+      weaponBox(weaponCenterX,-1.10,width*.78,.24,.18,"#94a78f",gripY+.59);
+      weaponBox(weaponCenterX+width*.11,-.48,width*.22,.42,.78,"#18231c",gripY-.42);
+      weaponBox(weaponCenterX-width*.15,-.58,width*.20,.48,.30,"#101812",gripY+.60);
+      weaponBox(weaponCenterX+width*.05,-1.46,width*.22,.52,.24,"#111a15",gripY+.60);
+      barrel(.22,-3.30,"#17241c",18,gripY+.12);
+      weaponLine([weaponCenterX-width*.25,gripY+.13,.50],[weaponCenterX-width*.34,gripY+.13,.94],"#d49b48",6.4);
+      if (combat.reloading) {
+        const insert = clamp((reloadProgress-.38)/.48,0,1);
+        weaponBox(weaponCenterX-width*.04,.96-insert*.82,width*.44,.72,.48,"#707f69",gripY+.12-reloadWave*.22);
+      }
+      weaponMuzzleY=gripY+.12;
+      weaponMuzzleZ=-3.30;
     } else if (enemyWeapon === "sniper") {
-      weaponBox(weaponCenterX,.35,width*.38,.72,.45,"#2d373c",gripY-.02);
-      weaponBox(weaponCenterX,-.35,width*.52,.82,.44,weapon,gripY-.01);
-      weaponBox(weaponCenterX,-1.05,width*.38,.84,.32,"#46545a",gripY+.01);
-      weaponBox(weaponCenterX+.02,-.28,width*.19,.30,.72,"#151c20",gripY-.48);
-      barrel(-.78,-3.06,weapon,6.4,gripY+.05);
-      barrel(-2.88,-3.28,"#171e22",8.4,gripY+.05);
-      weaponBox(weaponCenterX,-.48,width*.30,.92,.24,"#10181c",gripY+.38);
-      weaponBox(weaponCenterX,-.48,width*.19,1.06,.18,"#73828a",gripY+.40);
-      weaponBox(weaponCenterX,-.48,width*.12,1.12,.12,"#aab4b8",gripY+.41);
-      weaponMuzzleY=gripY+.05;
-      weaponMuzzleZ=-3.28;
+      weaponBox(weaponCenterX,.48,width*.50,.92,.54,"#29353a",gripY-.01);
+      weaponBox(weaponCenterX,.70,width*.60,.34,.64,"#1e282d",gripY-.01);
+      weaponBox(weaponCenterX,-.34,width*.58,.94,.48,"#20292e",gripY-.01);
+      weaponBox(weaponCenterX,-1.12,width*.46,1.04,.36,"#46565d",gripY+.02);
+      weaponBox(weaponCenterX+.02,-.30,width*.22,.34,.74,"#151c20",gripY-.49);
+      weaponBox(weaponCenterX+.01,-.30,width*.24,.34,.66,"#1b2529",gripY-.70-magazineDrop);
+      barrel(-.78,-3.22,weapon,7.2,gripY+.06);
+      barrel(-3.02,-3.54,"#151d21",10.0,gripY+.06);
+      weaponBox(weaponCenterX,-.54,width*.34,1.22,.26,"#0e1519",gripY+.42);
+      weaponBox(weaponCenterX,-.54,width*.23,1.34,.20,"#63747c",gripY+.44);
+      weaponBox(weaponCenterX,-.12,width*.37,.12,.35,"#171f23",gripY+.44);
+      weaponBox(weaponCenterX,-.95,width*.37,.12,.35,"#171f23",gripY+.44);
+      weaponBox(weaponCenterX,-.54,width*.13,1.42,.12,"#b5bec2",gripY+.45);
+      weaponLine([weaponCenterX-width*.15,gripY-.02,-1.62],[weaponCenterX-width*.34,gripY-.64,-2.02],"#20292d",3.4);
+      weaponLine([weaponCenterX+width*.15,gripY-.02,-1.62],[weaponCenterX+width*.34,gripY-.64,-2.02],"#20292d",3.4);
+      weaponMuzzleY=gripY+.06;
+      weaponMuzzleZ=-3.54;
     } else if (enemyWeapon === "shotgun") {
-      weaponBox(weaponCenterX,.30,width*.38,.66,.42,"#553923",gripY-.03);
-      weaponBox(weaponCenterX,-.34,width*.50,.74,.40,weapon,gripY-.01);
-      weaponBox(weaponCenterX,-1.05,width*.40,.88,.34,"#6b4a2e",gripY+.01);
+      weaponBox(weaponCenterX,.30,width*.42,.70,.46,"#553923",gripY-.03);
+      weaponBox(weaponCenterX,-.34,width*.52,.78,.42,weapon,gripY-.01);
+      weaponBox(weaponCenterX,-1.05,width*.42,.92,.36,"#6b4a2e",gripY+.01);
       barrel(-.72,-2.44,"#20282d",8.2,gripY+.05);
       barrel(-.72,-2.44,"#5a6468",3.3,gripY+.12,weaponCenterX+width*.06);
       weaponMuzzleY=gripY+.05;
       weaponMuzzleZ=-2.44;
     } else if (enemyWeapon === "smg") {
-      weaponBox(weaponCenterX,.15,width*.34,.58,.38,"#2a3439",gripY-.03);
-      weaponBox(weaponCenterX,-.38,width*.48,.72,.42,weapon,gripY-.02);
-      weaponBox(weaponCenterX,-.86,width*.36,.48,.33,weaponLight,gripY+.02);
-      weaponBox(weaponCenterX+.02,-.28,width*.18,.28,.68,"#151c20",gripY-.49);
-      barrel(-.62,-1.66,weapon,6.8,gripY+.04);
+      weaponBox(weaponCenterX,.15,width*.38,.62,.42,"#2a3439",gripY-.03);
+      weaponBox(weaponCenterX,-.38,width*.52,.76,.46,weapon,gripY-.02);
+      weaponBox(weaponCenterX,-.86,width*.38,.52,.35,weaponLight,gripY+.02);
+      weaponBox(weaponCenterX+.02,-.28,width*.20,.30,.70,"#151c20",gripY-.49-magazineDrop);
+      barrel(-.62,-1.70,weapon,7.0,gripY+.04);
       weaponMuzzleY=gripY+.04;
-      weaponMuzzleZ=-1.66;
+      weaponMuzzleZ=-1.70;
     } else if (enemyWeapon === "pistol") {
-      weaponBox(weaponCenterX,-.40,width*.34,.76,.28,weapon,gripY+.03);
-      weaponBox(weaponCenterX,-.31,width*.20,.30,.58,"#171f22",gripY-.39);
-      weaponBox(weaponCenterX,-.44,width*.27,.55,.08,"#748087",gripY+.20);
-      barrel(-.62,-1.34,weapon,5.6,gripY+.06);
+      weaponBox(weaponCenterX,-.40,width*.38,.80,.30,weapon,gripY+.03);
+      weaponBox(weaponCenterX,-.31,width*.22,.32,.60,"#171f22",gripY-.39-magazineDrop*.45);
+      weaponBox(weaponCenterX,-.44,width*.30,.58,.09,"#748087",gripY+.20);
+      barrel(-.62,-1.36,weapon,5.8,gripY+.06);
       weaponMuzzleY=gripY+.06;
-      weaponMuzzleZ=-1.34;
+      weaponMuzzleZ=-1.36;
     } else {
-      // Thick right-side service rifle: stock, receiver, handguard, magazine, grip, rail, optic and barrel all read as one weapon.
-      weaponBox(weaponCenterX,.42,width*.42,.76,.50,"#29343a",gripY-.04);
-      weaponBox(weaponCenterX,-.32,width*.56,.88,.48,weapon,gripY-.02);
-      weaponBox(weaponCenterX,-1.02,width*.44,.82,.38,weaponLight,gripY+.01);
-      weaponBox(weaponCenterX+.01,-.27,width*.20,.32,.78,"#151d21",gripY-.52);
-      weaponBox(weaponCenterX+.01,-.18,width*.17,.30,.88,"#1a2226",gripY-.88);
-      weaponBox(weaponCenterX,-.44,width*.32,.72,.12,"#10181c",gripY+.31);
-      weaponBox(weaponCenterX,-.43,width*.21,.34,.25,"#27343a",gripY+.46);
-      weaponBox(weaponCenterX,-.43,width*.14,.46,.18,"#7d8b91",gripY+.48);
-      barrel(-.78,-2.32,weapon,7.2,gripY+.04);
-      barrel(-2.16,-2.58,"#151c20",8.7,gripY+.04);
-      weaponMuzzleY=gripY+.04;
-      weaponMuzzleZ=-2.58;
+      // Full 3D service rifle: thick butt stock, layered receiver, handguard,
+      // pistol grip, detachable curved magazine, top rail, holo optic and muzzle brake.
+      weaponBox(weaponCenterX,.54,width*.54,.90,.58,"#29343a",gripY-.04);
+      weaponBox(weaponCenterX,.78,width*.62,.30,.44,"#1b2428",gripY-.04);
+      weaponBox(weaponCenterX,-.24,width*.62,.98,.52,weapon,gripY-.02);
+      weaponBox(weaponCenterX,-.82,width*.54,.58,.44,"#37464d",gripY+.00);
+      weaponBox(weaponCenterX,-1.22,width*.48,.62,.40,weaponLight,gripY+.01);
+      weaponBox(weaponCenterX+.02,-.22,width*.22,.36,.78,"#151d21",gripY-.52);
+      weaponBox(weaponCenterX+.02,-.28,width*.24,.38,.64,"#1a2226",gripY-.78-magazineDrop);
+      weaponBox(weaponCenterX+.02,-.42,width*.25,.34,.58,"#202a2f",gripY-.98-magazineDrop*.92);
+      weaponBox(weaponCenterX,-.48,width*.38,.80,.13,"#10181c",gripY+.34);
+      weaponBox(weaponCenterX,-.46,width*.25,.40,.30,"#27343a",gripY+.49);
+      weaponBox(weaponCenterX,-.46,width*.15,.50,.18,"#7d8b91",gripY+.51);
+      weaponBox(weaponCenterX,-1.15,width*.58,.12,.12,"#929da2",gripY+.25);
+      barrel(-.88,-2.42,weapon,8.0,gripY+.05);
+      barrel(-2.24,-2.72,"#151c20",10.0,gripY+.05);
+      weaponBox(weaponCenterX,-2.64,width*.28,.28,.24,"#20292d",gripY+.05);
+      weaponLine([weaponCenterX-width*.20,gripY+.05,-2.72],[weaponCenterX-width*.28,gripY+.05,-2.91],"#353f44",3.4);
+      weaponLine([weaponCenterX+width*.20,gripY+.05,-2.72],[weaponCenterX+width*.28,gripY+.05,-2.91],"#353f44",3.4);
+      weaponMuzzleY=gripY+.05;
+      weaponMuzzleZ=-2.91;
     }
 
+    const posedMuzzle = weaponPoint(weaponMuzzleX,weaponMuzzleY,weaponMuzzleZ);
+    weaponMuzzleX = posedMuzzle[0];
+    weaponMuzzleY = posedMuzzle[1];
+    weaponMuzzleZ = posedMuzzle[2];
     const muzzle = localPoint3d(actor,weaponMuzzleX,weaponMuzzleY,weaponMuzzleZ);
     if (combat.muzzleFlash && enemyWeapon !== "chainsaw") {
       const flashLength = (enemyWeapon === "bazooka" || enemyWeapon === "rocket") ? 1.55 : 1.05;

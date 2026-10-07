@@ -9,6 +9,8 @@ const owner = fs.readFileSync(new URL("../app/plant-owner-7f3a9c/page.tsx", impo
 const ownerGate = fs.readFileSync(new URL("../app/editor-access-gate.tsx", import.meta.url), "utf8");
 const preview = fs.readFileSync(new URL("../public/preview.html", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const multiplayer = fs.readFileSync(new URL("../public/combat-multiplayer.js", import.meta.url), "utf8");
+const lobbyRoute = fs.readFileSync(new URL("../app/api/combat-lobby/route.ts", import.meta.url), "utf8");
 
 assert.ok(combat.includes("createPlantCombatMode"), "Combat controller factory is missing.");
 assert.ok(combat.includes("rayAabb") && combat.includes("hasLineOfSight"), "Enemy AI line-of-sight checks are missing.");
@@ -154,7 +156,7 @@ assert.ok(plant.includes("Heavy layered motor housing") && plant.includes("chain
 // v0.13.63: separate Zombie Mode, persistent clear times, true headshots, gun-side tracers, and end-screen kill stats.
 assert.ok(plant.includes('data-toggle="zombie" class="zombie-mode-button"') && plant.includes('setCombatMode(!sameMode, "zombie")'), "Owner controls must expose a separate Zombie Mode beside Combat Mode.");
 assert.ok(combat.includes('zombie: Object.freeze') && combat.includes('defaultWeapon: "shotgun"') && combat.includes('loadout: Object.freeze(["shotgun", "handgun"])'), "Zombie Mode must use the shotgun + pistol player loadout.");
-assert.ok(combat.includes('record.weaponKey = record.zombie ? "chainsaw"') && combat.includes('record.modeSpeedMultiplier = record.zombie ? 1.55 * zombieDifficultyConfig().speed : 1'), "Zombie AI must be chainsaw-only and difficulty-scaled faster than normal Combat Mode enemies.");
+assert.ok(combat.includes('record.weaponKey = record.zombie ? "chainsaw"') && combat.includes('1.55 * zombieDifficultyConfig().speed') && combat.includes('combatDifficultyConfig().speed'), "Zombie AI must be chainsaw-only while Combat and Zombie movement are difficulty-scaled independently.");
 assert.ok(plant.includes('headCandidates') && plant.includes('drawDesignBox(actor,{...headPart,color:skin}') && plant.includes('const eyeWhite = zombie ? "#f7e76f"'), "Zombie face/eye overlays must anchor to the actual custom-person Head component.");
 assert.ok(combat.includes('function enemyHitVolumes') && combat.includes('zone: "head"') && combat.includes('zone: "body"') && combat.includes('HEADSHOT_DAMAGE_MULTIPLIER = 3'), "Combat hit detection must have separate head/body volumes and real headshot damage.");
 assert.ok(combat.includes('headshotKills += 1') && combat.includes('regularKills += 1') && combat.includes('data-combat-headshot-kills') && combat.includes('data-combat-regular-kills'), "Regular-kill and headshot-kill statistics must be tracked separately.");
@@ -178,9 +180,22 @@ assert.ok(plant.includes("service gap between the tables") && plant.includes("co
 
 
 // v0.13.66: Zombie difficulty, Normal vs Endless runs, and corrected camera-relative damage indicators.
-assert.ok(combat.includes("ZOMBIE_DIFFICULTIES") && combat.includes('nightmare: Object.freeze') && combat.includes('data-zombie-difficulty="nightmare"'), "Zombie Mode must provide Easy, Normal, Hard, and Nightmare difficulty options.");
+assert.ok(combat.includes("ZOMBIE_DIFFICULTIES") && combat.includes('nightmare: Object.freeze') && combat.includes('data-match-difficulty="nightmare"'), "Zombie Mode must provide Easy, Normal, Hard, and Nightmare difficulty options.");
 assert.ok(combat.includes("ZOMBIE_RUN_TYPES") && combat.includes('data-zombie-run="normal"') && combat.includes('data-zombie-run="endless"'), "Zombie Mode must offer Normal plant-clear and Endless survival run types.");
 assert.ok(combat.includes('if (!zombieEndless() || roundState !== "playing") return;') && combat.includes('zombieRunType === "normal"'), "Normal Zombie Mode must disable respawns and allow a clear-the-plant victory.");
-assert.ok(combat.includes('100 * zombieDifficultyConfig().health') && combat.includes('zombieDifficultyConfig().damage') && combat.includes('zombieDifficultyConfig().spawnRate') && combat.includes('zombieDifficultyConfig().aliveCap'), "Zombie difficulty must affect health, damage, speed/spawn pressure, and alive cap.");
+assert.ok(combat.includes('100 * activeDifficultyConfig().health') && combat.includes('activeDifficultyConfig().damage') && combat.includes('zombieDifficultyConfig().spawnRate') && combat.includes('zombieDifficultyConfig().aliveCap'), "Zombie difficulty must affect health, damage, speed/spawn pressure, and alive cap.");
 assert.ok(combat.includes('let relative = number(player.yaw) - worldAngle') && combat.includes('First-person rendering mirrors horizontal world X'), "Incoming-fire indicators must use the mirrored first-person camera basis so left/right are not reversed.");
-assert.ok(css.includes('.combat-zombie-setup') && css.includes('.combat-zombie-choice-grid') && css.includes('.combat-zombie-setup-actions'), "Zombie difficulty/run setup must have a dedicated polished overlay.");
+assert.ok(css.includes('.combat-zombie-setup') && css.includes('pointer-events: auto') && css.includes('.combat-zombie-choice-grid') && css.includes('.combat-zombie-setup-actions'), "The shared combat setup must be clickable and visually polished.");
+
+
+// v0.13.67: shared setup, Combat difficulty, actual head volumes, breakable glass, character selection, and password-gated multiplayer lobby.
+assert.ok(combat.includes("COMBAT_DIFFICULTIES") && combat.includes("combatDifficultyConfig") && combat.includes("fireRate") && combat.includes("accuracy"), "Combat Mode must have Easy/Normal/Hard/Nightmare difficulty scaling for enemy health, speed, damage, accuracy and fire rate.");
+assert.ok(combat.includes('nightmare: Object.freeze({ key:"nightmare", label:"Nightmare", health:1.58, speed:1') && combat.includes('normal: Object.freeze({ key:"normal", label:"Normal", health:1, speed:.72'), "Nightmare must preserve the prior full zombie speed while lower difficulties reduce it.");
+assert.ok(combat.includes("data-match-setup") && combat.includes("data-match-difficulty") && combat.includes("data-character-options") && combat.includes("data-match-type"), "Combat and Zombie Mode must share a working pre-match setup with difficulty, character and match type controls.");
+assert.ok(combat.includes("function availableCharacters") && combat.includes("selectedCharacterId") && combat.includes("excludedCharacters"), "Players must be able to select a plant person and selected characters must be removed from the AI pool.");
+assert.ok(combat.includes("getEnemyHeadVolume") && plant.includes("function combatHeadVolume") && plant.includes('/^head$/i') && combat.includes("Stop the body volume below the neck"), "Headshots must follow the actual rendered Head component instead of the neck/body overlap.");
+assert.ok(plant.includes("combatGlassOccluders") && combat.includes("pushGlassShatter") && combat.includes("glassShards") && plant.includes("isGlassShattered"), "Shooting machine glass must create shatter/explosion effects and remove broken glass from rendering/collision.");
+assert.ok(page.includes('/combat-multiplayer.js') && multiplayer.includes("createCombatMultiplayer") && multiplayer.includes('setInterval(heartbeat, 180)'), "The plant must load the multiplayer lobby client and synchronize player state continuously.");
+assert.ok(lobbyRoute.includes("Owner password session required") && lobbyRoute.includes('action === "create"') && lobbyRoute.includes('action === "join"') && lobbyRoute.includes('action === "event"'), "Multiplayer lobbies must require the owner-password server session and support create/join/game events.");
+assert.ok(combat.includes('data-match-type="private"') && combat.includes('data-match-type="coop"') && combat.includes('player-hit') && combat.includes('enemy-hit'), "Lobby setup must support Private Match plus shared Combat/Zombie co-op hit events.");
+assert.ok(plant.includes("drawCombatRemotePlayers") && combat.includes("remotePlayers"), "Remote lobby players must render as their selected plant characters on the layout.");

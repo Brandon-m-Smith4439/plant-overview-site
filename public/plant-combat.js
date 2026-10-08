@@ -2290,7 +2290,7 @@
       if(!target)return;
       const held=reviveHold?.targetId===target.ally.id;
       const fraction=held?clamp((now-reviveHold.startedAt)/COOP_REVIVE_HOLD_MS,0,1):0;
-      revivePrompt.style.setProperty("--revive-progress",Math.round(fraction*100)+"%");
+      revivePrompt.style.setProperty("--revive-progress",String(fraction));
       revivePrompt.textContent=held
         ? `REVIVING ${target.ally.name||"TEAMMATE"} · ${Math.ceil((1-fraction)*COOP_REVIVE_HOLD_MS/1000)}s · ${target.seconds}s LEFT`
         : `HOLD [E] FOR ${Math.ceil(COOP_REVIVE_HOLD_MS/1000)}s TO REVIVE ${target.ally.name||"TEAMMATE"} · ${target.seconds}s LEFT`;

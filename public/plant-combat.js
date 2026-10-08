@@ -2143,7 +2143,7 @@
       }
       if (stationPrompt) {
         nearestStation=null;
-        if (gameMode==="zombie" && roundState==="playing") {
+        if (gameMode==="zombie" && roundState==="playing" && !playerZombie) {
           const player=options.getPlayer?.();
           if (player) {
             let nearestDistance=6;
@@ -3849,6 +3849,10 @@
     function handleKeyDown(event) {
       if (!active || roundState === "setup") return;
       if (event.target?.matches?.("input, select, textarea, [contenteditable='true']")) return;
+      if(playerZombie && ["KeyE","Digit1","Digit2","Digit3","KeyR"].includes(event.code)){
+        event.preventDefault();
+        return; // Player-controlled zombies fight with chainsaws, not human loadouts.
+      }
       if (event.code === "KeyE") {
         event.preventDefault();
         if(event.repeat)return;

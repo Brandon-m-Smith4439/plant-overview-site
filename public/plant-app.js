@@ -10686,7 +10686,29 @@
     let weaponMuzzleY = gripY+.025;
     let weaponMuzzleZ = -2.42;
 
-    if (enemyWeapon === "chainsaw") {
+    // The same editable Combat Weapon geometry drives enemy-held firearms.
+    // Local +X on the asset becomes forward (-Z) for the character.
+    const enemyModel=designLibrary["combat-weapon-"+(enemyWeapon==="bazooka"?"rocket":enemyWeapon)];
+    if(enemyModel?.machineType==="combatWeapon" && enemyModel.components?.length) {
+      const base=enemyModel.base||{},bw=Math.max(.2,Number(base.w)||4);
+      const bd=Math.max(.2,Number(base.d)||1.25),bh=Math.max(.2,Number(base.h)||1.65);
+      const barrelLength=enemyWeapon==="sniper"?3.5:enemyWeapon==="chainsaw"?2.1:2.8;
+      for(const component of enemyModel.components) {
+        if(component.type!=="box"||component.visible===false)continue;
+        const px=weaponCenterX+((Number(component.z)||0)+(Number(component.d)||0)/2-bd/2)*width*.37/bd;
+        const py=gripY+((Number(component.y)||0)+(Number(component.h)||0)/2-bh/2)*height*.18/bh;
+        const pz=-(Number(component.x)||0)*barrelLength/bw-.12;
+        const ww=Math.max(.04,(Number(component.d)||.1)*width*.37/bd);
+        const dd=Math.max(.04,(Number(component.w)||.1)*barrelLength/bw);
+        const hh=Math.max(.04,(Number(component.h)||.1)*height*.18/bh);
+        const posed=weaponPoint(px,py,pz);
+        box(localBox3d(actor,posed[0]-ww/2,posed[2]-dd/2,ww,dd,hh,component.color||weapon,posed[1]-hh/2),alpha,1);
+      }
+      const anchor=enemyModel.combatAnchors?.hipMuzzle || {x:bw,y:bh*.52,z:bd*.5};
+      weaponMuzzleX=weaponCenterX+(Number(anchor.z)-bd*.5)*width*.37/bd;
+      weaponMuzzleY=gripY+(Number(anchor.y)-bh*.5)*height*.18/bh;
+      weaponMuzzleZ=-Number(anchor.x)*barrelLength/bw-.12;
+    } else if (enemyWeapon === "chainsaw") {
       // Heavy layered motor housing + thick guide bar + moving chain teeth.
       weaponMuzzleX = weaponCenterX;
       weaponMuzzleY = gripY-.02;

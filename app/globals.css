@@ -9196,3 +9196,16 @@ body.viewer-fullscreen-fallback-active {
 .studio-tabs.studio-browser-tabs { flex-wrap:wrap; }
 .studio-combat-anchors { margin-top:12px;padding:12px;border:1px solid rgba(122,179,195,.3);border-radius:10px;background:rgba(40,69,84,.08); }
 .studio-combat-anchors[hidden] { display:none !important; }
+
+/* Co-op revive: urgency without obscuring the player's weapon sight. */
+.combat-revive-prompt {
+  position:absolute;left:50%;bottom:10.8rem;transform:translateX(-50%);
+  z-index:8;max-width:86vw;padding:.6rem 1rem;text-align:center;
+  font:900 .8rem/1.25 "Segoe UI",sans-serif;letter-spacing:.06em;
+  border:1px solid rgba(255,118,120,.82);border-radius:.7rem;
+  color:#fff1f1;background:rgba(89,13,26,.92);
+  box-shadow:0 .3rem 1rem rgba(26,2,7,.48),0 0 1rem rgba(255,41,65,.15);
+  pointer-events:none;
+}
+.combat-revive-prompt[hidden]{display:none !important;}
+@media(max-width:760px){.combat-revive-prompt{bottom:8rem;font-size:.65rem;padding:.5rem .65rem;}}

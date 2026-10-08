@@ -1,3 +1,11 @@
+## v0.13.83 — Co-op Death Sync, Moonlit Wasteland, Animation & Audio
+
+Zombie Mode now includes large dense groves of dead, branch-only trees with trunk collision for both players and AI, a blocky glowing moon, and subtle lunar ground lighting. Enemy death animation timing is synchronized using elapsed animation age rather than host-browser timestamps. Both living and zombie characters have stronger gait, head, body, and arm motion.
+
+**Shift + move** sprints with a lowered weapon: guns cannot fire, aim or start reloading while sprinting. **Hold E** to revive a nearby teammate for 3.5 seconds; rescue hand motions are visible to the rescuer and to co-op teammates. The first-person HUD makes health damage, depleted shields and critical health much easier to spot.
+
+The procedural sound library uses Web Audio rather than external sample downloads, with weapon, explosion, movement, melee, zombie, shield and revival sounds. Audio can be muted in the Esc tactical pause menu. Builds execute the new gameplay test at `tests/validate-combat-v01383.mjs` and the existing regression suites.
+
 ## v0.13.82 — Plant Combat / Zombie Mode gameplay
 
 Zombie Mode co-op revives require holding E for 3.5 seconds within nine feet of a downed teammate. Releasing E, moving away, or failing the server hold check cancels the attempt. A player whose 22-second rescue period expires becomes a player-controlled green version of their chosen plant member, restricted to melee/chainsaw attacks against surviving humans; living teammates remain human and friendly fire is otherwise disabled. The pause screen now contains a tactical dashboard. Eye meshes use explicit valid Designer box types (fixing missing eyes), and chainsaws have animated chains and swing effects synchronized in co-op. Gameplay perimeter walls exist only on the south and east, with small doors centered on those sides; north and west are open. AI paths through the doors, exterior buildings block ground-floor entry, and ladder climbing transfers cleanly onto the roof.

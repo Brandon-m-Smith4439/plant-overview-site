@@ -422,6 +422,16 @@ export async function POST(request: Request) {
               return {ok:false,status:409,error:"Revive already completed."};
           }
         }
+        if(type==="player-hit" && lobby.config.matchType==="coop"){
+          const target=lobby.players[cleanId(body.targetId,96)];
+          if(!target || !existing.state || !target.state ||
+            Boolean(existing.state.revenant)===Boolean(target.state.revenant))
+            return {ok:false,status:403,error:"No team damage in co-op."};
+          if(Boolean(existing.state.revenant) &&
+            Math.hypot(finite(existing.state.x)-finite(target.state.x),
+            finite(existing.state.z)-finite(target.state.z))>7.5)
+            return {ok:false,status:403,error:"Target is out of range."};
+        }
         const event: LobbyEvent = {
           id: `${now.toString(36)}-${randomBytes(4).toString("hex")}`,
           type,

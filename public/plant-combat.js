@@ -340,7 +340,7 @@
         '</div>',
         '<div class="combat-ammo"><strong data-combat-mag>30</strong><span>/</span><b data-combat-reserve>120</b></div>',
         '<div class="combat-weapon-inventory" data-combat-inventory></div>',
-        '<div class="combat-controls">Fire · Right click aim · <b>1/2/3</b> weapons · <b>R</b> reload · <b>E</b> buy</div>',
+        '<div class="combat-controls">Fire · Right click aim · <b>1/2/3</b> weapons · <b>R</b> reload · <b>F</b> melee · <b>E</b> buy/revive</div>',
       '</div>',
       '<div class="combat-round-overlay" data-combat-round hidden>',
         '<div class="combat-round-card">',
@@ -3369,6 +3369,7 @@
           name:String(enemy.machine?.name || "Zombie"),
           w:Math.max(.4,number(enemy.machine?.w,1.8)), d:Math.max(.4,number(enemy.machine?.d,1.8)),
           h:Math.max(1,number(enemy.machine?.h,6.5)), y:number(enemy.machine?.y),
+          designId:String(enemy.machine?.designId||""),sourceId:String(enemy.machine?.instanceId||""),
         };
         return snapshot;
       });
@@ -3425,12 +3426,17 @@
           const base=(Array.isArray(options.getEnemies?.()) ? options.getEnemies() : []).find((machine,index) => enemyId(machine,index)===id);
           const machine=base || {
             id,instanceId:id,name:String(snapshot.machine?.name || "Zombie"),type:"person",x:number(snapshot.x)-.9,y:number(snapshot.machine?.y),z:number(snapshot.z)-.9,
-            w:Math.max(.4,number(snapshot.machine?.w,1.8)),d:Math.max(.4,number(snapshot.machine?.d,1.8)),h:Math.max(1,number(snapshot.machine?.h,6.5)),visible:true,combatSpawned:true,
+            w:Math.max(.4,number(snapshot.machine?.w,1.8)),d:Math.max(.4,number(snapshot.machine?.d,1.8)),h:Math.max(1,number(snapshot.machine?.h,6.5)),
+            designId:String(snapshot.machine?.designId||""),visible:true,combatSpawned:true,
+            reveal:0,retire:99,
           };
           enemy={id};
           enemies.set(id,enemy);
           resetEnemyRecord(enemy,machine,enemies.size);
           enemy.synthetic=Boolean(snapshot.synthetic || !base);
+          enemy.machine.reveal=Number.isFinite(Number(enemy.machine.reveal))?Number(enemy.machine.reveal):0;
+          enemy.machine.retire=Number.isFinite(Number(enemy.machine.retire))?Number(enemy.machine.retire):99;
+          if(snapshot.machine?.designId)enemy.machine.designId=String(snapshot.machine.designId);
           enemy.x=number(snapshot.x,enemy.x); enemy.z=number(snapshot.z,enemy.z); enemy.rotationY=number(snapshot.rotationY,enemy.rotationY);
         }
         enemy.remoteSync={

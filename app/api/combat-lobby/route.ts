@@ -377,6 +377,7 @@ export async function POST(request: Request) {
       if (action === "event") {
         const type = cleanId(body.type, 40);
         if (!type) return { ok: false, status: 400, error: "Event type required." };
+        if (["coop-victory", "round-restart"].includes(type) && lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host may end or restart a co-op round." };
         const event: LobbyEvent = {
           id: `${now.toString(36)}-${randomBytes(4).toString("hex")}`,
           type,

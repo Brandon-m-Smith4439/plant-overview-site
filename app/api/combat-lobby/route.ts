@@ -19,7 +19,8 @@ type EnemySyncState = {
 
 type PlayerState = {
   x?: number; y?: number; z?: number; yaw?: number; pitch?: number; vx?: number; vz?: number;
-  health?: number; shield?: number; moving?: boolean; weapon?: string;
+  health?: number; shield?: number; moving?: boolean; sprinting?: boolean; weapon?: string;
+  revivingTargetId?: string; reviveProgress?: number;
   alive?: boolean; revenant?: boolean; meleeSwing?: number; downedUntil?: number; kills?: number; headshots?: number; deaths?: number; points?: number; worldSeq?: number;
   wave?: number; waveTotal?: number; waveSpawned?: number; waveDefeated?: number;
   boxX?: number; boxZ?: number; healthX?: number | null; healthZ?: number | null;
@@ -159,6 +160,9 @@ function sanitizeState(value: unknown): PlayerState {
     health: Math.max(0, Math.min(100, finite(source.health, 100))),
     shield: Math.max(0, Math.min(100, finite(source.shield, 0))),
     moving: Boolean(source.moving),
+    sprinting: Boolean(source.sprinting),
+    revivingTargetId: cleanId(source.revivingTargetId,96),
+    reviveProgress: Math.max(0, Math.min(1, finite(source.reviveProgress))),
     weapon: cleanText(source.weapon, 24),
     alive: source.alive !== false,
     revenant: Boolean(source.revenant) && source.alive === false,

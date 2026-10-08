@@ -414,6 +414,102 @@
     },
   };
 
-  window.PLANT_MACHINE_DESIGN_STORAGE_KEY = "monroe-glass-machine-designs-v1";
+  // Shared combat-ready presets use the SAME editable geometry as Machine Studio.
+  // The muzzle anchors are expressed in design-local feet; the game reads the
+  // edited values from the saved design library on its next load.
+  const gunTypes = [
+    ["rifle","Service Rifle",4.15,.25,"#46535a","#23343a","optic"],
+    ["handgun","Service Pistol",2.1,.5,"#3e454f","#8c9196","pistol"],
+    ["shotgun","Pump Shotgun",3.6,.42,"#67452c","#292d33","shotgun"],
+    ["sniper","Long-Range Sniper",5.2,.19,"#3b4749","#191f25","scope"],
+    ["rocket","Rocket Launcher",4.6,.71,"#4a6446","#29352d","launcher"],
+    ["smg","Viper SMG",2.75,.43,"#3c464b","#a45a35","smg"],
+    ["carbine","Tactical Carbine",3.65,.29,"#35514d","#202b36","optic"],
+    ["lmg","Belt-Fed LMG",4.8,.45,"#51574c","#333b40","heavy"],
+    ["burst","Burst Rifle",3.85,.34,"#50565d","#2e3e4f","optic"],
+    ["revolver","Magnum Revolver",2.5,.38,"#7a8387","#232a30","revolver"],
+    ["dmr","Precision DMR",4.75,.24,"#52605d","#222a30","scope"],
+    ["autoShotgun","Automatic Shotgun",3.5,.45,"#3f474a","#776349","shotgun"],
+    ["heavyPistol","Heavy Pistol",2.55,.48,"#444d54","#8d7d65","pistol"],
+    ["chainsaw","Combat Chainsaw",3.4,.56,"#ae4f22","#2a3536","chainsaw"],
+  ];
+  gunTypes.forEach(([key,name,length,thickness,primary,secondary,style])=>{
+    const h=1.65,d=1.25,barrelStart=length*.53,barrelEnd=length-.1;
+    const parts=[
+      box("gun-stock","Rear stock",.08,.66,.36,length*.25,.42,.52,secondary),
+      box("gun-receiver","Main receiver",length*.29,.62,.27,length*.32,.52,.68,primary),
+      box("gun-barrel","Front barrel",barrelStart,.79,.57,barrelEnd-barrelStart,.20,thickness,secondary),
+      box("gun-muzzle","Muzzle device",length-.21,.75,.51,.21,.28,thickness+.12,"#141f27"),
+      box("gun-grip","Pistol grip",length*.34,.13,.44,.27,.56,.3,secondary),
+      box("gun-magazine","Magazine",length*.49,.09,.36,.35,.55,.44,"#20282c"),
+      box("gun-handguard","Hand guard",length*.57,.65,.25,length*.2,.44,.67,primary),
+    ];
+    if(["optic","scope"].includes(style)) {
+      parts.push(box("scope-base","Scope mount",length*.37,1.13,.48,length*.28,.14,.32,"#181e27"));
+      parts.push(box("scope","Optic / sight",length*.36,1.3,.43,length*(style==="scope"?.29:.16),.21,.42,secondary));
+    }
+    if(style==="shotgun") {
+      parts.push(box("shell-tube","Shotgun tube",barrelStart,.53,.55,length*.37,.16,.20,"#a89a80"));
+      parts.push(box("pump","Pump fore-end",length*.65,.53,.4,.44,.18,.52,"#896345"));
+    }
+    if(style==="revolver") {
+      parts.push(box("cylinder","Six-shot cylinder",length*.42,.70,.30,.53,.46,.66,secondary));
+      parts.push(box("hammer","Hammer",length*.28,1.11,.48,.16,.19,.20,"#a9afb1"));
+    }
+    if(style==="launcher") {
+      parts.push(box("launcher-tube","Large rocket tube",length*.23,.57,.24,length*.70,.65,.74,primary));
+      parts.push(box("launcher-rear","Rear exhaust bell",length*.06,.48,.17,.30,.83,.85,"#1b292b"));
+      parts.push(box("launcher-sight","Launcher sight",length*.50,1.32,.43,.38,.22,.22,secondary));
+    }
+    if(style==="heavy") {
+      parts.push(box("belt-housing","Belt feed assembly",length*.40,.52,.16,.73,.68,.91,secondary));
+      parts.push(box("support-bipod","Folded bipod",length*.74,.34,.20,.20,.40,.69,"#242f34"));
+    }
+    if(style==="chainsaw") {
+      parts.push(box("saw-engine","Engine block",length*.16,.45,.18,length*.43,.78,.92,"#d96024"));
+      parts.push(box("saw-blade","Chain blade",length*.60,.77,.48,length*.39,.26,.32,"#c2ced0"));
+      parts.push(box("saw-teeth","Teeth",length*.65,.99,.45,length*.34,.07,.4,"#535a60"));
+    }
+    if(style==="pistol"||style==="smg")parts.push(box("slide","Raised slide",length*.28,1.12,.39,length*.45,.13,.47,"#a5afb0"));
+    designs["combat-weapon-"+key]={
+      id:"combat-weapon-"+key,name:"Combat weapon - "+name,machineType:"combatWeapon",
+      description:"Editable shared weapon used by player, AI weapon visuals and Mystery Box prize. The local +X side is the muzzle.",
+      base:{x:0,y:0,z:0,w:length,h,d},components:parts,
+      combatAnchors:{
+        hipMuzzle:{x:length-.04,y:.87,z:.65},adsMuzzle:{x:length-.04,y:.96,z:.65},
+        grip:{x:length*.37,y:.49,z:.58},support:{x:length*.67,y:.74,z:.58},
+      },
+    };
+  });
+  const zombieVariants=[
+    ["shambler","Shambler", "#768466","#38433a",6.25],
+    ["walker","Walker", "#86996e","#455347",6.5],
+    ["runner","Runner", "#8b9d76","#455a49",6.55],
+    ["sprinter","Sprinter", "#a2aa7a","#505b45",6.4],
+    ["giant","Giant", "#a3b581","#5c554b",10.8],
+  ];
+  zombieVariants.forEach(([key,name,skin,shirt,height])=>{
+    const width=key==="giant"?3.7:2.15,depth=key==="giant"?3.0:1.8;
+    designs["combat-zombie-"+key]={
+      id:"combat-zombie-"+key,name:"Zombie - "+name,machineType:"combatZombie",
+      description:"Editable zombie body and face. Head, left/right eyes, and articulated limbs can be repositioned in the Parts tab.",
+      base:{x:0,y:0,z:0,w:width,d:depth,h:height},
+      combatAnchors:{leftEye:{x:width*.39,y:height*.86,z:depth*.20},rightEye:{x:width*.6,y:height*.86,z:depth*.20}},
+      components:[
+        box("torso","Torso",width*.19,height*.40,depth*.18,width*.62,height*.36,depth*.64,shirt),
+        box("head","Head",width*.30,height*.775,depth*.29,width*.4,height*.17,depth*.42,skin),
+        box("eye-left","Left eye",width*.375,height*.866,depth*.21,width*.09,height*.048,depth*.08,"#f0e983"),
+        box("eye-right","Right eye",width*.553,height*.866,depth*.21,width*.09,height*.048,depth*.08,"#f0e983"),
+        box("pupil-left","Left pupil",width*.41,height*.879,depth*.16,width*.036,height*.033,depth*.07,"#9b1520"),
+        box("pupil-right","Right pupil",width*.588,height*.879,depth*.16,width*.036,height*.033,depth*.07,"#9b1520"),
+        box("left-arm","Left arm",width*.08,height*.43,depth*.35,width*.16,height*.30,depth*.26,skin),
+        box("right-arm","Right arm",width*.76,height*.43,depth*.35,width*.16,height*.30,depth*.26,skin),
+        box("left-leg","Left leg",width*.27,.02,depth*.3,width*.17,height*.4,depth*.37,"#313a34"),
+        box("right-leg","Right leg",width*.56,.02,depth*.3,width*.17,height*.4,depth*.37,"#313a34"),
+      ],
+    };
+  });
+
+    window.PLANT_MACHINE_DESIGN_STORAGE_KEY = "monroe-glass-machine-designs-v1";
   window.PLANT_MACHINE_DESIGNS = designs;
 })();

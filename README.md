@@ -1,3 +1,13 @@
+## Version 0.13.78
+
+**Mystery Box animation and manual collection.** The floor-placed Mystery Box is now 5.4 world units wide and visually styled as a three-reel slot machine. A 950-point purchase begins a 4.8-second decelerating weapon reel that always lands on the actual prize. The weapon then rises out of the top over 1.75 seconds, stays available for 11.5 seconds, and can be claimed with E or the TAKE button at no extra cost. You only receive the weapon if you explicitly collect it; when all three slots are full, your equipped slot is replaced. Unclaimed prizes slowly descend for 2.3 seconds, disappear, and allow another 950-point roll. The reel, inventory and points are local to each player in co-op. Pausing freezes the timer, and restarting or leaving resets it.
+
+**Endless Zombie visual cleanup.** During active Endless Zombie mode all original static person/team-member models are suppressed; only actually spawned zombies (including giant variants) and your active co-op teammates remain visible. Normal Zombie and Combat retain their original person actors.
+
+**Improved enemy navigation across all modes.** AI uses a cached collision grid derived from real physical envelopes, machine geometry, walls and pillars. When direct pursuit is blocked, capped A-star pathfinding finds waypoints around the obstacle; line-of-sight checks can shortcut safely around clear sections. Zombies continue tracking the current player position while Combat soldiers pursue last-known positions for longer after contact. Path planning is throttled to a small budget per frame so enemies do not all run expensive searches at once.
+
+Regression validation passed 191 code-level assertions (excluding the separately unavailable 1.39 MB published-workspace fixture). Simulated gameplay checks verified wall detours, the full Mystery Box roll/claim/despawn/reroll lifecycle and point deductions. Live two-player testing and production browser rendering have not yet been completed.
+
 ## Version 0.13.77
 
 **Player-controlled respawning.** In AI Combat and Normal Zombie modes, death runs the complete five-second fall, killer-camera and "Killed by" reveal. After the replay, the player chooses **Respawn** (full health and shield, without erasing kills or deaths) or **Exit mode**. Endless Zombie mode remains one-life survival.

@@ -749,6 +749,7 @@
       record.gaitCycle = 7.5;
       record.gaitStride = .55;record.gaitSwing=.4;record.gaitBob=.1;record.gaitLean=0;
       record.navProgressAt = 0;
+      record.navProgressDistance=Infinity;
       return record;
     }
 
@@ -1386,7 +1387,9 @@
     // collision only when it really has a physical panel at foot height.
     function navigationRadius(record) {
       const size=enemyDimensions(record);
-      return clamp(Math.max(size.w,size.d)*.42,.55,1.2);
+      // Allow extra elbow-room around cage corners and machine envelopes so
+      // waypoint shortcuts do not cut the actor too close to the geometry.
+      return clamp(Math.max(size.w,size.d)*.42+.42,.88,2.05);
     }
 
     function navigationWorld(now=performance.now()) {
@@ -1717,6 +1720,26 @@
       const moved = step > 0 ? tryMoveEnemy(enemy, moveX / length * step, moveZ / length * step) : false;
       if (moved) enemy.navBlockedFrames=0;
       else if (isPursuing && step>0) enemy.navBlockedFrames=Math.min(30,(enemy.navBlockedFrames||0)+1);
+      // Sliding against the side of a cage can technically count as movement,
+      // yet make no progress toward the player. Treat that as stuck too.
+      if(isPursuing) {
+        const current=enemyCenter(enemy);
+        const remaining=Math.hypot(current.x-playerTarget.x,current.z-playerTarget.z);
+        if(!enemy.navProgressAt||remaining<number(enemy.navProgressDistance,Infinity)-1.0){
+          enemy.navProgressAt=now;enemy.navProgressDistance=remaining;
+        } else if(now-enemy.navProgressAt>1050){
+          enemy.navExpires=0;
+          enemy.navBlockedFrames=16;
+          enemy.navDirectOpen=false;
+          enemy.navLineCheckedAt=0;
+          enemy.navProgressAt=now;
+          enemy.navProgressDistance=remaining;
+          enemy.strafeSign*=-1;
+        }
+      }else {
+        enemy.navProgressAt=0;
+        enemy.navProgressDistance=Infinity;
+      }
 
       // When engaging, facing the player is authoritative even while strafing or blocked.
       // When wandering, only rotate after a successful move. This prevents blocked actors

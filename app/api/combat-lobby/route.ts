@@ -11,7 +11,7 @@ const MAX_EVENTS = 120;
 
 type EnemySyncState = {
   id: string; x: number; z: number; vx?: number; vz?: number; rotationY: number; health: number; weaponKey: string;
-  movementBlend: number; walkPhase: number; synthetic?: boolean; giant?: boolean; defeatedAt?: number;
+  movementBlend: number; walkPhase: number; synthetic?: boolean; giant?: boolean; gaitClass?: string; defeatedAt?: number;
   machine?: { name?: string; w?: number; d?: number; h?: number; y?: number };
 };
 
@@ -129,7 +129,9 @@ function sanitizeEnemyState(value: unknown): EnemySyncState | null {
     health: Math.max(0, Math.min(12_000, finite(source.health, 100))),
     weaponKey: cleanText(source.weaponKey, 24) || "rifle",
     movementBlend: Math.max(0, Math.min(1, finite(source.movementBlend, .08))),
-    walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), giant:Boolean(source.giant), defeatedAt: Math.max(0, finite(source.defeatedAt)),
+    walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), giant:Boolean(source.giant),
+    gaitClass:["shambler","walker","runner","sprinter","giant"].includes(String(source.gaitClass))?String(source.gaitClass):"walker",
+    defeatedAt: Math.max(0, finite(source.defeatedAt)),
     machine: {
       name: cleanText(machineSource.name, 48), w: Math.max(.4, Math.min(20, finite(machineSource.w, 1.8))),
       d: Math.max(.4, Math.min(20, finite(machineSource.d, 1.8))), h: Math.max(1, Math.min(20, finite(machineSource.h, 6.5))),

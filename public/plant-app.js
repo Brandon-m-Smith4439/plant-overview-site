@@ -2512,6 +2512,36 @@
     const [x0,z0,x1,z1]=floorBounds();
     return [x0-180,z0-180,x1+180,z1+180];
   }
+  function combatPortalSpec() {
+    const [left,front,right,back]=floorBounds();
+    const thickness=state?.wallGeometry?.thickness||defaultWallGeometry.thickness;
+    const height=state?.wallGeometry?.height||defaultWallGeometry.height;
+    const centerX=(left+right)*.5;
+    const halfWidth=5.2;
+    return {left,front,right,back,centerX,halfWidth,thickness,height};
+  }
+  function combatPortalWallSections() {
+    const {left,front,right,back,centerX,halfWidth,thickness,height}=combatPortalSpec();
+    const portalLeft=centerX-halfWidth,portalRight=centerX+halfWidth;
+    return [
+      {id:"west",x:left,z:front,w:thickness,d:back-front,h:height},
+      {id:"east",x:right-thickness,z:front,w:thickness,d:back-front,h:height},
+      ...[["south",front],["north",back-thickness]].flatMap(([side,z])=>[
+        {id:side+"-left",x:left,z,w:portalLeft-left,d:thickness,h:height},
+        {id:side+"-right",x:portalRight,z,w:right-portalRight,d:thickness,h:height},
+        // Solid upper lintel makes it a doorway, not a missing full-height wall.
+        {id:side+"-lintel",x:portalLeft,y:9,z,w:halfWidth*2,d:thickness,h:Math.max(.2,height-9)},
+      ]),
+    ];
+  }
+  function combatPerimeterPassage(x,z,radius=1.2) {
+    const {left,front,right,back,centerX,halfWidth,thickness}=combatPortalSpec();
+    const band=Math.max(3.5,thickness+radius*2);
+    if(x<left+band||x>right-band)return false;
+    if(z<front+band||z>back-band)
+      return Math.abs(x-centerX) < halfWidth-radius-.25;
+    return true;
+  }
   function combatExteriorLandmarks() {
     const [left,front,right,back]=floorBounds();
     return [
@@ -2523,9 +2553,11 @@
   function combatClimbSurface(x,z) {
     if(!combatController?.isActive?.())return null;
     for(const site of combatExteriorLandmarks()){
-      if(Math.hypot(x-site.ladderX,z-site.ladderZ)<3.1)return {kind:"ladder",height:site.h,...site};
-      if(x>=site.x-.35&&x<=site.x+site.w+.35&&z>=site.z-.35&&z<=site.z+site.d+.35)
-        return {kind:"roof",height:site.h,...site};
+      const roofHeight=site.h+.6; // upper face of visible roof slab
+      if(x>=site.x&&x<=site.x+site.w&&z>=site.z&&z<=site.z+site.d)
+        return {...site,kind:"roof",height:roofHeight};
+      if(Math.hypot(x-site.ladderX,z-site.ladderZ)<3.1)
+        return {...site,kind:"ladder",height:roofHeight};
     }
     return null;
   }
@@ -2535,7 +2567,7 @@
     if(x<b[0]+p||x>b[2]-p||z<b[1]+p||z>b[3]-p)return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
-      const onRoof=Number(state.walkVerticalOffset)>site.h-1.2;
+      const onRoof=Number(state.walkVerticalOffset)>site.h-1.25;
       return onRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
     });
   }
@@ -2545,7 +2577,8 @@
     const margin = Math.max(0.45, Number(radius) || 1.2);
     const beyondFloor = worldX < bounds[0]+margin || worldX > bounds[2]-margin
       || worldZ < bounds[1]+margin || worldZ > bounds[3]-margin;
-    if (beyondFloor && combatController?.isActive?.())return exteriorWalkAllowed(worldX,worldZ,margin);
+    if (beyondFloor && combatController?.isActive?.())
+      return combatPerimeterPassage(worldX,worldZ,margin) && exteriorWalkAllowed(worldX,worldZ,margin);
     if (beyondFloor)return false;
     return !walkHitsStructuralColumn(worldX, worldZ, margin);
   }
@@ -2555,11 +2588,9 @@
     const wallMargin = Math.max(0.45, Number(radius) || 1.2);
     const beyondFloor=worldX<bounds[0]+wallMargin||worldX>bounds[2]-wallMargin
       || worldZ<bounds[1]+wallMargin||worldZ>bounds[3]-wallMargin;
-    if(beyondFloor && combatController?.isActive?.())return exteriorWalkAllowed(worldX,worldZ,wallMargin);
+    if(beyondFloor && combatController?.isActive?.())
+      return combatPerimeterPassage(worldX,worldZ,wallMargin) && exteriorWalkAllowed(worldX,worldZ,wallMargin);
     if(beyondFloor)return false;
-    // Clear the north/south exit corridors in combat without changing editor walls.
-    const gateway = combatController?.isActive?.() && Math.abs(worldX-(bounds[0]+bounds[2])*.5)<10
-      && (Math.abs(worldZ-bounds[1])<7 || Math.abs(worldZ-bounds[3])<7);
     // Pillars remain solid even if the broad-phase spatial index is stale.
     if (walkHitsStructuralColumn(worldX, worldZ, wallMargin)) return false;
 
@@ -2581,7 +2612,6 @@
         continue;
       }
       if (entry.kind === "wall") {
-        if (gateway) continue;
         if (circleIntersectsMachine(worldX, worldZ, wallMargin, entry.wall)) return false;
         continue;
       }
@@ -7411,7 +7441,9 @@
   }
 
   function displayedWallSections() {
-    const sections = wallSections();
+    // In combat modes, both perimeter walls have a real, aligned narrow exit.
+    // The editor and normal construction timeline retain the original walls.
+    const sections = combatController?.isActive?.() ? combatPortalWallSections() : wallSections();
     const roofProfile = structuralHeightProfile();
     if (!state.wallGeometry.extendToRoof) return sections;
     const heightAt = (x) => x < roofProfile.splitX ? roofProfile.leftHeight : roofProfile.rightHeight;
@@ -9033,7 +9065,9 @@
     const painted = paintProgress(state.paint.wallStageId, 3);
     const wall = blendHexColors(state.paint.wallBefore, state.paint.wallAfter, painted);
     displayedWallSections().forEach((section) => {
-      if (state.walls[section.id] !== false) box({ ...section, color: wall });
+      const inheritedId=String(section.id).split("-")[0];
+      if (state.walls[section.id] !== false && state.walls[inheritedId] !== false)
+        box({ ...section, color: wall });
     });
   }
 
@@ -10624,19 +10658,26 @@
       const staticIdentityParts = designParts.filter((part) => !/(?:left|right)\s+(?:arm|leg)/i.test(String(part?.name || "")));
       if (staticIdentityParts.length) {
         const jawPulse = zombie ? Math.abs(Math.sin(time*.007 + phase*.38))*.11 : 0;
-        const posedIdentityParts = zombie ? staticIdentityParts.map((part) => {
+        const actualHead = designParts.find((part)=>/^head$/i.test(String(part?.name||"")) && Number(part.h)>.08);
+        const posedIdentityParts = staticIdentityParts.map((part) => {
           const name = String(part?.name || "");
           const skinPart = /^(?:head|face|neck|nose|ear|cheek|skin|hands?)\b/i.test(name);
           const eyePart = /(?:eye|sclera|iris|pupil)/i.test(name);
           const jawPart = /(?:mouth|jaw|lips|teeth|cigarette|cigar)/i.test(name);
+          // Preserve the employee's eyes and pupils but re-anchor BOTH to
+          // the top/front of the real head rather than the neck/mouth.
+          const anchoredEye = actualHead && eyePart;
+          const eyeY = anchoredEye ? Number(actualHead.y)+Number(actualHead.h)*.66 : Number(part.y)||0;
+          const eyeZ = anchoredEye ? Number(actualHead.z)-Math.max(.04,Number(part.d||.1)*.2) : Number(part.z)||0;
           return {
             ...part,
-            color: skinPart ? (combat.giant ? "#8ba875" : "#79a36b")
-              : eyePart ? (/pupil|iris/i.test(name) ? "#b12229" : "#e7e99b")
+            color: zombie && skinPart ? (combat.giant ? "#8ba875" : "#79a36b")
+              : zombie && eyePart ? (/pupil|iris/i.test(name) ? "#b12229" : "#e7e99b")
               : part.color,
-            y: Number(part.y || 0) - (jawPart ? jawPulse : 0),
+            y: anchoredEye ? eyeY : Number(part.y || 0) - (jawPart ? jawPulse : 0),
+            z: anchoredEye ? eyeZ : part.z,
           };
-        }) : staticIdentityParts;
+        });
         drawCustomDesign(actor, alpha, grow, time, 3, posedIdentityParts, machineCurveSegments(actor));
       }
     } else {
@@ -10746,12 +10787,23 @@
       }
       leftKnee[0]-=sway*.06;rightKnee[0]+=sway*.06;
     }
-    const thighWidth = zombie ? 7.0 : 4.0;
-    const calfWidth = zombie ? 6.3 : 3.5;
-    localLine3d(actor,leftHip,leftKnee,pants,thighWidth,alpha);
-    localLine3d(actor,leftKnee,leftFoot,pants,calfWidth,alpha);
-    localLine3d(actor,rightHip,rightKnee,pants,thighWidth,alpha);
-    localLine3d(actor,rightKnee,rightFoot,pants,calfWidth,alpha);
+    // 3D articulated calf/thigh volumes, not screen-space wide strokes.
+    const drawLegSegment=(from,to,thickness)=>{
+      const dy=to[1]-from[1],dz=to[2]-from[2];
+      const segmentLength=Math.hypot(dy,dz);
+      const middleX=(from[0]+to[0])*.5;
+      box({
+        ...localBox3d(actor,middleX-thickness*.5,(from[2]+to[2])*.5-thickness*.5,
+          thickness,thickness,segmentLength,pants,(from[1]+to[1])*.5-segmentLength*.5),
+        rotationX:Math.atan2(dz,dy)*180/Math.PI,
+      },alpha,1);
+    };
+    const thighSize=zombie?Math.max(.38,width*.26):Math.max(.25,width*.18);
+    const calfSize=zombie?Math.max(.36,width*.23):Math.max(.23,width*.16);
+    drawLegSegment(leftHip,leftKnee,thighSize);
+    drawLegSegment(leftKnee,leftFoot,calfSize);
+    drawLegSegment(rightHip,rightKnee,thighSize);
+    drawLegSegment(rightKnee,rightFoot,calfSize);
     box(localBox3d(actor,leftFoot[0]-.18,leftFoot[2]-.34,.42,.7,.2,boot,leftFoot[1]-.1),alpha,1);
     box(localBox3d(actor,rightFoot[0]-.18,rightFoot[2]-.34,.42,.7,.2,boot,rightFoot[1]-.1),alpha,1);
 
@@ -11547,9 +11599,9 @@
       x: .34 + bobX*(1-aim*.78) - aim*.14 + deathDrop*.18,
       y: -.25 - bobY*(1-aim*.8) - aim*.35 - reloadArc*.12 + recoil*.045 - deathDrop*.72,
       z: 1.15 - aim*.20 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
-      rotationX: -4 - recoil*6 + reloadArc*18 + deathDrop*28,
+      rotationX: -4 - recoil*6 + reloadArc*(combat.weapon==="rocket"?3:18) + deathDrop*28,
       rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
-      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
+      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*(combat.weapon==="rocket"?6:30) + deathDrop*24,
     };
     const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381", steel="#77858b", accent="#202a2f";
     let parts = combat.weapon === "handgun" ? [
@@ -11641,13 +11693,14 @@
       const base=sharedWeaponModel.base||{};
       const bw=Math.max(.3,Number(base.w)||4),bh=Math.max(.3,Number(base.h)||1.65),bd=Math.max(.3,Number(base.d)||1.25);
       const factor=Math.min(1,3.75/bw);
+      const rocketReloadScale=combat.weapon==="rocket" ? 1-reloadArc*.24 : 1;
       parts=sharedWeaponModel.components.filter(part=>part.visible!==false && part.type==="box").map(part=>({
-        x:((Number(part.z)||0)+(Number(part.d)||.1)*.5-bd*.5)*.63,
-        y:((Number(part.y)||0)+(Number(part.h)||.1)*.5-bh*.5)*.72,
-        z:(bw*.5-(Number(part.x)||0)-(Number(part.w)||.1)*.5)*factor,
-        w:Math.max(.02,(Number(part.d)||.1)*.63),
-        h:Math.max(.02,(Number(part.h)||.1)*.72),
-        d:Math.max(.02,(Number(part.w)||.1)*factor),
+        x:((Number(part.z)||0)+(Number(part.d)||.1)*.5-bd*.5)*.63*rocketReloadScale,
+        y:((Number(part.y)||0)+(Number(part.h)||.1)*.5-bh*.5)*.72*rocketReloadScale,
+        z:(bw*.5-(Number(part.x)||0)-(Number(part.w)||.1)*.5)*factor*rocketReloadScale,
+        w:Math.max(.02,(Number(part.d)||.1)*.63*rocketReloadScale),
+        h:Math.max(.02,(Number(part.h)||.1)*.72*rocketReloadScale),
+        d:Math.max(.02,(Number(part.w)||.1)*factor*rocketReloadScale),
         color:part.color||"#58686c",
         rotationX:Number(part.rotationX)||0,rotationY:Number(part.rotationY)||0,rotationZ:Number(part.rotationZ)||0,
       }));

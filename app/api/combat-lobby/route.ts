@@ -12,13 +12,14 @@ const MAX_EVENTS = 120;
 type EnemySyncState = {
   id: string; x: number; z: number; vx?: number; vz?: number; rotationY: number; health: number; weaponKey: string;
   movementBlend: number; walkPhase: number; synthetic?: boolean; giant?: boolean; gaitClass?: string; defeatedAt?: number;
-  machine?: { name?: string; w?: number; d?: number; h?: number; y?: number };
+  elevation?: number; climbing?: boolean;
+  machine?: { name?: string; w?: number; d?: number; h?: number; y?: number; designId?: string; sourceId?: string };
 };
 
 type PlayerState = {
   x?: number; y?: number; z?: number; yaw?: number; pitch?: number; vx?: number; vz?: number;
   health?: number; shield?: number; moving?: boolean; weapon?: string;
-  alive?: boolean; kills?: number; headshots?: number; deaths?: number; points?: number; worldSeq?: number;
+  alive?: boolean; downedUntil?: number; kills?: number; headshots?: number; deaths?: number; points?: number; worldSeq?: number;
   wave?: number; waveTotal?: number; waveSpawned?: number; waveDefeated?: number;
   boxX?: number; boxZ?: number; healthX?: number | null; healthZ?: number | null;
   enemies?: EnemySyncState[]; glass?: string[];
@@ -130,12 +131,14 @@ function sanitizeEnemyState(value: unknown): EnemySyncState | null {
     weaponKey: cleanText(source.weaponKey, 24) || "rifle",
     movementBlend: Math.max(0, Math.min(1, finite(source.movementBlend, .08))),
     walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), giant:Boolean(source.giant),
+    elevation:Math.max(0,Math.min(80,finite(source.elevation))),climbing:Boolean(source.climbing),
     gaitClass:["shambler","walker","runner","sprinter","giant"].includes(String(source.gaitClass))?String(source.gaitClass):"walker",
     defeatedAt: Math.max(0, finite(source.defeatedAt)),
     machine: {
       name: cleanText(machineSource.name, 48), w: Math.max(.4, Math.min(20, finite(machineSource.w, 1.8))),
       d: Math.max(.4, Math.min(20, finite(machineSource.d, 1.8))), h: Math.max(1, Math.min(20, finite(machineSource.h, 6.5))),
       y: finite(machineSource.y),
+      designId:cleanId(machineSource.designId,96),sourceId:cleanId(machineSource.sourceId,96),
     },
   };
 }
@@ -152,6 +155,8 @@ function sanitizeState(value: unknown): PlayerState {
     moving: Boolean(source.moving),
     weapon: cleanText(source.weapon, 24),
     alive: source.alive !== false,
+    downedUntil:source.alive===false
+      ? Math.max(0,Math.min(Date.now()+30_000,finite(source.downedUntil))) : 0,
     kills: Math.max(0, Math.floor(finite(source.kills))),
     headshots: Math.max(0, Math.floor(finite(source.headshots))),
     deaths: Math.max(0, Math.floor(finite(source.deaths))),
@@ -393,6 +398,17 @@ export async function POST(request: Request) {
         if (["coop-victory", "round-restart"].includes(type) && lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host may end or restart a co-op round." };
         if (type === "npc-hit" && lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host may issue zombie damage events." };
         if (type === "npc-hit" && !lobby.players[cleanId(body.targetId, 96)]) return { ok: false, status: 400, error: "Damage target must be a player in the lobby." };
+        if(type==="revive-player"){
+          const recipient=lobby.players[cleanId(body.targetId,96)];
+          if(lobby.config.matchType!=="coop" || lobby.status!=="started"
+            || !recipient || recipient.id===playerId || existing.state?.alive!==true
+            || recipient.state?.alive!==false
+            || finite(recipient.state?.downedUntil)<now)
+            return {ok:false,status:400,error:"No nearby downed teammate available for revival."};
+          if(Math.hypot(finite(existing.state?.x)-finite(recipient.state?.x),
+            finite(existing.state?.z)-finite(recipient.state?.z))>10.5)
+            return {ok:false,status:400,error:"Move closer to the downed teammate."};
+        }
         const event: LobbyEvent = {
           id: `${now.toString(36)}-${randomBytes(4).toString("hex")}`,
           type,

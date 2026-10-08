@@ -321,14 +321,29 @@
         '</div>',
       '</div>',
       '<div class="combat-pause-overlay" data-combat-pause hidden>',
-        '<div>',
-          '<p>COMBAT PAUSED</p>',
-          '<h2>Combat options</h2>',
-          '<span>Resume the fight or leave Combat Mode. The normal walkthrough menu stays separate.</span>',
-          '<div class="combat-pause-actions">',
-            '<button type="button" data-combat-pause-action="resume" class="primary">Resume combat</button>',
-            '<button type="button" data-combat-pause-action="exit">Exit combat</button>',
+        '<div class="combat-pause-card">',
+          '<header class="combat-pause-header">',
+            '<div class="combat-pause-emblem" aria-hidden="true"><span>Ⅱ</span></div>',
+            '<div class="combat-pause-heading"><p data-combat-pause-mode>TACTICAL INTERMISSION</p><h2>Game paused<span class="combat-pause-dot">.</span></h2>',
+              '<span data-combat-pause-subtitle>Take stock of your situation before rejoining the fight.</span></div>',
+            '<span class="combat-pause-esc">ESC</span>',
+          '</header>',
+          '<div class="combat-pause-divider"></div>',
+          '<div class="combat-pause-stats">',
+            '<div><small>HEALTH</small><strong data-combat-pause-health>100</strong><em>HP REMAINING</em></div>',
+            '<div><small>HOSTILES</small><strong data-combat-pause-hostiles>0</strong><em>ACTIVE THREATS</em></div>',
+            '<div><small>ELAPSED</small><strong data-combat-pause-elapsed>00:00</strong><em>MATCH TIME</em></div>',
           '</div>',
+          '<div class="combat-pause-controls"><h3>FIELD CONTROLS</h3>',
+            '<div><span><kbd>W A S D</kbd> Move</span><span><kbd>SHIFT</kbd> Sprint</span>',
+              '<span><kbd>F</kbd> Melee</span><span><kbd>HOLD E</kbd> Revive</span>',
+              '<span><kbd>R</kbd> Reload</span><span><kbd>SPACE</kbd> Climb</span></div>',
+          '</div>',
+          '<div class="combat-pause-actions">',
+            '<button type="button" data-combat-pause-action="resume" class="primary"><span>▶</span> RESUME GAME <small>RETURN TO ACTION</small></button>',
+            '<button type="button" data-combat-pause-action="exit"><span>↩</span> LEAVE MATCH <small>EXIT TO PLANT</small></button>',
+          '</div>',
+          '<footer class="combat-pause-footer"><i></i> THE PLANT IS STILL WAITING FOR YOU <i></i></footer>',
         '</div>',
       '</div>',
       '<div class="combat-station-prompt" data-combat-station-prompt hidden><span data-combat-station-label></span><button type="button" data-combat-station-buy>BUY [E]</button></div>',
@@ -2209,7 +2224,20 @@
         mouseHeld = false;
         setAiming(false);
         frame.classList.add("combat-paused");
-        if (pauseOverlay) pauseOverlay.hidden = false;
+        cancelReviveHold();
+        if (pauseOverlay) {
+          pauseOverlay.hidden=false;
+          const mode=pauseOverlay.querySelector("[data-combat-pause-mode]");
+          const subtitle=pauseOverlay.querySelector("[data-combat-pause-subtitle]");
+          const health=pauseOverlay.querySelector("[data-combat-pause-health]");
+          const hostiles=pauseOverlay.querySelector("[data-combat-pause-hostiles]");
+          const elapsed=pauseOverlay.querySelector("[data-combat-pause-elapsed]");
+          if(mode)mode.textContent=gameMode==="zombie"?"ZOMBIE SURVIVAL • "+String(zombieRunType).toUpperCase():"PLANT COMBAT • "+String(matchType).toUpperCase();
+          if(subtitle)subtitle.textContent=playerZombie?"INFECTED • HUNT THE LIVING":gameMode==="zombie"?"Survive together. Hold E to rescue a downed teammate.":"Review your loadout, objectives, and surroundings.";
+          if(health)health.textContent=Math.round(playerHealth)+"";
+          if(hostiles)hostiles.textContent=String(aliveEnemies().length);
+          if(elapsed)elapsed.textContent=formatTime(Math.max(0,Math.floor((pausedAt-(roundStartedAt||pausedAt))/1000)));
+        }
         options.hideWalkMenu?.();
         options.setMovementLocked?.(true);
         options.releasePointer?.();
@@ -2712,7 +2740,7 @@
       const origin={x:number(player.x),y:number(player.y,5.5),z:number(player.z)};
       const direction=directionFromCamera(player);
       const target=findTarget(origin,direction,6.5);
-      if(target && target.enemy.health>0 && target.distance<=6.5){
+      if(!playerZombie && target && target.enemy.health>0 && target.distance<=6.5){
         const impact=pointAlongRay(origin,direction,target.distance);
         const enemy=target.enemy;
         const previousHealth=enemy.health;

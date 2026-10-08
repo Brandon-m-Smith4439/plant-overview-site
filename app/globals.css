@@ -9287,3 +9287,82 @@ body.viewer-fullscreen-fallback-active {
   .combat-pause-overlay .combat-pause-actions{padding:0 20px 20px;grid-template-columns:1fr;}
   .combat-pause-overlay .combat-pause-actions button{min-height:54px;}
 }
+
+/* v0.13.83 — Combat telemetry: high-contrast vitals and exposed-state feedback. */
+.combat-health-panel {
+  width:min(20rem,43vw);
+  padding:1.05rem 1.15rem .9rem;
+  border:1px solid rgba(127,205,201,.43);
+  border-radius:1rem;
+  background:linear-gradient(150deg,rgba(13,32,39,.94),rgba(4,14,22,.93));
+  box-shadow:0 .6rem 2rem rgba(0,0,0,.4),inset 0 1px rgba(255,255,255,.07);
+}
+.combat-health-heading,.combat-shield-heading {
+  font-weight:900;letter-spacing:.15em;font-size:.71rem;
+}
+.combat-health-heading {color:#bce9d6;}
+.combat-health-heading strong {font-size:1.63rem;color:#ecfff0;font-variant-numeric:tabular-nums;
+  text-shadow:0 0 18px rgba(123,255,170,.18);}
+.combat-shield-heading {margin-top:.95rem;color:#9ddaf3;}
+.combat-shield-heading strong {font-size:1.35rem;color:#e7f9ff;font-variant-numeric:tabular-nums;}
+.combat-health-track,.combat-shield-track {
+  position:relative;height:.78rem;margin:.40rem 0 .64rem;
+  background:rgba(6,12,16,.93);border:1px solid rgba(183,224,226,.24);
+  box-shadow:inset 0 .17rem .45rem rgba(0,0,0,.6);overflow:hidden;
+}
+.combat-health-track>span {background:linear-gradient(90deg,#2fbc6e,#89f4ac);
+  box-shadow:0 0 13px rgba(61,222,124,.64);transition:width .16s ease;}
+.combat-shield-track>span {background:linear-gradient(90deg,#2793e6,#85dcff);
+  box-shadow:0 0 16px rgba(66,183,255,.75);transition:width .16s ease;}
+.combat-vitals-status {font-size:.62rem;letter-spacing:.14em;font-weight:900;color:#91cbce;
+  margin:.35rem 0 .45rem;}
+.combat-vitals-alert {font-size:.67rem;letter-spacing:.065em;font-weight:950;line-height:1.4;
+  color:#fff3e6;background:rgba(176,27,45,.38);border:1px solid rgba(255,76,91,.76);
+  box-shadow:0 0 20px rgba(248,34,70,.19);border-radius:.48rem;padding:.42rem .56rem;
+  animation:combat-shield-warning-pulse 1.45s ease-in-out infinite;}
+.combat-vitals-alert[hidden]{display:none !important;}
+@keyframes combat-shield-warning-pulse {
+  50% {border-color:rgba(255,140,144,.97);background:rgba(198,29,50,.58);}
+}
+.combat-shield-down .combat-shield-heading,.combat-shield-down .combat-shield-heading strong {
+  color:#ff8b93;text-shadow:0 0 11px rgba(255,66,76,.54);}
+.combat-shield-down .combat-shield-track {border-color:rgba(255,62,88,.8);
+  background:linear-gradient(90deg,rgba(108,19,32,.9),rgba(49,9,18,.9));}
+.combat-shield-down .combat-health-panel {border-color:rgba(245,64,89,.56);}
+.combat-shield-break-flash .combat-health-panel {animation:combat-shield-burst .52s ease-out both;}
+@keyframes combat-shield-burst {
+  0%,45% {box-shadow:0 0 38px rgba(250,49,86,.65),inset 0 0 22px rgba(255,78,112,.43);}
+  100%{box-shadow:0 .6rem 2rem rgba(0,0,0,.4);}
+}
+.combat-health-hit .combat-health-panel {animation:combat-health-impact .36s ease-out;}
+@keyframes combat-health-impact {
+  0%,35%{transform:translateX(-2px);border-color:#ff5866;background:rgba(111,18,29,.94);}
+  100%{transform:none;}
+}
+.combat-health-critical .combat-health-track>span {
+  background:linear-gradient(90deg,#c93947,#ff6f75);box-shadow:0 0 18px rgba(255,58,76,.68);
+  animation:combat-critical-pulse 1.05s ease-in-out infinite;
+}
+@keyframes combat-critical-pulse {50%{filter:brightness(1.55);}}
+.combat-health-critical .combat-health-heading strong {color:#ff9c9e;}
+.combat-is-sprinting .combat-weapon-panel {opacity:.76;transform:translateY(.25rem);}
+.combat-is-reviving .combat-weapon-panel {opacity:.38;}
+.combat-pause-audio {
+  display:block;width:calc(100% - 68px);margin:0 34px 19px;padding:9px 12px;
+  color:#a8dfd3;border:1px solid rgba(125,204,194,.33);
+  background:rgba(36,79,80,.20);border-radius:8px;
+  font:850 10px/1.3 inherit;letter-spacing:.13em;text-align:center;
+  cursor:pointer;pointer-events:auto;transition:filter .15s,background .15s;
+}
+.combat-pause-audio:hover {background:rgba(56,130,119,.35);filter:brightness(1.14);}
+.combat-pause-audio[aria-pressed="true"] {color:#c7cacc;border-color:#657073;background:rgba(100,107,109,.18);}
+@media(max-width:760px){
+  .combat-health-panel {width:min(15.5rem,55vw);padding:.75rem .8rem;}
+  .combat-health-heading strong {font-size:1.24rem;}
+  .combat-shield-heading strong {font-size:1.1rem;}
+  .combat-health-track,.combat-shield-track {height:.62rem;}
+  .combat-pause-audio {width:calc(100% - 40px);margin:0 20px 14px;}
+}
+@media(prefers-reduced-motion:reduce){
+  .combat-vitals-alert,.combat-health-critical .combat-health-track>span{animation:none;}
+}

@@ -3681,6 +3681,23 @@
       }
     }
 
+    function synchronizeEnemyDeathPose(enemy,snapshot,receivedAt){
+      if(!enemy || enemy.health>0)return false;
+      // Snapshot carries AGE rather than the remote machine's monotonic clock.
+      const age=clamp(number(snapshot.deathAgeMs),0,6000);
+      const localStart=receivedAt-age;
+      enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt>0
+        ? Math.min(enemy.deathAnimationStartedAt,localStart) : localStart;
+      enemy.defeatedAt=enemy.deathAnimationStartedAt;
+      enemy.deathDirection=number(snapshot.deathDirection,enemy.deathDirection||1);
+      enemy.deathPushX=number(snapshot.deathPushX);
+      enemy.deathPushZ=number(snapshot.deathPushZ);
+      enemy.movementBlend=0;
+      enemy.firingUntil=0;
+      enemy.rollUntil=0;
+      return true;
+    }
+
     function applyHostEnemySyncState(lobby = multiplayer?.getLobby?.()) {
       if (!coopFollower() || !lobby) return false;
       const host=(lobby.players||[]).find((player) => player.id===lobby.hostId);
@@ -3751,23 +3768,7 @@
         const gait=ZOMBIE_GAITS[enemy.gaitClass];
         enemy.gaitCycle=gait.cycle;enemy.gaitStride=gait.stride;enemy.gaitSwing=gait.swing;
         enemy.gaitBob=gait.bob;enemy.gaitLean=gait.lean;
-        if (enemy.health<=0) {
-          // Incoming deathAgeMs is relative and safe across browser clocks.
-          // Preserve earliest observed start so later packets cannot rewind
-          // the animation; new clients join at the correct point in the fall.
-          const age=clamp(number(snapshot.deathAgeMs),0,6000);
-          const localStart=receivedAt-age;
-          enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt>0
-            ? Math.min(enemy.deathAnimationStartedAt,localStart)
-            : localStart;
-          enemy.defeatedAt=enemy.deathAnimationStartedAt;
-          enemy.deathDirection=number(snapshot.deathDirection,enemy.deathDirection||1);
-          enemy.deathPushX=number(snapshot.deathPushX);
-          enemy.deathPushZ=number(snapshot.deathPushZ);
-          enemy.movementBlend=0;
-          enemy.firingUntil=0;
-          enemy.rollUntil=0;
-        }
+        synchronizeEnemyDeathPose(enemy,snapshot,receivedAt);
       }
       [...enemies.entries()].forEach(([id,enemy]) => { if (enemy.synthetic && !seen.has(id)) enemies.delete(id); });
       const sharedGlass=Array.isArray(host?.state?.glass) ? host.state.glass : [];

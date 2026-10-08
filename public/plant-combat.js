@@ -499,6 +499,8 @@
     let lastAppliedHostWorldSeq = -1;
     const hostEnemySyncSamples = new Map();
     const roundStatOverrides = new Map();
+    // Prevent network reconciliation from awarding the same zombie twice.
+    const creditedKillIds = new Set();
 
     function readZombieSettings() {
       try {
@@ -2044,12 +2046,15 @@
       const defeated = wasAlive && target.enemy.health <= 0;
       if (defeated) {
         markEnemyDefeated(target.enemy, now, direction);
-        if (headshot) headshotKills += 1;
-        else regularKills += 1;
-        if (gameMode==="zombie") {
-          const earned=(headshot?150:100)*(target.enemy.giant?5:1)*(waveSpecial?2:1);
-          playerPoints+=earned;
-          setTransientStatus(`+${earned} POINTS · ${headshot?"HEADSHOT":"KILL"}`,900);
+        if (!creditedKillIds.has(target.enemy.id)) {
+          creditedKillIds.add(target.enemy.id);
+          if (headshot) headshotKills += 1;
+          else regularKills += 1;
+          if (gameMode==="zombie") {
+            const earned=(headshot?150:100)*(target.enemy.giant?5:1)*(waveSpecial?2:1);
+            playerPoints+=earned;
+            setTransientStatus(`+${earned} POINTS · ${headshot?"HEADSHOT":"KILL"}`,900);
+          }
         }
       } else if (target.enemy.health > 0) {
         triggerCombatRoll(target.enemy, now, headshot ? .18 : .46);
@@ -2405,6 +2410,7 @@
       respawnEndsAt = 0;
       respawnDisplay = 0;
       roundStatOverrides.clear();
+      creditedKillIds.clear();
       reloading = false;
       reloadStartedAt = 0;
       reloadEndsAt = 0;
@@ -2933,6 +2939,7 @@
     }
 
     function resetCombatSessionUi() {
+      creditedKillIds.clear();
       carriedWeapons=[];
       playerPoints=0;
       zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;

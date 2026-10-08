@@ -126,7 +126,7 @@ function sanitizeEnemyState(value: unknown): EnemySyncState | null {
   const machineSource = source.machine && typeof source.machine === "object" ? source.machine as Record<string, unknown> : {};
   return {
     id, x: finite(source.x), z: finite(source.z), vx: finite(source.vx), vz: finite(source.vz), rotationY: finite(source.rotationY),
-    health: Math.max(0, Math.min(500, finite(source.health, 100))),
+    health: Math.max(0, Math.min(12_000, finite(source.health, 100))),
     weaponKey: cleanText(source.weaponKey, 24) || "rifle",
     movementBlend: Math.max(0, Math.min(1, finite(source.movementBlend, .08))),
     walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), giant:Boolean(source.giant), defeatedAt: Math.max(0, finite(source.defeatedAt)),

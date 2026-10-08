@@ -1,3 +1,15 @@
+## 0.13.77 - 2026-10-08
+
+- Replaced timed automatic respawning in Combat and Normal Zombie with the full five-second death/attacker cinematic followed by explicit Respawn and Exit decisions; Endless remains no-respawn.
+- Added a difficulty-scaled wave scheduler for Endless Zombie, with wave target/progress, between-wave breaks, increasingly tough and numerous enemies, Giant zombies on special and later waves, and a two-Giant special round every five waves.
+- Added survival points (100 for body kills, 150 for headshot kills, 5x Giants and 2x special waves), a live multiplayer survivor points sidebar, and replicated wave/points data.
+- Added a walkably placed permanent 950-point Mystery Box, eight new player weapons with existing specials in the random pool, and an explicit three-slot inventory with 1/2/3 keys.
+- Added an 800-point full-health station on each fifth wave, separately placed from the Mystery Box with one purchase per player per special wave. E and the nearby interaction button purchase items and immediately deduct points.
+- Improved hostile pursuit of the latest player location and host-authoritative co-op AI target selection; synchronized giant health/size and restricted host AI damage events.
+- Fixed eye placement on custom/generic zombie and combat-person models, avoiding the previous lower-face/neck placement.
+- Added a generic Zombie fallback for plants with no spare person models; made full-session exits reset wave, point and inventory UI state.
+- Updated version tokens and extended regression assertions, plus completed simulated runtime checks of wave one, respawn choice, Mystery Box and full-health purchase.
+
 ## 0.13.76 - 2026-10-08
 
 - Rechecked all v0.13.75 requirements: synchronized co-op victory, team leaderboard for kills/headshots/deaths, timed respawns in AI Combat and Normal Zombies (not Endless), destructible rack/A-frame/shipping/animated glass, and 3x explosions.

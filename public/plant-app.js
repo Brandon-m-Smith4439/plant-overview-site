@@ -2457,7 +2457,7 @@
       entries.push({ kind: "column", column, x: column.x - 1.18, z: column.z - 1.18, w: 2.36, d: 2.36 });
     });
     displayedWallSections().forEach((wall) => {
-      if (state.walls[wall.id] === false || state.walls[String(wall.id).split("-")[0]] === false) return;
+      if (state.walls[wall.id] === false || (!combatController?.isActive?.() && state.walls[String(wall.id).split("-")[0]] === false)) return;
       // A raised lintel is visual/shot occlusion only; feet walk under it.
       if (String(wall.id).endsWith("-lintel")) return;
       entries.push({ kind: "wall", wall, x: wall.x, z: wall.z, w: wall.w, d: wall.d });
@@ -2518,34 +2518,39 @@
     const [left,front,right,back]=floorBounds();
     const thickness=state?.wallGeometry?.thickness||defaultWallGeometry.thickness;
     const height=state?.wallGeometry?.height||defaultWallGeometry.height;
-    const centerX=(left+right)*.5;
-    const halfWidth=5.2;
-    return {left,front,right,back,centerX,halfWidth,thickness,height};
+    const centerX=(left+right)*.5,centerZ=(front+back)*.5;
+    const halfWidth=6.2;
+    return {left,front,right,back,centerX,centerZ,halfWidth,thickness,height};
   }
   function combatPortalWallSections() {
-    const {left,front,right,back,centerX,halfWidth,thickness,height}=combatPortalSpec();
-    const portalLeft=centerX-halfWidth,portalRight=centerX+halfWidth;
+    // Only the south and east walls exist in gameplay; both have narrow doors.
+    const {left,front,right,back,centerX,centerZ,halfWidth,thickness,height}=combatPortalSpec();
     return [
-      {id:"west",x:left,z:front,w:thickness,d:back-front,h:height},
-      {id:"east",x:right-thickness,z:front,w:thickness,d:back-front,h:height},
-      ...[["south",front],["north",back-thickness]].flatMap(([side,z])=>[
-        {id:side+"-left",x:left,z,w:portalLeft-left,d:thickness,h:height},
-        {id:side+"-right",x:portalRight,z,w:right-portalRight,d:thickness,h:height},
-        // Solid upper lintel makes it a doorway, not a missing full-height wall.
-        {id:side+"-lintel",x:portalLeft,y:9,z,w:halfWidth*2,d:thickness,h:Math.max(.2,height-9)},
-      ]),
+      {id:"south-left",x:left,z:front,w:centerX-halfWidth-left,d:thickness,h:height},
+      {id:"south-right",x:centerX+halfWidth,z:front,w:right-centerX-halfWidth,d:thickness,h:height},
+      {id:"south-lintel",x:centerX-halfWidth,y:9,z:front,w:2*halfWidth,d:thickness,h:Math.max(.2,height-9)},
+      {id:"east-south",x:right-thickness,z:front,w:thickness,d:centerZ-halfWidth-front,h:height},
+      {id:"east-north",x:right-thickness,z:centerZ+halfWidth,w:thickness,d:back-centerZ-halfWidth,h:height},
+      {id:"east-lintel",x:right-thickness,y:9,z:centerZ-halfWidth,w:thickness,d:2*halfWidth,h:Math.max(.2,height-9)},
+    ];
+  }
+  function combatPortalWaypoints() {
+    const {left,front,right,back,centerX,centerZ,thickness}=combatPortalSpec();
+    return [
+      {id:"south",side:"south",x:centerX,z:front+thickness*.5},
+      {id:"east",side:"east",x:right-thickness*.5,z:centerZ},
+      {id:"west",side:"west",x:left,z:centerZ,open:true},
+      {id:"north",side:"north",x:centerX,z:back,open:true},
     ];
   }
   function combatPerimeterPassage(x,z,radius=1.2) {
-    const {left,front,right,back,centerX,halfWidth,thickness}=combatPortalSpec();
-    const band=Math.max(3.5,thickness+radius*2);
-    // Only enforce a portal while crossing a perimeter wall; after exiting,
-    // players can explore the entire desert instead of an invisible corridor.
-    const nearEastWest=(Math.abs(x-left)<band||Math.abs(x-right)<band) && z>=front-band && z<=back+band;
-    if(nearEastWest)return false;
-    const nearNorthSouth=(Math.abs(z-front)<band||Math.abs(z-back)<band) && x>=left-band && x<=right+band;
-    if(nearNorthSouth)return Math.abs(x-centerX) < halfWidth-radius-.25;
-    return true;
+    const {left,front,right,back,centerX,centerZ,halfWidth,thickness}=combatPortalSpec();
+    const band=Math.max(3.2,thickness+radius*1.8);
+    const onSouth=Math.abs(z-front)<band && x>=left-band && x<=right+band;
+    if(onSouth)return Math.abs(x-centerX)<halfWidth-radius-.15;
+    const onEast=Math.abs(x-right)<band && z>=front-band && z<=back+band;
+    if(onEast)return Math.abs(z-centerZ)<halfWidth-radius-.15;
+    return true; // North/west have no invisible barriers.
   }
   function combatExteriorHills() {
     const [left,front,right,back]=floorBounds();
@@ -2570,8 +2575,8 @@
       const roofHeight=site.h+.6; // upper face of visible roof slab
       if(x>=site.x&&x<=site.x+site.w&&z>=site.z&&z<=site.z+site.d)
         return {...site,kind:"roof",height:roofHeight};
-      if(Math.hypot(x-site.ladderX,z-site.ladderZ)<3.1)
-        return {...site,kind:"ladder",height:roofHeight};
+      if(Math.hypot(x-site.ladderX,z-site.ladderZ)<4.7)
+        return {...site,kind:"ladder",height:roofHeight,landingX:site.ladderX,landingZ:site.z+site.d-2};
     }
     return null;
   }
@@ -2584,7 +2589,8 @@
     if(!hillsOpen)return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
-      const onRoof=Number(state.walkVerticalOffset)>site.h-1.25;
+      const onRoof=Number(state.walkVerticalOffset)>=site.h+.35 &&
+        x>=site.x-.45&&x<=site.x+site.w+.45&&z>=site.z-.45&&z<=site.z+site.d+.45;
       return onRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
     });
   }
@@ -2797,7 +2803,7 @@
       });
     });
     displayedWallSections().forEach((wall) => {
-      if (state.walls[wall.id] === false || state.walls[String(wall.id).split("-")[0]] === false) return;
+      if (state.walls[wall.id] === false || (!combatController?.isActive?.() && state.walls[String(wall.id).split("-")[0]] === false)) return;
       entries.push({
         x: Number(wall.x) || 0,
         y: Number(wall.y) || 0,
@@ -6981,6 +6987,8 @@
       getBounds: combatWorldBounds,
       getLadderSites: combatExteriorLandmarks,
       getClimbSurface: combatClimbSurface,
+      getPortalWaypoints: combatPortalWaypoints,
+      getPlantBounds: floorBounds,
       getWeaponMuzzleAnchor: (weaponKey,aiming) => {
         const design=designLibrary["combat-weapon-"+String(weaponKey||"rifle")];
         const anchor=design?.combatAnchors?.[aiming?"adsMuzzle":"hipMuzzle"];
@@ -9094,7 +9102,7 @@
     const wall = blendHexColors(state.paint.wallBefore, state.paint.wallAfter, painted);
     displayedWallSections().forEach((section) => {
       const inheritedId=String(section.id).split("-")[0];
-      if (state.walls[section.id] !== false && state.walls[inheritedId] !== false)
+      if (state.walls[section.id] !== false && (combatController?.isActive?.() || state.walls[inheritedId] !== false))
         box({ ...section, color: wall });
     });
   }

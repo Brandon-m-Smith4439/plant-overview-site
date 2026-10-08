@@ -255,7 +255,7 @@ assert.ok(combat.includes('roundState="respawn-choice"') && combat.includes("fun
 assert.ok(combat.includes('playerDeathDuration=RESPAWN_DELAY_MS') && combat.includes("RESPAWN_DELAY_MS = 5000") && combat.includes('Killed by '), "The full five-second who-killed-you replay must play before the choice.");
 assert.ok(combat.includes('zombieWave%5===0') && combat.includes("beginZombieWave") && combat.includes("waveDefeated>=waveTotal"), "Endless mode must progress through counted waves with special rounds.");
 assert.ok(combat.includes('spawnZombie(now,giant)') && combat.includes('record.health*=Math.min') && combat.includes('giant ? 7 : 1'), "Later special rounds must spawn and scale giant zombies.");
-assert.ok(combat.includes('MYSTERY_BOX_COST = 950') && combat.includes('HEALTH_STATION_COST = 800') && combat.includes('playerPoints-=cost'), "Purchases must deduct mystery box and health-station costs from points.");
+assert.ok(combat.includes('MYSTERY_BOX_COST = 950') && combat.includes('HEALTH_STATION_COST = 800') && (combat.includes('playerPoints-=cost') || combat.includes('playerPoints -= cost')), "Purchases must deduct mystery box and health-station costs from points.");
 assert.ok(combat.includes('headshot?150:100') && combat.includes('waveSpecial?2:1'), "Headshots and special-wave kills must award bonus points.");
 assert.ok(combat.includes("MAX_CARRIED_WEAPONS = 3") && combat.includes("MYSTERY_WEAPON_POOL") && combat.includes("data-combat-inventory"), "Random mystery weapons and three carried slots must be supported.");
 assert.ok(combat.includes("combat-team-panel") && combat.includes("teamPanel") && lobbyRoute.includes("points:"), "All multiplayer survivors must have visible synchronized points.");

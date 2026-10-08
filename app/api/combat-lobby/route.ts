@@ -400,7 +400,7 @@ export async function POST(request: Request) {
         if (["coop-victory", "round-restart"].includes(type) && lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host may end or restart a co-op round." };
         if (type === "npc-hit" && lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host may issue zombie damage events." };
         if (type === "npc-hit" && !lobby.players[cleanId(body.targetId, 96)]) return { ok: false, status: 400, error: "Damage target must be a player in the lobby." };
-        if(type==="revive-player"){
+        if(type==="revive-begin" || type==="revive-player"){
           const recipient=lobby.players[cleanId(body.targetId,96)];
           if(lobby.config.matchType!=="coop" || lobby.status!=="started"
             || !recipient || recipient.id===playerId || existing.state?.alive!==true
@@ -410,6 +410,17 @@ export async function POST(request: Request) {
           if(Math.hypot(finite(existing.state?.x)-finite(recipient.state?.x),
             finite(existing.state?.z)-finite(recipient.state?.z))>10.5)
             return {ok:false,status:400,error:"Move closer to the downed teammate."};
+          if(type==="revive-player"){
+            const start=[...lobby.events].reverse().find(entry =>
+              entry.type==="revive-begin" && entry.senderId===playerId &&
+              entry.targetId===recipient.id && now-entry.createdAt<10_000);
+            if(!start || now-start.createdAt<3000)
+              return {ok:false,status:409,error:"Hold E for three seconds near your teammate."};
+            if(lobby.events.some(entry => entry.type==="revive-player" &&
+              entry.senderId===playerId && entry.targetId===recipient.id &&
+              entry.createdAt>=start.createdAt))
+              return {ok:false,status:409,error:"Revive already completed."};
+          }
         }
         const event: LobbyEvent = {
           id: `${now.toString(36)}-${randomBytes(4).toString("hex")}`,

@@ -11,14 +11,16 @@ const MAX_EVENTS = 120;
 
 type EnemySyncState = {
   id: string; x: number; z: number; vx?: number; vz?: number; rotationY: number; health: number; weaponKey: string;
-  movementBlend: number; walkPhase: number; synthetic?: boolean; defeatedAt?: number;
+  movementBlend: number; walkPhase: number; synthetic?: boolean; giant?: boolean; defeatedAt?: number;
   machine?: { name?: string; w?: number; d?: number; h?: number; y?: number };
 };
 
 type PlayerState = {
   x?: number; y?: number; z?: number; yaw?: number; pitch?: number; vx?: number; vz?: number;
   health?: number; shield?: number; moving?: boolean; weapon?: string;
-  alive?: boolean; kills?: number; headshots?: number; deaths?: number; worldSeq?: number;
+  alive?: boolean; kills?: number; headshots?: number; deaths?: number; points?: number; worldSeq?: number;
+  wave?: number; waveTotal?: number; waveSpawned?: number; waveDefeated?: number;
+  boxX?: number; boxZ?: number; healthX?: number | null; healthZ?: number | null;
   enemies?: EnemySyncState[]; glass?: string[];
 };
 
@@ -127,7 +129,7 @@ function sanitizeEnemyState(value: unknown): EnemySyncState | null {
     health: Math.max(0, Math.min(500, finite(source.health, 100))),
     weaponKey: cleanText(source.weaponKey, 24) || "rifle",
     movementBlend: Math.max(0, Math.min(1, finite(source.movementBlend, .08))),
-    walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), defeatedAt: Math.max(0, finite(source.defeatedAt)),
+    walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), giant:Boolean(source.giant), defeatedAt: Math.max(0, finite(source.defeatedAt)),
     machine: {
       name: cleanText(machineSource.name, 48), w: Math.max(.4, Math.min(20, finite(machineSource.w, 1.8))),
       d: Math.max(.4, Math.min(20, finite(machineSource.d, 1.8))), h: Math.max(1, Math.min(20, finite(machineSource.h, 6.5))),
@@ -151,6 +153,15 @@ function sanitizeState(value: unknown): PlayerState {
     kills: Math.max(0, Math.floor(finite(source.kills))),
     headshots: Math.max(0, Math.floor(finite(source.headshots))),
     deaths: Math.max(0, Math.floor(finite(source.deaths))),
+    points:Math.max(0,Math.min(10_000_000,Math.floor(finite(source.points)))),
+    wave:Math.max(0,Math.min(999,Math.floor(finite(source.wave)))),
+    waveTotal:Math.max(0,Math.min(100,Math.floor(finite(source.waveTotal)))),
+    waveSpawned:Math.max(0,Math.min(100,Math.floor(finite(source.waveSpawned)))),
+    waveDefeated:Math.max(0,Math.min(100,Math.floor(finite(source.waveDefeated)))),
+    boxX:source.boxX==null ? undefined : finite(source.boxX),
+    boxZ:source.boxZ==null ? undefined : finite(source.boxZ),
+    healthX:source.healthX==null ? null : finite(source.healthX),
+    healthZ:source.healthZ==null ? null : finite(source.healthZ),
     worldSeq: Math.max(0, Math.floor(finite(source.worldSeq))),
     ...(enemies ? { enemies } : {}),
     ...(glass ? { glass } : {}),

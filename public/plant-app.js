@@ -2547,6 +2547,15 @@
     if(nearNorthSouth)return Math.abs(x-centerX) < halfWidth-radius-.25;
     return true;
   }
+  function combatExteriorHills() {
+    const [left,front,right,back]=floorBounds();
+    return Array.from({length:28},(_,i)=>{
+      const angle=i*Math.PI*2/28,range=94+(i%5)*17;
+      const x=(left+right)*.5+Math.cos(angle)*(right-left+range);
+      const z=(front+back)*.5+Math.sin(angle)*(back-front+range);
+      return {x,z,radius:13+(i%4)*6,height:9+(i%7)*2.4};
+    });
+  }
   function combatExteriorLandmarks() {
     const [left,front,right,back]=floorBounds();
     return [
@@ -2570,6 +2579,9 @@
     if(!combatController?.isActive?.())return false;
     const b=combatWorldBounds(),p=Math.max(.45,Number(radius)||1.2);
     if(x<b[0]+p||x>b[2]-p||z<b[1]+p||z>b[3]-p)return false;
+    const hillsOpen = combatExteriorHills().every(hill =>
+      Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
+    if(!hillsOpen)return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
       const onRoof=Number(state.walkVerticalOffset)>site.h-1.25;
@@ -2822,9 +2834,15 @@
         });
       });
     });
-    if(combatController?.isActive?.())combatExteriorLandmarks().forEach((site)=>entries.push({
-      kind:"exterior-building",x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d
-    }));
+    if(combatController?.isActive?.()){
+      combatExteriorLandmarks().forEach((site)=>entries.push({
+        kind:"exterior-building",x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d
+      }));
+      combatExteriorHills().forEach((hill)=>entries.push({
+        kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
+        w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44
+      }));
+    }
     combatOccluderCache = { at: now, entries };
     return entries;
   }
@@ -9036,11 +9054,9 @@
         w:site.w*.48,h:.12,d:.26,color:"#d8c299"},1,1);
     });
     // Ridgelines supply actual vertical scenery beyond the rock scatter.
-    for(let i=0;i<28;i++){
-      const angle=i*Math.PI*2/28,range=94+(i%5)*17;
-      const cx=(left+right)*.5+Math.cos(angle)*(right-left+range),
-        cz=(front+back)*.5+Math.sin(angle)*(back-front+range);
-      const radius=13+(i%4)*6,h=9+(i%7)*2.4;
+    for(const hill of combatExteriorHills()){
+      const cx=hill.x,cz=hill.z,radius=hill.radius,h=hill.height;
+      const i=Math.round(hill.height*10)%7;
       polygon([[cx-radius,0,cz-radius],[cx+radius,0,cz-radius],[cx,h,cz],[cx-radius,0,cz+radius]],
         zombie?"#363b34":"#b69a70",edge,.6,1);
       polygon([[cx+radius,0,cz-radius],[cx+radius,0,cz+radius],[cx-radius,0,cz+radius],[cx,h,cz]],
@@ -12476,7 +12492,13 @@
         const characterId=String(machine.instanceId || machine.id || machine.name || "");
         if (combatController.isCharacterOccupied?.(characterId)) continue;
       }
-      const alpha = stageAlpha(machine.reveal,machine.retire);
+      // Network-synthesized co-op zombies may not have stage fields. Stage NaN
+      // used to cull all body polygons while leaving stray foot primitives.
+      const liveEnemy=Boolean(combatController?.isActive?.() && combatEnemyMachine(machine)
+        && combatController.enemyRenderState?.(machine.instanceId,time));
+      const alpha = liveEnemy ? 1 : stageAlpha(
+        Number.isFinite(Number(machine.reveal)) ? Number(machine.reveal) : 0,
+        Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99);
       if (alpha <= .01) continue;
       let rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
       if (combatController?.isActive?.() && combatEnemyMachine(machine)) {
@@ -12518,7 +12540,7 @@
         machine,
         rendered,
         alpha: alpha * walkDistanceAlpha * (Number.isFinite(Number(rendered.renderAlpha)) ? Number(rendered.renderAlpha) : 1),
-        grow: clamp(state.stageFloat - machine.reveal + 1),
+        grow: liveEnemy ? 1 : clamp(state.stageFloat - Number(machine.reveal||0) + 1),
         depth: sceneDepth(rendered.x+rendered.w/2,rendered.z+rendered.d/2),
       });
     }

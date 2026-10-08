@@ -2458,6 +2458,8 @@
     });
     displayedWallSections().forEach((wall) => {
       if (state.walls[wall.id] === false || state.walls[String(wall.id).split("-")[0]] === false) return;
+      // A raised lintel is visual/shot occlusion only; feet walk under it.
+      if (String(wall.id).endsWith("-lintel")) return;
       entries.push({ kind: "wall", wall, x: wall.x, z: wall.z, w: wall.w, d: wall.d });
     });
     walkCollisionCandidates().forEach((machine) => {
@@ -2615,6 +2617,7 @@
         continue;
       }
       if (entry.kind === "wall") {
+        if (String(entry.wall?.id||"").endsWith("-lintel")) continue;
         if (circleIntersectsMachine(worldX, worldZ, wallMargin, entry.wall)) return false;
         continue;
       }
@@ -7461,10 +7464,10 @@
       const horizontalWall = section.w > section.d;
       const sectionEnd = section.x + section.w;
       if (horizontalWall && section.x < roofProfile.splitX && sectionEnd > roofProfile.splitX) {
-        result.push({ ...section, w: roofProfile.splitX - section.x, h: roofProfile.leftHeight });
-        result.push({ ...section, x: roofProfile.splitX, w: sectionEnd - roofProfile.splitX, h: roofProfile.rightHeight });
+        result.push({ ...section, w: roofProfile.splitX - section.x, h: Math.max(.2,roofProfile.leftHeight-(Number(section.y)||0)) });
+        result.push({ ...section, x: roofProfile.splitX, w: sectionEnd - roofProfile.splitX, h: Math.max(.2,roofProfile.rightHeight-(Number(section.y)||0)) });
       } else {
-        result.push({ ...section, h: heightAt(section.x + section.w / 2) });
+        result.push({ ...section, h: Math.max(.2,heightAt(section.x + section.w / 2)-(Number(section.y)||0)) });
       }
     });
     return result;
@@ -10636,7 +10639,7 @@
     const width = Math.max(1.4, Number(actor.w) || 1.8);
     const depth = Math.max(1.2, Number(actor.d) || 1.8);
     const height = Math.max(5.5, Number(actor.h) || 6.5) * grow;
-    const movement = combat.defeated ? 0 : clamp(Number(combat.movementBlend) || 0, 0, 1);
+    const movement = combat.defeated ? 0 : (combat.climbing ? 1 : clamp(Number(combat.movementBlend) || 0, 0, 1));
     const phase = Number(combat.walkPhase) || time * .008;
     const zombieGait = combat.zombie ? String(combat.gaitClass||"walker") : "combat";
     const gaitStride = combat.zombie ? Number(combat.gaitStride)||.53 : .55;
@@ -10779,6 +10782,11 @@
     const rightHip = [width*.62, hipY, depth*.5];
     const leftKnee = [width*.35, kneeY + liftLeft*.45, depth*.5 + stride*.48];
     const rightKnee = [width*.65, kneeY + liftRight*.45, depth*.5 - stride*.48];
+    if(combat.climbing){
+      // Opposing arms/knees alternate on ladder rungs even while X/Z is static.
+      leftKnee[1]+=.48+.34*Math.sin(phase);
+      rightKnee[1]+=.48-.34*Math.sin(phase);
+    }
     const leftFoot = [width*.3, .12 + liftLeft, depth*.5 + stride];
     const rightFoot = [width*.7, .12 + liftRight, depth*.5 - stride];
     // Shamblers drag their feet with little lift; runners and sprinters pump
@@ -10841,7 +10849,11 @@
       -.72+supportReloadBack*reloadWave,
     ];
     const rightGrip = [weaponCenterX + hit*.045,gripY+.025,gripZ + meleeLunge*.08];
-    if(zombie) {
+    if(combat.climbing){
+      leftGrip[1]=shoulderY+.42+Math.max(0,Math.sin(phase))*.62;
+      rightGrip[1]=shoulderY+.42+Math.max(0,-Math.sin(phase))*.62;
+      leftGrip[2]=-.48;rightGrip[2]=-.48;
+    }else if(zombie) {
       const pump=Math.sin(phase)*gaitSwing*movement;
       const fast=zombieGait==="runner"||zombieGait==="sprinter";
       // Zombie shufflers reach forward; runners pump bent arms, sprinters lunge,

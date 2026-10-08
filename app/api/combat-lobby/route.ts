@@ -12,7 +12,7 @@ const MAX_EVENTS = 120;
 type EnemySyncState = {
   id: string; x: number; z: number; vx?: number; vz?: number; rotationY: number; health: number; weaponKey: string;
   movementBlend: number; walkPhase: number; synthetic?: boolean; giant?: boolean; gaitClass?: string; defeatedAt?: number;
-  elevation?: number; climbing?: boolean;
+  elevation?: number; climbing?: boolean; attacking?: boolean; attackProgress?: number;
   machine?: { name?: string; w?: number; d?: number; h?: number; y?: number; designId?: string; sourceId?: string };
 };
 
@@ -132,6 +132,7 @@ function sanitizeEnemyState(value: unknown): EnemySyncState | null {
     movementBlend: Math.max(0, Math.min(1, finite(source.movementBlend, .08))),
     walkPhase: finite(source.walkPhase), synthetic: Boolean(source.synthetic), giant:Boolean(source.giant),
     elevation:Math.max(0,Math.min(80,finite(source.elevation))),climbing:Boolean(source.climbing),
+    attacking:Boolean(source.attacking),attackProgress:Math.max(0,Math.min(1,finite(source.attackProgress))),
     gaitClass:["shambler","walker","runner","sprinter","giant"].includes(String(source.gaitClass))?String(source.gaitClass):"walker",
     defeatedAt: Math.max(0, finite(source.defeatedAt)),
     machine: {

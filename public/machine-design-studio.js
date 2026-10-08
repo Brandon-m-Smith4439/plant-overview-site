@@ -55,7 +55,7 @@
   };
   addLifecycleListener(window, "plant-renderer-fallback", handleRendererFallback);
   addLifecycleListener(window, "plantgeometryprepared", handleGeometryPrepared);
-  const APP_VERSION = "0.13.75";
+  const APP_VERSION = "0.13.79";
   const timelineEngine = window.MachineAnimationTimeline || null;
   const timelineWorkspaceEngine = window.AnimationTimelineWorkspace || null;
   const MIN_DESIGN_ENVELOPE = 0.01;
@@ -411,6 +411,8 @@
       description: design?.description || "",
       base: normalizedBase,
       collisionEnvelopes,
+      combatAnchors: design?.combatAnchors && typeof design.combatAnchors === "object"
+        ? clone(design.combatAnchors) : null,
       animationTimelineSettings: normalizeSharedTimelineSettings(design),
       components: (Array.isArray(design?.components) ? design.components : []).map(normalizeComponent),
       custom: design?.custom === true || !builtinIds.has(design?.id),
@@ -1956,6 +1958,41 @@
     renderPerformance.invalidate?.("animation-preview");
   }
 
+  function renderCombatAssetLists() {
+    for (const [category,kind] of [["zombie","combatZombie"],["weapon","combatWeapon"]]) {
+      const list=document.getElementById(category+"-design-list");
+      if(!list)continue;
+      const models=Object.values(library).filter((design)=>design.machineType===kind).sort((a,b)=>a.name.localeCompare(b.name));
+      list.innerHTML=models.map((design)=>`
+        <button class="design-list-select ${design.id===state.designId?"active":""}"
+          data-combat-design-id="${escapeHtml(design.id)}" type="button">
+          <span>${escapeHtml(design.name)}</span>
+          <small>${escapeHtml(design.components.length)} 3D parts · editable ${category} model</small>
+        </button>`).join("") || '<p class="studio-empty">No saved models available.</p>';
+      list.querySelectorAll("[data-combat-design-id]").forEach((button)=>button.addEventListener("click",()=>{
+        selectDesign(button.dataset.combatDesignId);
+        state.inspectorTab="design";
+        updateInterface();
+      }));
+    }
+  }
+
+  function updateCombatAnchorPanel() {
+    const design=currentDesign();
+    const panel=document.getElementById("combat-anchors-panel");
+    if(!panel)return;
+    panel.hidden=design?.machineType!=="combatWeapon";
+    if(panel.hidden)return;
+    const fallback={x:Math.max(.1,Number(design.base.w)||3),y:1,z:(Number(design.base.d)||1)/2};
+    const anchors=design.combatAnchors||{};
+    for (const [prefix,anchor] of [["hip",anchors.hipMuzzle],["ads",anchors.adsMuzzle]]) {
+      for (const axis of ["x","y","z"]) {
+        const input=document.getElementById("combat-"+prefix+"-"+axis);
+        if(input && document.activeElement!==input)input.value=String(Number(anchor?.[axis]??fallback[axis]));
+      }
+    }
+  }
+
   function updateDesignList() {
     const list = document.getElementById("design-list");
     const count = document.getElementById("design-count");
@@ -1980,6 +2017,7 @@
     list.querySelectorAll("[data-delete-design-id]").forEach((button) => {
       button.addEventListener("click", () => deleteDesign(button.dataset.deleteDesignId));
     });
+    renderCombatAssetLists();
   }
 
   function updateDesignListSelection() {
@@ -2678,10 +2716,11 @@
   }
 
   function updateInterface({ designSwitch = false } = {}) {
-    if (designSwitch) updateDesignListSelection();
+    if (designSwitch) {updateDesignListSelection();renderCombatAssetLists();}
     else updateDesignList();
     if (!designSwitch) updateEmbeddedMachinePicker();
     updateDesignFields({ includeEnvelope: !designSwitch });
+    updateCombatAnchorPanel();
     updateComponentList();
     updateComponentProperties();
     if (!designSwitch) updateAnimationTimelineUI();
@@ -5552,6 +5591,21 @@
   });
 
   document.getElementById("design-search")?.addEventListener("input", updateDesignList);
+  for(const prefix of ["hip","ads"])for(const axis of ["x","y","z"]) {
+    document.getElementById("combat-"+prefix+"-"+axis)?.addEventListener("change",(event)=>{
+      const design=currentDesign();
+      if(design?.machineType!=="combatWeapon")return;
+      const value=Number(event.target.value);
+      if(!Number.isFinite(value))return;
+      design.combatAnchors=design.combatAnchors||{};
+      const anchorKey=prefix==="hip"?"hipMuzzle":"adsMuzzle";
+      design.combatAnchors[anchorKey]=design.combatAnchors[anchorKey]||{};
+      design.combatAnchors[anchorKey][axis]=value;
+      markDesignGeometryDirty();
+      saveCurrentDesign({silent:true});
+      showToast("Combat "+(prefix==="hip"?"hip-fire":"aimed")+" muzzle "+axis.toUpperCase()+" saved.");
+    });
+  }
   document.getElementById("component-search")?.addEventListener("input", updateComponentList);
   document.getElementById("select-all-components")?.addEventListener("click", selectAllComponents);
   document.getElementById("merge-components")?.addEventListener("click", mergeSelectedComponents);

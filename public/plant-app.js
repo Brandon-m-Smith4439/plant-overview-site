@@ -2680,7 +2680,9 @@
   }
 
   function combatEnemyMachines() {
-    const base = combatBaseEnemyMachines();
+    // Endless uses synthetic zombies only. Original plant people remain in the
+    // editor data but are not actors, props, or labels during the survival run.
+    const base = combatController?.isEndlessZombie?.() ? [] : combatBaseEnemyMachines();
     const spawned = combatController?.isActive?.() ? (combatController.spawnedEnemyMachines?.() || []) : [];
     return spawned.length ? [...base, ...spawned] : base;
   }
@@ -12138,6 +12140,7 @@
     if (combatController?.isActive?.()) combatEnemyMachines().forEach((machine) => sourceMachines.add(machine));
     for (const machine of sourceMachines) {
       if (machine.visible === false) continue;
+      if (combatController?.isEndlessZombie?.() && combatEnemyMachine(machine) && !machine.combatSpawned) continue;
       if (combatController?.isActive?.() && combatEnemyMachine(machine)) {
         const characterId=String(machine.instanceId || machine.id || machine.name || "");
         if (combatController.isCharacterOccupied?.(characterId)) continue;

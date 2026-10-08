@@ -2953,7 +2953,7 @@
       enemy.lastKnownPlayerX = playerTarget.x;
       enemy.lastKnownPlayerZ = playerTarget.z;
       enemy.aimLockUntil = now + (loadout.melee ? 300 : 560);
-      const shotDuration = loadout.melee ? 360 : loadout.explosive ? 390 : loadout.key === "sniper" ? 320 : 230;
+      const shotDuration = loadout.melee ? 430 : loadout.explosive ? 390 : loadout.key === "sniper" ? 320 : 230;
       enemy.shotStartedAt = now;
       enemy.shotEndsAt = now + shotDuration;
       enemy.firingUntil = now + shotDuration;
@@ -3452,6 +3452,9 @@
         const snapshot={
           id,x,z,vx,vz,rotationY:number(enemy.rotationY),giant:Boolean(enemy.giant),
           elevation:number(enemy.elevation),climbing:Boolean(enemy.climbing),
+          attacking:Boolean(enemy.shotStartedAt && now<enemy.shotEndsAt),
+          attackProgress:enemy.shotStartedAt && now<enemy.shotEndsAt
+            ? clamp((now-enemy.shotStartedAt)/Math.max(1,enemy.shotEndsAt-enemy.shotStartedAt),0,1):0,
           health:Math.max(0,number(enemy.health)), weaponKey:String(enemy.weaponKey || "rifle"),
           movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
           gaitClass:String(enemy.gaitClass||"walker"),
@@ -3538,6 +3541,14 @@
         enemy.health=Math.max(0,number(snapshot.health,enemy.health));
         enemy.elevation=Math.max(0,number(snapshot.elevation,enemy.elevation));
         enemy.climbing=Boolean(snapshot.climbing);
+        if(snapshot.attacking){
+          const duration=enemy.weaponKey==="chainsaw"?420:320;
+          enemy.shotStartedAt=receivedAt-clamp(number(snapshot.attackProgress),0,1)*duration;
+          enemy.shotEndsAt=enemy.shotStartedAt+duration;
+        }else{
+          enemy.shotEndsAt=0;
+          enemy.shotStartedAt=0;
+        }
         enemy.weaponKey=String(snapshot.weaponKey || enemy.weaponKey || "rifle"); enemy.weaponLabel=ENEMY_WEAPONS[enemy.weaponKey]?.label || enemy.weaponLabel || "Rifle";
         enemy.synthetic=Boolean(snapshot.synthetic);
         enemy.giant=Boolean(snapshot.giant);

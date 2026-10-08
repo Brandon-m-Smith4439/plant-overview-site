@@ -456,6 +456,7 @@
     let waveSpecial = false;
     let mysteryBox = null;
     let healthStation = null;
+    let lastHealthPurchaseWave = -1;
     let nearestStation = null;
     let lastStationHudAt = -Infinity;
     let reloading = false;
@@ -842,7 +843,7 @@
       playerPoints-=cost;
       if (isHealth) {
         playerHealth=100;playerShield=SHIELD_MAX;
-        healthStation=null;
+        lastHealthPurchaseWave=zombieWave;
         setTransientStatus(`FULL HEALTH RESTORED · -${cost} POINTS`,1800);
       } else {
         const choices=MYSTERY_WEAPON_POOL.filter((key)=>!carriedWeapons.includes(key));
@@ -892,6 +893,7 @@
 
     function updateZombieSpawns(now) {
       if (!zombieEndless() || coopFollower() || !["playing","respawning","respawn-choice","lost"].includes(roundState)) return;
+      if (roundState==="lost" && !(matchType==="coop" && multiplayer?.isHost?.() && (multiplayer.remotePlayers?.()||[]).some((entry)=>entry.state?.alive!==false))) return;
       if (!zombieWave) beginZombieWave(now);
       if (waveSpawned>=waveTotal) {
         if (waveDefeated>=waveTotal) {
@@ -1619,7 +1621,7 @@
           const player=options.getPlayer?.();
           if (player) {
             for (const [type,station] of [["mystery",mysteryBox],["health",healthStation]]) {
-              if (station && Math.hypot(number(player.x)-station.x,number(player.z)-station.z)<=6) {nearestStation=type;break;}
+              if (station && (type!=="health" || lastHealthPurchaseWave!==zombieWave) && Math.hypot(number(player.x)-station.x,number(player.z)-station.z)<=6) {nearestStation=type;break;}
             }
           }
         }
@@ -2032,7 +2034,7 @@
         if (headshot) headshotKills += 1;
         else regularKills += 1;
         if (gameMode==="zombie") {
-          const earned=(headshot?150:100)*(target.enemy.giant?5:1);
+          const earned=(headshot?150:100)*(target.enemy.giant?5:1)*(waveSpecial?2:1);
           playerPoints+=earned;
           setTransientStatus(`+${earned} POINTS · ${headshot?"HEADSHOT":"KILL"}`,900);
         }
@@ -2127,7 +2129,7 @@
         else setTransientStatus(headshotHit ? "Headshot" : "Hit", headshotHit ? 650 : 420);
         if (defeatedHit && aliveEnemies().length === 0 && enemies.size > 0 && (gameMode !== "zombie" || zombieRunType === "normal") && (matchType !== "coop" || multiplayer?.isHost?.())) scheduleVictory();
       }
-      if (weapon.key === "shotgun") {
+      if (number(weapon.pellets,1)>1) {
         // Render the actual buckshot cone rather than collapsing all pellets into
         // one center tracer. Eight pellets are fired; at least six remain visible
         // even when some impacts are close together.
@@ -2386,7 +2388,7 @@
       playerPoints = 0;
       carriedWeapons=[selectedPrimaryWeapon,"handgun"].filter((weapon,index,array)=>WEAPONS[weapon]&&array.indexOf(weapon)===index);
       zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;waveSpecial=false;
-      mysteryBox=null;healthStation=null;nearestStation=null;
+      mysteryBox=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
       respawnEndsAt = 0;
       respawnDisplay = 0;
       roundStatOverrides.clear();

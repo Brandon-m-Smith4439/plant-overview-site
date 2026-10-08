@@ -604,6 +604,11 @@
 
     function syncRestartButton() {
       if (!restartButton) return;
+      if (roundState==="respawn-choice") {
+        restartButton.disabled=false;
+        restartButton.innerHTML='<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Respawn</strong><small>Return to your team with full health</small></span>';
+        return;
+      }
       const waitingForHost=matchType==="coop" && multiplayer?.getLobby?.() && !multiplayer.isHost?.();
       restartButton.disabled=Boolean(waitingForHost);
       restartButton.innerHTML=waitingForHost ? '<span class="combat-restart-icon" aria-hidden="true">⌛</span><span class="combat-restart-copy"><strong>Waiting for host</strong><small>The host restarts the entire team</small></span>' : '<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Play again</strong><small>Restart ' + modeConfig().label.toLowerCase() + ' mode</small></span>';
@@ -1684,7 +1689,7 @@
     function handleEscape(reason = "escape-key") {
       if (!active) return false;
       options.hideWalkMenu?.();
-      if (["lost","won","respawning"].includes(roundState)) return true;
+      if (["lost","won","respawning","respawn-choice"].includes(roundState)) return true;
       if (paused && reason === "pointer-lock-released") return true;
       return setPaused(!paused);
     }
@@ -1773,62 +1778,71 @@
 
     function beginPlayerRespawn(killer, player) {
       const now=performance.now();
+      const source=killer?enemyCenter(killer):null;
+      const killerLabel=String(killer?.machine?.name || "Zombie");
+      const distance=source&&player ? Math.hypot(source.x-number(player.x),source.z-number(player.z)) : 0;
       roundState="respawning";
       respawnEndsAt=now+RESPAWN_DELAY_MS;
-      respawnDisplay=Math.ceil(RESPAWN_DELAY_MS/1000);
       playerDeathStartedAt=now;
-      playerDeathDuration=Math.min(2200,RESPAWN_DELAY_MS-350);
-      paused=false;
-      pausedAt=0;
-      mouseHeld=false;
+      playerDeathDuration=RESPAWN_DELAY_MS;
+      paused=false;pausedAt=0;mouseHeld=false;
       setAiming(false);
       frame.classList.remove("combat-paused");
       frame.classList.add("combat-death-cinematic","combat-player-dead");
-      if (roundOverlay) roundOverlay.hidden=true;
       if (pauseOverlay) pauseOverlay.hidden=true;
-      if (countdownLabel) countdownLabel.textContent="RESPAWNING IN";
-      if (countdownValue) countdownValue.textContent=String(respawnDisplay);
-      if (countdownOverlay) countdownOverlay.hidden=false;
+      if (countdownOverlay) countdownOverlay.hidden=true;
+      if (roundOverlay) {roundOverlay.hidden=true;roundOverlay.classList.remove("victory","killer-reveal");}
+      if (killerReveal) killerReveal.hidden=false;
+      if (killerName) killerName.textContent=killerLabel;
+      if (killerDetail) killerDetail.textContent=(distance ? Math.round(distance)+" ft away · " : "")+(killer?.weaponLabel || "Melee");
+      if (roundKicker) roundKicker.textContent="PLAYER DOWN";
+      if (roundTitle) roundTitle.textContent="Killed by "+killerLabel;
+      if (roundCopy) roundCopy.textContent="Death replay complete. Choose Respawn to return with full health, or Exit Combat.";
+      if (deathCountCopy) deathCountCopy.textContent=String(playerDeaths);
+      if (regularKillsCopy) regularKillsCopy.textContent=String(regularKills);
+      if (headshotKillsCopy) headshotKillsCopy.textContent=String(headshotKills);
       options.hideWalkMenu?.();
       options.setMovementLocked?.(true);
       options.releasePointer?.();
-      const source=killer ? enemyCenter(killer) : null;
-      options.playDeathCinematic?.({target:source,killerId:killer?.id||null,killerName:String(killer?.machine?.name||"Enemy"),durationMs:playerDeathDuration});
-      setTransientStatus(`Downed · respawning in ${respawnDisplay}`,900);
+      if (killer) killer.killerRevealUntil=now+RESPAWN_DELAY_MS+700;
+      options.playDeathCinematic?.({target:source,killerId:killer?.id||null,killerName:killerLabel,durationMs:playerDeathDuration});
+      setTransientStatus("DOWNED · WATCHING DEATH REPLAY",1400);
       multiplayer?.heartbeat?.();
       options.invalidate?.();
     }
 
     function updatePlayerRespawn(now) {
-      if (roundState !== "respawning") return false;
-      const remaining=Math.max(0,respawnEndsAt-now);
-      if (remaining>0) {
-        const nextDisplay=Math.max(1,Math.ceil(remaining/1000));
-        if (nextDisplay!==respawnDisplay) {
-          respawnDisplay=nextDisplay;
-          if (countdownValue) countdownValue.textContent=String(nextDisplay);
-        }
-        return true;
-      }
+      if (roundState==="respawn-choice") return true;
+      if (roundState!=="respawning") return false;
+      if (now<respawnEndsAt) return true;
       respawnEndsAt=0;
-      respawnDisplay=0;
-      playerHealth=100;
-      playerShield=SHIELD_MAX;
-      lastDamageAt=now;
-      lastShieldUpdateAt=now;
-      playerDeathStartedAt=0;
-      roundState="playing";
+      roundState="respawn-choice";
+      if (roundOverlay) {roundOverlay.hidden=false;roundOverlay.classList.remove("victory","killer-reveal");}
+      if (killerReveal) killerReveal.hidden=false;
+      roundActions?.classList.remove("locked");
+      syncRestartButton();
+      options.releasePointer?.();
+      options.invalidate?.();
+      return true;
+    }
+
+    function resumePlayerAfterDeath() {
+      if (!active || roundState!=="respawn-choice") return false;
+      roundRevealSerial++;
+      respawnEndsAt=0;respawnDisplay=0;playerHealth=100;playerShield=SHIELD_MAX;
+      lastDamageAt=performance.now();lastShieldUpdateAt=lastDamageAt;
+      playerDeathStartedAt=0;roundState="playing";
       frame.classList.remove("combat-death-cinematic","combat-player-dead");
-      if (countdownLabel) countdownLabel.textContent="COMBAT STARTS IN";
-      if (countdownOverlay) countdownOverlay.hidden=true;
+      if (roundOverlay) roundOverlay.hidden=true;
+      if (killerReveal) killerReveal.hidden=true;
       options.resetDeathCinematic?.();
       options.setMovementLocked?.(false);
-      setTransientStatus("RESPAWNED",900);
+      setTransientStatus("RESPAWNED · BACK IN THE FIGHT",1200);
       syncHud();
       multiplayer?.heartbeat?.();
       window.requestAnimationFrame(()=>options.capture?.());
       options.invalidate?.();
-      return false;
+      return true;
     }
 
     function scheduleVictory() {
@@ -2354,6 +2368,10 @@
       regularKills = 0;
       headshotKills = 0;
       playerDeaths = 0;
+      playerPoints = 0;
+      carriedWeapons=[selectedPrimaryWeapon,"handgun"].filter((weapon,index,array)=>WEAPONS[weapon]&&array.indexOf(weapon)===index);
+      zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;waveSpecial=false;
+      mysteryBox=null;healthStation=null;nearestStation=null;
       respawnEndsAt = 0;
       respawnDisplay = 0;
       roundStatOverrides.clear();
@@ -2388,10 +2406,7 @@
       });
       syncEnemies(true);
       if (matchType !== "private") resetAmmoPickups();
-      if (zombieEndless() && matchType !== "private") {
-        const initialExtra = Math.max(0, Math.round(zombieDifficultyConfig().initialExtra ?? ZOMBIE_INITIAL_EXTRA));
-        for (let index=0; index<initialExtra; index+=1) spawnZombie(performance.now());
-      }
+      if (zombieEndless()) mysteryBox=findStationPosition(10,"mystery");
       if (roundOverlay) {
         roundOverlay.hidden = true;
         roundOverlay.classList.remove("killer-reveal", "victory");
@@ -2465,6 +2480,11 @@
         return;
       }
       if (updatePlayerRespawn(now)) {
+        if (matchType==="coop" && multiplayer?.isHost?.()) {
+          cleanupZombieCorpses(now);
+          updateZombieSpawns(now);
+          updateEnemyAi(now);
+        }
         multiplayer?.heartbeat?.();
         options.invalidate?.();
         frameRequest = window.requestAnimationFrame(loop);
@@ -2965,12 +2985,16 @@
     function handleKeyDown(event) {
       if (!active || roundState === "setup") return;
       if (event.target?.matches?.("input, select, textarea, [contenteditable='true']")) return;
+      if (event.code === "KeyE") {event.preventDefault();buyNearbyStation();return;}
       if (event.code === "Digit1") {
         event.preventDefault();
         switchWeapon(playerLoadout()[0]);
       } else if (event.code === "Digit2") {
         event.preventDefault();
         switchWeapon(playerLoadout()[1]);
+      } else if (event.code === "Digit3") {
+        event.preventDefault();
+        switchWeapon(playerLoadout()[2]);
       } else if (event.code === "KeyR") {
         event.preventDefault();
         startReload();
@@ -3071,6 +3095,7 @@
     lobbyNameInput?.addEventListener("input", () => multiplayer?.updateIdentity?.(lobbyNameInput.value,selectedCharacterId));
 
     hud.querySelector("[data-combat-restart]")?.addEventListener("click", async () => {
+      if (roundState==="respawn-choice") {resumePlayerAfterDeath();return;}
       if (matchType === "coop" && multiplayer?.getLobby?.()) {
         if (!multiplayer.isHost?.()) return;
         try { await multiplayer.sendEvent("round-restart",{},""); }
@@ -3080,6 +3105,7 @@
       resetRound({countdown:true});
       options.capture?.();
     });
+    stationBuyButton?.addEventListener("click", () => buyNearbyStation());
     hud.querySelector("[data-combat-pause-action='resume']")?.addEventListener("click", () => setPaused(false));
     hud.querySelector("[data-combat-pause-action='exit']")?.addEventListener("click", () => {
       stop();
@@ -3097,7 +3123,7 @@
       switchWeapon,
       toggleWeapon: () => {
         const loadout = playerLoadout();
-        switchWeapon(selectedWeapon === loadout[0] ? loadout[1] : loadout[0]);
+        switchWeapon(loadout[(Math.max(0,loadout.indexOf(selectedWeapon))+1)%loadout.length]);
       },
       getMode: () => gameMode,
       getZombieSettings: () => ({ difficulty:zombieDifficulty, runType:zombieRunType, endless:zombieEndless() }),

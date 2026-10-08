@@ -1730,6 +1730,10 @@
           }
         }
         stationPrompt.hidden=!nearestStation;
+        const offerState = nearestStation === "mystery" ? mysteryPhase() : "idle";
+        stationPrompt.classList.toggle("mystery-rolling",offerState==="rolling" || offerState==="rising");
+        stationPrompt.classList.toggle("mystery-ready",offerState==="ready");
+        stationPrompt.classList.toggle("mystery-returning",offerState==="lowering");
         if (nearestStation) {
           const health=nearestStation==="health",cost=health?HEALTH_STATION_COST:MYSTERY_BOX_COST;
           if (!health) {

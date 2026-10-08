@@ -1,3 +1,11 @@
+## 0.13.76 - 2026-10-08
+
+- Rechecked all v0.13.75 requirements: synchronized co-op victory, team leaderboard for kills/headshots/deaths, timed respawns in AI Combat and Normal Zombies (not Endless), destructible rack/A-frame/shipping/animated glass, and 3x explosions.
+- Fixed co-op replay so only the host can restart the round, all teammates receive a shared round-restart event, and non-host players see a disabled Waiting for host control.
+- Rejected non-host co-op victory and restart broadcasts at the server, and ignored invalid lobby/round completion events on the client.
+- Corrected A-frame cart/truck left/right rendered glass geometry and raw-glass-rack hitbox positions. Machine collision hulls now permit shots to reach their actual glass panes.
+- Expanded regression assertions for coordinated replay, event ownership, and glass geometry. Updated release cache tokens to 0.13.76.
+
 ## 0.13.75 - 2026-10-07
 
 - Made co-op round completion host-authoritative and broadcast a `coop-victory` result so every teammate receives the same victory screen when the shared enemy world is cleared.

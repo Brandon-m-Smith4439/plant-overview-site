@@ -1480,13 +1480,26 @@
 
     function navigateEnemy(enemy,center,target,now) {
       const context=navigationWorld(now),radius=navigationRadius(enemy);
-      if (navigationStraight(center,target,radius,context)) {
+      const targetChanged=Math.hypot(number(enemy.navTargetX,center.x)-target.x,number(enemy.navTargetZ,center.z)-target.z)>7;
+      // Direct-path checks are broad-phase cached for moving enemies. Pathfinding
+      // is much more expensive than motion interpolation at 60+ FPS.
+      const needsDirectCheck=!enemy.navLineCheckedAt || now-enemy.navLineCheckedAt>290
+        || Math.hypot(center.x-number(enemy.navLineStartX,center.x),center.z-number(enemy.navLineStartZ,center.z))>3.6
+        || targetChanged;
+      if(needsDirectCheck) {
+        enemy.navDirectOpen=navigationStraight(center,target,radius,context);
+        enemy.navLineCheckedAt=now;
+        enemy.navLineStartX=center.x;
+        enemy.navLineStartZ=center.z;
+      }
+      if(enemy.navDirectOpen) {
         enemy.navRoute=null;
         enemy.navIndex=0;
+        enemy.navExpires=0;
+        enemy.navTargetX=target.x;enemy.navTargetZ=target.z;
         return target;
       }
-      const changed=Math.hypot(number(enemy.navTargetX,center.x)-target.x,number(enemy.navTargetZ,center.z)-target.z)>7;
-      if ((!enemy.navRoute || now>=enemy.navExpires || changed || enemy.navBlockedFrames>13) && navFramePlans<NAV_REBUILDS_PER_FRAME) {
+      if ((now>=enemy.navExpires || targetChanged || enemy.navBlockedFrames>13) && navFramePlans<NAV_REBUILDS_PER_FRAME) {
         navFramePlans++;
         enemy.navRoute=navigationRoute(enemy,center,target,now);
         enemy.navIndex=0;
@@ -3100,7 +3113,7 @@
           const base=(Array.isArray(options.getEnemies?.()) ? options.getEnemies() : []).find((machine,index) => enemyId(machine,index)===id);
           const machine=base || {
             id,instanceId:id,name:String(snapshot.machine?.name || "Zombie"),type:"person",x:number(snapshot.x)-.9,y:number(snapshot.machine?.y),z:number(snapshot.z)-.9,
-            w:Math.max(.4,number(snapshot.machine?.w,1.8)),d:Math.max(.4,number(snapshot.machine?.d,1.8)),h:Math.max(1,number(snapshot.machine?.h,6.5)),visible:true,
+            w:Math.max(.4,number(snapshot.machine?.w,1.8)),d:Math.max(.4,number(snapshot.machine?.d,1.8)),h:Math.max(1,number(snapshot.machine?.h,6.5)),visible:true,combatSpawned:true,
           };
           enemy={id};
           enemies.set(id,enemy);
@@ -3495,6 +3508,7 @@
       },
       getMode: () => gameMode,
       getZombieSettings: () => ({ difficulty:zombieDifficulty, runType:zombieRunType, endless:zombieEndless() }),
+      isEndlessZombie: () => active && zombieEndless(),
       getCombatSettings: () => ({ difficulty:combatDifficulty, matchType, characterId:selectedCharacterId, weapon:selectedPrimaryWeapon }),
       remotePlayers: () => multiplayer?.remotePlayers?.() || [],
       selectedCharacterId: () => selectedCharacterId,

@@ -213,7 +213,7 @@
     ? new window.BroadcastChannel(SYNC_CHANNEL_NAME)
     : null;
   const workspaceTransfer = window.PLANT_WORKSPACE_TRANSFER || null;
-  const APP_VERSION = "0.13.78";
+  const APP_VERSION = "0.13.79";
 
   function editorProfileProtected() {
     try {
@@ -10479,11 +10479,17 @@
     const height = Math.max(5.5, Number(actor.h) || 6.5) * grow;
     const movement = combat.defeated ? 0 : clamp(Number(combat.movementBlend) || 0, 0, 1);
     const phase = Number(combat.walkPhase) || time * .008;
-    const stride = Math.sin(phase) * .55 * movement;
-    const liftLeft = Math.max(0, Math.sin(phase)) * .14 * movement;
-    const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * .14 * movement;
+    const zombieGait = combat.zombie ? String(combat.gaitClass||"walker") : "combat";
+    const gaitStride = combat.zombie ? Number(combat.gaitStride)||.53 : .55;
+    const gaitSwing = combat.zombie ? Number(combat.gaitSwing)||.4 : .45;
+    const gaitBob = combat.zombie ? Number(combat.gaitBob)||.11 : .12;
+    const gaitLean = combat.zombie ? Number(combat.gaitLean)||0 : 0;
+    const stride = Math.sin(phase) * gaitStride * movement;
+    const liftLeft = Math.max(0, Math.sin(phase)) * gaitBob * 1.5 * movement;
+    const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * gaitBob * 1.5 * movement;
     const hit = clamp(Number(combat.hitReact) || 0, 0, 1);
-    const design = machine.designId ? designLibrary[machine.designId] : null;
+    const zombiePreset = combat.zombie ? designLibrary["combat-zombie-"+zombieGait] : null;
+    const design = zombiePreset || (machine.designId ? designLibrary[machine.designId] : null);
     const designParts = Array.isArray(design?.components) ? design.components : [];
     const namedPart = (pattern) => designParts.find((part) => pattern.test(String(part?.name || "")));
     const zombie = Boolean(combat.zombie);
@@ -10498,8 +10504,8 @@
     // Keep each custom person's torso/head/hair/hat/accessories instead of
     // replacing every named employee with one generic combat body. Arms and
     // legs are omitted here because the articulated combat limbs below own them.
-    if (design && String(design.machineType || "").toLowerCase() === "person") {
-      const staticIdentityParts = designParts.filter((part) => !/(?:left|right)\s+(?:arm|leg)/i.test(String(part?.name || "")));
+    if (design && ["person","combatzombie"].includes(String(design.machineType || "").toLowerCase())) {
+      const staticIdentityParts = designParts.filter((part) => !/(?:left|right)\s+(?:arm|leg)/i.test(String(part?.name || "")) && !/(?:eye|pupil)/i.test(String(part?.name||"")));
       if (staticIdentityParts.length) {
         drawCustomDesign(actor, alpha, grow, time, 3, staticIdentityParts, machineCurveSegments(actor));
       }
@@ -10553,15 +10559,38 @@
       // Same upper-face coordinates are used for generic and custom characters.
     }
 
-    // Face is local -Z. Embed whites into the upper head and put pupils just
-    // ahead of them instead of sticking both decals under the mouth/neck.
-    const eyeY=height*.835;
-    const eyeZ=depth*.285;
-    const eyeWidth=width*.115,eyeHeight=height*.034,eyeDepth=Math.max(.08,depth*.085);
-    [width*.325,width*.555].forEach((eyeX) => {
-      box(localBox3d(actor,eyeX,eyeZ,eyeWidth,eyeDepth,eyeHeight,eyeWhite,eyeY),alpha,1);
-      box(localBox3d(actor,eyeX+eyeWidth*.31,eyeZ-eyeDepth*.19,eyeWidth*.38,eyeDepth*.55,eyeHeight*.7,pupil,eyeY+eyeHeight*.1),alpha,1);
-    });
+    // Use head-local coordinates instead of absolute actor height: older
+    // employee models put their head lower/higher than the generic fallback.
+    // Custom eye anchors follow the selected model's actual head bounds and
+    // rotate with the head part, preventing eyes inside the neck or mouth.
+    if (design && headPart) {
+      const anchors=design.combatAnchors||{};
+      const minFront=Number(headPart.z)-Math.max(.05,Number(headPart.d)*.11);
+      const eyeSize=Math.max(.07,Number(headPart.w)*.105);
+      const eyeH=Math.max(.08,Number(headPart.h)*.15);
+      const eyeD=Math.max(.07,Number(headPart.d)*.105);
+      for(const [side,fraction] of [["left",.24],["right",.65]]) {
+        const saved=anchors[side+"Eye"];
+        const px=Number.isFinite(Number(saved?.x))?Number(saved.x):Number(headPart.x)+Number(headPart.w)*fraction;
+        const py=Number.isFinite(Number(saved?.y))?Number(saved.y):Number(headPart.y)+Number(headPart.h)*.74;
+        const pz=Number.isFinite(Number(saved?.z))?Number(saved.z):minFront;
+        const shape={x:px,y:py,z:pz,w:eyeSize,h:eyeH,d:eyeD,color:eyeWhite,
+          rotationX:Number(headPart.rotationX)||0,rotationY:Number(headPart.rotationY)||0,
+          rotationZ:Number(headPart.rotationZ)||0};
+        drawDesignBox(actor,shape,design,alpha,grow);
+        drawDesignBox(actor,{...shape,x:px+eyeSize*.32,y:py+eyeH*.12,z:pz-eyeD*.42,
+          w:eyeSize*.38,h:eyeH*.72,d:eyeD*.55,color:pupil},design,alpha,grow);
+      }
+    } else {
+      const fallbackHead={x:width*.32,y:height*.73,z:depth*.30,w:width*.36,h:height*.14,d:depth*.38};
+      const eyeY=fallbackHead.y+fallbackHead.h*.74;
+      const eyeZ=fallbackHead.z-Math.max(.05,fallbackHead.d*.12);
+      [fallbackHead.x+fallbackHead.w*.18,fallbackHead.x+fallbackHead.w*.65].forEach(eyeX=>{
+        const eyeWidth=fallbackHead.w*.18,eyeHeight=fallbackHead.h*.20,eyeDepth=.11;
+        box(localBox3d(actor,eyeX,eyeZ,eyeWidth,eyeDepth,eyeHeight,eyeWhite,eyeY),alpha,1);
+        box(localBox3d(actor,eyeX+eyeWidth*.32,eyeZ-.052,eyeWidth*.36,.07,eyeHeight*.65,pupil,eyeY+eyeHeight*.12),alpha,1);
+      });
+    }
 
     // Two-segment legs create an actual walking gait instead of sliding feet.
     const hipY = height * .43;
@@ -10572,6 +10601,20 @@
     const rightKnee = [width*.65, kneeY + liftRight*.45, depth*.5 - stride*.48];
     const leftFoot = [width*.3, .12 + liftLeft, depth*.5 + stride];
     const rightFoot = [width*.7, .12 + liftRight, depth*.5 - stride];
+    // Shamblers drag their feet with little lift; runners and sprinters pump
+    // knees much higher, and giants use a deliberately heavy stomping cadence.
+    if (combat.zombie) {
+      const sway=Math.sin(phase*.5)*gaitSwing*movement;
+      actor.renderY=(Number(actor.renderY??actor.y)||0)+Math.abs(Math.cos(phase))*gaitBob*movement;
+      if(zombieGait==="sprinter"||zombieGait==="runner"){
+        const frontLean=gaitLean*Math.PI/180;
+        // Lean is applied through shoulder pose, not actor world orientation,
+        // to preserve stable headshot geometry and network hit volumes.
+        leftFoot[2]+=Math.sin(frontLean)*.25;
+        rightFoot[2]+=Math.sin(frontLean)*.25;
+      }
+      leftKnee[0]-=sway*.06;rightKnee[0]+=sway*.06;
+    }
     localLine3d(actor,leftHip,leftKnee,pants,3.4,alpha);
     localLine3d(actor,leftKnee,leftFoot,pants,3.1,alpha);
     localLine3d(actor,rightHip,rightKnee,pants,3.4,alpha);

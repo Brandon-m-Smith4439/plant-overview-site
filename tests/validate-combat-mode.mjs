@@ -263,7 +263,7 @@ assert.ok(combat.includes("mysteryOffer=null;healthStation=null;nearestStation=n
 assert.ok(plant.includes("const width=health?3.1:5.4") && plant.includes("const offer=station.offer") && plant.includes("weaponY=2.92+raise*2.65+bob"), "The physically wider 3D box must animate a prize above its lid.");
 assert.ok(css.includes(".combat-station-prompt.mystery-ready") && css.includes(".combat-station-prompt.mystery-rolling"), "Take-weapon and spinning states need distinct HUD feedback.");
 assert.ok(combat.includes("function navigationRoute(") && combat.includes("function navigationStraight(") && combat.includes("NAV_ROUTE_MAX_EXPANSIONS") && combat.includes("NAV_REBUILDS_PER_FRAME"), "Enemies must navigate physical envelopes using capped, cached waypoint routing.");
-assert.ok(combat.includes("navigateEnemy(enemy,center,playerTarget,now)") && combat.includes("enemy.navBlockedFrames"), "Combat and Zombie pursuit must use detours when straight pursuit is obstructed.");
+assert.ok(combat.includes("navigateEnemy(enemy,center,routeGoal,now)") && combat.includes("crossingPortalTarget") && combat.includes("enemy.navBlockedFrames"), "Combat and Zombie pursuit must use detours when straight pursuit is obstructed.");
 assert.ok(plant.includes("combatController?.isEndlessZombie?.() ? [] : combatBaseEnemyMachines()") && plant.includes("!machine.combatSpawned"), "Endless mode must suppress standing plant people while retaining synthetic zombies.");
 assert.ok(combat.includes('isEndlessZombie: () => active && zombieEndless()'), "The renderer must read the active Endless state, not a stale setup selection.");
 

@@ -168,7 +168,7 @@ assert.ok(css.includes(".combat-round-overlay.victory") && css.includes(".combat
 assert.ok(plant.includes('data-touch-combat="fire"') && plant.includes('data-touch-combat="aim"') && plant.includes('data-touch-combat="reload"') && plant.includes('data-touch-combat="swap"'), "Mobile Combat Mode action controls are missing.");
 assert.ok(plant.includes("navigator.maxTouchPoints") && combat.includes("setTriggerHeld") && combat.includes("setAiming: (enabled)"), "Touch players must be combat-engaged without desktop pointer lock and expose fire/aim APIs.");
 assert.ok(css.includes(".combat-mode-active .touch-combat-actions") && css.includes(".touch-combat-fire"), "Mobile Combat Mode controls are not styled for touch screens.");
-assert.ok(plant.includes("const eyeY=hy+hh*.57") && plant.includes("const eyeZ=hz-eyeD*1.38"), "Combat eyes must stay anchored high and visibly in front of the actual head face plane.");
+assert.ok(plant.includes("const eyeY=height*.835") && plant.includes("const eyeZ=depth*.285") && plant.includes("eyeWidth*.38"), "Combat eyes must be above the mouth on the upper head rather than the neck.");
 assert.ok(plant.includes("Large shoulder-fired launcher built from multiple 3D collars") && plant.includes("weaponMuzzleZ=-3.30"), "Enemy Rocket Launcher must render as a layered shoulder-fired 3D weapon.");
 assert.ok(plant.includes("Full 3D service rifle") && plant.includes('enemyWeapon === "sniper"') && plant.includes('enemyWeapon === "chainsaw"'), "AI rifle, sniper, and chainsaw models must have distinct detailed right-hand 3D geometry.");
 // v0.13.61: shared envelopes, reliable owner Combat entry, stronger weapon placement, and deterministic deaths.
@@ -192,7 +192,7 @@ assert.ok(plant.includes("Heavy layered motor housing") && plant.includes("chain
 
 // v0.13.63: separate Zombie Mode, persistent clear times, true headshots, gun-side tracers, and end-screen kill stats.
 assert.ok(plant.includes('data-toggle="zombie" class="zombie-mode-button"') && plant.includes('setCombatMode(!sameMode, "zombie")'), "Owner controls must expose a separate Zombie Mode beside Combat Mode.");
-assert.ok(combat.includes('zombie: Object.freeze') && combat.includes('defaultWeapon: "shotgun"') && combat.includes("PLAYER_PRIMARY_WEAPONS") && combat.includes('return [primary, "handgun"]'), "Zombie Mode must retain shotgun as its default while allowing the selected primary weapon plus pistol secondary.");
+assert.ok(combat.includes('zombie: Object.freeze') && combat.includes('defaultWeapon: "shotgun"') && combat.includes("PLAYER_PRIMARY_WEAPONS") && combat.includes('carriedWeapons.length ? carriedWeapons'), "Zombie Mode must retain the shotgun option and support the selected starting loadout and acquired weapons.");
 assert.ok(combat.includes('record.weaponKey = record.zombie ? "chainsaw"') && combat.includes('1.55 * zombieDifficultyConfig().speed') && combat.includes('combatDifficultyConfig().speed'), "Zombie AI must be chainsaw-only while Combat and Zombie movement are difficulty-scaled independently.");
 assert.ok(plant.includes('headCandidates') && plant.includes('drawDesignBox(actor,{...headPart,color:skin}') && plant.includes('const eyeWhite = zombie ? "#f7e76f"'), "Zombie face/eye overlays must anchor to the actual custom-person Head component.");
 assert.ok(combat.includes('function enemyHitVolumes') && combat.includes('zone: "head"') && combat.includes('zone: "body"') && combat.includes('HEADSHOT_DAMAGE_MULTIPLIER = 3'), "Combat hit detection must have separate head/body volumes and real headshot damage.");

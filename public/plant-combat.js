@@ -347,7 +347,7 @@
             '<button type="button" data-combat-pause-action="resume" class="primary"><span>▶</span> RESUME GAME <small>RETURN TO ACTION</small></button>',
             '<button type="button" data-combat-pause-action="exit"><span>↩</span> LEAVE MATCH <small>EXIT TO PLANT</small></button>',
           '</div>',
-          '<button type="button" class="combat-pause-audio" data-combat-pause-action="audio" aria-pressed="false">♫ SOUND EFFECTS: ON</button>',
+          '<button type="button" class="combat-pause-audio" data-combat-pause-action="audio" aria-pressed="false">♫ AUDIO & MUSIC: ON</button>',
           '<footer class="combat-pause-footer"><i></i> THE PLANT IS STILL WAITING FOR YOU <i></i></footer>',
         '</div>',
       '</div>',
@@ -590,7 +590,7 @@
       else if(audioContext && audioContext.state==="running")audioContext.suspend().catch(()=>{});
       const control=hud.querySelector('[data-combat-pause-action="audio"]');
       if(control){
-        control.textContent=soundEnabled?"♫ SOUND EFFECTS: ON":"♪ SOUND EFFECTS: MUTED";
+        control.textContent=soundEnabled?"♫ AUDIO & MUSIC: ON":"♪ AUDIO & MUSIC: MUTED";
         control.setAttribute("aria-pressed",String(!soundEnabled));
       }
       if(soundEnabled)playCombatSound("pickup",.6);
@@ -3989,7 +3989,7 @@
         if (host) {
           const previousWave=zombieWave;
           zombieWave=Math.max(0,Math.floor(number(host.wave,zombieWave)));
-          if(zombieWave>previousWave && previousWave>0){
+          if(zombieWave>previousWave && roundState==="playing"){
             playCombatSound("wave-start",.70);
             lastWaveTick=0;
           }

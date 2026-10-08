@@ -1332,11 +1332,11 @@
 
     function splashDamage(point, target, radius, baseDamage) {
       const distance=Math.hypot(number(target.x)-point.x,number(target.y)-point.y,number(target.z)-point.z);
-      if(distance>radius)return 0;
+      if(distance>=radius)return 0;
       // Solid machinery or walls protect distant targets, without making
       // a point-blank impact inexplicably deal no damage.
       if(distance>2.25 && !hasLineOfSight({x:point.x,y:point.y+.25,z:point.z},target))return 0;
-      return Math.max(0,number(baseDamage))*clamp(1-distance/Math.max(.1,radius),.18,1);
+      return Math.max(0,number(baseDamage))*clamp(1-distance/Math.max(.1,radius),0,1);
     }
 
     function resolveExplosionDamage(now) {

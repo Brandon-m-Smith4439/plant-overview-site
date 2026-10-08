@@ -8893,6 +8893,47 @@
     return { drawn: true, targetVisible };
   }
 
+  function drawCombatExterior() {
+    if(!combatController?.isActive?.())return;
+    const zombie=combatController.getMode?.()==="zombie";
+    const [left,front,right,back]=floorBounds();
+    const span=390,fill=zombie?"#242724":"#d2ab72",edge=zombie?"#555b52":"#e6c389";
+    const quads=[
+      [[left-span,-.35,front-span],[right+span,-.35,front-span],[right+span,-.35,front],[left-span,-.35,front]],
+      [[left-span,-.35,back],[right+span,-.35,back],[right+span,-.35,back+span],[left-span,-.35,back+span]],
+      [[left-span,-.35,front],[left,-.35,front],[left,-.35,back],[left-span,-.35,back]],
+      [[right,-.35,front],[right+span,-.35,front],[right+span,-.35,back],[right,-.35,back]],
+    ];
+    quads.forEach(points=>polygon(points,fill,edge,.3,1));
+    // Deterministic low-poly exterior only: no collision boxes or decorations
+    // inside the working plant, preserving editor, glass and AI navigation.
+    for(let i=0;i<48;i++){
+      const theta=i*2.39996322972865;
+      const side=i%4,offset=26+(i*41)%185;
+      let x=left+((i*67)%(Math.max(1,right-left))),z=front+((i*43)%(Math.max(1,back-front)));
+      if(side===0)x=left-offset;
+      else if(side===1)x=right+offset;
+      else if(side===2)z=front-offset;
+      else z=back+offset;
+      const rock=1.5+(i%5)*.75;
+      if(zombie){
+        // Charred broken rock and occasional dead tree silhouettes.
+        box({x:x-rock/2,y:0,z:z-rock/2,w:rock,h:.38+rock*.3,d:rock,color:i%3?"#343a32":"#443d3a"},1,1);
+        if(i%7===0){
+          box({x:x-.16,y:0,z:z-.16,w:.34,h:6+(i%3)*1.9,d:.34,color:"#241f1b"},1,1);
+          box({x:x-1.1,y:3.7,z:z-.13,w:2.2,h:.21,d:.24,color:"#241f1b",rotationZ:26},1,1);
+        }
+      }else{
+        // Sun-bleached boulders and sparse scrub on a dry open desert.
+        box({x:x-rock/2,y:-.05,z:z-rock/2,w:rock,h:.38+rock*.18,d:rock,color:i%3?"#b59a76":"#d1b085"},1,1);
+        if(i%8===0){
+          box({x:x-.1,y:.1,z:z-.1,w:.22,h:1.4,d:.24,color:"#786c43"},1,1);
+          box({x:x-.34,y:.85,z:z-.07,w:.65,h:.12,d:.15,color:"#908151"},1,1);
+        }
+      }
+    }
+  }
+
   function drawFloor() {
     const bounds = floorBounds();
     polygon(
@@ -13284,6 +13325,10 @@
     state.lastRenderedAt = time;
     updateCanvasSize();
     updateSkyBackground();
+    const zombieExterior=combatController?.isActive?.()&&combatController?.getMode?.()==="zombie";
+    const desertExterior=combatController?.isActive?.()&&combatController?.getMode?.()==="combat";
+    modelFrame.classList.toggle("combat-zombie-wasteland",Boolean(zombieExterior));
+    modelFrame.classList.toggle("combat-desert-exterior",Boolean(desertExterior));
     const blend = 1 - Math.pow(.93, elapsed / 16.667);
     state.stageFloat += (state.stage - state.stageFloat) * blend;
     if (Math.abs(state.stage - state.stageFloat) < .0005) state.stageFloat = state.stage;
@@ -13304,6 +13349,9 @@
     labelRects = [];
     renderPerformance.beginPhase?.("structure");
     const bounds = floorBounds();
+    if(zombieExterior||desertExterior)drawRetainedObject(
+      "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}`,drawCombatExterior
+    );
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(
       "plant:shell",

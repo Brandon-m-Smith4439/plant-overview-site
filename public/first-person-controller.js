@@ -12,6 +12,7 @@
     const setCamera = options.setCamera;
     const canOccupy = options.canOccupy;
     const canOccupyHard = options.canOccupyHard || (() => true);
+    const getClimbSurface = options.getClimbSurface || (() => null);
     const onLockChange = options.onLockChange || (() => {});
     const onMovement = options.onMovement || (() => {});
     const onExitRequest = options.onExitRequest || (() => {});
@@ -200,9 +201,20 @@
         verticalVelocity = 8.2;
         jumpRequested = false;
       }
-      verticalVelocity -= 22 * delta;
-      verticalOffset = Math.max(0, verticalOffset + verticalVelocity * delta);
-      if (verticalOffset <= 0) verticalVelocity = 0;
+      const climb = getClimbSurface(next.x,next.z);
+      const climbInput = Number(keys.has("Space") || keys.has("KeyW")) - Number(keys.has("KeyS"));
+      if (climb?.kind === "ladder" && climbInput !== 0) {
+        verticalVelocity = 0;
+        verticalOffset = clamp(verticalOffset + climbInput * delta * 8, 0, climb.height);
+      } else {
+        verticalVelocity -= 22 * delta;
+        verticalOffset = Math.max(0, verticalOffset + verticalVelocity * delta);
+        if (verticalOffset <= 0) verticalVelocity = 0;
+        if (climb?.kind === "roof" && verticalOffset > climb.height - .8) {
+          verticalOffset = climb.height;
+          verticalVelocity = Math.max(0,verticalVelocity);
+        }
+      }
 
       if (moving && verticalOffset <= 0.001) bobTime += delta * (sprinting ? 12 : 8.5);
       else bobTime += delta * 4;

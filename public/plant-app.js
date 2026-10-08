@@ -6875,6 +6875,11 @@
       getEnemyHeadVolume: combatHeadVolume,
       getOccluders: combatOccluders,
       getBounds: floorBounds,
+      getWeaponMuzzleAnchor: (weaponKey,aiming) => {
+        const design=designLibrary["combat-weapon-"+String(weaponKey||"rifle")];
+        const anchor=design?.combatAnchors?.[aiming?"adsMuzzle":"hipMuzzle"];
+        return anchor ? {...anchor,length:Number(design.base?.w)||3.9,depth:Number(design.base?.d)||1.25} : null;
+      },
       canPlaceStation: (x,z,radius=2.3) => walkCanOccupy(x,z,radius),
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
       capture: () => firstPersonController?.capture?.(),
@@ -11145,7 +11150,16 @@
           const bob=(offer.phase==="ready"?Math.sin(time*.0034)*.11:0);
           const weaponY=2.92+raise*2.65+bob;
           const weaponKey=String(offer.weaponKey||"rifle");
-          const pistol=/pistol|revolver/i.test(weaponKey);
+          const mysteryWeaponDesign=designLibrary["combat-weapon-"+weaponKey];
+          if (mysteryWeaponDesign?.components?.length) {
+            const base=mysteryWeaponDesign.base||{},ww=Math.max(.2,Number(base.w)||4);
+            const hh=Math.max(.2,Number(base.h)||1.65),dd=Math.max(.2,Number(base.d)||1.25);
+            drawCustomDesign({id:"mystery-display-"+weaponKey,instanceId:"mystery-display-"+weaponKey,
+              type:"combatWeapon",designId:mysteryWeaponDesign.id,
+              x:x-ww/2,y:weaponY-hh*.52,z:z-dd/2,w:ww,h:hh,d:dd,
+              color:"#d5dce6",rotationY:0},1,1,time,3,mysteryWeaponDesign.components,12);
+          } else {
+                    const pistol=/pistol|revolver/i.test(weaponKey);
           const rocket=/rocket/i.test(weaponKey);
           const sniper=/sniper|dmr/i.test(weaponKey);
           const shotgun=/shotgun/i.test(weaponKey);
@@ -11166,6 +11180,7 @@
             if (lmg) box({x:left+1.65,y:weaponY-.6,z:z-.27,w:.9,h:.42,d:.47,color:"#58616b",rotationY:0},1,1);
           }
           if (rocket) box({x:left+2.5,y:weaponY+.08,z:z-.36,w:1.05,h:.46,d:.62,color:"#c07e32",rotationY:0},.96,1);
+          }
           const haloRadius=1.25+raise*.75;
           const ring=[];
           for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,weaponY-.75,z+Math.sin(angle)*.82]);}
@@ -11375,7 +11390,7 @@
       rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
     };
     const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381", steel="#77858b", accent="#202a2f";
-    const parts = combat.weapon === "handgun" ? [
+    let parts = combat.weapon === "handgun" ? [
       {x:.02,y:.04,z:-.06,w:.3,h:.15,d:.72,color:metal},
       {x:.02,y:.13,z:-.08,w:.25,h:.035,d:.56,color:steel},
       {x:.02,y:.105,z:.19,w:.16,h:.055,d:.19,color:"#11171a"},
@@ -11456,13 +11471,32 @@
       {x:.04,y:-.34,z:.12,w:.25,h:.19,d:.3,color:skin,rotationX:-8},
       {x:-.22,y:-.17,z:-.61,w:.2,h:.18,d:.36,color:skin,rotationZ:-14},
     ];
+    // All fourteen authored combat weapons are real designer parts. Convert
+    // the shared +X-forward modeling convention into the first-person -Z axis.
+    // Editing and saving a weapon in Machine Studio changes its live viewmodel.
+    const sharedWeaponModel=designLibrary["combat-weapon-"+String(combat.weapon||"rifle")];
+    if (sharedWeaponModel?.machineType==="combatWeapon" && sharedWeaponModel.components?.length) {
+      const base=sharedWeaponModel.base||{};
+      const bw=Math.max(.3,Number(base.w)||4),bh=Math.max(.3,Number(base.h)||1.65),bd=Math.max(.3,Number(base.d)||1.25);
+      const factor=Math.min(1,3.75/bw);
+      parts=sharedWeaponModel.components.filter(part=>part.visible!==false && part.type==="box").map(part=>({
+        x:((Number(part.z)||0)+(Number(part.d)||.1)*.5-bd*.5)*.63,
+        y:((Number(part.y)||0)+(Number(part.h)||.1)*.5-bh*.5)*.72,
+        z:(bw*.5-(Number(part.x)||0)-(Number(part.w)||.1)*.5)*factor,
+        w:Math.max(.02,(Number(part.d)||.1)*.63),
+        h:Math.max(.02,(Number(part.h)||.1)*.72),
+        d:Math.max(.02,(Number(part.w)||.1)*factor),
+        color:part.color||"#58686c",
+        rotationX:Number(part.rotationX)||0,rotationY:Number(part.rotationY)||0,rotationZ:Number(part.rotationZ)||0,
+      }));
+    }
     // During reload the magazine visibly drops and returns instead of the whole gun merely rotating.
     parts.forEach((part,index) => {
-      const magazineIndex = combat.weapon === "rifle" ? 5 : -1;
+      const magazineIndex = sharedWeaponModel ? -1 : combat.weapon === "rifle" ? 5 : -1;
       // Rifle optic parts (10-14) disappear while zoomed/ADS so the separate
       // screen-space holographic aiming sight cannot be blocked by the gun model.
-      if (combat.weapon === "rifle" && rifleAds && index >= 10 && index <= 14) return;
-      if (combat.weapon === "sniper" && aim > .5 && index >= 7 && index <= 9) return;
+      if (!sharedWeaponModel && combat.weapon === "rifle" && rifleAds && index >= 10 && index <= 14) return;
+      if (!sharedWeaponModel && combat.weapon === "sniper" && aim > .5 && index >= 7 && index <= 9) return;
       const spec = {...part};
       if (index === magazineIndex && reload > .05) {
         const eject = reload < .5 ? reload*2 : (1-reload)*2;
@@ -11471,7 +11505,7 @@
       }
       drawViewmodelBox(spec,root,1);
     });
-    if (combat.weapon === "rifle" && !rifleAds) {
+    if (combat.weapon === "rifle" && !rifleAds && !sharedWeaponModel) {
       // Hip fire keeps the physical holographic sight on the rifle model; ADS
       // hides it so the dedicated aiming sight remains completely unobstructed.
       // glass is framed by the physical sight posts and carries its own red reticle.
@@ -11493,7 +11527,12 @@
       ctx.restore();
     }
     if (combat.muzzleFlash) {
-      const muzzleLocal = combat.weapon === "handgun" ? [0,.01,-.78]
+      const customAnchor=sharedWeaponModel?.combatAnchors?.[aim>.5?"adsMuzzle":"hipMuzzle"];
+      const muzzleLocal = customAnchor ? [
+        (Number(customAnchor.z)-(Number(sharedWeaponModel.base?.d)||1.25)*.5)*.63,
+        (Number(customAnchor.y)-(Number(sharedWeaponModel.base?.h)||1.65)*.5)*.72,
+        ((Number(sharedWeaponModel.base?.w)||4)*.5-Number(customAnchor.x))*Math.min(1,3.75/(Number(sharedWeaponModel.base?.w)||4)),
+      ] : combat.weapon === "handgun" ? [0,.01,-.78]
         : combat.weapon === "shotgun" ? [0,.04,-1.26]
         : combat.weapon === "sniper" ? [0,-.005,-1.78]
         : combat.weapon === "rocket" ? [0,0,-1.05]

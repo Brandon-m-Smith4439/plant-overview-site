@@ -237,6 +237,14 @@ assert.ok(lobbyRoute.includes("Owner password session required") && lobbyRoute.i
 assert.ok(combat.includes('data-match-type="private"') && combat.includes('data-match-type="coop"') && combat.includes('player-hit') && combat.includes('enemy-hit'), "Lobby setup must support Private Match plus shared Combat/Zombie co-op hit events.");
 assert.ok(plant.includes("drawCombatRemotePlayers") && combat.includes("remotePlayers"), "Remote lobby players must render as their selected plant characters on the layout.");
 
+// v0.13.76: host-coordinated replay, collision ordering and rack/truck geometry.
+assert.ok(combat.includes('sendEvent("round-restart"') && combat.includes('event.type === "round-restart"'), "Co-op replay must broadcast to all players.");
+assert.ok(combat.includes("The host restarts the entire team") && combat.includes("if (!multiplayer.isHost?.()) return;"), "Co-op clients must wait for the host replay.");
+assert.ok(combat.includes('event.senderId !== lobby.hostId') && lobbyRoute.includes('["coop-victory", "round-restart"].includes(type)'), "Only the host may send victory/restart events.");
+assert.ok(combat.includes('hitObstacle?.kind === "machine" && hitObstacle.machineId') && plant.includes('machineId:String(machine.instanceId || machine.id || machine.name || "machine")'), "Coarse machine hulls must not absorb shots targeting glass panes.");
+assert.ok(plant.includes('box(localBox3d(machine,1,.9,Math.max(.5,machine.w-2)') && plant.includes('box(localBox3d(machine,1,machine.d-Math.max(.3,machine.d*.12)-.9'), "A-frame glass must use correct geometry on both faces.");
+assert.ok(plant.includes('box:localBox3d(machine,Math.min(offset,machine.w-1),1,.55'), "Rack glass hitboxes must align to visible panes.");
+
 // v0.13.68: combat lobby authorization must be backed by the signed owner cookie only.
 assert.ok(lobbyRoute.includes('SESSION_COOKIE = "monroe-glass-owner-server-v1"') && lobbyRoute.includes('timingSafeEqual') && lobbyRoute.includes('Owner password session required.'), "Combat multiplayer must validate the signed owner-password session cookie server-side.");
 assert.ok(!lobbyRoute.includes('x-monroe-owner-session') && !lobbyRoute.includes('clientOwner && sameOrigin'), "Combat lobby authorization must not trust a client-supplied owner marker.");

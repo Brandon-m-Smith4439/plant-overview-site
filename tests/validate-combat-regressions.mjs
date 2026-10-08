@@ -32,11 +32,14 @@ const obscured=extractFunction(combat,"splashDamage",{number,clamp,hasLineOfSigh
 assert.equal(obscured(center,{x:5,y:0,z:0},10,100),0,"Solid cover blocks distant blast");
 
 const portal=extractFunction(plant,"combatPerimeterPassage",{
-  combatPortalSpec:()=>({left:0,front:0,right:100,back:100,centerX:50,halfWidth:5.2,thickness:1})
+  combatPortalSpec:()=>({left:0,front:0,right:100,back:100,centerX:50,centerZ:50,halfWidth:6.2,thickness:1})
 });
 assert.equal(portal(50,0,1),true,"Combat doorway can be crossed");
 assert.equal(portal(10,0,1),false,"Solid wall blocks crossing");
-assert.equal(portal(0,50,1),false,"Side walls stay closed");
+assert.equal(portal(0,50,1),true,"The west boundary is completely open");
+assert.equal(portal(50,100,1),true,"The north boundary is completely open");
+assert.equal(portal(100,50,1),true,"East door can be crossed");
+assert.equal(portal(100,20,1),false,"East wall blocks travel outside its doorway");
 assert.equal(portal(50,-30,1),true,"Outside wasteland is freely explorable");
 
 assert.ok(combat.includes("COOP_REVIVE_WINDOW_MS=22000"),"Revive window must be limited");

@@ -1,3 +1,14 @@
+## 0.13.82 — 2026-10-08
+
+- Changed zombie and combat perimeter to two walls only (south and east), each with a narrow doorway and upper lintel; north/west are open and collision/pathfinding now matches the visuals.
+- Fixed missing zombie eyes: prior eye geometry lacked the Designer `type: "box"`, which prevented it rendering. Added prominent, double-sided protruding eyes on existing team-member heads.
+- Improved zombie AI doorway routing, chainsaw chain-motion, attack/slash animation and multiplayer attack synchronization.
+- Easier ladder activation, faster climb and automatic roof landing; reinforced collision on solid POI buildings.
+- Co-op revive requires uninterrupted 3.5-second E hold; the server enforces at least 3 seconds between start and completion. The 22-second downed timer remains.
+- After failing to revive in co-op Zombie Mode, that person returns as their own hostile chainsaw zombie, while still-living team members remain human.
+- Upgraded pause screen to a polished tactical intermission panel with health, threats, elapsed time and controls.
+- Added behavioral regression tests covering walls/portals, model eyes, revive roles, weapons, ladders and pause UI.
+
 ## 0.13.81 — 2026-10-08
 
 - Fixed co-op zombies appearing as feet-only by giving network-synthesized enemies complete layout stage, model-design, animation and elevation metadata and ensuring full-size live actor rendering.

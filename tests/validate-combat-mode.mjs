@@ -32,7 +32,7 @@ assert.ok(combat.includes("hitReactUntil") && combat.includes("defeatedAt") && c
 assert.ok(combat.includes("playerRenderState") && combat.includes("reloadProgress") && combat.includes("recoilProgress"), "Player weapon animation state is missing.");
 assert.ok(combat.includes("roundState") && combat.includes("data-combat-restart"), "Win/defeat restart flow is missing.");
 assert.ok(combat.includes("function resetCombatSessionUi()"), "Combat needs one idempotent session-UI reset so stale end screens cannot survive an exit/re-entry cycle.");
-const startLifecycleStart = combat.indexOf("function start(mode = \\\"combat\\\")");
+const startLifecycleStart = combat.indexOf('function start(mode = "combat")');
 const stopLifecycleStart = combat.indexOf("function stop()", startLifecycleStart);
 const startLifecycleBody = combat.slice(startLifecycleStart, stopLifecycleStart);
 const stopLifecycleEnd = combat.indexOf("function handleKeyDown", stopLifecycleStart);

@@ -2537,9 +2537,12 @@
   function combatPerimeterPassage(x,z,radius=1.2) {
     const {left,front,right,back,centerX,halfWidth,thickness}=combatPortalSpec();
     const band=Math.max(3.5,thickness+radius*2);
-    if(x<left+band||x>right-band)return false;
-    if(z<front+band||z>back-band)
-      return Math.abs(x-centerX) < halfWidth-radius-.25;
+    // Only enforce a portal while crossing a perimeter wall; after exiting,
+    // players can explore the entire desert instead of an invisible corridor.
+    const nearEastWest=(Math.abs(x-left)<band||Math.abs(x-right)<band) && z>=front-band && z<=back+band;
+    if(nearEastWest)return false;
+    const nearNorthSouth=(Math.abs(z-front)<band||Math.abs(z-back)<band) && x>=left-band && x<=right+band;
+    if(nearNorthSouth)return Math.abs(x-centerX) < halfWidth-radius-.25;
     return true;
   }
   function combatExteriorLandmarks() {

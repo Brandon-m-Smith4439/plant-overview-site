@@ -10685,6 +10685,12 @@
     if (design && ["person","combatzombie"].includes(String(design.machineType || "").toLowerCase())) {
       const staticIdentityParts = designParts.filter((part) => !/(?:left|right)\s+(?:arm|leg)/i.test(String(part?.name || "")));
       if (staticIdentityParts.length) {
+        // Sparse legacy employee designs must still have a complete solid torso
+        // and head instead of the co-op client's isolated shoes/leg segments.
+        if(!staticIdentityParts.some(part=>/torso|body|chest/i.test(String(part.name||""))))
+          box(localBox3d(actor,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
+        if(!staticIdentityParts.some(part=>/^head$/i.test(String(part.name||""))))
+          box(localBox3d(actor,width*.32,depth*.3,width*.36,depth*.38,height*.14,skin,height*.75),alpha,1);
         const jawPulse = zombie ? Math.abs(Math.sin(time*.007 + phase*.38))*.11 : 0;
         const actualHead = designParts.find((part)=>/^head$/i.test(String(part?.name||"")) && Number(part.h)>.08);
         const posedIdentityParts = staticIdentityParts.map((part) => {
@@ -11196,7 +11202,8 @@
 
   function viewmodelPoint(point, root) {
     const rotated = rotateVector3(point, root.rotationX, root.rotationY, root.rotationZ);
-    return [rotated[0] + root.x, rotated[1] + root.y, rotated[2] + root.z];
+    const scale = Number(root.scale) || 1;
+    return [rotated[0]*scale+root.x, rotated[1]*scale+root.y, rotated[2]*scale+root.z];
   }
 
   function drawViewmodelPolygon(points, fill, stroke = "rgba(255,255,255,.08)", alpha = 1) {
@@ -11291,7 +11298,7 @@
         rotationY:180-(Number(playerState.yaw)||0)*180/Math.PI,
         rotation:180-(Number(playerState.yaw)||0)*180/Math.PI,
         combatState:{
-          zombie:lobby.config?.mode === "zombie" && lobby.config?.matchType !== "private",
+          zombie:false,
           movementBlend:playerState.moving ? 1 : .08,
           walkPhase:time*.008 + (String(player.id||"").length%7)*.71,
           weaponKey:playerState.weapon === "handgun" ? "pistol" : (playerState.weapon || "rifle"),
@@ -11313,6 +11320,29 @@
       const playerState=smoothRemotePlayerState(player,time);
       if (!Number.isFinite(Number(playerState.x)) || !Number.isFinite(Number(playerState.z))) continue;
       const allyDistance=remotePlayerDistance(playerState);
+      // Downed markers never distance-fade: rescuers must locate teammates,
+      // even if the fallen player is behind a wall or off-screen.
+      const reviveSeconds=playerState.alive===false
+        ? Math.ceil((Number(playerState.downedUntil||0)-Date.now())/1000) : 0;
+      if(reviveSeconds>0 && lobby.config?.matchType==="coop"){
+        const raw=project(Number(playerState.x),Number(playerState.y||5.5)+3.1,Number(playerState.z));
+        const markerX=clamp(raw[0],38*pixelScale,canvas.width-38*pixelScale);
+        const markerY=clamp(raw[1],46*pixelScale,canvas.height-46*pixelScale);
+        const offscreen=Math.abs(markerX-raw[0])>4||Math.abs(markerY-raw[1])>4;
+        ctx.save();
+        ctx.textAlign="center";ctx.textBaseline="middle";
+        ctx.shadowColor="rgba(255,22,42,.9)";ctx.shadowBlur=11*pixelScale;
+        ctx.fillStyle="#e22e40";ctx.strokeStyle="#fff1f0";ctx.lineWidth=1.4*pixelScale;
+        ctx.beginPath();ctx.moveTo(markerX,markerY-20*pixelScale);
+        ctx.lineTo(markerX-10*pixelScale,markerY-6*pixelScale);
+        ctx.lineTo(markerX+10*pixelScale,markerY-6*pixelScale);ctx.closePath();ctx.fill();ctx.stroke();
+        ctx.font=`900 ${Math.max(12,14*pixelScale)}px "Segoe UI",sans-serif`;
+        ctx.fillStyle="#fff1ef";ctx.fillText(`REVIVE · ${reviveSeconds}s`,markerX,markerY+10*pixelScale);
+        ctx.font=`700 ${Math.max(10,11*pixelScale)}px "Segoe UI",sans-serif`;
+        ctx.fillText(`${player.name||"Teammate"}${offscreen?" · LOCATE":""}`,markerX,markerY+26*pixelScale);
+        ctx.restore();
+        continue;
+      }
       if (lobby.config?.matchType === "coop" && allyDistance >= ALLY_LABEL_HIDE_DISTANCE) continue;
       const template=machines.find((machine,index) => String(machine.instanceId || machine.id || machine.name || `enemy-${index}`) === String(player.characterId || ""));
       const characterName=String(template?.name || template?.short || "Plant character");
@@ -11629,16 +11659,17 @@
     const death = clamp(Number(combat.deathProgress) || 0, 0, 1);
     const deathDrop = Math.sin(Math.min(1, death * 2) * Math.PI / 2);
     const rifleAds = aim > .5 && combat.weapon !== "chainsaw";
+    const meleeSwing=clamp(Number(combat.meleeSwingProgress)||0,0,1);
     const root = {
-      // ADS keeps the rifle low enough that the dedicated HUD holographic sight
-      // stays completely open. Hip fire returns the weapon to the right side.
-      // All physical receivers stay BELOW the centered red-dot aperture while ADS.
-      x: .34 + bobX*(1-aim*.78) - aim*.14 + deathDrop*.18,
-      y: -.25 - bobY*(1-aim*.8) - aim*.35 - reloadArc*.12 + recoil*.045 - deathDrop*.72,
-      z: 1.15 - aim*.20 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
-      rotationX: -4 - recoil*6 + reloadArc*(combat.weapon==="rocket"?3:18) + deathDrop*28,
+      // A smaller 3D gun held farther from the camera leaves a readable view
+      // of the world even while swapping magazines or shouldering a rocket.
+      scale:combat.weapon==="rocket" ? .70 : .78,
+      x: .49 + bobX*(1-aim*.78) - aim*.14 + deathDrop*.18 - meleeSwing*.22,
+      y: -.42 - bobY*(1-aim*.8) - aim*.35 - reloadArc*.07 + recoil*.045 - deathDrop*.72 + meleeSwing*.10,
+      z: 1.60 - aim*.18 - recoil*.11 + reloadArc*.17 + deathDrop*.12,
+      rotationX: -4 - recoil*6 + reloadArc*(combat.weapon==="rocket"?3:12) + deathDrop*28,
       rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
-      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*(combat.weapon==="rocket"?6:30) + deathDrop*24,
+      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*(combat.weapon==="rocket"?6:18) + meleeSwing*19 + deathDrop*24,
     };
     const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381", steel="#77858b", accent="#202a2f";
     let parts = combat.weapon === "handgun" ? [

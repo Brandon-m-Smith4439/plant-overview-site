@@ -501,6 +501,9 @@
     let respawnDisplay = 0;
     const COOP_REVIVE_WINDOW_MS=22000;
     const COOP_REVIVE_RADIUS=9;
+    const COOP_REVIVE_HOLD_MS=3500;
+    let reviveHold=null;
+    let playerZombie=false;
     let reviveUntil=0;
     let nextMeleeAt=0;
     let meleeSwingUntil=0;
@@ -2251,23 +2254,36 @@
       return nearest;
     }
     function updateRevivePrompt(now=performance.now()){
-      if(now-lastRevivePromptAt<200)return;
+      if(now-lastRevivePromptAt<100)return;
       lastRevivePromptAt=now;
       const target=nearestDownedAlly();
+      if(!target || (reviveHold && reviveHold.targetId!==target.ally.id))reviveHold=null;
       revivePrompt.hidden=!target;
-      if(target)revivePrompt.textContent=`[E] REVIVE ${target.ally.name||"TEAMMATE"} · ${target.seconds}s LEFT`;
+      if(!target)return;
+      const held=reviveHold?.targetId===target.ally.id;
+      const fraction=held?clamp((now-reviveHold.startedAt)/COOP_REVIVE_HOLD_MS,0,1):0;
+      revivePrompt.style.setProperty("--revive-progress",Math.round(fraction*100)+"%");
+      revivePrompt.textContent=held
+        ? `REVIVING ${target.ally.name||"TEAMMATE"} · ${Math.ceil((1-fraction)*COOP_REVIVE_HOLD_MS/1000)}s · ${target.seconds}s LEFT`
+        : `HOLD [E] FOR ${Math.ceil(COOP_REVIVE_HOLD_MS/1000)}s TO REVIVE ${target.ally.name||"TEAMMATE"} · ${target.seconds}s LEFT`;
+      if(held && fraction>=1 && !reviveHold.sent){
+        reviveHold.sent=true;
+        // Server validates both the start event and continuous elapsed time.
+        multiplayer.sendEvent("revive-player",{},target.ally.id)
+          .then(()=>setTransientStatus("REVIVE COMPLETE",1100))
+          .catch(()=>{reviveHold=null;setTransientStatus("Revive interrupted - try again",1100);});
+      }
     }
-    async function reviveNearbyAlly(){
-      const nearest=nearestDownedAlly();
-      if(!nearest)return false;
-      const target=nearest.ally;
-      // Receiver verifies the current down timer and actual sender distance.
-      try{
-        await multiplayer.sendEvent("revive-player",{targetId:target.id},target.id);
-        setTransientStatus(`Reviving ${target.name||"teammate"}`,1100);
-      }catch{setTransientStatus("Revive failed - check connection",1100);}
+    function beginReviveHold(){
+      const target=nearestDownedAlly();
+      if(!target||reviveHold)return false;
+      reviveHold={targetId:target.ally.id,startedAt:performance.now(),sent:false};
+      multiplayer.sendEvent("revive-begin",{},target.ally.id)
+        .catch(()=>{reviveHold=null;setTransientStatus("Revive unavailable",1200);});
+      updateRevivePrompt(performance.now()+101);
       return true;
     }
+    function cancelReviveHold(){reviveHold=null;revivePrompt.style.setProperty("--revive-progress","0%");}
 
     function localRoundStats() {
       return { kills:regularKills+headshotKills, headshots:headshotKills, deaths:playerDeaths, points:playerPoints };
@@ -2403,6 +2419,10 @@
       }
       if(reviveUntil){
         reviveUntil=0;
+        if(gameMode==="zombie" && matchType==="coop" && multiplayer?.getLobby?.()){
+          becomePlayerZombie();
+          return false;
+        }
         if(!canRespawnAfterDeath()){
           finishRound("lost");
           return true;
@@ -2413,11 +2433,29 @@
       return true;
     }
 
+    function becomePlayerZombie(){
+      if(!active || gameMode!=="zombie" || matchType!=="coop")return false;
+      roundRevealSerial++;
+      playerZombie=true;reviveUntil=0;respawnEndsAt=0;respawnDisplay=0;
+      playerHealth=165;playerShield=0;selectedWeapon="chainsaw";
+      playerDeathStartedAt=0;roundState="playing";
+      frame.classList.remove("combat-death-cinematic","combat-player-dead");
+      if(roundOverlay)roundOverlay.hidden=true;
+      if(killerReveal)killerReveal.hidden=true;
+      options.resetDeathCinematic?.();
+      options.setMovementLocked?.(false);
+      setTransientStatus("YOU TURNED · HUNT THE SURVIVING PLAYERS",4000);
+      syncHud();multiplayer?.heartbeat?.();
+      window.requestAnimationFrame(()=>options.capture?.());
+      options.invalidate?.();
+      return true;
+    }
+
     function resumePlayerAfterDeath(revived=false) {
       if (!active || !["respawn-choice","respawning"].includes(roundState)) return false;
       if(!revived && (roundState==="respawning" || reviveUntil>Date.now()))return false;
       roundRevealSerial++;
-      respawnEndsAt=0;respawnDisplay=0;reviveUntil=0;
+      respawnEndsAt=0;respawnDisplay=0;reviveUntil=0;playerZombie=false;
       playerHealth=revived?75:100;playerShield=revived?0:SHIELD_MAX;
       lastDamageAt=performance.now();lastShieldUpdateAt=lastDamageAt;
       playerDeathStartedAt=0;roundState="playing";
@@ -2694,11 +2732,11 @@
             kills:regularKills+headshotKills},"").catch(()=>{});
         showHitmarker(enemy.health<=0,false);
       }
-      if(matchType==="private" && multiplayer?.getLobby?.()){
+      if((matchType==="private" || playerZombie) && multiplayer?.getLobby?.()){
         const remote=findRemotePlayerTarget(origin,direction,6.5);
         if(remote && remote.distance<=6.5)
-          multiplayer.sendEvent?.("player-hit",{damage:32,headshot:false,weapon:"melee"},
-            remote.player.id).catch(()=>{});
+          multiplayer.sendEvent?.("player-hit",{damage:playerZombie?62:32,
+            headshot:false,weapon:playerZombie?"chainsaw":"melee"},remote.player.id).catch(()=>{});
       }
       setTransientStatus("MELEE · [F] TO STRIKE",420);
       options.invalidate?.();
@@ -2706,6 +2744,7 @@
     }
 
     function fire() {
+      if(playerZombie){meleeAttack();return;}
       if (!active || reloading || roundState !== "playing") return;
       const player = options.getPlayer?.();
       if (!player?.engaged) return;
@@ -2768,7 +2807,8 @@
         const remoteTarget = findRemotePlayerTarget(origin, pelletDirection, weapon.range);
         const worldImpact = resolveWorldImpact(origin, pelletDirection, weapon.range);
         let finalPoint = worldImpact.point;
-        if (matchType === "private" && remoteTarget && remoteTarget.distance <= worldImpact.distance + .05) {
+        if ((matchType === "private" || matchType==="coop" && remoteTarget?.player?.state?.revenant===true)
+             && remoteTarget && remoteTarget.distance <= worldImpact.distance + .05) {
           finalPoint = pointAlongRay(origin,pelletDirection,remoteTarget.distance);
           const headshot = remoteTarget.zone === "head";
           const damage = weapon.damage * (headshot ? HEADSHOT_DAMAGE_MULTIPLIER : 1);
@@ -2842,7 +2882,8 @@
       else setTransientStatus("Incoming fire - " + sourceName, 600);
       if (playerHealth <= 0) {
         recordPlayerDeath();
-        if (canRespawnAfterDeath() || (matchType==="coop" && multiplayer?.getLobby?.()))beginPlayerRespawn(enemy,player);
+        if(playerZombie)finishRound("lost",enemy,player);
+        else if (canRespawnAfterDeath() || (matchType==="coop" && multiplayer?.getLobby?.()))beginPlayerRespawn(enemy,player);
         else finishRound("lost", enemy, player);
       }
       syncHud();
@@ -2978,7 +3019,7 @@
 
       const localTarget={x:number(player?.x),y:number(player?.y,5.5),z:number(player?.z)};
       const remoteTargets=matchType==="coop" && multiplayer?.isHost?.() ? (multiplayer.remotePlayers?.()||[]).filter((entry)=>entry.state?.alive!==false && number(entry.state?.health,100)>0).map((entry)=>({id:entry.id,x:number(entry.state?.x),y:number(entry.state?.y,5.5),z:number(entry.state?.z)})) : [];
-      const targets=[...(roundState==="playing" ? [{...localTarget,id:""}] : []),...remoteTargets];
+      const targets=[...(roundState==="playing" && !playerZombie ? [{...localTarget,id:""}] : []),...remoteTargets];
       let threats = 0;
       for (const enemy of aliveEnemies()) {
         let source = enemyCenter(enemy);
@@ -3033,7 +3074,7 @@
       hostWorldSeq = 0;
       lastAppliedHostWorldSeq = -1;
       playerShield = SHIELD_MAX;
-      reviveUntil=0;nextMeleeAt=0;meleeSwingUntil=0;revivePrompt.hidden=true;
+      reviveUntil=0;reviveHold=null;playerZombie=false;nextMeleeAt=0;meleeSwingUntil=0;revivePrompt.hidden=true;
       aiming = false;
       frame.classList.remove("combat-aiming");
       if (scopeOverlay) scopeOverlay.hidden = true;
@@ -3536,9 +3577,12 @@
         if (enemy && enemy.health>0) damagePlayer(Math.min(80,Math.max(0,number(event.payload?.damage))),enemy,options.getPlayer?.());
         return;
       }
-      if (event.type === "player-hit" && event.targetId === multiplayer?.playerId && matchType === "private" && roundState === "playing") {
+      if (event.type === "player-hit" && event.targetId === multiplayer?.playerId &&
+          (matchType === "private" || matchType==="coop") && roundState === "playing") {
         const sender=(lobby?.players||[]).find((player) => player.id===event.senderId);
         const state=sender?.state || {};
+        // Friendly fire is forbidden except when one of the two players is undead.
+        if(matchType==="coop" && Boolean(state.revenant)===Boolean(playerZombie))return;
         const killerWeaponKey=String(event.payload?.weapon || state.weapon || "rifle");
         const fakeEnemy={ id:event.senderId, x:number(state.x)-.9, z:number(state.z)-.9, weaponKey:killerWeaponKey, weaponLabel:WEAPONS[killerWeaponKey]?.shortLabel || ENEMY_WEAPONS[killerWeaponKey]?.label || "Weapon", machine:{name:sender?.name||"Opponent",x:number(state.x)-.9,y:0,z:number(state.z)-.9,w:1.8,d:1.8,h:6.5} };
         damagePlayer(number(event.payload?.damage),fakeEnemy,options.getPlayer?.());
@@ -3617,7 +3661,9 @@
       const state={
         x,y:number(player.y,5.5),z,yaw:number(player.yaw),pitch:number(player.pitch),vx,vz,moving:Boolean(player.moving),
         health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,
-        alive:!["lost","respawning","respawn-choice"].includes(roundState),
+        alive:!playerZombie && !["lost","respawning","respawn-choice"].includes(roundState),
+        revenant:playerZombie,
+        meleeSwing:now<meleeSwingUntil?clamp((meleeSwingUntil-now)/330,0,1):0,
         downedUntil:reviveUntil>Date.now()?reviveUntil:0,
         kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths,points:playerPoints,
       };
@@ -3630,11 +3676,13 @@
     }
 
     function findRemotePlayerTarget(origin,direction,range) {
-      if (matchType !== "private" || !multiplayer) return null;
+      if ((matchType!=="private" && matchType!=="coop") || !multiplayer)return null;
       let best=null,bestDistance=range;
       for (const player of multiplayer.remotePlayers?.() || []) {
         const state=player.state || {};
-        if (state.alive === false || number(state.health,100)<=0) continue;
+        if(number(state.health,100)<=0)continue;
+        if(matchType==="coop" && (playerZombie ? state.alive!==true : state.revenant!==true))continue;
+        if(matchType==="private" && state.alive===false)continue;
         const x=number(state.x), y=number(state.y,5.5), z=number(state.z);
         const head={x,y:y-.42,z};
         const headDistance=raySphere(origin,direction,head,.52);
@@ -3754,7 +3802,7 @@
       if (matchSetup) matchSetup.hidden = true;
       multiplayer?.leave?.();
       multiplayerStartedRevision=0;
-      reviveUntil=0;revivePrompt.hidden=true;
+      reviveUntil=0;reviveHold=null;playerZombie=false;revivePrompt.hidden=true;
       options.onStateChange?.(false, gameMode);
       options.invalidate?.();
     }
@@ -3764,7 +3812,8 @@
       if (event.target?.matches?.("input, select, textarea, [contenteditable='true']")) return;
       if (event.code === "KeyE") {
         event.preventDefault();
-        if(nearestDownedAlly())reviveNearbyAlly();
+        if(event.repeat)return;
+        if(nearestDownedAlly())beginReviveHold();
         else buyNearbyStation();
         return;
       }
@@ -3784,6 +3833,9 @@
       }
     }
 
+    function handleKeyUp(event){
+      if(event.code==="KeyE")cancelReviveHold();
+    }
     function handleMouseDown(event) {
       if (!active || paused || ["lost","won"].includes(roundState) || options.isPointerLocked?.() !== true) return;
       if (event.button === 2) { event.preventDefault(); setAiming(true); return; }
@@ -3815,6 +3867,7 @@
     }
 
     function handleBlur() {
+      cancelReviveHold();
       mouseHeld = false;
       setAiming(false);
     }
@@ -3827,6 +3880,7 @@
     }) || null;
 
     document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("keyup", handleKeyUp, true);
     document.addEventListener("mousedown", handleMouseDown, true);
     document.addEventListener("mouseup", handleMouseUp, true);
     document.addEventListener("contextmenu", handleContextMenu, true);
@@ -3940,6 +3994,7 @@
         stop();
         revivePrompt.remove();
         document.removeEventListener("keydown", handleKeyDown, true);
+        document.removeEventListener("keyup", handleKeyUp, true);
         document.removeEventListener("mousedown", handleMouseDown, true);
         document.removeEventListener("mouseup", handleMouseUp, true);
         document.removeEventListener("contextmenu", handleContextMenu, true);

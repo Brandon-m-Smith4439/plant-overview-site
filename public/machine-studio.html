@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Build editable component-based machine models for the Monroe glass plant.">
-  <title>Machine Design Studio &middot; v0.13.75</title>
+  <title>Machine Design Studio &middot; v0.13.79</title>
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="plant-icon.png" type="image/png" sizes="512x512">
   <link rel="apple-touch-icon" href="plant-icon.png">
@@ -21,7 +21,7 @@
       <div class="studio-brand">
         <a class="studio-back-link" href="preview.html" aria-label="Return to plant layout"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/><path d="M8 12h10"/></svg></a>
         <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
-        <span class="studio-version-badge">v0.13.75</span>
+        <span class="studio-version-badge">v0.13.79</span>
       </div>
       <div class="studio-top-actions" role="toolbar" aria-label="Design commands">
         <span id="save-state" class="studio-save-state">Auto-saved</span>
@@ -39,6 +39,8 @@
       <aside class="studio-browser-panel">
         <div class="studio-tabs studio-browser-tabs" role="tablist" aria-label="Design browser">
           <button type="button" role="tab" data-browser-tab="designs" class="active" aria-selected="true">Machines</button>
+          <button type="button" role="tab" data-browser-tab="zombies" aria-selected="false">Zombies</button>
+          <button type="button" role="tab" data-browser-tab="weapons" aria-selected="false">Weapons</button>
           <button type="button" role="tab" data-browser-tab="parts" aria-selected="false">Parts</button>
           <button type="button" role="tab" data-browser-tab="add" aria-selected="false">Build</button>
           <button type="button" role="tab" data-browser-tab="plant" aria-selected="false">Place</button>
@@ -66,6 +68,16 @@
           </details>
         </section>
 
+        <section data-browser-panel="zombies" class="studio-browser-section" hidden>
+          <div class="studio-panel-heading"><p>Zombie model presets</p><span>Shared with Endless mode</span></div>
+          <p class="studio-help">Select a zombie gait to edit its body, face and animation in the same 3D studio. Save to update the live model library.</p>
+          <div id="zombie-design-list" class="design-list"></div>
+        </section>
+        <section data-browser-panel="weapons" class="studio-browser-section" hidden>
+          <div class="studio-panel-heading"><p>Weapon model presets</p><span>Player · AI · Mystery Box</span></div>
+          <p class="studio-help">Edit the 3D geometry of every weapon. In the Machine inspector, set the hip-fire and ADS muzzle attachment coordinates.</p>
+          <div id="weapon-design-list" class="design-list"></div>
+        </section>
         <section data-browser-panel="parts" class="studio-browser-section" hidden>
           <div class="studio-panel-heading"><p>Machine parts</p><strong id="component-count">0 parts</strong></div>
           <div class="parts-quick-actions">
@@ -388,6 +400,15 @@
               <label class="studio-switch envelope-visibility-switch"><input id="show-design-envelope" type="checkbox" checked><span>Show envelope outline in the viewport</span></label>
               <button id="fit-envelope" type="button" class="full-width-button">Move &amp; tight fit to parts</button>
             </details>
+            <section class="studio-combat-anchors wide" id="combat-anchors-panel" hidden>
+              <div class="studio-panel-heading compact"><p>Combat muzzle origins</p><span>Design-local coordinates (ft)</span></div>
+              <p class="studio-help">The +X end of a weapon points toward its muzzle. Edit these values to move where the first-person weapon fires when aiming and hip-firing.</p>
+              <div class="transform-subheading">Hip fire muzzle · X / Y / Z</div>
+              <div class="axis-fields"><label>X<input id="combat-hip-x" type="number" step="0.01"></label><label>Y<input id="combat-hip-y" type="number" step="0.01"></label><label>Z<input id="combat-hip-z" type="number" step="0.01"></label></div>
+              <div class="transform-subheading">Aiming down sights muzzle · X / Y / Z</div>
+              <div class="axis-fields"><label>X<input id="combat-ads-x" type="number" step="0.01"></label><label>Y<input id="combat-ads-y" type="number" step="0.01"></label><label>Z<input id="combat-ads-z" type="number" step="0.01"></label></div>
+              <p class="studio-help">The weapon's actual geometry is editable under Parts/Build, while these independent anchors control shot emergence.</p>
+            </section>
             <label class="studio-field wide">Description<textarea id="design-description" rows="4"></textarea></label>
           </div>
         </section>

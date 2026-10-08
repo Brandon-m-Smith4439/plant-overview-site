@@ -10605,7 +10605,8 @@
     // knees much higher, and giants use a deliberately heavy stomping cadence.
     if (combat.zombie) {
       const sway=Math.sin(phase*.5)*gaitSwing*movement;
-      actor.renderY=(Number(actor.renderY??actor.y)||0)+Math.abs(Math.cos(phase))*gaitBob*movement;
+      const bounce=Math.abs(Math.cos(phase))*gaitBob*movement;
+      leftKnee[1]+=bounce*.14;rightKnee[1]+=bounce*.14;
       if(zombieGait==="sprinter"||zombieGait==="runner"){
         const frontLean=gaitLean*Math.PI/180;
         // Lean is applied through shoulder pose, not actor world orientation,

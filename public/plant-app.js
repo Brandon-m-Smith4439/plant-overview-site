@@ -10787,7 +10787,7 @@
         const px=Number.isFinite(Number(saved?.x))?Number(saved.x):Number(headPart.x)+Number(headPart.w)*fraction;
         const py=Number.isFinite(Number(saved?.y))?Number(saved.y):Number(headPart.y)+Number(headPart.h)*.74;
         const pz=Number.isFinite(Number(saved?.z))?Number(saved.z):minFront;
-        const shape={x:px,y:py,z:pz,w:eyeSize,h:eyeH,d:eyeD,color:eyeWhite,
+        const shape={type:"box",x:px,y:py,z:pz,w:eyeSize,h:eyeH,d:eyeD,color:eyeWhite,
           rotationX:Number(headPart.rotationX)||0,rotationY:Number(headPart.rotationY)||0,
           rotationZ:Number(headPart.rotationZ)||0};
         drawDesignBox(actor,shape,design,alpha,grow);
@@ -10821,7 +10821,7 @@
           const x=face.x+face.w*fraction,y=face.y+face.h*.63;
           const z=frontZ+(side<0 ? -.08 : .08);
           if(design && headPart){
-            const white={x,y,z,w:eyeW,h:eyeH,d:eyeD,color:"#f3f5dc"};
+            const white={type:"box",x,y,z,w:eyeW,h:eyeH,d:eyeD,color:"#f3f5dc"};
             drawDesignBox(actor,white,design,alpha, grow);
             drawDesignBox(actor,{...white,x:x+eyeW*.32,y:y+eyeH*.13,
               z:z+(side<0 ? -eyeD*.34 : eyeD*.34),w:eyeW*.39,

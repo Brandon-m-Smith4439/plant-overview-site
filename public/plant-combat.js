@@ -20,6 +20,11 @@
   const COMBAT_SETTINGS_STORAGE_KEY = "monroe-glass-combat-settings-v1";
   const RESPAWN_DELAY_MS = 5000;
   const MYSTERY_BOX_COST = 950;
+  const MYSTERY_ROLL_DURATION_MS = 4800;
+  const MYSTERY_RISE_DURATION_MS = 1750;
+  const MYSTERY_CLAIM_WINDOW_MS = 11500;
+  const MYSTERY_LOWER_DURATION_MS = 2300;
+  const MYSTERY_REEL_STEPS = 35;
   const HEALTH_STATION_COST = 800;
   const MAX_CARRIED_WEAPONS = 3;
   const MYSTERY_WEAPON_POOL = Object.freeze(["smg","carbine","lmg","burst","revolver","dmr","autoShotgun","heavyPistol","sniper","rocket","shotgun"]);
@@ -455,6 +460,8 @@
     let waveNextAt = 0;
     let waveSpecial = false;
     let mysteryBox = null;
+    // Pending prizes are per-player, never granted until the second E press.
+    let mysteryOffer = null;
     let healthStation = null;
     let lastHealthPurchaseWave = -1;
     let nearestStation = null;
@@ -841,33 +848,108 @@
       return null;
     }
 
+    function mysteryPhase(now = performance.now()) {
+      if (!mysteryOffer) return "idle";
+      if (now >= mysteryOffer.despawnAt) {
+        mysteryOffer = null; // Unclaimed prize has lowered and can be rerolled.
+        return "idle";
+      }
+      if (now < mysteryOffer.rollEndsAt) return "rolling";
+      if (now < mysteryOffer.riseEndsAt) return "rising";
+      if (now < mysteryOffer.lowerStartsAt) return "ready";
+      return "lowering";
+    }
+
+    function mysteryPresentation(now = performance.now()) {
+      const phase = mysteryPhase(now);
+      if (phase === "idle") return null;
+      const offer = mysteryOffer;
+      const progress = clamp((now - offer.startedAt) / MYSTERY_ROLL_DURATION_MS, 0, 1);
+      // Decelerating reel uses an exact integer number of steps so the
+      // final visible slot always lands on the actual random prize.
+      const steps = Math.min(MYSTERY_REEL_STEPS, Math.floor(MYSTERY_REEL_STEPS * (1 - Math.pow(1 - progress, 2.3))));
+      const index = (offer.prizeIndex + steps - MYSTERY_REEL_STEPS + MYSTERY_WEAPON_POOL.length * 4) % MYSTERY_WEAPON_POOL.length;
+      const weaponKey = phase === "rolling" ? MYSTERY_WEAPON_POOL[index] : offer.prizeKey;
+      const rise = phase === "rolling" ? 0
+        : phase === "rising" ? (1 - Math.pow(1 - clamp((now - offer.rollEndsAt) / MYSTERY_RISE_DURATION_MS, 0, 1), 2))
+        : phase === "ready" ? 1
+        : 1 - (1 - Math.pow(1 - clamp((now - offer.lowerStartsAt) / MYSTERY_LOWER_DURATION_MS, 0, 1), 2));
+      return {
+        phase, weaponKey, weaponName: WEAPONS[weaponKey]?.shortLabel || "Weapon",
+        finalWeaponName: WEAPONS[offer.prizeKey]?.shortLabel || "Weapon",
+        rise: clamp(rise, 0, 1), reelStep: steps,
+        remainingSeconds: Math.max(0, Math.ceil((offer.lowerStartsAt - now) / 1000)),
+      };
+    }
+
+    function claimMysteryWeapon() {
+      if (mysteryPhase() !== "ready" || !mysteryOffer) return false;
+      const key = mysteryOffer.prizeKey;
+      if (!WEAPONS[key]) return false;
+      if (carriedWeapons.length < MAX_CARRIED_WEAPONS) carriedWeapons.push(key);
+      else {
+        // Equip the slot you want to replace before taking your prize.
+        const replacement = Math.max(0, carriedWeapons.indexOf(selectedWeapon));
+        carriedWeapons[replacement] = key;
+      }
+      ammunition[key] = {magazine:WEAPONS[key].magazine,reserve:WEAPONS[key].reserve};
+      selectedWeapon = key;
+      reloading = false;
+      reloadSerial += 1;
+      mouseHeld = false;
+      setAiming(false);
+      mysteryOffer = null;
+      setTransientStatus(`CLAIMED ${WEAPONS[key].shortLabel.toUpperCase()} · EQUIPPED`,2100);
+      syncHud();
+      multiplayer?.heartbeat?.();
+      return true;
+    }
+
     function buyNearbyStation() {
-      if (!active || roundState!=="playing" || gameMode!=="zombie" || !nearestStation) return false;
-      const isHealth=nearestStation==="health";
-      const cost=isHealth?HEALTH_STATION_COST:MYSTERY_BOX_COST;
-      if (playerPoints<cost) {setTransientStatus(`NEED ${cost-playerPoints} MORE POINTS`,1600);return false;}
-      if (isHealth && playerHealth>=100) {setTransientStatus("HEALTH ALREADY FULL",1350);return false;}
-      playerPoints-=cost;
+      if (!active || paused || roundState !== "playing" || gameMode !== "zombie" || !nearestStation) return false;
+      const isHealth = nearestStation === "health";
+      if (!isHealth) {
+        const phase = mysteryPhase();
+        if (phase === "ready") return claimMysteryWeapon();
+        if (phase !== "idle") {
+          setTransientStatus(phase === "rolling" ? "MYSTERY REEL IS SPINNING" : "WAIT FOR THE WEAPON TO APPEAR",900);
+          return false;
+        }
+      }
+      const cost = isHealth ? HEALTH_STATION_COST : MYSTERY_BOX_COST;
+      if (playerPoints < cost) {
+        setTransientStatus(`NEED ${cost - playerPoints} MORE POINTS`,1600);
+        return false;
+      }
+      if (isHealth && playerHealth >= 100) {
+        setTransientStatus("HEALTH ALREADY FULL",1350);
+        return false;
+      }
       if (isHealth) {
-        playerHealth=100;playerShield=SHIELD_MAX;
-        lastHealthPurchaseWave=zombieWave;
+        playerPoints -= cost;
+        playerHealth = 100; playerShield = SHIELD_MAX;
+        lastHealthPurchaseWave = zombieWave;
         setTransientStatus(`FULL HEALTH RESTORED · -${cost} POINTS`,1800);
       } else {
-        const choices=MYSTERY_WEAPON_POOL.filter((key)=>!carriedWeapons.includes(key));
-        const key=(choices.length?choices:MYSTERY_WEAPON_POOL)[Math.floor(Math.random()*(choices.length||MYSTERY_WEAPON_POOL.length))];
-        if (!key || !WEAPONS[key]) return false;
-        if (carriedWeapons.length<MAX_CARRIED_WEAPONS) carriedWeapons.push(key);
-        else {
-          const replacement=Math.max(0,carriedWeapons.indexOf(selectedWeapon));
-          carriedWeapons[replacement]=key;
-        }
-        ammunition[key]={magazine:WEAPONS[key].magazine,reserve:WEAPONS[key].reserve};
-        selectedWeapon=key;
-        reloading=false;reloadSerial+=1;
-        setAiming(false);
-        setTransientStatus(`${WEAPONS[key].shortLabel.toUpperCase()} · -${cost} POINTS`,2400);
+        const pool = MYSTERY_WEAPON_POOL.filter(key => WEAPONS[key] && !carriedWeapons.includes(key));
+        const choices = pool.length ? pool : MYSTERY_WEAPON_POOL.filter(key => WEAPONS[key]);
+        if (!choices.length) return false;
+        const key = choices[Math.floor(Math.random() * choices.length)];
+        const now = performance.now();
+        const rollEndsAt = now + MYSTERY_ROLL_DURATION_MS;
+        const riseEndsAt = rollEndsAt + MYSTERY_RISE_DURATION_MS;
+        const lowerStartsAt = riseEndsAt + MYSTERY_CLAIM_WINDOW_MS;
+        mysteryOffer = {
+          prizeKey:key, prizeIndex:MYSTERY_WEAPON_POOL.indexOf(key),
+          startedAt:now,rollEndsAt,riseEndsAt,lowerStartsAt,
+          despawnAt:lowerStartsAt+MYSTERY_LOWER_DURATION_MS,
+        };
+        // Charge only when rolling starts; no weapon or second charge until
+        // another E press on the fully risen prize. Ignoring it forfeits it.
+        playerPoints -= cost;
+        setTransientStatus(`MYSTERY REEL SPINNING · -${cost} POINTS`,1800);
       }
-      nearestStation=null;
+      nearestStation = null;
       syncHud();
       multiplayer?.heartbeat?.();
       return true;
@@ -1197,7 +1279,7 @@
       worldEffects.explosions = worldEffects.explosions.filter((effect) => now < effect.startAt + effect.duration);
       worldEffects.glassShards = worldEffects.glassShards.filter((effect) => now < effect.startAt + effect.duration);
       worldEffects.stations=gameMode==="zombie" ? [
-        ...(mysteryBox ? [{...mysteryBox,type:"mystery",label:"MYSTERY BOX",cost:MYSTERY_BOX_COST}] : []),
+        ...(mysteryBox ? [{...mysteryBox,type:"mystery",label:"MYSTERY BOX",cost:MYSTERY_BOX_COST,offer:mysteryPresentation(now)}] : []),
         ...(healthStation ? [{...healthStation,type:"health",label:"HEALTH STATION",cost:HEALTH_STATION_COST}] : []),
       ] : [];
       return worldEffects;
@@ -1566,6 +1648,8 @@
     function syncHud() {
       const weapon = currentWeapon();
       const ammo = currentAmmo();
+      // Expire abandoned prizes even when the player walks away from the box.
+      mysteryPhase();
       const all = [...enemies.values()];
       const alive = all.filter((enemy) => enemy.health > 0).length;
       if (healthValue) healthValue.textContent = String(Math.max(0, Math.ceil(playerHealth)));
@@ -1643,8 +1727,28 @@
         stationPrompt.hidden=!nearestStation;
         if (nearestStation) {
           const health=nearestStation==="health",cost=health?HEALTH_STATION_COST:MYSTERY_BOX_COST;
-          if (stationLabel) stationLabel.textContent=`${health?"FULL HEALTH":"RANDOM WEAPON"} · ${cost} PTS · YOU HAVE ${playerPoints.toLocaleString()}`;
-          if (stationBuyButton) stationBuyButton.disabled=playerPoints<cost || (health && playerHealth>=100);
+          if (!health) {
+            const offer = mysteryPresentation();
+            if (!offer) {
+              if (stationLabel) stationLabel.textContent=`MYSTERY BOX · ${cost} PTS · BALANCE ${playerPoints.toLocaleString()}`;
+              if (stationBuyButton) {stationBuyButton.textContent="ROLL [E]";stationBuyButton.disabled=playerPoints<cost;}
+            } else if (offer.phase==="rolling") {
+              if (stationLabel) stationLabel.textContent=`ROLLING · ${offer.weaponName.toUpperCase()} · SLOWING DOWN...`;
+              if (stationBuyButton) {stationBuyButton.textContent="SPINNING";stationBuyButton.disabled=true;}
+            } else if (offer.phase==="rising") {
+              if (stationLabel) stationLabel.textContent=`${offer.finalWeaponName.toUpperCase()} · RISING OUT OF BOX`;
+              if (stationBuyButton) {stationBuyButton.textContent="RISING...";stationBuyButton.disabled=true;}
+            } else if (offer.phase==="ready") {
+              if (stationLabel) stationLabel.textContent=`TAKE ${offer.finalWeaponName.toUpperCase()} · ${offer.remainingSeconds}S LEFT · NO EXTRA COST`;
+              if (stationBuyButton) {stationBuyButton.textContent="TAKE [E]";stationBuyButton.disabled=false;}
+            } else {
+              if (stationLabel) stationLabel.textContent="UNCLAIMED WEAPON RETURNING TO BOX";
+              if (stationBuyButton) {stationBuyButton.textContent="RETURNING";stationBuyButton.disabled=true;}
+            }
+          } else {
+            if (stationLabel) stationLabel.textContent=`FULL HEALTH · ${cost} PTS · YOU HAVE ${playerPoints.toLocaleString()}`;
+            if (stationBuyButton) {stationBuyButton.textContent="BUY [E]";stationBuyButton.disabled=playerPoints<cost || playerHealth>=100;}
+          }
         }
       }
     }
@@ -1666,6 +1770,9 @@
       if (nextPlayerShotAt) nextPlayerShotAt += duration;
       if (reloadStartedAt) reloadStartedAt += duration;
       if (reloadEndsAt) reloadEndsAt += duration;
+      if (mysteryOffer) {
+        for (const field of ["startedAt","rollEndsAt","riseEndsAt","lowerStartsAt","despawnAt"]) mysteryOffer[field] += duration;
+      }
       enemies.forEach((enemy) => {
         for (const key of ["nextHeadingAt","nextShotAt","firingUntil","muzzleFlashUntil","recoilUntil","shotStartedAt","shotEndsAt","reloadStartedAt","reloadUntil","hitReactUntil","tracerUntil","aimLockUntil","blockedUntil"]) {
           if (enemy[key]) enemy[key] += duration;
@@ -2406,7 +2513,7 @@
       playerPoints = 0;
       carriedWeapons=[selectedPrimaryWeapon,"handgun"].filter((weapon,index,array)=>WEAPONS[weapon]&&array.indexOf(weapon)===index);
       zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;waveSpecial=false;
-      mysteryBox=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
+      mysteryBox=null;mysteryOffer=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
       respawnEndsAt = 0;
       respawnDisplay = 0;
       roundStatOverrides.clear();
@@ -2943,7 +3050,7 @@
       carriedWeapons=[];
       playerPoints=0;
       zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;
-      mysteryBox=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
+      mysteryBox=null;mysteryOffer=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
       // This reset is intentionally idempotent. Combat can be exited through
       // several paths (round-end buttons, toolbar toggle, first-person exit),
       // and some of those paths can call stop() after the controller is already

@@ -40,7 +40,7 @@ const stopLifecycleBody = combat.slice(stopLifecycleStart, stopLifecycleEnd);
 assert.ok(startLifecycleBody.includes("resetCombatSessionUi()") && startLifecycleBody.indexOf("resetCombatSessionUi()") < startLifecycleBody.indexOf("active = true"), "Entering combat must clear stale victory/death UI before the new session becomes active.");
 assert.ok(stopLifecycleBody.includes("resetCombatSessionUi()") && stopLifecycleBody.indexOf("resetCombatSessionUi()") < stopLifecycleBody.indexOf("if (!active) return"), "Leaving combat must clear stale session UI even when stop() is called after combat is already inactive.");
 assert.ok(combat.includes("countdownEndsAt") && combat.includes("COMBAT STARTS IN"), "Two-second combat countdown is missing.");
-assert.ok(combat.includes('resetRound({ countdown: true })'), "Combat and restart must enter the countdown state before AI becomes active.");
+assert.ok(combat.includes('resetRound({countdown:true})') || combat.includes('resetRound({ countdown: true })'), "Combat and restart must enter the countdown state before AI becomes active.");
 assert.ok(combat.includes('roundState !== "playing"'), "Weapons and enemy damage must stay locked until the countdown ends.");
 assert.ok(access.includes("isOwner"), "Browser editor access must expose owner-session status.");
 assert.ok(plant.includes('dataset.toggle = "combat"') || plant.includes('data-toggle="combat"'), "Owner-only Combat mode button is missing from the plant controls.");
@@ -204,7 +204,7 @@ assert.ok(css.includes('.combat-restart-button') && css.includes('.combat-restar
 
 
 // v0.13.65: continuous survival spawns, ammo pickups, real zombie heads, crane envelopes, and machine-safe death falls.
-assert.ok(combat.includes("function updateZombieSpawns") && combat.includes("spawnZombie(now)") && combat.includes("zombieAliveCap(now)"), "Zombie Mode must continuously spawn additional edge zombies during survival.");
+assert.ok(combat.includes("function updateZombieSpawns") && combat.includes("spawnZombie(now,giant)") && combat.includes("zombieAliveCap()"), "Endless Zombie Mode must spawn counted waves of zombies from map edges.");
 assert.ok(combat.includes("function resetAmmoPickups") && combat.includes("function updateAmmoPickups") && combat.includes("AMMO_PICKUP_RESPAWN_MS = 18000"), "Survival mode must provide respawning ammo pickups around the layout.");
 assert.ok(combat.includes('survivalScore ? Math.max(...scores) : Math.min(...scores)') && combat.includes("recordRoundTime(survivalSeconds)"), "Zombie Endless high score must track longest survival while Normal tracks fastest clear.");
 assert.ok(plant.includes("drawDesignBox(actor,{...headPart,color:skin}") && plant.includes("large protruding eyes"), "Zombie visuals must repaint the actual Head geometry and show visible eyes.");
@@ -219,7 +219,7 @@ assert.ok(plant.includes("service gap between the tables") && plant.includes("co
 // v0.13.66: Zombie difficulty, Normal vs Endless runs, and corrected camera-relative damage indicators.
 assert.ok(combat.includes("ZOMBIE_DIFFICULTIES") && combat.includes('nightmare: Object.freeze') && combat.includes('data-match-difficulty="nightmare"'), "Zombie Mode must provide Easy, Normal, Hard, and Nightmare difficulty options.");
 assert.ok(combat.includes("ZOMBIE_RUN_TYPES") && combat.includes('data-zombie-run="normal"') && combat.includes('data-zombie-run="endless"'), "Zombie Mode must offer Normal plant-clear and Endless survival run types.");
-assert.ok(combat.includes('if (!zombieEndless() || roundState !== "playing") return;') && combat.includes('zombieRunType === "normal"'), "Normal Zombie Mode must disable respawns and allow a clear-the-plant victory.");
+assert.ok(combat.includes('function canRespawnAfterDeath()') && combat.includes('zombieRunType === "normal"') && combat.includes('!zombieEndless()'), "Normal Zombie Mode must allow respawns while Endless Zombie preserves permanent deaths.");
 assert.ok(combat.includes('100 * activeDifficultyConfig().health') && combat.includes('activeDifficultyConfig().damage') && combat.includes('zombieDifficultyConfig().spawnRate') && combat.includes('zombieDifficultyConfig().aliveCap'), "Zombie difficulty must affect health, damage, speed/spawn pressure, and alive cap.");
 assert.ok(combat.includes('let relative = number(player.yaw) - worldAngle') && combat.includes('First-person rendering mirrors horizontal world X'), "Incoming-fire indicators must use the mirrored first-person camera basis so left/right are not reversed.");
 assert.ok(css.includes('.combat-zombie-setup') && css.includes('pointer-events: auto') && css.includes('.combat-zombie-choice-grid') && css.includes('.combat-zombie-setup-actions'), "The shared combat setup must be clickable and visually polished.");
@@ -236,6 +236,19 @@ assert.ok(page.includes('/combat-multiplayer.js') && multiplayer.includes("creat
 assert.ok(lobbyRoute.includes("Owner password session required") && lobbyRoute.includes('action === "create"') && lobbyRoute.includes('action === "join"') && lobbyRoute.includes('action === "event"'), "Multiplayer lobbies must require the owner-password server session and support create/join/game events.");
 assert.ok(combat.includes('data-match-type="private"') && combat.includes('data-match-type="coop"') && combat.includes('player-hit') && combat.includes('enemy-hit'), "Lobby setup must support Private Match plus shared Combat/Zombie co-op hit events.");
 assert.ok(plant.includes("drawCombatRemotePlayers") && combat.includes("remotePlayers"), "Remote lobby players must render as their selected plant characters on the layout.");
+
+// v0.13.77: waves, points, special enemies, stations, weapons, and cinematic respawn choice.
+assert.ok(combat.includes('roundState="respawn-choice"') && combat.includes("function resumePlayerAfterDeath") && combat.includes('roundState==="respawn-choice"'), "Respawn must wait for a full cinematic and an explicit player choice.");
+assert.ok(combat.includes('playerDeathDuration=RESPAWN_DELAY_MS') && combat.includes("RESPAWN_DELAY_MS = 5000") && combat.includes('Killed by '), "The full five-second who-killed-you replay must play before the choice.");
+assert.ok(combat.includes('zombieWave%5===0') && combat.includes("beginZombieWave") && combat.includes("waveDefeated>=waveTotal"), "Endless mode must progress through counted waves with special rounds.");
+assert.ok(combat.includes('spawnZombie(now,giant)') && combat.includes('record.health*=Math.min') && combat.includes('giant ? 7 : 1'), "Later special rounds must spawn and scale giant zombies.");
+assert.ok(combat.includes('MYSTERY_BOX_COST = 950') && combat.includes('HEALTH_STATION_COST = 800') && combat.includes('playerPoints-=cost'), "Purchases must deduct mystery box and health-station costs from points.");
+assert.ok(combat.includes('headshot?150:100') && combat.includes('waveSpecial?2:1'), "Headshots and special-wave kills must award bonus points.");
+assert.ok(combat.includes("MAX_CARRIED_WEAPONS = 3") && combat.includes("MYSTERY_WEAPON_POOL") && combat.includes("data-combat-inventory"), "Random mystery weapons and three carried slots must be supported.");
+assert.ok(combat.includes("combat-team-panel") && combat.includes("teamPanel") && lobbyRoute.includes("points:"), "All multiplayer survivors must have visible synchronized points.");
+assert.ok(combat.includes("healthStation=findStationPosition") && combat.includes("lastHealthPurchaseWave") && plant.includes("effects.stations"), "The health station must appear on special waves, with per-player purchase tracking and world rendering.");
+assert.ok(plant.includes("const eyeY=height*.835") && plant.includes("const eyeZ=depth*.285"), "Enemy eyes must be placed on the upper face rather than neck height.");
+assert.ok(css.includes(".combat-wave-progress") && css.includes(".combat-station-prompt") && css.includes(".combat-weapon-inventory"), "Survival HUD, interactions and inventory must have responsive styling.");
 
 // v0.13.76: host-coordinated replay, collision ordering and rack/truck geometry.
 assert.ok(combat.includes('sendEvent("round-restart"') && combat.includes('event.type === "round-restart"'), "Co-op replay must broadcast to all players.");

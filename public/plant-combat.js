@@ -345,6 +345,7 @@
             '<button type="button" data-combat-pause-action="resume" class="primary"><span>▶</span> RESUME GAME <small>RETURN TO ACTION</small></button>',
             '<button type="button" data-combat-pause-action="exit"><span>↩</span> LEAVE MATCH <small>EXIT TO PLANT</small></button>',
           '</div>',
+          '<button type="button" class="combat-pause-audio" data-combat-pause-action="audio" aria-pressed="false">♫ SOUND EFFECTS: ON</button>',
           '<footer class="combat-pause-footer"><i></i> THE PLANT IS STILL WAITING FOR YOU <i></i></footer>',
         '</div>',
       '</div>',
@@ -389,6 +390,111 @@
       '</div>',
     ].join("");
     frame.appendChild(hud);
+
+    // Web Audio-generated effects ship with the application: no remote sample
+    // fetches, licensing dependencies, autoplay, or unbounded looping voices.
+    let audioContext=null,noiseBuffer=null;
+    let soundEnabled=true;
+    try{soundEnabled=window.localStorage?.getItem("monroe-combat-sound")!=="off";}catch{}
+    const SOUND_PRESETS=Object.freeze({
+      rifle:{freq:145,tail:.17,type:"sawtooth",noise:.55,gain:.25,slide:.24},
+      handgun:{freq:200,tail:.13,type:"square",noise:.4,gain:.19,slide:.40},
+      shotgun:{freq:100,tail:.29,type:"sawtooth",noise:.8,gain:.35,slide:.12},
+      sniper:{freq:110,tail:.31,type:"sawtooth",noise:.75,gain:.32,slide:.13},
+      rocket:{freq:76,tail:.48,type:"sawtooth",noise:.52,gain:.33,slide:.36},
+      explosion:{freq:48,tail:.95,type:"sawtooth",noise:.95,gain:.44,slide:.10},
+      "enemy-shot":{freq:180,tail:.15,type:"sawtooth",noise:.37,gain:.17,slide:.48},
+      "enemy-down":{freq:88,tail:.32,type:"triangle",noise:.19,gain:.14,slide:.38},
+      chainsaw:{freq:98,tail:.35,type:"sawtooth",noise:.46,gain:.23,slide:1.8},
+      melee:{freq:250,tail:.17,type:"triangle",noise:.4,gain:.23,slide:.36},
+      reload:{freq:900,tail:.09,type:"square",noise:.18,gain:.12,slide:.57},
+      "reload-end":{freq:1100,tail:.09,type:"sine",noise:.11,gain:.10,slide:1.23},
+      "health-hit":{freq:120,tail:.33,type:"sawtooth",noise:.36,gain:.28,slide:.46},
+      "shield-hit":{freq:480,tail:.25,type:"sine",noise:.28,gain:.17,slide:.48},
+      "shield-break":{freq:740,tail:.49,type:"sawtooth",noise:.61,gain:.32,slide:.18},
+      revive:{freq:500,tail:.75,type:"sine",noise:.08,gain:.19,slide:1.8},
+      "revive-start":{freq:350,tail:.25,type:"sine",noise:.03,gain:.12,slide:1.36},
+      "zombie-turn":{freq:95,tail:.92,type:"sawtooth",noise:.39,gain:.25,slide:.34},
+      footstep:{freq:88,tail:.12,type:"triangle",noise:.29,gain:.13,slide:.68},
+      "zombie-growl":{freq:67,tail:.75,type:"sawtooth",noise:.23,gain:.15,slide:.68},
+      wind:{freq:58,tail:1.55,type:"sine",noise:.9,gain:.08,slide:.89},
+      "shield-ready":{freq:660,tail:.41,type:"sine",noise:.02,gain:.10,slide:1.5},
+      pickup:{freq:620,tail:.18,type:"sine",noise:.08,gain:.15,slide:1.52},
+      pause:{freq:250,tail:.13,type:"triangle",noise:.06,gain:.12,slide:.75},
+    });
+    let soundEventsInWindow=0,soundWindowStartsAt=0;
+    let nextFootstepAt=0,nextAmbientAt=0,shieldWasEmpty=false;
+    function unlockCombatAudio(){
+      if(!soundEnabled)return null;
+      const Context=window.AudioContext||window.webkitAudioContext;
+      if(!Context)return null;
+      try{
+        if(!audioContext)audioContext=new Context({latencyHint:"interactive"});
+        if(audioContext.state==="suspended")audioContext.resume().catch(()=>{});
+        return audioContext;
+      }catch{return null;}
+    }
+    function playCombatSound(cue,volume=1){
+      const ctx=audioContext;
+      if(!soundEnabled||!ctx||ctx.state!=="running")return;
+      const preset=SOUND_PRESETS[cue]||SOUND_PRESETS.pickup;
+      const now=ctx.currentTime;
+      if(now-soundWindowStartsAt>1){soundWindowStartsAt=now;soundEventsInWindow=0;}
+      if(++soundEventsInWindow>26)return; // Many zombies can die at once.
+      const tail=preset.tail,level=Math.min(.55,Math.max(.01,preset.gain*Math.max(0,volume)));
+      try{
+        const osc=ctx.createOscillator(),tone=ctx.createGain();
+        osc.type=preset.type;
+        osc.frequency.setValueAtTime(preset.freq*(.93+Math.random()*.14),now);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(24,preset.freq*preset.slide),now+tail);
+        tone.gain.setValueAtTime(.001,now);
+        tone.gain.linearRampToValueAtTime(level,now+.007);
+        tone.gain.exponentialRampToValueAtTime(.001,now+tail);
+        osc.connect(tone);tone.connect(ctx.destination);
+        osc.start(now);osc.stop(now+tail+.015);
+        if(preset.noise>.01){
+          if(!noiseBuffer){
+            noiseBuffer=ctx.createBuffer(1,Math.round(ctx.sampleRate*2),ctx.sampleRate);
+            const samples=noiseBuffer.getChannelData(0);
+            for(let i=0;i<samples.length;i++)samples[i]=(Math.random()*2-1)*.78;
+          }
+          const noise=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+          noise.buffer=noiseBuffer;
+          filter.type=(cue==="wind"||cue==="explosion")?"lowpass":"highpass";
+          filter.frequency.value=cue==="wind"?470:cue==="explosion"?850:1300;
+          gain.gain.setValueAtTime(.0001,now);
+          gain.gain.linearRampToValueAtTime(level*preset.noise*.55,now+.005);
+          gain.gain.exponentialRampToValueAtTime(.0001,now+tail);
+          noise.connect(filter);filter.connect(gain);gain.connect(ctx.destination);
+          noise.start(now,Math.random()*.3,tail);
+        }
+      }catch{/* Audio is cosmetic; never interrupt combat if a device lacks it. */}
+    }
+    function updateCombatSoundscape(now){
+      if(roundState!=="playing"||paused)return;
+      const player=options.getPlayer?.();
+      if(player?.moving && now>=nextFootstepAt){
+        playCombatSound("footstep",player.sprinting?.85:.43);
+        nextFootstepAt=now+(player.sprinting?270:420);
+      }
+      if(now>=nextAmbientAt){
+        const zombies=gameMode==="zombie" ? [...enemies.values()].filter(e=>e.health>0):[];
+        playCombatSound(gameMode==="zombie"&&zombies.length?"zombie-growl":"wind",
+          gameMode==="zombie"?.45:.19);
+        nextAmbientAt=now+2850+Math.random()*2700;
+      }
+    }
+    function setCombatSoundEnabled(enabled){
+      soundEnabled=Boolean(enabled);
+      try{window.localStorage?.setItem("monroe-combat-sound",soundEnabled?"on":"off");}catch{}
+      if(soundEnabled)unlockCombatAudio();
+      const control=hud.querySelector('[data-combat-pause-action="audio"]');
+      if(control){
+        control.textContent=soundEnabled?"♫ SOUND EFFECTS: ON":"♪ SOUND EFFECTS: MUTED";
+        control.setAttribute("aria-pressed",String(!soundEnabled));
+      }
+      if(soundEnabled)playCombatSound("pickup",.6);
+    }
 
     const healthValue = hud.querySelector("[data-combat-health-value]");
     const healthBar = hud.querySelector("[data-combat-health-bar]");

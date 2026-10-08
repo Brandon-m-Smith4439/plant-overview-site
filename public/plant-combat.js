@@ -1859,7 +1859,7 @@
         ? clamp((now - playerDeathStartedAt) / Math.max(1, playerDeathDuration), 0, 1)
         : 0;
       return {
-        weapon: currentWeapon().visual || selectedWeapon,
+        weapon: selectedWeapon,
         firing: now < playerRecoilUntil,
         muzzleFlash: now < playerMuzzleUntil,
         recoilProgress,
@@ -2441,9 +2441,16 @@
         z: -Math.cos(yaw) * Math.sin(pitch),
       });
       const ads = Boolean(weapon?.scope && isAiming);
-      const forwardOffset = weapon?.key === "chainsaw" ? 1.05 : weapon?.key === "rocket" ? 1.22 : weapon?.key === "sniper" ? 1.72 : weapon?.key === "shotgun" ? 1.46 : weapon?.key === "handgun" ? .94 : (ads ? 1.66 : 1.34);
-      const rightOffset = weapon?.key === "chainsaw" ? .2 : weapon?.key === "rocket" ? .3 : weapon?.key === "sniper" ? (ads ? .03 : .36) : weapon?.key === "shotgun" ? .18 : weapon?.key === "handgun" ? .28 : (ads ? .06 : .42);
-      const upOffset = weapon?.key === "chainsaw" ? -.34 : weapon?.key === "rocket" ? -.22 : weapon?.key === "sniper" ? (ads ? -.11 : -.28) : weapon?.key === "shotgun" ? -.20 : weapon?.key === "handgun" ? -.24 : (ads ? -.13 : -.30);
+      let forwardOffset = weapon?.key === "chainsaw" ? 1.05 : weapon?.key === "rocket" ? 1.22 : weapon?.key === "sniper" ? 1.72 : weapon?.key === "shotgun" ? 1.46 : weapon?.key === "handgun" ? .94 : (ads ? 1.66 : 1.34);
+      let rightOffset = weapon?.key === "chainsaw" ? .2 : weapon?.key === "rocket" ? .3 : weapon?.key === "sniper" ? (ads ? .03 : .36) : weapon?.key === "shotgun" ? .18 : weapon?.key === "handgun" ? .28 : (ads ? .06 : .42);
+      let upOffset = weapon?.key === "chainsaw" ? -.34 : weapon?.key === "rocket" ? -.22 : weapon?.key === "sniper" ? (ads ? -.11 : -.28) : weapon?.key === "shotgun" ? -.20 : weapon?.key === "handgun" ? -.24 : (ads ? -.13 : -.30);
+      // Shared designer muzzle anchors shift hip-fire and ADS shot emergence.
+      const custom=options.getWeaponMuzzleAnchor?.(weapon?.key,ads);
+      if(custom && Number.isFinite(Number(custom.x))) {
+        forwardOffset+=clamp((Number(custom.x)-Number(custom.length||3.9))*.23,-.38,.38);
+        rightOffset+=clamp((Number(custom.z)-Number(custom.depth||1.25)*.5)*.27,-.21,.21);
+        upOffset+=clamp((Number(custom.y)-.87)*.26,-.22,.22);
+      }
       return {
         x: origin.x + direction.x * forwardOffset + right.x * rightOffset + up.x * upOffset,
         y: origin.y + direction.y * forwardOffset + right.y * rightOffset + up.y * upOffset,

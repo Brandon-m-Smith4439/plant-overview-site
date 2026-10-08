@@ -2507,20 +2507,59 @@
     });
   }
 
+  // Play-only terrain bounds and rooftop POIs never modify the editable plant layout.
+  function combatWorldBounds() {
+    const [x0,z0,x1,z1]=floorBounds();
+    return [x0-180,z0-180,x1+180,z1+180];
+  }
+  function combatExteriorLandmarks() {
+    const [left,front,right,back]=floorBounds();
+    return [
+      {id:"north-outpost",label:"Ranger Outpost",x:left+35,z:front-84,w:24,d:22,h:14},
+      {id:"east-relay",label:"Radio Relay",x:right+53,z:front+30,w:21,d:24,h:18},
+      {id:"south-shelter",label:"Abandoned Depot",x:left+55,z:back+61,w:31,d:27,h:12},
+    ].map((site)=>({...site,ladderX:site.x+site.w*.5,ladderZ:site.z+site.d+1.25}));
+  }
+  function combatClimbSurface(x,z) {
+    if(!combatController?.isActive?.())return null;
+    for(const site of combatExteriorLandmarks()){
+      if(Math.hypot(x-site.ladderX,z-site.ladderZ)<3.1)return {kind:"ladder",height:site.h,...site};
+      if(x>=site.x-.35&&x<=site.x+site.w+.35&&z>=site.z-.35&&z<=site.z+site.d+.35)
+        return {kind:"roof",height:site.h,...site};
+    }
+    return null;
+  }
+  function exteriorWalkAllowed(x,z,radius){
+    if(!combatController?.isActive?.())return false;
+    const b=combatWorldBounds(),p=Math.max(.45,Number(radius)||1.2);
+    if(x<b[0]+p||x>b[2]-p||z<b[1]+p||z>b[3]-p)return false;
+    return combatExteriorLandmarks().every(site=>{
+      const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
+      const onRoof=Number(state.walkVerticalOffset)>site.h-1.2;
+      return onRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
+    });
+  }
+
   function walkCanOccupyHard(worldX, worldZ, radius = state.walkRadius) {
     const bounds = floorBounds();
     const margin = Math.max(0.45, Number(radius) || 1.2);
-    if (worldX < bounds[0] + margin || worldX > bounds[2] - margin
-        || worldZ < bounds[1] + margin || worldZ > bounds[3] - margin) return false;
+    const beyondFloor = worldX < bounds[0]+margin || worldX > bounds[2]-margin
+      || worldZ < bounds[1]+margin || worldZ > bounds[3]-margin;
+    if (beyondFloor && combatController?.isActive?.())return exteriorWalkAllowed(worldX,worldZ,margin);
+    if (beyondFloor)return false;
     return !walkHitsStructuralColumn(worldX, worldZ, margin);
   }
 
   function walkCanOccupy(worldX, worldZ, radius = state.walkRadius) {
     const bounds = floorBounds();
     const wallMargin = Math.max(0.45, Number(radius) || 1.2);
-    if (worldX < bounds[0] + wallMargin || worldX > bounds[2] - wallMargin ||
-        worldZ < bounds[1] + wallMargin || worldZ > bounds[3] - wallMargin) return false;
-
+    const beyondFloor=worldX<bounds[0]+wallMargin||worldX>bounds[2]-wallMargin
+      || worldZ<bounds[1]+wallMargin||worldZ>bounds[3]-wallMargin;
+    if(beyondFloor && combatController?.isActive?.())return exteriorWalkAllowed(worldX,worldZ,wallMargin);
+    if(beyondFloor)return false;
+    // Clear the north/south exit corridors in combat without changing editor walls.
+    const gateway = combatController?.isActive?.() && Math.abs(worldX-(bounds[0]+bounds[2])*.5)<10
+      && (Math.abs(worldZ-bounds[1])<7 || Math.abs(worldZ-bounds[3])<7);
     // Pillars remain solid even if the broad-phase spatial index is stale.
     if (walkHitsStructuralColumn(worldX, worldZ, wallMargin)) return false;
 
@@ -2542,6 +2581,7 @@
         continue;
       }
       if (entry.kind === "wall") {
+        if (gateway) continue;
         if (circleIntersectsMachine(worldX, worldZ, wallMargin, entry.wall)) return false;
         continue;
       }
@@ -2592,13 +2632,13 @@
       const boxSpec = scaledComponentBox(positioned, heads[0], design);
       return {
         center:{ x:Number(boxSpec.x)+Number(boxSpec.w)/2, y:Number(boxSpec.y)+Number(boxSpec.h)/2, z:Number(boxSpec.z)+Number(boxSpec.d)/2 },
-        radius:Math.max(.34,Math.min(.78,Math.max(Number(boxSpec.w),Number(boxSpec.h),Number(boxSpec.d))*.48)),
+        radius:Math.max(.44,Math.min(.96,Math.max(Number(boxSpec.w),Number(boxSpec.h),Number(boxSpec.d))*.54)),
       };
     }
     const height=Math.max(1,Number(positioned.h)||6.5);
     return {
       center:{x:Number(x)+(Number(positioned.w)||1.8)/2,y:(Number(positioned.y)||0)+height*.80,z:Number(z)+(Number(positioned.d)||1.8)/2},
-      radius:Math.max(.38,Math.min(height>9?1.7:.66,Math.min(Number(positioned.w)||1.8,Number(positioned.d)||1.8)*.32)),
+      radius:Math.max(.46,Math.min(height>9?1.7:.86,Math.min(Number(positioned.w)||1.8,Number(positioned.d)||1.8)*.36)),
     };
   }
 
@@ -2746,6 +2786,9 @@
         });
       });
     });
+    if(combatController?.isActive?.())combatExteriorLandmarks().forEach((site)=>entries.push({
+      kind:"exterior-building",x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d
+    }));
     combatOccluderCache = { at: now, entries };
     return entries;
   }
@@ -6698,6 +6741,7 @@
       },
       canOccupy: walkCanOccupy,
       canOccupyHard: walkCanOccupyHard,
+      getClimbSurface: combatClimbSurface,
       onLockChange: updateFirstPersonHud,
       onMovement: () => renderPerformance.noteInteraction(120),
       onExitRequest: (reason) => {
@@ -6874,7 +6918,9 @@
       getCharacters: combatBaseEnemyMachines,
       getEnemyHeadVolume: combatHeadVolume,
       getOccluders: combatOccluders,
-      getBounds: floorBounds,
+      getBounds: combatWorldBounds,
+      getLadderSites: combatExteriorLandmarks,
+      getClimbSurface: combatClimbSurface,
       getWeaponMuzzleAnchor: (weaponKey,aiming) => {
         const design=designLibrary["combat-weapon-"+String(weaponKey||"rifle")];
         const anchor=design?.combatAnchors?.[aiming?"adsMuzzle":"hipMuzzle"];
@@ -8932,6 +8978,30 @@
         }
       }
     }
+    // Traversable exterior points of interest, roof decks and climbable ladders.
+    combatExteriorLandmarks().forEach((site,index)=>{
+      box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,color:zombie?"#424a40":"#ad9270"},1,1);
+      box({x:site.x-.55,y:site.h,z:site.z-.55,w:site.w+1.1,h:.6,d:site.d+1.1,color:zombie?"#73786a":"#dfbd87"},1,1);
+      box({x:site.x+2,y:site.h+.7,z:site.z+2,w:2,h:4+index,d:2,color:zombie?"#413938":"#b5a482"},1,1);
+      // Railings and ladder are 3D geometry, not floating UI.
+      for(const side of [site.ladderX-.72,site.ladderX+.72])
+        box({x:side-.09,y:0,z:site.ladderZ-.15,w:.18,h:site.h+.5,d:.24,color:"#b9a988"},1,1);
+      for(let h=.8;h<site.h+.4;h+=1.35)
+        box({x:site.ladderX-.76,y:h,z:site.ladderZ-.17,w:1.52,h:.18,d:.28,color:"#d2c9aa"},1,1);
+      box({x:site.x+site.w*.24,y:site.h+.65,z:site.z+site.d*.42,
+        w:site.w*.48,h:.12,d:.26,color:"#d8c299"},1,1);
+    });
+    // Ridgelines supply actual vertical scenery beyond the rock scatter.
+    for(let i=0;i<28;i++){
+      const angle=i*Math.PI*2/28,range=94+(i%5)*17;
+      const cx=(left+right)*.5+Math.cos(angle)*(right-left+range),
+        cz=(front+back)*.5+Math.sin(angle)*(back-front+range);
+      const radius=13+(i%4)*6,h=9+(i%7)*2.4;
+      polygon([[cx-radius,0,cz-radius],[cx+radius,0,cz-radius],[cx,h,cz],[cx-radius,0,cz+radius]],
+        zombie?"#363b34":"#b69a70",edge,.6,1);
+      polygon([[cx+radius,0,cz-radius],[cx+radius,0,cz+radius],[cx-radius,0,cz+radius],[cx,h,cz]],
+        zombie?"#4c4c40":"#d5b487",edge,.6,1);
+    }
   }
 
   function drawFloor() {
@@ -10534,8 +10604,8 @@
     const liftLeft = Math.max(0, Math.sin(phase)) * gaitBob * 1.5 * movement;
     const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * gaitBob * 1.5 * movement;
     const hit = clamp(Number(combat.hitReact) || 0, 0, 1);
-    const zombiePreset = combat.zombie ? designLibrary["combat-zombie-"+zombieGait] : null;
-    const design = zombiePreset || (machine.designId ? designLibrary[machine.designId] : null);
+    // A zombie is the original employee model, NOT a generic zombie gait preset.
+    const design = machine.designId ? designLibrary[machine.designId] : null;
     const designParts = Array.isArray(design?.components) ? design.components : [];
     const namedPart = (pattern) => designParts.find((part) => pattern.test(String(part?.name || "")));
     const zombie = Boolean(combat.zombie);
@@ -10551,9 +10621,23 @@
     // replacing every named employee with one generic combat body. Arms and
     // legs are omitted here because the articulated combat limbs below own them.
     if (design && ["person","combatzombie"].includes(String(design.machineType || "").toLowerCase())) {
-      const staticIdentityParts = designParts.filter((part) => !/(?:left|right)\s+(?:arm|leg)/i.test(String(part?.name || "")) && !/(?:eye|pupil)/i.test(String(part?.name||"")));
+      const staticIdentityParts = designParts.filter((part) => !/(?:left|right)\s+(?:arm|leg)/i.test(String(part?.name || "")));
       if (staticIdentityParts.length) {
-        drawCustomDesign(actor, alpha, grow, time, 3, staticIdentityParts, machineCurveSegments(actor));
+        const jawPulse = zombie ? Math.abs(Math.sin(time*.007 + phase*.38))*.11 : 0;
+        const posedIdentityParts = zombie ? staticIdentityParts.map((part) => {
+          const name = String(part?.name || "");
+          const skinPart = /^(?:head|face|neck|nose|ear|cheek|skin|hands?)\b/i.test(name);
+          const eyePart = /(?:eye|sclera|iris|pupil)/i.test(name);
+          const jawPart = /(?:mouth|jaw|lips|teeth|cigarette|cigar)/i.test(name);
+          return {
+            ...part,
+            color: skinPart ? (combat.giant ? "#8ba875" : "#79a36b")
+              : eyePart ? (/pupil|iris/i.test(name) ? "#b12229" : "#e7e99b")
+              : part.color,
+            y: Number(part.y || 0) - (jawPart ? jawPulse : 0),
+          };
+        }) : staticIdentityParts;
+        drawCustomDesign(actor, alpha, grow, time, 3, posedIdentityParts, machineCurveSegments(actor));
       }
     } else {
       box(localBox3d(actor,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
@@ -10609,7 +10693,7 @@
     // employee models put their head lower/higher than the generic fallback.
     // Custom eye anchors follow the selected model's actual head bounds and
     // rotate with the head part, preventing eyes inside the neck or mouth.
-    if (design && headPart) {
+    if (design && headPart && !designParts.some((part) => /(?:eye|sclera|pupil)/i.test(String(part?.name||"")))) {
       const anchors=design.combatAnchors||{};
       const minFront=Number(headPart.z)-Math.max(.05,Number(headPart.d)*.11);
       const eyeSize=Math.max(.07,Number(headPart.w)*.105);
@@ -10627,7 +10711,7 @@
         drawDesignBox(actor,{...shape,x:px+eyeSize*.32,y:py+eyeH*.12,z:pz-eyeD*.42,
           w:eyeSize*.38,h:eyeH*.72,d:eyeD*.55,color:pupil},design,alpha,grow);
       }
-    } else {
+    } else if (!design || !designParts.some((part) => /(?:eye|sclera|pupil)/i.test(String(part?.name||"")))) {
       const fallbackHead={x:width*.32,y:height*.73,z:depth*.30,w:width*.36,h:height*.14,d:depth*.38};
       const eyeY=fallbackHead.y+fallbackHead.h*.74;
       const eyeZ=fallbackHead.z-Math.max(.05,fallbackHead.d*.12);
@@ -10662,10 +10746,12 @@
       }
       leftKnee[0]-=sway*.06;rightKnee[0]+=sway*.06;
     }
-    localLine3d(actor,leftHip,leftKnee,pants,3.4,alpha);
-    localLine3d(actor,leftKnee,leftFoot,pants,3.1,alpha);
-    localLine3d(actor,rightHip,rightKnee,pants,3.4,alpha);
-    localLine3d(actor,rightKnee,rightFoot,pants,3.1,alpha);
+    const thighWidth = zombie ? 7.0 : 4.0;
+    const calfWidth = zombie ? 6.3 : 3.5;
+    localLine3d(actor,leftHip,leftKnee,pants,thighWidth,alpha);
+    localLine3d(actor,leftKnee,leftFoot,pants,calfWidth,alpha);
+    localLine3d(actor,rightHip,rightKnee,pants,thighWidth,alpha);
+    localLine3d(actor,rightKnee,rightFoot,pants,calfWidth,alpha);
     box(localBox3d(actor,leftFoot[0]-.18,leftFoot[2]-.34,.42,.7,.2,boot,leftFoot[1]-.1),alpha,1);
     box(localBox3d(actor,rightFoot[0]-.18,rightFoot[2]-.34,.42,.7,.2,boot,rightFoot[1]-.1),alpha,1);
 
@@ -10741,11 +10827,8 @@
     // The same editable Combat Weapon geometry drives enemy-held firearms.
     // Local +X on the asset becomes forward (-Z) for the character.
     const enemyModel=designLibrary["combat-weapon-"+(enemyWeapon==="bazooka"?"rocket":enemyWeapon)];
-    if(zombie) {
-      // Clawing, animated zombie arms replace the combat soldier's displayed
-      // chainsaw while the melee collision/attack behavior stays unchanged.
-      weaponMuzzleZ=-.5;
-    } else if(enemyModel?.machineType==="combatWeapon" && enemyModel.components?.length) {
+    if(enemyModel?.machineType==="combatWeapon" && enemyModel.components?.length) {
+      // Zombie chainsaws use the existing unique editable 3D chainsaw model.
       const base=enemyModel.base||{},bw=Math.max(.2,Number(base.w)||4);
       const bd=Math.max(.2,Number(base.d)||1.25),bh=Math.max(.2,Number(base.h)||1.65);
       const barrelLength=enemyWeapon==="sniper"?3.5:enemyWeapon==="chainsaw"?2.1:2.8;
@@ -11456,13 +11539,14 @@
     const aim = combat.aiming ? 1 : 0;
     const death = clamp(Number(combat.deathProgress) || 0, 0, 1);
     const deathDrop = Math.sin(Math.min(1, death * 2) * Math.PI / 2);
-    const rifleAds = combat.weapon === "rifle" && aim > .5;
+    const rifleAds = aim > .5 && combat.weapon !== "chainsaw";
     const root = {
       // ADS keeps the rifle low enough that the dedicated HUD holographic sight
       // stays completely open. Hip fire returns the weapon to the right side.
-      x: .34 + bobX*(1-aim*.78) - aim*(rifleAds?.27:.34) + deathDrop*.18,
-      y: -.25 - bobY*(1-aim*.8) - aim*(rifleAds?.19:.085) - reloadArc*.12 + recoil*.045 - deathDrop*.72,
-      z: 1.15 - aim*(rifleAds?.12:.22) - recoil*.11 + reloadArc*.08 + deathDrop*.12,
+      // All physical receivers stay BELOW the centered red-dot aperture while ADS.
+      x: .34 + bobX*(1-aim*.78) - aim*.14 + deathDrop*.18,
+      y: -.25 - bobY*(1-aim*.8) - aim*.35 - reloadArc*.12 + recoil*.045 - deathDrop*.72,
+      z: 1.15 - aim*.20 - recoil*.11 + reloadArc*.08 + deathDrop*.12,
       rotationX: -4 - recoil*6 + reloadArc*18 + deathDrop*28,
       rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
       rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*30 + deathDrop*24,
@@ -11568,6 +11652,17 @@
         rotationX:Number(part.rotationX)||0,rotationY:Number(part.rotationY)||0,rotationZ:Number(part.rotationZ)||0,
       }));
     }
+    // Explicit hands survive any swap to a custom 3D weapon asset.
+    drawViewmodelBox({x:.17,y:-.35,z:.22,w:.25,h:.23,d:.32,color:skin,rotationZ:-12},root,1);
+    drawViewmodelBox({x:-.24+reloadArc*.18,y:-.18-reloadArc*.28,z:-.52+reloadArc*.50,
+      w:.24,h:.21,d:.33,color:skin,rotationZ:-16+reloadArc*28},root,1);
+    if (combat.reloading && combat.weapon !== "chainsaw") {
+      const magazine= combat.weapon==="rocket"
+        ? {x:0,y:-.18,z:.54,w:.38,h:.26,d:.34,color:"#536954"}
+        : combat.weapon==="revolver" ? {x:0,y:-.13,z:-.12,w:.24,h:.21,d:.28,color:"#7a858a"}
+        : {x:0,y:-.32-reloadArc*.43,z:.02+reloadArc*.16,w:.20,h:.39,d:.23,color:"#232e33",rotationZ:reloadArc*20};
+      drawViewmodelBox(magazine,root,1);
+    }
     // During reload the magazine visibly drops and returns instead of the whole gun merely rotating.
     parts.forEach((part,index) => {
       const magazineIndex = sharedWeaponModel ? -1 : combat.weapon === "rifle" ? 5 : -1;
@@ -11576,6 +11671,7 @@
       if (!sharedWeaponModel && combat.weapon === "rifle" && rifleAds && index >= 10 && index <= 14) return;
       if (!sharedWeaponModel && combat.weapon === "sniper" && aim > .5 && index >= 7 && index <= 9) return;
       const spec = {...part};
+      if (sharedWeaponModel && aim > .5 && /scope|sight|optic|rail/i.test(String(sharedWeaponModel.components?.[index]?.name||""))) return;
       if (index === magazineIndex && reload > .05) {
         const eject = reload < .5 ? reload*2 : (1-reload)*2;
         spec.y -= .42 * clamp(eject,0,1);
@@ -12319,7 +12415,7 @@
             rotationY: Number(combatState.rotationY),
             rotation: Number(combatState.rotationY),
             rotationZ: (Number(rendered.rotationZ) || 0) + (combatState.defeated ? 0 : combatState.hitReact * 5),
-            renderY: (Number(rendered.renderY ?? rendered.y) || 0)
+            renderY: (Number(rendered.renderY ?? rendered.y) || 0) + (Number(combatState.elevation)||0)
               + (combatState.defeated ? 0 : Math.abs(Math.sin(combatState.walkPhase || 0)) * .08 * combatState.movementBlend),
             combatState,
           };

@@ -830,6 +830,9 @@
         const radius=distance+(step%4)*3.4;
         const x=px+Math.cos(angle)*radius,z=pz+Math.sin(angle)*radius;
         if (bounds.length>=4 && (x<number(bounds[0])+4 || x>number(bounds[2])-4 || z<number(bounds[1])+4 || z>number(bounds[3])-4)) continue;
+        // Health stations are deliberately separated from the permanent
+        // Mystery Box so either purchase remains easy to target on foot.
+        if (String(seed).startsWith("medic") && mysteryBox && Math.hypot(x-mysteryBox.x,z-mysteryBox.z)<12) continue;
         if (!pointBlockedByObstacle(x,z,2.3) && options.canPlaceStation?.(x,z)!==false) return {x,z};
       }
       // A blocked station is not placed inside solid machinery.
@@ -1627,8 +1630,11 @@
         if (gameMode==="zombie" && roundState==="playing") {
           const player=options.getPlayer?.();
           if (player) {
+            let nearestDistance=6;
             for (const [type,station] of [["mystery",mysteryBox],["health",healthStation]]) {
-              if (station && (type!=="health" || lastHealthPurchaseWave!==zombieWave) && Math.hypot(number(player.x)-station.x,number(player.z)-station.z)<=6) {nearestStation=type;break;}
+              if (!station || (type==="health" && lastHealthPurchaseWave===zombieWave)) continue;
+              const distance=Math.hypot(number(player.x)-station.x,number(player.z)-station.z);
+              if (distance<=nearestDistance) {nearestDistance=distance;nearestStation=type;}
             }
           }
         }

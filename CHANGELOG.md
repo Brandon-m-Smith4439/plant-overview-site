@@ -1,0 +1,1866 @@
+## 0.13.80 — 2026-10-08
+
+- Fixed production browser caching of legacy plant and combat assets: derive script URL query key from the actual JavaScript/CSS content at build time instead of a hardcoded stale version.
+- Synchronized project, app, preview, and editor versions to 0.13.80; added source-fingerprint regression coverage as a build gate.
+- Released plant-member zombie identities and accessories, rendered chainsaws, thicker animated legs, aiming/reload/viewmodel updates, expanded exterior and climbable POIs, and improved headshot detection (earlier commits).
+
+## 0.13.79 - 2026-10-08
+
+- Added five zombie movement classes (shambler, walker, runner, sprinter, giant), each with independent travel speed, animation cycle, stride, limb swing and bob, with gait type replicated to co-op clients.
+- Fixed zombie eyes by positioning them relative to the real Head part rather than total actor height, and removed drawn weapons from zombie claw-run animations while preserving melee damage.
+- Raised navigation clearance around cage corners and physical machine envelopes, and forced detour route replanning after sustained lack of progress.
+- Added dark wasteland exterior terrain and sky for Zombie Mode, and arid desert environment for Combat Mode; production layout remains unchanged.
+- Changed the Mystery Box to raise the rolling weapon while the slot-machine reel spins: the winning gun peaks at the exact moment the reel lands. Retained the TAKE interaction and forfeiture timeout.
+- Relocated the Mystery Box to a valid and sufficiently distant walkable location every two completed Endless waves, shared from the multiplayer host.
+- Added 14 distinct editable weapon geometry presets and five editable zombie anatomy presets to the shared design library, accessible under dedicated Machine Studio Zombies/Weapons tabs.
+- Added persistent design-local hip-fire and ADS muzzle XYZ controls in Studio; wired designer weapon geometry into player viewmodels, AI-held weapons and Mystery Box prize rendering, with custom anchors influencing projectile emergence.
+- Bumped plant and Machine Studio cache versions to 0.13.79, expanded combat regression checks, and validated the model catalog and timed mystery-roll/relocation simulations.
+
+## 0.13.78 - 2026-10-08
+
+- Widened the Survival Mystery Box to 5.4 world units and redesigned its 3D case and three slot-reel windows.
+- Added a 4.8-second easing slot-machine roll that lands deterministically on the selected weapon, followed by a 1.75-second weapon rise animation, an 11.5-second claim window, and a 2.3-second visual descent and despawn if not claimed.
+- Decoupled paying 950 points from receiving the gun. Only pressing E / TAKE after the roll awards the prize; skipping it forfeits the paid roll and permits a fresh purchase once the box clears.
+- Added visible 3D rifle/shotgun/rocket/pistol/revolver prize silhouettes, colored reel labels, dynamic nearby claim instructions and distinctive animated claim/rolling HUD states.
+- Kept per-player offers, weapon inventory and purchase costs independent in co-op; paused games freeze the pending prize timer, and all round/exit resets remove stale mystery offers.
+- Removed standing original plant people from active Endless Zombie rendering without deleting any original plant data, while retaining spawned zombies, giant variants and selected multiplayer teammates.
+- Implemented cached bounded A-star waypoint routing around machine envelopes, collision boxes, walls and pillars. Added collision-grid broad-phase, direct-line shortcuts, path replanning and per-frame path-planning limits for Zombie and Combat enemy pursuit; Combat remembers last-seen targets longer.
+- Expanded static combat assertions and verified runtime simulations of obstruction avoidance and the full Mystery Box state machine.
+  
+## 0.13.77 - 2026-10-08
+
+- Replaced timed automatic respawning in Combat and Normal Zombie with the full five-second death/attacker cinematic followed by explicit Respawn and Exit decisions; Endless remains no-respawn.
+- Added a difficulty-scaled wave scheduler for Endless Zombie, with wave target/progress, between-wave breaks, increasingly tough and numerous enemies, Giant zombies on special and later waves, and a two-Giant special round every five waves.
+- Added survival points (100 for body kills, 150 for headshot kills, 5x Giants and 2x special waves), a live multiplayer survivor points sidebar, and replicated wave/points data.
+- Added a walkably placed permanent 950-point Mystery Box, eight new player weapons with existing specials in the random pool, and an explicit three-slot inventory with 1/2/3 keys.
+- Added an 800-point full-health station on each fifth wave, separately placed from the Mystery Box with one purchase per player per special wave. E and the nearby interaction button purchase items and immediately deduct points.
+- Improved hostile pursuit of the latest player location and host-authoritative co-op AI target selection; synchronized giant health/size and restricted host AI damage events.
+- Fixed eye placement on custom/generic zombie and combat-person models, avoiding the previous lower-face/neck placement.
+- Added a generic Zombie fallback for plants with no spare person models; made full-session exits reset wave, point and inventory UI state.
+- Updated version tokens and extended regression assertions, plus completed simulated runtime checks of wave one, respawn choice, Mystery Box and full-health purchase.
+
+## 0.13.76 - 2026-10-08
+
+- Rechecked all v0.13.75 requirements: synchronized co-op victory, team leaderboard for kills/headshots/deaths, timed respawns in AI Combat and Normal Zombies (not Endless), destructible rack/A-frame/shipping/animated glass, and 3x explosions.
+- Fixed co-op replay so only the host can restart the round, all teammates receive a shared round-restart event, and non-host players see a disabled Waiting for host control.
+- Rejected non-host co-op victory and restart broadcasts at the server, and ignored invalid lobby/round completion events on the client.
+- Corrected A-frame cart/truck left/right rendered glass geometry and raw-glass-rack hitbox positions. Machine collision hulls now permit shots to reach their actual glass panes.
+- Expanded regression assertions for coordinated replay, event ownership, and glass geometry. Updated release cache tokens to 0.13.76.
+
+## 0.13.75 - 2026-10-07
+
+- Made co-op round completion host-authoritative and broadcast a `coop-victory` result so every teammate receives the same victory screen when the shared enemy world is cleared.
+- Added synchronized per-player death counts alongside existing kills/headshots, plus a round-end multiplayer leaderboard sorted by kills with `KILL LEADER` and `MOST DEATHS` callouts and each player’s selected plant character.
+- Added a three-second downed/respawn lifecycle for AI Combat and Normal Zombie mode. Respawning players are temporarily advertised as not alive, movement/fire are locked during the death cinematic, health/shield are restored automatically, and the death counter persists until the round ends. Private PvP and Endless Zombie keep terminal death behavior.
+- Added host-side stat reconciliation for remote kills/deaths so the final co-op leaderboard does not regress when a late heartbeat contains older stats.
+- Expanded destructible glass recognition for carrier objects and sparse/custom component metadata (`lite`, `sheet`, `load`, `pane`) and added procedural glass hitboxes for raw-glass racks, A-frame carts/trucks, shipping racks/windshields, and animated-glass objects when authored glass geometry is unavailable.
+- Made procedural carrier glass disappear after shattering using the same glass IDs as its hitboxes, and aligned custom-design rendering with the carrier-aware glass detector.
+- Increased rocket/explosion and glass-shatter visual scale to 300% while leaving their damage radius unchanged.
+- Updated Normal Zombie setup/status copy to reflect that respawns are enabled.
+- Added regression coverage for synchronized co-op victory, kills/deaths leaderboard data, respawn rules, carrier glass destruction, and 3x visual explosion scaling.
+- Bumped viewer/editor release tokens to v0.13.75.
+
+## 0.13.74 - 2026-10-07
+
+- Fixed stale Combat/Zombie round-end UI surviving an exit/re-entry cycle.
+- Added an idempotent `resetCombatSessionUi()` lifecycle reset that hides round, pause, countdown, killer-reveal, and setup overlays; clears victory/death presentation classes; unlocks restart controls; resets the death cinematic; and invalidates delayed round reveal callbacks.
+- Run the session UI reset before every new combat session becomes active and before `stop()` can early-return when the controller is already inactive. This makes toolbar exits, end-screen exits, and first-person transition exits converge on the same cleanup path.
+- Added regression coverage proving combat entry clears stale end-screen state and combat exit performs cleanup even on repeated/inactive stop calls.
+- Bumped viewer/editor release tokens to v0.13.74.
+
+## 0.13.73 - 2026-10-07
+
+- Fixed the severe co-op host FPS regression by caching combat occluders for 34 ms. Enemy line-of-sight, movement collision, projectile, and related AI queries now reuse one animated-machine/glass geometry result instead of rebuilding the entire plant geometry multiple times per enemy every frame.
+- Reworked host enemy synchronization into compact world snapshots with a 180 ms cadence. Static plant enemies no longer resend repeated machine dimensions; synthetic zombies include only the additional geometry metadata they need.
+- Added enemy velocity and world-sequence data so follower clients reconcile each host snapshot once and interpolate/extrapolate enemy movement locally every render frame instead of teleporting directly between network positions.
+- Removed the per-frame follower call that reapplied the complete host enemy snapshot during every AI update.
+- Increased player-state responsiveness to a 100 ms heartbeat while allowing heavy enemy/glass fields to be omitted between world snapshots. The server preserves the last host world snapshot until a new one arrives.
+- Added a transient heartbeat mutation path that bypasses the durable lobby write queue, preventing deferred JSON file persistence from blocking live movement/state updates.
+- Reduced heartbeat payload cost by stripping the requesting player's own enemy/glass world data from lobby responses and by avoiding hidden lobby/setup DOM rebuilds during active matches.
+- Added combat/co-op performance regression coverage for occluder caching, host snapshot throttling, follower interpolation, lightweight heartbeat state merging, and heartbeat write-queue bypass.
+- Bumped viewer/editor release tokens to v0.13.73.
+
+## 0.13.72 - 2026-10-07
+
+- Fixed a process-route migration regression that forced legacy route anchors back inside machine bounds. Legacy `processPointerAnchorXPercent`, `processPointerAnchorYPercent`, and `processPointerAnchorZPercent` values now retain the same `-1000%` to `1100%` range used by current object-to-object connections.
+- Preserved outside-machine start/end positions when older saved pointer geometry is converted into the modern process-connection model.
+- Added regression coverage proving legacy process-pointer X/Z anchors are no longer clamped to the old `0–100%` machine envelope during normalization.
+- Bumped viewer/editor release tokens to v0.13.72.
+
+## 0.13.71 - 2026-10-07
+
+- Made co-op enemies host-authoritative. The host publishes enemy IDs, positions, facing, health, loadouts, movement/death state, synthetic zombie state, and shattered-glass IDs; follower clients consume that snapshot instead of independently running enemy AI, so both players see and shoot the same opponents.
+- Made remote-player movement smoother by sending velocity with player state and interpolating/extrapolating snapshots client-side. Reduced transport latency with an explicit 120 ms heartbeat cadence plus an in-memory lobby heartbeat path with deferred persistence instead of serialized disk I/O on every movement update.
+- Made co-op ally identity distance-aware: nearby player/character name tags shrink and fade as distance grows, then the teammate remains identifiable through a blue 3D outline at longer range.
+- Broadcast co-op `glass-shatter` events so a pane destroyed by either player or host AI stays destroyed for both players.
+- Rebuilt combat glass discovery around the live animation frame. Nested `box`/`glassPanel` geometry is flattened from `visibleDesignComponents(...)` after animation transforms and all visible machines are scanned, covering animated glass plus rack/cart/shipping glass instead of only static top-level walk-collision candidates.
+- Hardened first-person culling for cranes, cutting equipment, furnaces/tempering assets, and other large animated machines by testing conservative current-design world bounds rather than only the placed machine's coarse box. This prevents still-visible geometry from disappearing while looking up/down or across extended machine parts.
+- Restored cutting-table collision by always adding the cutting design's physical base components to walk hitboxes, even when other custom collision envelopes exist, while preserving the intentional service gap between table sections.
+- Added/updated regression coverage for authoritative co-op enemies, responsive/smoothed remote players, distance-aware ally UI, shared glass destruction, live animated glass hitboxes, first-person design-bound culling, and additive cutting-table collision.
+- Bumped viewer/editor release tokens to v0.13.71.
+
+## 0.13.70 - 2026-10-07
+
+- Added a pre-match player weapon selector for **Rifle, Sniper, Shotgun, Rocket Launcher, and Chainsaw** in both Combat and Zombie setup. The chosen weapon becomes the primary loadout and the pistol remains available as the secondary weapon. Sniper receives the stronger scoped zoom, Rocket Launcher uses projectile/explosion visuals, Chainsaw is continuous ammo-free melee, and all five have first-person weapon geometry.
+- Fixed lobby/setup typing at the first-person input layer: movement can stay locked while text fields still receive keyboard input, allowing player-name changes, lobby-code entry, and owner-password entry without leaving Combat Mode. Player-name edits now synchronize on input instead of waiting for blur/change.
+- Added multiplayer player identity tags above remote avatars showing the **player name** and the **plant character** being controlled. Lobby cards also show each player's selected character and current weapon.
+- Removed occupied character models from their original plant positions while Combat/Zombie mode is active. The local selected character and all remotely selected characters are now rendered only as controlled player avatars, preventing duplicate people on the layout.
+- Expanded death feedback: the end/death copy explicitly names the weapon that killed the player, private-match damage carries the firing weapon through the multiplayer event, and a persistent blood vignette/spatter treatment covers the death cinematic and end screen.
+- Expanded destructible machine glass to authored `glassPanel` geometry and made AI treat intact glass as shootable cover rather than an opaque sight wall. AI bullets and rockets now collide with glass, trigger the same shatter event as player fire, throw depth-tested shards, and remove the broken pane for the rest of the round.
+- Added regression coverage for weapon setup, lobby typing under movement lock, multiplayer name/character tags, occupied-character hiding, death weapon reporting/blood treatment, and shared player/AI glass destruction.
+- Bumped viewer/editor release tokens to v0.13.70.
+
+## 0.13.69 - 2026-10-07
+
+- Fixed Combat/Zombie pre-match setup so entering either mode transitions to first person/fullscreen without capturing the desktop mouse. Difficulty, character, match-type, and lobby controls remain clickable with a visible cursor until the match actually begins.
+- Kept pointer lock tied to the existing **Start Match** path, so gameplay still captures the mouse immediately when the configured round starts while pause/end/setup overlays continue to release it.
+- Added regression coverage ensuring `capture: false` is honored by first-person startup and used by Combat/Zombie setup, preventing the delayed fullscreen callback from recapturing the cursor.
+- Bumped viewer/editor release tokens to v0.13.69 so the pointer-lock fix deploys without stale browser assets.
+
+## 0.13.68 - 2026-10-07
+
+- Hardened `/api/combat-lobby` authorization to require the signed HttpOnly owner-session cookie issued by `/api/editor-session` after the owner password is validated.
+- Removed the legacy `x-monroe-owner-session`/same-origin shortcut from the multiplayer lobby API so client-supplied headers cannot authorize lobby reads or mutations.
+- Bumped viewer/editor release tokens to v0.13.68 so the secured lobby route and matching client assets deploy together without stale caching.
+
+## 0.13.67 - 2026-10-07
+
+- Fixed the pre-match setup overlay by restoring pointer interaction on top of the combat HUD. Combat and Zombie Mode now use the same setup surface for difficulty, character selection, match type, and multiplayer lobby controls.
+- Added **Easy, Normal, Hard, and Nightmare** difficulty to Combat Mode. Difficulty scales enemy health, movement speed, incoming damage, accuracy, and firing cadence independently from Zombie Mode.
+- Rebalanced Zombie movement so the speed used before this release is now the **Nightmare** baseline. Easy, Normal, and Hard intentionally run slower multipliers while retaining their own health/damage/spawn-pressure profiles.
+- Reworked headshot hit volumes to query each enemy's actual rendered **Head** design component when available. The body hitbox now terminates below the neck, preventing torso/neck overlap from stealing headshots.
+- Added destructible machine glass. Named glass/window/cutting-surface components become combat hit surfaces, disappear after being shattered for the active round, stop blocking later shots as glass surfaces, and emit a world-space shard/explosion effect.
+- Added character selection for both Combat and Zombie Mode using the actual people currently present in the plant. Selected local and remote-player characters are excluded from the AI enemy pool.
+- Added password-gated multiplayer lobbies backed by the Railway volume. Owner-password users can create or join short-code lobbies, synchronize player name/character/position/health/weapon state, ready up, and start a match from the setup screen.
+- Added **Co-op** Combat/Zombie play with synchronized remote player characters plus shared enemy-hit events, and **Private Match** with synchronized player-vs-player damage/headshot events and end-of-round win/loss detection.
+- Added depth-tested remote-player rendering so other lobby participants appear in the plant using the character they selected from the layout.
+
+## 0.13.66 - 2026-10-07
+
+- Added a dedicated Zombie Mode setup overlay with four difficulty presets: **Easy**, **Normal**, **Hard**, and **Nightmare**. Difficulty scales zombie health, sprint speed, incoming damage, Endless spawn cadence, alive-enemy cap, starting spawn pressure, and ammo-pickup respawn timing.
+- Added two Zombie run types. **Normal · Clear Plant** uses the people already present in the plant, disables edge respawns, and wins when the last zombie is eliminated. **Endless Survival** preserves the escalating edge-spawn loop and runs until the player dies.
+- Split Zombie records by run type and difficulty so each Normal difficulty keeps its own fastest clear while each Endless difficulty keeps its own longest survival time. Existing v0.13.65 survival records remain available as the Normal-difficulty Endless fallback.
+- Fixed incoming-fire indicators and text callouts to use the mirrored horizontal basis of the first-person camera. The old world-angle subtraction made visual left/right directions appear backwards relative to where attackers actually appeared on screen.
+- Added polished responsive styling for the Zombie setup cards, active difficulty/run selections, and Start/Cancel actions.
+
+## 0.13.65 - 2026-10-07
+
+- Converted Zombie Mode from a finite clear-the-room round into continuous survival. Existing people still begin as zombies, then additional chainsaw zombies spawn from safe points around the layout edges on an accelerating timer with an alive-enemy cap that rises as survival time increases.
+- Added persistent Zombie survival scoring: the mode now records the **longest** survival time on death instead of treating Zombie Mode like a fastest-clear challenge.
+- Added nine safe ammo-pickup locations distributed through the floor plan. Pickups refill shotgun/pistol reserves in Zombie Mode (or rifle/pistol reserves in Combat Mode), visually pulse in the 3D scene, and respawn after 18 seconds.
+- Replaced the remaining zombie face-plate approach by repainting the real named **Head** component in place and placing larger protruding eye/pupil geometry just beyond the face plane. Fallback people receive a complete zombie head volume rather than a neck-level card.
+- Added obstacle-aware corpse drift to the kill-frame death animation so enemies killed beside machines slide away from nearby collision volumes while falling instead of clipping into equipment and appearing frozen upright.
+- Enabled authored Designer envelopes on **bridgeCrane** and **craneMachine** objects as real first-person/combat collision and bullet/AI cover. Cranes without explicit envelopes remain pass-through, preserving open overhead structures.
+- Polished both end-screen actions: Restart/Play Again and Exit Mode now share matched icon, two-line label, depth, hover sheen, and pressed-state styling.
+
+## 0.13.64 - 2026-10-07
+
+- Anchored Zombie Mode face skin, eyes, pupils, and wound marks to the actual custom-person **Head** component through the design-placement transform, with a corrected built-in-person fallback. This prevents the zombie face layer from appearing as a flat plate around the neck on differently scaled employee models.
+- Changed rifle ADS presentation so the physical holographic optic/glass/reticle on the 3D rifle disappears while zoomed and the rifle sits lower, leaving the dedicated screen-space holographic aiming sight completely open. Hip fire still shows the detailed optic on the rifle model.
+- Added a camera-basis-aware player muzzle calculation that moves the tracer origin with the visible weapon. Rifle ADS now moves the muzzle forward and close to center; hip fire returns it to the visible right-side barrel position. Shotgun and pistol use their own muzzle offsets.
+- Widened Zombie Mode shotgun spread to 0.09 radians and render all eight buckshot pellets as separate world-space tracers instead of collapsing the shot into one center tracer.
+- Started enemy death animation at the exact kill timestamp inside `markEnemyDefeated()` rather than waiting for a later render-state pass, eliminating intermittent standing stalls before the fall animation begins.
+
+## 0.13.63 - 2026-10-07
+
+- Added owner-only **Zombie mode** beside Combat Mode. Zombie rounds force every person AI to use a chainsaw, apply an additional 1.55x zombie sprint multiplier on top of the already-fast chainsaw movement profile, tint/mark people with sickly zombie faces and eyes, and give the player a dedicated shotgun + pistol loadout.
+- Added persistent per-mode clear-time high scores in browser storage. Combat and Zombie Mode keep separate top-ten clear-time lists, the best time is shown live in the HUD, and victory records a new time without overwriting the other mode.
+- Expanded end-of-round statistics on both victory and death screens with survival/clear time, best clear time, **Regular Kills**, **Headshot Kills**, health, and shield.
+- Replaced the single oversized enemy target sphere with separate head and body hit volumes. Headshots now register independently, receive a 3x damage multiplier, drive distinct hit feedback, and count correctly when the headshot is the killing hit.
+- Added an 8-pellet Zombie Mode shotgun with spread, close-range stopping power, reload/ammo state, a dedicated first-person 3D shotgun model, and normal 1/2 weapon switching with the pistol.
+- Corrected the player's world-space muzzle/tracer offset for the mirrored walk-camera X basis so tracers now leave the gun on the player's right instead of appearing from the left side.
+- Raised and recessed combat eyes back onto the head face plane, and added zombie-specific face tinting, eye colors, and wound marks so Zombie Mode reads immediately without replacing each employee's full custom identity.
+- Upgraded the player rifle viewmodel with translucent holographic glass and a red reticle physically attached to the weapon model itself.
+- Redesigned the restart action as a larger replay control with icon, two-line label, hover sheen, depth, and mode-specific styling instead of the plain button used by the earlier victory screen.
+
+## 0.13.62 - 2026-10-07
+
+- Fixed the private-owner session handoff so an already-authenticated editor who opens the owner workspace receives the owner-session marker before returning to the plant. The owner-only **Combat mode** button therefore reliably reappears immediately after **First person** without weakening the public/editor access boundary.
+- Added real enemy firearm magazines and reload cycles. Rifle, SMG, shotgun, sniper, launcher, and pistol AI now consume ammunition, pause firing while reloading, refill their magazines on completion, and preserve reload timing through Combat Mode pause/resume.
+- Exposed enemy `shotProgress` and `reloadProgress` render state and added visible firing/reload animation: recoil or melee lunge, weapon tilt/drop, support-hand movement, detachable magazine motion, and rocket-round insertion.
+- Rebuilt the most visible enemy weapons with deeper layered 3D geometry. Rifles now have a stock, receiver, handguard, rail, optic, magazine, barrel, and muzzle brake; snipers add a long barrel, scope/rings, magazine and bipod; rocket launchers add a large layered tube, collars, rails, grips and exhaust section; chainsaws add a substantial motor body, handles, thick guide bar and animated chain teeth.
+- Increased chainsaw enemy pressure substantially by raising its movement weighting from 2.0x to 2.8x, increasing close-range chase speed, extending sight range, and keeping the melee speed weighting while pursuing the player's last-known position.
+- Expanded Combat Mode regression checks for owner-session recovery, enemy magazines/reloads, render animation progress, the weapon-model revamp, and the faster chainsaw pursuit profile.
+- Repaired stale validation coverage left behind by the earlier 3D route/label/shared-workspace migrations, including the malformed process-connection runtime test, so the current source-only validation suite can execute cleanly against the systems actually in production.
+
+## 0.13.61 - 2026-10-07
+
+- Completed the cross-device envelope rollout by shipping the shared workspace API/storage path with the viewer and Machine Studio hydration hooks, so phones and desktops resolve the same saved machine-design envelopes instead of browser-local copies.
+- Hardened the owner-only desktop **Combat mode** entry point: the button now always occupies the toolbar position immediately after **First person**, hides for non-owners, and re-synchronizes on owner authorization, focus, and page restore instead of being decided only at startup.
+- Finalized the thicker right-hand enemy weapon geometry and the rebuilt player rifle/holographic sight alignment so AI weapons no longer intersect the torso and the ADS sight window stays unobstructed.
+- Finalized deterministic enemy deaths with a render-start death clock, longer floor fall, and a short final-kill victory delay so the last enemy cannot remain visually standing behind the victory overlay.
+
+## 0.13.60 - 2026-10-07
+
+- Replaced device-only Machine Studio envelope persistence with a shared workspace sync API. Owner design/layout edits now publish to durable shared storage so desktop and mobile load the same collision envelopes and linked machine designs.
+- The shared workspace hydrates before the Plant viewer or Machine Studio renderer starts, reconciles local/remote revisions, preserves protected local editor data, and auto-publishes later envelope/layout edits.
+- Restored the owner-only desktop **Combat mode** button immediately to the right of **First person** and made its visibility re-sync after owner authorization, page restore, and window focus instead of relying on a one-time startup check.
+- Rebuilt enemy weapons around a thicker right-hand-dominant pose rather than the center of the body. Rifle, sniper, shotgun, SMG, pistol, chainsaw, bazooka, and rocket-launcher silhouettes are wider, easier to identify, and aligned with the articulated hands.
+- Redesigned the first-person rifle around an open-window holographic optic, lowered/centered the receiver during ADS, strengthened the stock/receiver/fore-end/barrel geometry, and made the reload animation target the magazine explicitly.
+- Enemy death animation now starts on the first rendered defeated frame, lasts longer, and delays the final victory overlay so the last enemy visibly completes the fall instead of sometimes appearing to remain standing.
+
+## 0.13.59 - 2026-10-06
+
+- Rebuilt the Combat Mode success state into a celebratory **VICTORY / PLANT SECURED** presentation with an animated secure seal, confetti, victory rings, clear-time/health/shield stats, and stronger restart/exit emphasis.
+- Combat Mode is now playable on touch phones: coarse-touch players count as engaged without pointer lock, existing movement/look controls remain active, and dedicated FIRE, AIM, RELOAD, SWAP, and MENU controls appear only during combat.
+- Mobile HUD placement now respects phone safe areas and keeps health, enemy count, ammo, movement, look, and combat controls readable in portrait or landscape layouts.
+- Raised and recessed Combat Mode eyes so they sit correctly on the face instead of over the mouth.
+- Reworked enemy 3D weapons around a right-hand combat pose: service rifles and sniper rifles have more complete stocks/receivers/magazines/rails/optics, chainsaws have a distinct engine/handle/bar/chain model, and the Rocket Launcher is now a visibly oversized shoulder-fired launcher.
+
+## 0.13.58 - 2026-10-06
+
+- Depth-tested combat decals/effects: player tracers, bullet holes, blood bursts, pools, fountains, rockets and explosions are submitted into the physical 3D scene so machines, walls and pillars correctly occlude them. Bullet holes are now constant-size world-space surface decals aligned to the struck face and are never placed on people.
+- Rifle ADS now uses a compact holographic sight instead of the full-screen scope mask, with a moderate FOV tighten and a red holographic reticle. Rifle/handgun viewmodels received additional receiver, rail, sight, barrel, stock/slide and muzzle geometry.
+- Enemy combat expanded with a Rocket Launcher projectile/explosion loadout, faster long-range chainsaw pursuit, dodge-roll reactions under player fire, consistent floor-settled deaths, restored visible combat eyes, stronger hit blood, delayed pools, and occasional post-death blood fountains.
+- Player tracers now originate farther forward/right at the rendered weapon muzzle so shots visually leave the barrel instead of the player's left side.
+
+- Combat Mode now suppresses normal machine labels, necessary process-step labels, and route-tag labels for a cleaner game view; exiting combat restores the existing label settings without modifying them.
+
+- Added animated player bullet tracers and persistent impact marks on walls, machines, pillars, and floor surfaces where shots land.
+- Added restrained combat hit effects for enemy AI: short blood spurts on confirmed hits and delayed floor pools after defeated enemies finish falling.
+- Added right-click aim-down-sights. Rifle ADS narrows the first-person FOV and opens a dedicated circular scope/reticle overlay; handgun ADS gets a lighter zoom without the scope.
+- Reduced the rechargeable player shield from 45 to 22 and slowed recharge to keep health damage relevant.
+- Randomized enemy loadouts each round across rifle, SMG, shotgun, sniper, bazooka, pistol, and chainsaw. AI movement, preferred engagement distance, fire rate, accuracy, damage, and tracer style now follow the assigned weapon.
+- Added weapon-specific 3D enemy geometry, including a long scoped sniper rifle, launcher tube, shotgun, compact SMG/pistol, and a chainsaw. Chainsaw enemies rush the player and only deal damage at melee range.
+- Expanded Combat Mode regression coverage for impacts, blood/pools, ADS scope, reduced shield, randomized loadouts, melee behavior, and distinct enemy weapon models.
+
+## 0.13.56 - 2026-10-06
+
+- Added a rechargeable 45-point Combat Mode shield. Incoming shots consume shield first; health only takes overflow damage, and the shield begins recharging after a short no-damage delay.
+- Added a dedicated Combat Mode Esc menu with Resume Combat and Exit Combat. While Combat Mode is active, the normal first-person walkthrough menu is suppressed instead of being overwritten or stacked underneath combat UI.
+- Added first-person input locking for combat pause, round completion, and player death. After death the player cannot move, look, jump, recapture the mouse, or reopen the normal pause menu.
+- Player death now releases pointer lock immediately so the mouse cursor returns, drops the camera to roughly floor-level over the first second, then eases the view onto the fatal shooter before the Restart/Exit death menu appears after the existing five-second replay.
+- Upgraded the fatal-shooter reveal from a small marker to a bright red 3D wireframe outline around the killer plus an in-world red name plate, retained throughout the death replay.
+- Combat pause freezes AI, shield timing, reload/shot timers, and player movement; resuming restores those timers and recaptures the mouse.
+- Expanded Combat Mode regressions for shield behavior, dedicated Esc routing, movement lock, death-menu authority, and killer outline/name rendering.
+
+## 0.13.55 - 2026-10-06
+
+- Fixed the root cause behind custom person machines such as Helper not receiving combat weapons/poses: retained shared-design, production-animation, and low-LOD proxy instancing now explicitly bypass every active combat person so the combat renderer owns their live transform.
+- Preserved individual custom person appearance in Combat Mode by rendering each person's non-limb design details (torso/head/hair/hard-hat/accessories) while combat-owned articulated arms/legs and the 3D rifle are layered onto the same transform.
+- Corrected the enemy facing basis. Combat rifles point down local -Z, so left/right aim now uses `180 - heading` instead of the mirrored `heading + 180` formula; roaming facing uses the same corrected basis.
+- Added published-workspace regression coverage for all person designs, including both live Helper instances, so a named custom person can no longer silently drop out of Combat Mode.
+- Added a five-second death cinematic: the first-person camera falls toward floor level, smoothly rotates toward the fatal shooter, holds on the killer marker, and only then reveals Restart/Exit. The player's weapon also drops out of view during the fall.
+- Hardened yellow structural pillars as permanent first-person safety collision even if optional machine/wall collision is disabled, and enlarged pillar combat occluders to match the visible structure through full roof height.
+- Expanded Combat Mode/collision regression checks for person-instancing bypass, corrected facing math, Helper coverage, five-second death replay, and hard pillar collision.
+
+## 0.13.54 - 2026-10-06
+
+- Enlarged and clarified incoming-fire direction feedback with bigger radial arrows, glow arcs, longer visibility, and explicit eight-way FRONT / FRONT-RIGHT / RIGHT / BACK-RIGHT / BEHIND / BACK-LEFT / LEFT / FRONT-LEFT callouts that also identify the shooter.
+- Fixed enemy AI spinning/stalling by separating aim-facing from wander-facing, remembering the last seen player position, slowing random heading changes, and rate-limiting blocked-path steering changes. Blocked wandering enemies no longer continuously rotate in place.
+- Made engagement facing authoritative: every armed person faces the player while it has line of sight, preserves a short aim lock after sight loss, and snaps its 3D weapon directly toward the player immediately before every shot.
+- Kept the 3D rifle render on every combat person and added a temporary red/white world marker to the enemy that delivers the fatal shot.
+- Added a killer reveal sequence on player death. The first-person camera centers on the killer, pointer lock releases without opening the normal first-person menu, the death overlay names the killer and distance, and restart stays disabled for 2.2 seconds so the shooter can be reviewed first.
+- Expanded Combat Mode regression coverage for anti-spin steering, aim locking, readable incoming-fire callouts, authoritative shooter facing, and the killer reveal/death-camera flow.
+
+## 0.13.53 - 2026-10-06
+
+- Replaced the previous CSS first-person gun silhouette with an actual canvas-rendered 3D viewmodel made from perspective cuboid geometry. Rifle and handgun models now sit just right of screen center with visible receiver/body, barrel, stock/grip, magazine, sights, and player hands.
+- Added first-person weapon motion driven by combat state: subtle walking bob, firing recoil, muzzle flash, and a staged reload animation where the weapon rolls and the rifle magazine visibly drops and returns.
+- Upgraded enemy walking animation to a two-segment leg gait with hips, knees, feet, and foot lift so roaming AI visibly walks instead of sliding.
+- Improved enemy 3D rifles with receiver, stock, magazine, handguard, barrel, sight, and aimed arm placement.
+- Reworked enemy death animation so the entire actor pivots around its feet and collapses toward the floor instead of rotating sideways around its center in mid-air.
+- Strengthened enemy bullet tracers with a bright tracer core and wider orange glow extending from the firing weapon muzzle to the shot destination.
+- Added directional incoming-fire indicators around the crosshair. Hits show a stronger red indicator and near misses show a softer indicator, both rotated to the shooter direction relative to the player camera.
+- Added regression coverage for the canvas 3D viewmodel, reload/recoil state, two-segment enemy walk gait, grounded death pose, tracers, and directional shot indicators.
+
+## 0.13.52 - 2026-10-06
+
+- Upgraded owner Combat Mode enemies from static targets to live roaming AI. Every person/team-member combat enemy now has runtime position, facing, walk-cycle phase, strafing/chasing/wandering behavior, obstacle-aware movement, and per-enemy movement variation.
+- Added synchronized combat rendering states for enemy aiming, recoil, muzzle flash, shot tracers, hit reactions, and death falls. The AI runtime position is now the position rendered and targeted by weapon raycasts.
+- Added dedicated animated combat-person rendering so team members visibly walk, aim a rifle, fire it, react to hits, and fall when defeated instead of relying on static machine-design poses.
+- Replaced the small HUD weapon silhouette with a larger first-person rifle/handgun view including visible stock/body/barrel/grip/magazine/hand geometry, idle sway, firing recoil, reload motion, and muzzle-flash bloom.
+- Hardened structural-pillar collision by checking pillars directly before the first-person spatial index, preventing stale broad-phase data from ever allowing the player to walk through a pillar.
+- Marked pillars explicitly in combat occluders so they remain authoritative line-of-sight and gunfire blockers for enemy AI.
+- Expanded Combat Mode and first-person collision regressions to cover moving enemy states, world weapon effects, first-person weapon effects, direct pillar collision, and pillar line-of-sight integration.
+
+## 0.13.51 - 2026-10-06
+
+- Moved the owner-only Combat Mode control directly beside the First person control in the plant viewer.
+- Starting Combat Mode now enters first person first, then displays a visible 2-second countdown before the combat round becomes active.
+- Player firing, weapon actions that require an active round, enemy line-of-sight attacks, and enemy damage remain locked during the countdown.
+- The countdown presents 2, 1, then FIGHT, and Combat Mode announces the live round only after the countdown completes.
+- Restarting a completed or lost round now uses the same 2-second countdown.
+- The round completes immediately when the final enemy AI is defeated, retaining the Plant secured completion screen and restart/exit choices.
+- Bumped viewer and cache tokens to v0.13.51 and expanded combat regression coverage for control placement and countdown behavior.
+
+## 0.13.50 - 2026-10-06
+
+- Added an owner-only Combat Mode launcher to the private owner dashboard and plant viewer. Public visitors and ordinary editor sessions do not receive the combat control; a valid owner-session flag is required.
+- Combat Mode reuses the existing first-person walkthrough without modifying saved plant data. Person, animated-person, and person-design machines become temporary enemy AI only for the active game session.
+- Enemy AI fires only when it has line of sight to the player. Plant machines, design collision envelopes, structural columns, and walls are reused as shot/sight occluders.
+- Added a generic primary rifle and secondary handgun with weapon switching (1/2), mouse fire, magazines, reserves, reloads (R), hit markers, health, incoming-fire feedback, victory/defeat screens, and restart.
+- Combat pauses whenever pointer lock is released, including the Esc first-person options menu, so enemies do not damage the owner while menus are open.
+- Added a dedicated combat HUD and game-styled weapon silhouettes while keeping the standard first-person HUD hidden during the owner-only game layer.
+- Added Combat Mode validation and advanced cache/version tokens to v0.13.50.
+
+## 0.13.49 - 2026-10-06
+
+- Rebuilt the machine-label settings panel around the active physical 3D billboard system, grouping Content, Appearance, Position, Advanced motion/leader, and Necessary process-step controls into a cleaner hierarchy.
+- Removed obsolete screen-space label timing and importance controls plus duplicate world X/Z offset controls from the visible editor while keeping their saved fields readable for backward compatibility.
+- Replaced the separate label color-preset dropdown with one integrated color control. Clicking it opens custom Background/Text/Accent color inputs with compact preset-color squares at the bottom.
+- Extended machine-label X/Y/Z placement to -1000%..1100%, matching process-route endpoint freedom. Labels can now be positioned well outside machine bounds while the leader remains attached to the nearest machine surface.
+- Removed the 250% label-size ceiling. Label size accepts any value from 5% upward, and the world-space renderer no longer caps large labels at 8 ft.
+- Advanced browser/cache version tokens to v0.13.49 and added label-editor regression coverage.
+
+## 0.13.48 - 2026-10-06
+
+- Added consistent named color presets shared by 3D machine billboards and process routes: Plant teal, Glass blue, Process blue, Process green, Amber, Orange, Alert red, Purple, and Steel. Custom color pickers remain available.
+- Label color presets apply a coordinated text/background/accent combination, while process-route presets apply the matching accent color. The editor automatically shows Custom when a saved color combination no longer matches a preset.
+- Added a Raised text depth control to the 3D billboard settings. Billboard lettering already renders on independent front/rear meshes; the new setting now controls how far those text planes physically project from the sign face.
+- Expanded the raised-text physical offset range to 0.02–0.30 ft while keeping the default subtle at 0.065 ft.
+- Fixed the process-route field editor so Route Y height can actually be entered up to 30 ft, matching the saved-data normalizer and visible editor range.
+- Elevated routes continue to transition from a flat floor ribbon into a depth-tested 3D rail with side/bottom/top faces, top-surface white direction highlights, and correctly lifted destination markers.
+- Preserved the cleaner v0.13.47 billboard design, double-sided readability, damped camera following, route direction, and machine occlusion behavior.
+- Advanced app/browser cache tokens to v0.13.48 and added regressions for elevated-route height, raised label text, and preset colors.
+
+## 0.13.47 - 2026-10-06
+
+- Raised process routes now gain real 3D thickness as their Route Y height is increased. Near the floor they remain a clean ribbon; as Y rises they progressively become a physical rectangular rail with top, bottom, side, and end faces.
+- Extended Route Y height from 6 ft to 30 ft and renamed the editor field to Route Y height (ft) so elevated overhead paths are practical.
+- Moving white direction highlights now ride on the top surface of elevated 3D rails instead of remaining a flat overlay through the rail center.
+- Destination markers also lift to the top surface of elevated routes while preserving the corrected source-to-destination motion direction from v0.13.45.
+- Kept all raised route geometry inside the depth-tested WebGL scene, so machines and other opaque equipment still occlude the route correctly.
+- Split billboard lettering onto its own front and rear texture meshes and physically offset those text planes slightly in front of the sign faces. This gives the machine names real parallax and a subtle raised/extruded 3D appearance from both sides.
+- Kept the cleaner v0.13.46 billboard styling, double-sided readability, damped camera-follow behavior, glow, and zoom limits.
+- Advanced the app/browser cache token to v0.13.47 and added regression coverage for elevated 3D route geometry and raised billboard text.
+
+## 0.13.46 - 2026-10-05
+
+- Simplified the new 3D machine billboard face after the v0.13.45 overhaul felt too busy.
+- Removed the large equipment beacon, full-width luminous top rail, bottom status rail, and extra decorative modules from the label face.
+- Kept the physical double-sided sign, dark layered surface, subtle depth shading, glowing text, dark side/backing, and damped camera-follow behavior.
+- Replaced the decorative treatment with one restrained glowing outer frame, a fine inner keyline, and a slim left accent rail so the labels still stand out without competing with the plant itself.
+- Reduced the text and border glow intensity for a cleaner appearance at overview distance while preserving readability.
+- Kept the corrected source-to-destination white route-line direction from v0.13.45 unchanged.
+- Advanced the app and browser cache token to v0.13.46 and updated label regressions for the cleaner face design.
+
+## 0.13.45 - 2026-10-05
+
+- Reversed the moving white highlights on the Today production routes so motion once again travels from each source machine toward its destination. The underlying world-space route geometry, stable physical width, depth occlusion, glow, and speed behavior are unchanged.
+- Gave the physical 3D machine billboards a clear visual overhaul instead of another subtle trim change: deeper layered face shading, a luminous full-width top rail, a dedicated left equipment module, glowing circular equipment beacon, stronger outer frame, crisp inner keyline, bottom status rail, heavier typography, and improved text shadow/glow treatment.
+- Darkened the physical billboard side/backing to the configured label background color so the bright route/label accent color reads as a deliberate frame instead of filling the whole sign edge.
+- Added an explicit billboard-face revision token so the new visual design is rebuilt immediately rather than allowing an existing retained label texture to survive with the prior face appearance.
+- Advanced the app and browser cache token to v0.13.45 and added regressions for both the corrected route direction and the redesigned billboard face.
+
+## 0.13.44 - 2026-10-05
+
+- Completed the Today production-flow conversion to physical world-space WebGL ribbons. The route is now shown automatically on the Today stage regardless of the selected 3D billboard naming mode.
+- Route width and moving highlight spacing are measured in plant/world units instead of projected pixels, so orbiting, zooming, and first-person movement no longer make the route appear to accelerate, shrink, or expand unpredictably.
+- Production routes now participate in the same depth buffer as plant equipment, so opaque machines cover route sections instead of the glow drawing through them.
+- Kept route pivot/edit handles as a lightweight editor overlay while the actual production route remains depth-tested 3D geometry.
+- Finished the damped 3D billboard camera-follow system: billboard positions stay fixed to their machines while yaw turns gradually, accelerates when far from the desired facing angle, and eases as it approaches the target.
+- Refined the physical billboards with a subtle sheen, glowing frame, inner keyline, accent marker, text glow, font-weight support, and double-sided readable faces.
+- Updated the Labels editor to match the real 3D billboard model, including camera-follow toggle/speed, facing offset, depth, glow, zoom limits, world offsets, size, and importance. Obsolete screen-space leader presentation controls are no longer shown.
+- Restored Barefoot cutting tables and Waterjet pump & filtration to the Standard Add menu and added regression coverage for all built-in equipment/object choices.
+- Advanced the browser release token to v0.13.44 so the completed route/billboard implementation cannot reuse the partial v0.13.43 viewer script cache.
+
+## 0.13.43 - 2026-10-05
+
+- Today now shows the configured necessary production-flow routes automatically, independent of the Today machine-label mode.
+- Moved production-flow rendering from the post-render 2D canvas overlay into world-space WebGL floor ribbons. Route width and animation phase now use plant/world units, eliminating the apparent speed/size jumps caused by camera projection in overview and first person.
+- World routes participate in the depth buffer, so opaque machines naturally occlude route segments instead of the glowing line appearing through equipment.
+- Preserved route edit handles as a lightweight 2D editor overlay while the actual route itself remains physical 3D geometry.
+- Reworked 3D billboard facing into damped camera following: signs stay attached to one world position, rotate only around Y, speed up when far from the target angle, and ease down smoothly as they approach it. Double-sided faces use the nearest 180-degree-equivalent orientation to avoid unnecessary spins.
+- Polished 3D billboard faces with a subtle vertical sheen, glowing frame, inner keyline, accent marker, configurable text glow, and font-weight support.
+- Updated the Labels editor to describe the actual 3D billboard behavior and added controls for slow camera follow and follow speed. Removed obsolete 2D leader pattern/shape/end controls from the visible 3D label UI while retaining saved data for compatibility.
+- Restored Barefoot cutting tables and Waterjet pump & filtration to the Standard machines Add menu, and added regression coverage ensuring every built-in machine/object type remains addable.
+- Updated the internal application/recovery version and browser cache token to v0.13.43.
+
+## 0.13.42 - 2026-10-05
+
+- Fixed a retained-renderer runtime crash introduced with the physical 3D label update. The frame reset path was incorrectly treating instanced machine/column batches as groups and reading `entry.group.visible`; those entries only own `entry.mesh`. The exception stopped redraws after the initial frame, which made orbiting, panning, wheel zoom, stage changes, and Today appear completely frozen.
+- Restored the correct `entry.mesh.visible` frame-reset path for instanced geometry.
+- Added explicit view-projection uniform refreshes for the new 3D label face and edge shader materials so fixed world signs continue to track camera movement correctly without rotating toward the camera.
+- Added regression checks for the exact instance-batch ownership error so this freeze cannot silently return.
+- Bumped the browser release token with the project version so production loads the repaired renderer immediately.
+
+## 0.13.41 - 2026-10-02
+
+- Reworked the world-space machine labels from camera-facing billboards into fixed-orientation physical 3D signs. Orbiting or moving the plant camera no longer rotates the signs to follow the viewer.
+- Added a shallow solid 3D backing/edge so each label has visible thickness instead of reading as a flat plane.
+- Added separate front and rear sign faces, with the rear face rotated physically so the same text is readable normally from both sides instead of appearing mirrored.
+- Added configurable glowing text while retaining a crisp foreground text pass for readability.
+- Added gentle zoom-responsive sizing with per-label minimum and maximum clamps. Labels still behave like world objects; zoom only nudges their physical scale within the allowed range.
+- Added label-editor controls for fixed Y rotation, sign depth, text glow, zoom minimum size, and zoom maximum size.
+- Preserved the v0.13.40 cache-busting guard and the 3D-only review mode with the old 2D label layer disabled.
+
+## 0.13.40 - 2026-10-02
+
+- Fixed the production cache-busting bug that kept loading the older v0.13.37 plant viewer scripts even though the Next.js shell had already advanced to v0.13.39.
+- Updated the shared LegacyScriptLoader release token to v0.13.40 so the browser/CDN requests a fresh plant-app.js, Three.js retained renderer, and supporting viewer scripts.
+- This makes the already-implemented 3D-only review mode actually reach the live browser: legacy 2D machine labels, compact process badges, and 2D route-tag text are disabled, while all full world-space machine labels are enabled.
+- Added a regression check that fails whenever the legacy-script release token no longer matches the VERSION file, preventing this stale-script mismatch from silently returning.
+
+## 0.13.39 - 2026-10-02
+
+- Added a true WebGL world-label renderer using textured Three.js planes positioned in plant coordinates and billboarded toward the active camera.
+- 3D machine labels are now submitted before the physical scene render, participate in the scene depth test, and can be naturally occluded by equipment.
+- Temporarily disabled every legacy 2D canvas machine label, compact process-step badge, and custom route-tag label so the new 3D label system can be reviewed without visual overlap.
+- Temporarily defaults the viewer to All / Full labels so every currently enabled machine label is visible through the new 3D system.
+- Preserved per-machine label text, colors, size percentage, world X/Z offsets, vertical lift, importance, and leader-line styling. A short depth-tested world leader now connects each 3D placard to its machine.
+- Kept the flowing production route lines themselves active; only their 2D text/badges are suppressed during this comparison pass.
+
+## 0.13.38 - 2026-10-02
+
+- Reworked normal machine/object labels into stable world-anchored, camera-facing callouts. Their position is now derived from the owning object's 3D anchor plus saved world offsets instead of collision-driven screen-space slot switching.
+- Added per-label World X / World Z offsets, vertical lift, and an Automatic / Major / Normal / Support importance override in the Labels editor.
+- Added a Reset 3D position action that restores the selected label above its machine without moving the machine itself.
+- Preserved existing label text, abbreviation, colors, sizing, timing, anchors, leader styling, and Today visibility controls while keeping process-route pointers and route tags completely separate.
+- Retained legacy screen-offset fields during normalization for saved-layout compatibility, while new normal machine-label placement no longer depends on those 2D offsets.
+- Removed normal-label screen-slot hopping and positional interpolation so labels remain spatially consistent while the camera orbits, pans, and zooms.
+
+## 0.13.37 - 2026-10-02
+
+- Replaced the fixed Turn 1 / Turn 2 route editor with an ordered exact-pivot model supporting zero to 24 floor pivot points per process route.
+- Added exact X / Z coordinate inputs for every pivot, plus Add pivot, Remove pivot, Remove all pivots, and direct numbered-handle dragging on the plant floor.
+- Preserved existing route shapes through legacy-to-exact pivot conversion; once edited, the route stores absolute plant coordinates for every turn.
+- Added custom compact process-step labels to any machine with an editable step number and optional label text, while keeping standard process-role labels automatic.
+- Kept v0.13.36 collision-aware label sizing, machine avoidance, S/E endpoint dragging, expanded endpoint range, First Person floor flow, and camera-independent route persistence.
+
+## 0.13.36 - 2026-10-02
+
+- Strengthened automatic Necessary process-step label placement to avoid projected rectangles for all visible machines, not only each label's own machine.
+- Expanded the compact label candidate search around each numbered route node so neighboring step labels are less likely to fight for the same screen area.
+- Kept process label font size and maximum width tightly bounded in screen pixels so zoomed-out overview labels remain readable without becoming oversized.
+- Preserved v0.13.35 direct S/E floor dragging, expanded -1000–1100% endpoint anchors, and route persistence independent of camera culling.
+
+## 0.13.35 - 2026-10-02
+
+- Replaced the single public route-tag presentation with automatic compact process-step badges and machine-name labels for every standard process node.
+- Added shared step numbering: Cutting 1, Polisher 2, Denver CNC / Waterjet 3, Washer 4, Tempering 5, Wrap 6, Glass Truck / Rack 7.
+- Added bounded adaptive label sizing based on projected machine size so overview labels remain readable when zoomed out without becoming oversized.
+- Added collision-aware label placement and machine-avoidance so process-step tags do not stack over one another or unnecessarily cover the equipment they identify.
+- Added explicit S / E endpoint edit handles to selected routes and direct floor dragging for both endpoints.
+- Expanded process endpoint anchor range from -300–400% to -1000–1100% so route starts/ends can move far outside machine footprints.
+- Made process route geometry persistent independently of camera culling by rebuilding missing source/destination endpoint entries from the saved process graph.
+- Kept the old custom route tag available only as an optional editor aid for the selected route.
+
+## 0.13.34 - 2026-10-02
+
+- Replaced Today/Necessary object-to-object route lines with animated glowing floor-flow paths inspired by the supplied plant-flow reference.
+- Routes now stay on a configurable floor height and remain visible in both Overview and First Person.
+- Added two editable route-turn controls per connection: progress along the machine-to-machine path plus signed side offset, allowing the line to route around equipment.
+- Added Curve / Rounding control for smooth arched corners; Sharp Turns remains available for deliberate hard corners.
+- Added per-route flow speed and glow-strength controls while preserving color, width, opacity, moving pattern, endpoint marker, and route-tag editing.
+- Selected routes show numbered Turn 1 / Turn 2 handles directly on the floor path for clearer editing feedback.
+- Flow animation now keeps the viewer render loop active even when no machine animation is running and respects the global Pause Motion control.
+- Route tags still render after all floor-flow paths so the glow cannot cover tag text.
+
+## 0.13.33 - 2026-10-01
+
+- Render process route tags in a second overlay pass after all Necessary route lines so route lines can no longer cover route-tag text.
+- Added lightweight route-tag collision avoidance so nearby tags spread apart before normal machine-label placement runs.
+- Show Necessary route tags on the Today stage in first-person mode while keeping the full route-line overlay overview-only.
+- Expanded process-pointer start/end X/Y/Z anchor controls from 0–100% to -300–400%, allowing endpoints well outside machine/object boundaries.
+- Added regression coverage for route-tag layering, first-person route labels, and expanded endpoint ranges.
+
+## 0.13.32 - 2026-10-01
+
+- Added durable editor-browser protection so an expired session cannot cause the public published snapshot to overwrite that browser's local plant layout or custom machine designs.
+- Existing automatic layout-backup evidence now protects older editor browsers immediately, before the new durable marker exists.
+- Preserve differing local layout/design data in a **pre-publish rescue snapshot** before Plant Layout applies a published workspace to an unprotected browser.
+- Added **Recovery & backups** controls in Project tools for restoring the previous layout backup, previous machine-design backup, or pre-publish rescue snapshot.
+- Machine Design Studio now writes a persistent previous-design-library backup before replacing the current saved library.
+- Full workspace export no longer calls `persistLayout()` first, preventing an export from overwriting the one-step layout backup needed for recovery.
+- Updated hosted published-workspace generation so future published snapshots retain the same safety behavior.
+
+## 0.13.31 - 2026-09-30
+
+- Fixed normal machine labels in **Today → Necessary** mode being forced on whenever the machine was assigned to a process-flow node.
+- Made **Show this machine/object label in Necessary mode** the authoritative visibility control for the normal machine/object label.
+- Kept process pointers and route tags independent, so hiding a Kodiak Polisher machine label does not remove the production-flow route.
+- Clear the selected label's transition state immediately when the Necessary-mode toggle changes and show explicit editor feedback.
+- Added a regression guard preventing process-flow assignment from re-enabling a hidden normal machine label.
+
+## 0.13.30 - 2026-09-30
+
+- Fixed Railway/public sessions being able to run stale cached plant renderer scripts after a new site deployment.
+- Added a release query token to every dynamically loaded legacy viewer script on both hosted and local environments.
+- Scoped the in-memory legacy script loader cache to the active release version.
+- Added matching release tokens to the standalone Plant Layout and Machine Studio previews.
+- Added regression coverage requiring the legacy build token to match `VERSION` and requiring hosted cache-busting to remain enabled.
+
+## 0.13.29 - 2026-09-30
+
+- Fixed the remaining Today/Necessary camera freeze where process labels moved but the physical plant stayed on an older rendered frame.
+- Present the physical 3D scene before drawing Necessary-mode labels and process pointers so overlay errors cannot block camera updates.
+- Force the retained Three.js view-projection uniform to refresh across shared and instanced materials every rendered camera frame.
+- Added regression coverage for scene-before-overlay ordering and retained-camera uniform refresh.
+
+## 0.13.28 - 2026-09-30
+
+- Fixed Today Overview becoming visually frozen when **Necessary** labels were active.
+- Corrected the Necessary-label candidate filter to read the current entry's machine instead of an undefined `machine` variable.
+- Restored live 3D scene presentation during orbit, pan, touch navigation, and wheel zoom while Necessary labels are enabled.
+- Added a regression guard so the render-loop-breaking undefined-variable form cannot return unnoticed.
+
+## 0.13.27 - 2026-09-30
+
+- Moved the Today Necessary-mode label control near the top of the dedicated **Objects → Labels** tab as a normal checkbox.
+- Replaced the separate Today label action-button workflow with **Show this machine/object label in Necessary mode**.
+- Moved editable route-tag text into **Pointers → 7 · Optional route tag**, directly beside its visibility and position controls.
+- Kept the live route-tag preview and live text editing behavior from v0.13.26.
+- Preserved the dedicated Labels tab and complete separation between process connections and normal machine-label pointers.
+
+## 0.13.26 - 2026-09-30
+
+- Added a dedicated **Objects → Labels** tab so machine/object label controls are no longer buried inside Transform.
+- Replaced the easy-to-miss Today checkbox with a prominent **Show label on Today / Hide label on Today** button and status explanation.
+- Kept Necessary process-role labels automatic while allowing any extra object label to be explicitly shown on Today Overview.
+- Moved **Route tag text** directly beneath the selected process line in the Pointers tab.
+- Added a route-tag preview that clearly shows custom versus automatic source → destination text.
+- Route-tag text now updates live while typing and persists per connection without changing either endpoint or any machine-label pointer settings.
+- Expanded the desktop object-editor tab strip from five to six tabs to make Labels a first-class editing surface.
+
+## 0.13.25 - 2026-09-30
+
+- Added editable `tagText` to each object-to-object process connection.
+- Added a **Route tag text** field under **Objects → Pointers → Optional route tag**; blank text automatically falls back to the source → destination names.
+- Route-tag text is persisted, normalized, reset with the connection, and remains independent from machine-label text.
+- Added per-machine `labelShowToday` control under **Objects → Label**.
+- **Show this machine label on Today Overview in Necessary mode** can expose any normal machine/person/object label on Today without assigning it a process role.
+- Existing process-flow machine labels remain visible in Necessary mode, preserving the current production-flow view while allowing extra selected labels.
+
+## 0.13.24 - 2026-09-30
+
+- Expanded process pointers from process-role-only connections to exact object-to-object connections.
+- Source and destination endpoints are now stored by exact layout object instance ID, so a pointer can connect to any placed machine, person, rack, truck, table, custom object, or other layout object.
+- Existing Cutting → Polisher and other process-role connections migrate automatically to the same exact source and destination objects.
+- Added direct **Source object** and **Destination object** controls for the selected pointer, allowing an existing line to be retargeted without deleting and recreating it.
+- Expanded the add-pointer controls to list all placed objects instead of only objects assigned to Cutting / Polisher / other process roles.
+- Today rendering now resolves pointer endpoints directly from object IDs; normal machine labels and their short leader pointers remain completely separate.
+- Optional process roles remain available only for Today Necessary-label semantics and no longer restrict where a process pointer can begin or end.
+- Route tags continue to use process names when an endpoint represents a process role, otherwise they use the connected object name.
+
+## 0.13.23 - 2026-09-29
+
+- Reworked the Pointers tab around the actual machine-to-machine process connection rather than the selected machine.
+- Added a global **Line to edit** selector that lists each process edge with both process roles and exact machine names.
+- Added independent source and destination selectors for creating process lines without relying on whichever machine happens to be selected.
+- Removed the legacy process-node text editor from Pointers so no pointer-tab text control can be mistaken for the machine label.
+- Added a dedicated `applyProcessConnectionField()` mutator that accepts only connection-owned fields and rejects machine-label fields.
+- Added a visual highlight around the currently selected process connection while the Pointers tab is open.
+- Kept machine-label text, anchor, tag offset, and label-leader styling exclusively under **Objects → Label**.
+- Added a runtime regression test that changes Cutting → Polisher connection geometry/style and verifies the machine-label pointer object is byte-for-byte unchanged.
+
+## 0.13.22 - 2026-09-29
+
+- Rebuilt the Today process-pointer editor around the actual machine-to-machine connection edge instead of storing editable pointer geometry on the source machine.
+- Added a dedicated `processConnections` layout model with independent source anchor, destination anchor, visibility, route-tag, line style, arrowhead, and sizing for every process connection.
+- Cutting → Polisher and every other process arrow can now be selected directly and edited without changing the machine label or the machine-label leader.
+- Added separate start-point and end-point controls so a process arrow can leave one machine and land on another at independently chosen X/Y/Z positions.
+- Added connection selection plus add/remove controls, allowing process connections to be created or removed independently of process-node assignments.
+- Existing v0.13.21 process geometry migrates once into the new connection records; future edits no longer write to machine-label pointer fields.
+- Process route tags can now be shown or hidden per connection.
+- Layout save/load, undo/redo, JSON export/import, and workspace persistence now include the independent process-connection collection.
+
+## 0.13.21 - 2026-09-29
+
+- Separated Today machine labels from Necessary process pointers at the renderer, data, and editor levels.
+- Today / Necessary now draws normal machine labels and the production-flow overlay at the same time instead of replacing machine labels with process labels.
+- Process pointers now connect the exact assigned machine to the next process machine and use their own connection anchors, line styling, endpoint styling, and route-tag placement.
+- Added compact machine-to-machine route tags such as `Cutting → Polisher` directly on process connections.
+- Added independent `processPointerText`; normal `labelText` no longer changes process-flow text.
+- Reworded the Pointers editor around process nodes and machine-to-machine connections so its controls are clearly separate from the Layout label editor.
+- Restored explicit machine-label anchor, tag-position, and leader-line controls in the Layout label section.
+- Preserved the existing independent machine-label appear/disappear stage controls.
+
+## 0.13.20 - 2026-09-29
+
+- Fixed Pointers controls being disabled for machines that belong to multi-object motion assemblies. Pointer editing now follows the active machine instead of requiring the entire selection to contain exactly one object.
+- Moved process-pointer change listeners out of the inspector refresh path so they are registered once and no longer accumulate duplicate handlers.
+- Restored add, reassign, remove, center, reset, visibility, geometry, and styling edits for Necessary pointers.
+- Added independent `labelReveal` / `labelRetire` timing to each machine label with **Label appears at** and **Label disappears after** stage selectors.
+- Construction-stage labels now honor their own timing window while Today Overview continues to use its separate Necessary / Abbreviated / Full label modes.
+- Timeline stage insert, delete, and reorder operations now keep machine-label timing references synchronized.
+- Label controls also follow the active machine inside attached motion assemblies, matching the repaired pointer workflow.
+
+## 0.13.19 - 2026-09-29
+
+- Fixed Today / Necessary labels selecting a nearby rendered machine instead of staying attached to their intended machine.
+- Replaced camera-dependent nearest-machine pointer resolution with persistent flow-step → machine instance bindings.
+- Added Necessary pointer assignment controls so each selected machine can add, reassign, remove, and edit its process pointer from the existing Pointers tab.
+- Added one-time migration that preserves the prior automatic flow choices using the complete saved plant, then persists the exact machine bindings for future renders.
+- Prevented a Necessary pointer from silently jumping to another candidate when its assigned machine is outside the current rendered set.
+- Added regression coverage for exact-machine bindings, assignment/removal controls, persistence, and removal of runtime nearest-machine selection.
+
+## 0.13.18 - 2026-09-28
+
+- Fixed the remaining non-fullscreen Plant Layout sidebar scrolling regression introduced by the prior explicit-height scroll containment change.
+- Removed the forced `height: 100%` from the inner editor scroll region so it can correctly occupy only the grid row above the fixed **Done editing** footer.
+- Added a high-specificity docked-editor override so older `.model-frame.editing .layout-editor` rules can no longer reintroduce conflicting bottom pinning, padding, or max-height behavior.
+- Anchored the editor to the visible intersection of the model frame and browser Visual Viewport, with explicit inline top/height values that follow page scrolling and browser resizing.
+- Added a direct wheel/trackpad fallback that advances the editor scroll region's `scrollTop` and blocks scroll chaining only when the sidebar actually consumes the movement.
+- Kept touch scrolling enabled and made the scroll region keyboard-focusable for complete non-fullscreen access.
+- Strengthened regression coverage for the scroll track, fixed footer row, viewport anchoring, explicit wheel scrolling, and legacy CSS override protection.
+
+## 0.13.17 - 2026-09-28
+
+- Fixed the remaining non-fullscreen Plant Layout sidebar scrolling failure by removing the percentage-based editor height that could resolve against an auto-height model frame and let the scroll region expand with its content.
+- The layout editor now uses the explicit pixel height calculated from the browser Visual Viewport, guaranteeing that the inner control region has a bounded height and can actually scroll.
+- Reasserted the two-row editor shell after the final polish CSS so later legacy/polish rules cannot restore outer padding or break the dedicated scroll region and fixed footer.
+- Added vertical touch scrolling and scroll-event ownership to the editor control region while leaving the viewer canvas zoom/pan behavior unchanged outside the sidebar.
+- Extended regression coverage to reject percentage-based sidebar sizing and require the explicit viewport-height scroll shell.
+
+## 0.13.16 - 2026-09-28
+
+- Rebuilt the Plant Layout editor sidebar as a two-row shell: independently scrollable controls plus a permanently reachable Done editing footer.
+- Removed the negative sticky-footer offset that could leave the bottom of the editor below the visible browser window.
+- Switched sidebar sizing to the actual rendered panel position and the browser Visual Viewport, with frame-bottom clamping for normal, zoomed, and fullscreen layouts.
+- Added regression coverage for the dedicated scroll region, fixed footer row, Visual Viewport sizing, and removal of the off-screen footer behavior.
+
+## 0.13.15 - 2026-09-24
+
+- Made the Plant Layout editor viewport-aware so the bottom of the edit UI remains reachable when editing in a normal browser window instead of fullscreen.
+- Added a dedicated **Pointers** object-editor tab for the Today/Necessary production-flow pointers, separate from normal machine labels.
+- Added independent per-machine process-pointer controls for target X/Y/Z, process-tag lift and screen offset, visibility, color, width, opacity, solid/dashed/dotted pattern, straight/elbow shape, tag connection side, endpoint type, and endpoint size.
+- Migrated existing saved label-pointer geometry into the new process-pointer fields on load so current production-flow layouts keep their existing placement while future pointer edits remain independent.
+- Kept normal machine-label text and appearance controls separate from process-flow pointer geometry.
+- Added regression coverage for process-pointer separation, saved-data migration, Today-flow rendering, and non-fullscreen editor viewport containment.
+- Updated the public-viewer regression to validate the owner-entry version against the current `VERSION` file instead of a stale hard-coded release number.
+
+## 0.13.14 - 2026-09-24
+
+- Removed the remaining Machine Design Studio mojibake from Build, Parts, timeline/status text, sizing readouts, standalone Studio markup, and standalone plant preview text.
+- Replaced deployment-sensitive punctuation with encoding-safe JavaScript Unicode escapes or HTML entities so separators, multiplication signs, arrows, ellipses, degree symbols, apostrophes, and dashes render consistently on Railway and local builds.
+- Added a recursive app/public encoding regression check to reject future `Â`, `Ã`, `â`, or replacement-character corruption.
+- Updated the Today production-flow regression to match the v0.13.13 custom-label-text path instead of the retired hard-coded label form.
+- Completed a focused performance review: designer switching, adaptive rendering, overlap detection, retained Three.js rendering, production animation caching, deep-performance checks, overview stability, production build, and TypeScript validation all passed. The 3,000-object overlap test completed in 808 ms with a 7.704 ms cached pass.
+- Confirmed the production dependency audit remains clean with `npm audit --omit=dev --audit-level=high`.
+
+## 0.13.13 - 2026-09-24
+
+- Replaced deployment-sensitive Machine Design Studio text glyphs with embedded SVG icons across the live editor, standalone editor, animation palette/timeline, and component visibility controls.
+- Preserved the v0.13.12 Today production-flow routing while allowing each production label to use custom text and independent pointer anchor, tag X/Y offset, line color, width, opacity, solid/dashed/dotted style, straight/elbow form, connection edge, endpoint style, and endpoint size.
+- Decoupled structural wall and pillar height from roof-panel visibility so full-height exterior walls remain visible in the overview when the roof is hidden.
+- Added regression checks for SVG Designer controls, editable production-label leaders, and roof-independent structural heights.
+
+# Changelog
+
+## 0.13.12 - 2026-09-23
+
+- Reworked construction-stage labels so only equipment introduced in the active stage receives a full-name label; those labels fade out after the stage advances. The Plant Offices stage now explicitly labels Plant office and Maintenance.
+- Replaced normal Today machine labels with an automatic production-flow overlay. Compact process tags now point to representative machines and directional connectors show Cutting → Polisher → Denver CNC / Waterjet → Washer → Tempering Line → Wrap → Glass Truck / Rack.
+- Kept production-flow tags small/light and collision-aware so they stay unobtrusive and avoid covering equipment where possible.
+- Updated the mobile stage dock so complete stage descriptions can wrap without line-clamp truncation.
+- Increased two-finger touch-pan movement by 2.15x while preserving pinch-to-zoom behavior.
+
+## 0.13.11 - 2026-09-23
+
+- Updated `next` and `eslint-config-next` from 16.3.3 to 16.3.6.
+- Resolved the production `sharp` security advisory by moving Next's transitive Sharp dependency to 0.35.4.
+- Added an npm override for `baseline-browser-mapping` 2.11.25, clearing the remaining production audit advisory.
+- Verified `npm audit --omit=dev` reports zero production vulnerabilities.
+- Moved the Railway production replica from the West Coast region to US East (Virginia) for lower latency to primary users.
+- Removed mobile stage-change auto-scroll and hid the large desktop stage card/timeline on phone layouts.
+- Added the current stage description directly to the compact dark mobile stage dock so stage context stays inside the overview viewport.
+- Replaced the Play Progress text glyph with a CSS-drawn play/pause icon that remains aligned at mobile sizes.
+- Added a mobile fullscreen fallback plus viewport/orientation listeners so fullscreen and First Person fill the current portrait or landscape phone geometry and adapt when the phone rotates.
+- First Person now enters the shared fullscreen experience automatically on mobile.
+- Republished the approved public workspace from the current Microsoft Edge local editor state, including the latest machine, label, and plant-layout changes.
+
+## 0.13.10 - 2026-09-23
+
+- Completed Railway/public-host compatibility for the approved published workspace.
+- Removed the `*.chatgpt.site`-only bootstrap restriction so any non-local read-only deployment receives the same checked-in plant layout and machine-design snapshot.
+- Kept localhost and password-unlocked owner/editor sessions isolated from public snapshot seeding so edits remain browser-local until explicitly published.
+
+## 0.13.9 - 2026-09-23
+
+- Removed the ChatGPT-specific sign-in requirement from the private owner route.
+- Owner access now uses only the existing password gate and session-scoped editor unlock, allowing the same owner workflow to run on Railway or another standard Node host.
+- Preserved the hidden five-click owner entry, no-index owner/editor routes, public read-only viewer, and desktop-only Machine Design Studio behavior.
+
+## 0.13.8 - 2026-09-23
+
+- Bug-fix-only release after a full responsive QA sweep; no new viewer or editor features were added.
+- Fixed 844x390 coarse-touch landscape so the overview model, gesture/playback row, and mobile stage dock fit together without control clipping.
+- Extended compact label-density, abbreviation, repeat-limit, and collision-spacing behavior to short coarse-touch landscape viewports so Plant Today does not fall back to desktop-level label density.
+- Updated the CAD regression validator to assert the current `displayedColumnHeight(column)` rendering path instead of the retired hard-coded 22-unit column height.
+- Rechecked public viewer layouts from 360x800 through 2560x1440, portrait/landscape First Person, owner access/dashboard, and desktop-only Machine Design Studio.
+
+## 0.13.7 - 2026-09-22
+
+- Rotated the owner and Machine Design Studio editor password to the newly requested credential.
+- Updated both the React access gate and standalone editor-access runtime to the same PBKDF2-derived password hash without storing the plaintext password in source.
+- Bumped application/version markers and owner-entry regression expectations to v0.13.7.
+
+## 0.13.6 - 2026-09-22
+
+- Added touch-first First Person controls for phones and tablets: directional movement, drag-to-look, hold-to-run, jump, crouch, and exit.
+- Kept desktop First Person behavior unchanged with pointer lock, mouse look, WASD, sprint, jump, crouch, and Escape options.
+- Restored the First Person entry control on coarse-touch/mobile viewers instead of hiding it.
+- Added a full-screen mobile First Person control overlay that leaves the center of the model visible and keeps movement/actions near the lower corners.
+- Reduced mobile overview label crowding by using a phone-specific label budget, stricter repeated-label limits, and earlier abbreviation in Adaptive mode.
+- Prevented the desktop force-visible label behavior from bypassing collision/density rules on narrow mobile viewports.
+- Added regression checks for touch movement, drag-to-look, mobile First Person UI wiring, and mobile label-density logic.
+
+## 0.13.5 - 2026-09-22
+
+- Decluttered the mobile Plant Evolution viewport by placing the movement hint and Play progress control on one compact row and increasing the usable 3D model height.
+- Hid the Plant Layout / Machine Studio navigation for public read-only viewers while keeping owner/editor navigation available after owner access is unlocked.
+- Reduced the hidden Model Studio owner-entry badge to a tiny fixed corner version marker on every resolution while preserving the five-click owner shortcut.
+- Made Machine Design Studio desktop-only; phones, tablets, and coarse-touch devices now receive a focused desktop-required screen instead of loading the precision editor.
+- Revalidated the production build, public-viewer access rules, layout rendering, machine creation, Plant Layout insertion, and lint.
+- Verified the true 390 CSS-pixel phone layout has no horizontal overflow; the movement hint and Play control fit side-by-side inside the 3D viewport.
+
+## 0.13.4 - 2026-09-22
+
+### Fixed
+
+- Kept touch gesture guidance correct after runtime control refreshes; phones and touch-first tablets now continue to show drag, pinch, and two-finger pan instructions instead of reverting to mouse directions.
+- Made pointer-lock First Person controls consistently desktop-only at phone widths, including unusual hybrid browser/device combinations.
+- Extended the touch-first public layout through portrait-tablet widths when the device reports coarse touch input, while preserving the desktop/tablet layout for precise-pointer devices at the same width.
+- Updated the shaped-collision regression test to match the current additive machine-level plus part-level collision-envelope behavior.
+- Separated the mobile Play progress control from the gesture hint and stage dock, and raised the remaining mobile Machine Studio camera/library controls to touch-friendly hit targets.
+- Docked the mobile Plant Layout editor beneath the 3D viewport instead of letting the editor overlay the model, and enlarged owner/access links and password controls for touch use.
+
+### Validation
+
+- Re-ran the complete source regression suite, JavaScript syntax validation, responsive Chromium layout checks, stage-transition checks, and touch-first public-viewer screenshots across phone, tablet, laptop, desktop, and ultrawide viewports.
+
+## 0.13.3 - 2026-09-22
+
+- Rebuilt the public Plant Evolution experience for phones with a taller touch-first viewport, compact header, safe-area spacing, thumb-sized controls, and a mobile stage dock that keeps previous/next navigation in reach while viewing the model.
+- Added real touch camera controls to the Plant Layout: one-finger orbit, pinch-to-zoom, and two-finger pan.
+- Added mobile-specific gesture guidance and hid pointer-lock First Person prompts on coarse-touch devices where that desktop interaction is not appropriate.
+- Reworked the stage card and timeline for mobile with sticky stage actions, horizontally scrollable detail chips, larger controls, snap-friendly stage navigation, and automatic centering of the active timeline stage.
+- Improved the owner/layout editor on phones with larger form controls and a better viewport/editor split.
+- Reworked Machine Design Studio on smaller screens so the 3D viewport appears first, primary actions remain thumb-sized, command bars scroll cleanly, and dense editor panels follow below the model.
+- Added mobile viewport metadata including safe-area support for modern edge-to-edge phone displays.
+
+## 0.13.2 - 2026-09-22
+
+### Added
+
+- Added a discreet owner-entry gesture to the normal Plant Evolution header: click the Model Studio version badge five times within 3.5 seconds to open the private owner workspace.
+- Kept the owner gesture visually identical to the ordinary version badge so the public portfolio view does not expose an obvious admin control.
+
+### Security
+
+- The hidden gesture only navigates to the owner route; ChatGPT sign-in and the editor password remain required before editing is enabled.
+- The private owner and Machine Studio routes remain non-indexed.
+
+### Validation
+
+- Extended the public-viewer regression suite to verify the five-click threshold, timeout window, and redirect to the protected owner route.
+
+## 0.13.1 - 2026-09-22
+
+### Added
+
+
+- Added a private, non-indexed owner workspace at the dedicated owner route, protected by ChatGPT sign-in plus the existing editor password gate.
+- Added owner shortcuts into the existing Plant Layout editor and Machine Design Studio instead of creating a second editing system.
+- Added a generated, versioned public workspace snapshot containing the approved 42-machine design library and 98-object plant layout.
+- Added a repeatable workspace publishing command and regression validation for snapshot contents and browser-storage transfer.
+
+### Fixed
+
+
+- Kept Auto-mode render resolution stable during sustained stage-transition load; Auto now reduces geometry/detail and shadow work before sacrificing viewport sharpness.
+- Removed blur from the stage-card entrance animation so text and controls remain crisp throughout stage changes.
+- Hid editor navigation and the layout-edit control from the normal hosted public viewer until the private owner workspace unlocks the tab.
+- The hosted read-only viewer now loads the published workspace before initializing the plant, so local machine designs, placements, envelopes, animations, labels, structure settings, and timeline edits appear on the live domain.
+- Localhost remains the editable source of truth and is never overwritten by the published snapshot.
+
+### Validation
+
+
+- Added/updated regression checks for stable Auto render resolution, crisp stage-card transitions, private owner routing, owner-session gating, and reuse of the existing editors.
+- Re-ran JavaScript syntax, adaptive-rendering, public/owner gating, published-workspace, layout-rendering, machine-creation, and layout-insertion regression checks.
+
+## 0.13.0 - 2026-08-25
+
+### Added
+
+- Added explicit **Save**, **Save as**, and **Save & add to layout** commands to Machine Design Studio.
+- Added a reusable-machine Save As dialog and a direct handoff that opens the newly added object in Plant Layout edit mode, selected and ready to position.
+- Added a visible Build, Save, Place workflow and made new custom machines start with a blank design ready for shapes.
+
+### Improved
+
+- Consolidated duplicate part and camera commands, including removal of the redundant orientation cube.
+- Applied consistent spacing, control sizing, focus states, panels, color tokens, and responsive behavior across the Plant Layout and Machine Design Studio.
+- Reduced rendering work from off-screen animations and idle first-person sessions; Auto mode now also scales curved-geometry and shadow budgets when sustained frame times are high.
+- Made first-person visibility culling conservative for nearby objects and use all box corners for distant screen checks.
+
+### Fixed
+
+- Corrected inverted Designer orbit, pan, and wheel zoom directions.
+- Fixed newly created reusable machines not having an obvious saved state or reliable transition into the Plant Layout positioning workflow.
+- Fixed machines disappearing near the sides of the first-person view.
+
+### Validation
+
+- Ran JavaScript syntax checks, machine-creation, Plant Layout insertion, adaptive-performance, and first-person regression tests.
+
+## 0.12.17 - 2026-08-07
+
+### Fixed
+
+- Prevented the browser's native middle-mouse autoscroll gesture from activating while middle-button dragging the Plant Overview 3D canvas outside fullscreen mode.
+- Applied the same middle-button suppression to Machine Design Studio so scene panning behaves consistently between both 3D viewports.
+- Kept the existing middle-button pan controls unchanged; only the browser/page default action is cancelled.
+
+### Validation
+
+- Added regression assertions for middle-button `mousedown` and `auxclick` suppression in both 3D canvases.
+- Re-ran JavaScript syntax validation and the complete project regression suite.
+
+## 0.12.16 - 2026-08-07
+
+### Fixed
+
+- Matched Plant Overview animation bounds to Machine Design Studio for boxes, cylinders, cones, spheres, wedges, wheels, roller beds, beams, and nested merged groups instead of approximating several rotated shapes as boxes.
+- Fixed beam Rotate clips being applied twice in Plant Overview. Beam endpoints now remain the authored local axis while rotation fields carry the animated orientation, matching the Designer.
+- Fixed combined Rotate + Move + non-uniform Scale clips drifting on nested groups by applying scale axes in the same order and around the same recalculated centers as the Designer.
+- Fixed inherited motion-driver scaling for nested merged groups by scaling each nested group around its own center before moving that group relative to the external driver pivot.
+- Fixed custom-design box rendering so component rotation and machine rotation compose as sequential 3D transforms instead of adding Euler angles.
+- Fixed custom-design wheel rendering so wheel rotation occurs in source-design coordinates before Plant Layout placement scaling, preventing skewed axes and pivots on non-uniformly scaled machines.
+- Fixed roller-bed rendering to use the machine's full X/Y/Z 3D transform rather than the older Y-only helper.
+- Aligned legacy Pulse scaling with the same shape-aware scaling path used by timeline clips, including beams, wheels, roller beds, and nested groups.
+
+### Changed
+
+- Kept machine-design payload version 17 because the corrections change runtime transform and rendering math only; no saved fields were added.
+
+### Validation
+
+- Expanded Plant Overview parity coverage to compare complete Designer and Plant transforms for combined pivot rotation, translation, non-uniform scale, opacity, visibility, and nested motion-driver inheritance.
+- Added parity checks for exact rotated bounds across every editable geometry family and for the corrected wheel design-space transform path.
+- Re-ran JavaScript syntax validation and all 28 project regression files.
+
+## 0.12.15 - 2026-08-07
+
+### Fixed
+
+- Kept embedded machines at the exact source-design scale when inserted into another machine by no longer changing the destination design envelope automatically.
+- Prevented Plant Layout instances in Preserve/Stretch sizing modes from shrinking or stretching existing geometry merely because a larger saved machine was embedded.
+- Aligned Plant Layout animation centers and bounds with Machine Design Studio for rotated parts and nested groups.
+- Fixed wheel animation transforms in Plant Layout by consistently treating wheel `x`, `y`, and `z` as center coordinates instead of box-corner coordinates.
+- Corrected grouped/nested rotation and scale transform pivots so embedded-machine animations match the designer more closely in Plant Layout.
+
+### Changed
+
+- Larger embedded machines may extend outside the current reusable design envelope after insertion. Use **Tight fit** when the envelope itself should intentionally grow around the combined machine.
+- Kept machine-design payload version 17 because no saved-data fields were added or changed.
+
+### Validation
+
+- Added regression coverage that prevents embedded-machine insertion from mutating the destination envelope.
+- Added Plant Layout animation-transform parity checks for rotated bounds, wheels, roller beds, beams, rotation pivots, and scale pivots.
+- Re-ran JavaScript syntax validation and the complete project regression suite.
+
+## 0.12.14 - 2026-08-07
+
+### Added
+
+- Added **Add saved machine** to the Machine Design Studio Add panel so another reusable machine design can be inserted into the current machine as one editable embedded assembly.
+- Listed custom machine designs before presets and excluded the currently edited design to prevent direct self-embedding.
+- Added embedded-machine source metadata so saved/exported designs retain which machine snapshot was inserted.
+
+### Changed
+
+- Embedded machine children keep their own independent animations on the destination machine's shared animation clock instead of inheriting one merged-item motion driver.
+- Animations added to the embedded-machine wrapper transform the whole inserted assembly while its internal animations continue to run.
+- Refreshed component and clip IDs recursively when inserting a machine so multiple copies can coexist safely and remain editable after separation.
+- Centered inserted machines in the current design, aligned their lowest geometry to the design floor, and expanded the reusable design envelope only when the inserted machine requires additional space.
+- Advanced the machine-design payload to version 17 for embedded-machine source metadata. The existing storage key remains unchanged.
+
+### Validation
+
+- Added regression coverage for the saved-machine picker, insertion workflow, recursive ID cloning, independent embedded-machine animation behavior, Plant Layout rendering, and payload version 17.
+- Re-ran JavaScript syntax validation and the complete project regression suite.
+
+## 0.12.13 - 2026-08-07
+
+### Fixed
+
+- Fixed **Blink opacity** appearing stuck in its visible state when using the default Step easing. Blink now samples raw cycle phase because blinking is a discrete state change rather than eased motion.
+- Fixed **Show / hide → Toggle each cycle** using eased progress, which could prevent the visibility state from toggling with Step easing. Toggle now alternates by cycle index.
+- Allowed Blink minimum opacity to reach exactly `0`, matching the timeline renderer's existing true-zero opacity support.
+
+### Validation
+
+- Expanded timeline regression coverage to exercise every supported animation family: move, back-and-forth, loop path, four-step path, rotate/pivot, bob, pulse, rectangular split, fade in, fade out, blink opacity, show/hide/toggle, and wait/hold.
+- Added explicit Blink tests for visible, dim, repeated-cycle, Step-easing, and fully invisible states.
+- Added explicit visibility tests for show, hide, and alternating toggle states.
+- Re-ran JavaScript syntax validation and the complete project regression suite.
+
+### Changed
+
+- Kept machine-design payload version 16 because the fixes change runtime evaluation only and add no saved-data fields.
+
+## 0.12.12 - 2026-08-06
+
+### Added
+
+- Added a machine-wide animation clock so every top-level part, nested merged item, and child timeline samples the same absolute playback time.
+- Added shared machine Loop and Machine speed settings while keeping clips stored on their individual part timelines.
+- Added ripple resizing to the right edge of timeline clips. Extending a clip pushes every later non-overlapping clip to the right by the same amount.
+
+### Fixed
+
+- Fixed parts appearing to begin at different times because each part previously applied its own timeline loop span and playback-rate setting.
+- Fixed Parts-panel selection opening an empty outer merged-item timeline instead of resolving the nested animation owner or configured motion driver.
+- Kept intentionally overlapping clips in place during ripple resizing, so body-dragging a clip into another lane still creates simultaneous playback.
+- Prevented repeated pointer-move events from accumulating downstream clip offsets while a ripple resize is in progress.
+
+### Changed
+
+- The timeline ruler, playhead, automatic span, loop state, and playback speed now represent the entire machine design instead of only the currently selected part.
+- Advanced the machine-design payload to version 16 to persist shared `animationTimelineSettings` on each design.
+
+### Validation
+
+- Added shared-clock, Parts-panel target-resolution, and ripple-resize regression coverage.
+- Re-ran JavaScript syntax validation and all project regression test files.
+
+## 0.12.11 - 2026-08-06
+
+### Fixed
+
+- Fixed intermittent timeline detection when clicking a merged item that contains other merged items.
+- Preserved the complete nested component path on every rendered hit primitive instead of retaining only the outermost group.
+- Made timeline target lookup recursive so animations can be found on deeply nested merged groups and parts.
+- Resolved the configured merged-item motion-driver chain when the clicked visible child is not itself the animation owner.
+- Allowed repeated clicks inside an already selected outer group to refresh the timeline target without changing transform ownership.
+
+### Changed
+
+- Expanded the timeline target selector to include every nested descendant with clear nested-item labels.
+- Kept moving, rotating, scaling, merging, and separating attached to the top-level selected group while timeline editing points to the resolved nested animation owner.
+- Kept machine-design payload version 15 because this repair changes editor selection metadata only and adds no saved-data fields.
+
+### Validation
+
+- Added nested hit-path, recursive target lookup, same-selection retargeting, and motion-driver-owner regression coverage.
+- Re-ran JavaScript syntax validation and all project regression test files.
+
+## 0.12.10 - 2026-08-06
+
+### Added
+
+- Added a **Flip rotation animation** button to Rotate clips. The button reverses the existing signed angle while retaining the stable fixed-angle and pivot behavior introduced in version 0.12.8.
+- Added a live direction label showing whether the selected Rotate clip currently uses forward or reverse rotation.
+
+### Fixed
+
+- Fixed nested merged-item animation ownership when a new outer merge is created.
+- Reset the timeline target and selected clip to the new outer merged item so a previously selected inner group cannot silently receive clips intended for the whole assembly.
+- Ensured an animation created for the outer merged item remains on that outer item and does not appear on the inner merged item after separation.
+
+### Changed
+
+- Restored the stable version 0.12.8 rotation and merged-selection behavior instead of retaining the version 0.12.9 rotation-direction implementation.
+- Migrated any Rotate clips saved by version 0.12.9 back from its temporary direction field to the stable signed-angle format.
+- Kept machine-design payload version 15 because the flip button uses the existing signed `amount` field and does not change saved-data structure.
+
+### Validation
+
+- Added regression coverage for signed-angle flipping and nested-merge timeline ownership.
+- Re-ran JavaScript syntax validation and all project regression test files.
+
+## 0.12.8 - 2026-08-06
+
+### Added
+
+- Added local X, Y, and Z pivot-offset controls to timeline **Rotate** clips.
+- Added pivot-aware rotation operations to both Machine Design Studio and Plant Layout renderers, including merged motion-driver inheritance.
+
+### Changed
+
+- Changed timeline Rotate from an accumulating continuous spin into a one-time interpolation from 0 degrees to the requested final angle.
+- Removed cycle, repeat, phase, pause-after-cycle, and yoyo controls from Rotate because the clip now uses its duration and easing directly.
+- Migrated older saved timeline clips with the internal `spin` type to the new keyed Rotate behavior while preserving their axis and degree amount.
+- Advanced the machine-design payload version to 15 while preserving the `monroe-glass-machine-designs-v1` storage key.
+
+### Validation
+
+- Added regression coverage for fixed-angle rotation, final-angle holding, legacy spin migration, pivot offsets, inspector fields, renderer integration, and payload version 15.
+- Re-ran JavaScript syntax validation and all 27 project regression test files.
+
+## 0.12.7 - 2026-08-05
+
+### Added
+
+- Added a spread-axis selector to **Split into rectangles** with local X, Y, Z, and all-axis options.
+- Added minimum and maximum column controls so each split can choose a deterministic random column count inside a saved range.
+- Added dedicated **Fade in** and **Fade out** timeline clips with easing, duration, and hold-final-value support.
+- Added stateful fade sequencing so a completed fade-out can remain invisible until a later fade-in restores the part.
+
+### Changed
+
+- New rectangular split clips default to a seeded range of three through six columns while older fixed-column clips retain their exact saved count and original all-axis spread.
+- Extended seeded split generation so the same seed preserves the chosen column count, fragment directions, and rotation scatter across reloads and both renderers.
+- Updated Designer and Plant Layout opacity pipelines to preserve true zero opacity instead of treating zero as an unset value.
+- Advanced the machine-design payload version to 14 while preserving the `monroe-glass-machine-designs-v1` storage key.
+
+### Validation
+
+- Added regression coverage for split-axis constraints, ranged column generation, deterministic layouts, fixed-column compatibility, fade interpolation, held zero opacity, fade-out/fade-in sequencing, inspector fields, and payload version 14.
+- Re-ran the complete JavaScript syntax and project regression suites.
+
+## 0.12.6 - 2026-08-05
+
+### Added
+
+- Added a **Split into rectangles** animation clip for Machine Design Studio timelines.
+- Added even rectangular-grid controls for columns, rows, and depth layers.
+- Added configurable fragment spread distance, rotation scatter, and a saved random seed.
+- Added deterministic fragment generation so playback, reloads, and linked Plant Layout machines keep the same split pattern.
+- Added rectangular-fragment rendering for individual parts, non-box shapes through their rectangular envelope, and merged assemblies.
+
+### Changed
+
+- Advanced the machine-design payload version to 13 while preserving the `monroe-glass-machine-designs-v1` storage key.
+- Updated Machine Design Studio and Plant Layout animation rendering to carry the split effect through saved timeline evaluation.
+
+### Validation
+
+- Added regression coverage for the new animation type, default settings, progress, fragment count, deterministic seeded layout, inspector fields, payload version, and both render paths.
+- Re-ran the complete JavaScript syntax and project regression suites.
+
+## 0.12.5 - 2026-08-05
+
+### Fixed
+
+- Repaired saved timeline spans with runaway values such as `886370` seconds by deriving timeline length only from clip endpoints.
+- Fixed animation deletion operating on a stale normalized timeline object instead of the part's saved timeline.
+- Added an explicit missing-clip guard so delete can never remove the wrong final item through a negative array index.
+- Added Delete and Backspace support for the selected clip while the animation workspace is active.
+
+### Improved
+
+- Increased the docked animation workspace height and clip-lane height for easier editing.
+- Moved the animation-type palette from the bottom workspace into the right Animation inspector.
+- Gave the timeline the full available viewport width after removing the palette column.
+- Changed Timeline span to a read-only automatic value: 30 seconds minimum, expanding in five-second increments only when clips require it.
+- Increased resize-handle hit areas and clip text size in the larger workspace.
+
+### Validation
+
+- Added regression coverage for runaway-span repair, automatic timeline duration, reliable selected-clip deletion, right-panel animation creation, and the enlarged full-width workspace.
+- Re-ran the complete rendering, animation, timeline, scaling, synchronization, first-person, performance, structural, selection, label, and editor regression suites.
+
+## 0.12.4 - 2026-08-05
+
+### Added
+
+- Added a non-zero preset duration and matching cycle settings for every animation type.
+- Added a 30-second minimum timeline ruler with automatic extension in five-second increments when clips run longer.
+- Added a fixed 44-pixel-per-second editing scale and horizontal scrolling for more precise movement and resizing.
+- Added chronological lane packing so sequential clips read left to right while overlapping clips use separate lanes.
+- Added separate **Play** and **Pause** controls alongside Restart.
+- Added preset-duration labels to the animation palette.
+
+### Improved
+
+- Clicking an animation type now appends it after the latest clip instead of stacking every new clip at the current zero-second playhead.
+- Resize handles now activate only on the selected clip and use larger dedicated hit areas.
+- Timeline dragging tracks a single clip identifier and preserves every neighboring clip unchanged.
+- Added pointer capture and edge auto-scroll during long timeline drags.
+- Updated timeline summaries and help text to make left-to-right timing and clip endpoints explicit.
+- Advanced the machine-design payload version to 12 while keeping the existing local-storage key and normalizing older payloads.
+
+### Validation
+
+- Added regression coverage for all animation presets, 30-second minimum duration, automatic extension, pixels-per-second drag sensitivity, lane packing, append order, isolated resizing, separate playback controls, and scrollable timeline markup.
+- Re-ran the complete rendering, animation, scaling, synchronization, first-person, performance, structural, selection, label, and editor regression suites.
+
+## 0.12.3 - 2026-08-05
+
+### Added
+
+- Added an **Animation** workspace button directly below Pan in the Machine Design Studio tool rail.
+- Added a docked bottom timeline that reduces the 3D viewport height while open instead of hiding the machine behind an overlay.
+- Added a visible palette containing every supported animation type.
+- Added click-to-add at the playhead and drag-and-drop creation at an exact timeline time.
+- Added draggable clips for changing start time and chronological order.
+- Added left and right resize handles for changing clip start, end, and duration.
+- Added configurable timeline snapping from 0.01 to 1.00 seconds and edge snapping to neighboring clips.
+- Added a dedicated timeline-workspace helper module and regression suite.
+
+### Changed
+
+- Selecting a timeline clip now opens the right inspector's Animation section automatically.
+- Moved timeline-wide controls, animation types, ruler, tracks, and playhead out of the narrow inspector and into the bottom workspace.
+- Kept the right inspector focused on the selected clip's complete type-specific settings.
+- Timeline duration now always expands far enough to contain every clip, even when an explicit duration was previously shorter.
+- Added `A` to toggle the timeline and Escape to close it when open.
+
+### Validation
+
+- Added tests for time conversion, snapping, chronological sorting, clip movement, left-edge resizing, right-edge resizing, dock markup, script order, and integration hooks.
+- Re-ran all existing animation, rendering, scaling, first-person, performance, structural, selection, and editor-panel regression suites.
+
+## 0.12.2 - 2026-08-05
+
+### Added
+
+- Added a visual per-part animation timeline in Machine Design Studio.
+- Added sequential and overlapping animation clips with an interactive ruler and scrubber.
+- Added Move, Oscillate, Loop, Four-step, Spin, Bob, Pulse, Blink, Visibility, and Wait clip types.
+- Added exact per-clip start, duration, active motion time, forward-end pause, return-end pause, cycle pause, repeat, easing, phase, yoyo, hold, axis, amount, opacity, and visibility controls.
+- Added separate timelines for merged assemblies and their individual child parts.
+- Added timeline playback support to linked custom machines in the Plant Layout.
+- Added `public/animation-timeline.js`, `docs/ANIMATION_TIMELINE.md`, and `docs/EDITOR_PANELS.md`.
+
+### Changed
+
+- Reorganized the Machine Design Studio left panel into Library, Parts, Add, and Plant tabs.
+- Reorganized the Designer right inspector into Properties, Transform, and Animation tabs for the selected part.
+- Reorganized the Plant Layout editor into Objects, Structure, Stages, and Project tabs.
+- Divided Plant Layout object editing into Select, Transform, Animation, and Add tabs.
+- Advanced the machine-design payload version to 11 while preserving the existing browser-storage key.
+- Automatically migrates older single-animation part settings into a timeline clip.
+### Validation
+
+- Added animation-engine regression tests for migration, interpolation, clip overlap, rotation, pulse, blink, visibility, and four-step paths.
+- Added panel-organization and script-order regression tests for both application entry points.
+
+## 0.12.1 - 2026-08-05
+
+### Improved
+
+- Reduced the minimum Machine Design Studio envelope dimension from 0.5 ft to 0.01 ft.
+- Changed envelope inputs to hundredth-foot precision.
+- Added a visible 3D envelope outline for checking the machine edges.
+- Reworked **Fit envelope around parts** into **Tight fit to parts** with optional inch-based clearance.
+- Added all-parts and visible-parts-only fit scopes.
+- Added live envelope-versus-geometry measurements and an outside-envelope warning.
+- Preserved compact custom envelope dimensions through Plant Layout creation, synchronization, editing, and reload.
+
+### Validation
+
+- Added compact-envelope regression coverage for the Designer UI, fit calculation, Plant Layout minimums, and versioned documentation.
+
+## 0.12.0 - 2026-08-05
+
+### Added
+
+- Added a direct **Saved designer machine** workflow under **Plant Layout → Edit layout → Add to the 3D model**.
+- Lists reusable custom machines saved in Machine Design Studio, including their design-envelope dimensions.
+- Added optional plant-instance naming, timeline appearance stage, and placement controls.
+- Added open-space, current-view, and plant-center placement choices.
+- Newly inserted machines use their reusable design, match its dimensions, and remain live-linked to later Designer edits.
+- Kept standard machines, objects, animations, and floor features available in a condensed secondary section.
+- Added refresh and open-designer actions so the Plant Layout can pick up newly saved designs without reloading the page.
+
+### Validation
+
+- Added a dedicated Plant Layout designer-machine insertion regression test.
+- Preserved layout schema 6 and the existing design-library storage key.
+
+## 0.11.9 - 2026-08-05
+
+### Fixed
+
+- Restored all CAD-derived structural columns inside the original plant footprint instead of limiting the scene to the first 96 anchors.
+- Added the 22 previously omitted eastern-structure pillars, including the column lines near X = 180, 182.54, and 226.54 ft.
+- Kept hidden-column persistence compatible with existing saved layouts; new CAD columns default to visible.
+- Included the restored pillars in rendering, selection, shadows, first-person collision, camera culling, removal, and restore-all behavior.
+- Kept generated extension columns limited to floor area outside the original CAD bounds, preventing duplicates.
+
+### Validation
+
+- Updated structural-column regression coverage to verify all 118 CAD anchors are loaded and the easternmost column remains present.
+
+## 0.11.8 - 2026-08-05
+
+### Added
+
+- Added a complete create-machine workflow inside Machine Design Studio.
+- Added machine name, appearance stage, and automatic/center/origin placement controls.
+- Added automatic open-space placement that avoids existing solid Plant Layout objects.
+- New machines use the current reusable design, its envelope dimensions, and Match dimensions synchronization.
+- Newly created machines are selected and live-linked immediately for continued editing.
+- Open Plant Layout tabs now import newly created designer objects through the existing storage and BroadcastChannel synchronization path.
+- Added `docs/CREATING_MACHINES.md` and a dedicated regression test.
+
+## 0.11.7 - Automatic structural columns for floor extensions
+
+### Added
+
+- Continued the established CAD structural grid automatically whenever the floor width, length, or center creates new structure area outside the original drawing footprint.
+- Added editable X and Z bay spacing controls in **Edit layout → Structure**. The supplied CAD pattern defaults to 40 ft in X and 30 ft in Z.
+- Added an on/off control for generated extension columns and a live count separating original CAD columns from generated columns.
+- Added stable generated-column identifiers so individually removed extension columns stay removed after saving, undo/redo, export/import, and page reloads.
+- Included generated columns in first-person collision, depth ordering, shadows, editor selection, and visibility culling.
+
+### Performance and compatibility
+
+- Column generation is cached and rebuilt only when floor or grid settings change.
+- Very large floors use an aligned integer grid stride as a safety limit instead of creating an unbounded number of column models.
+- Existing CAD-column removal indices remain compatible under layout schema 6.
+- Existing layouts automatically enable 40 × 30 ft extension spacing without moving or duplicating the original CAD columns.
+
+### Validation
+
+- Added `validate:columns` regression coverage for grid continuation, stable generated keys, persistence fields, editor controls, and large-floor safeguards.
+
+## 0.11.6 - First-person orientation and perspective-depth correction
+
+### Fixed
+
+- Replaced linear camera-space depth interpolation in first-person mode with reciprocal perspective depth, preventing rear machine parts, wheels, walls, and other geometry from appearing through opaque surfaces.
+- Corrected the orbit-to-first-person yaw conversion so entering first person faces the same side of the plant shown by the overview instead of appearing reversed.
+- Preserved near-plane clipping while making clipped faces participate in the same perspective-correct depth ordering.
+- Kept transparent glass behind opaque geometry while retaining deliberate glass transparency.
+
+### Validation
+
+- Added first-person projection checks for reciprocal depth, near/far ordering, horizontal handedness, and orbit-to-walk direction conversion.
+- Existing layout storage, machine designs, animations, camera preferences, and object placements remain unchanged.
+
+## 0.11.5 - Reliable WASD and one-step Escape exit
+
+### Fixed
+
+- WASD and movement keys now work when the First person or Capture mouse button remains focused after being clicked.
+- Entering first-person mode clears stale toolbar focus and focuses the model canvas.
+- Releasing pointer lock with the browser Escape action now exits first-person mode instead of leaving the user in a paused first-person state.
+- Escape keydown also exits immediately when the browser exposes the reserved key event to the page.
+- First-person HUD and documentation now describe Escape as a complete exit action.
+
+### Validation
+
+- Added regression coverage for movement events targeting a focused button.
+- Added regression coverage for pointer-lock loss and direct Escape exit requests.
+- Plant layout storage, machine designs, camera preferences, and all existing project data remain unchanged.
+
+## 0.11.4 - Full game-style first-person navigation
+
+### Added
+
+- Dedicated `first-person-controller.js` with continuous keyboard movement and pointer-lock mouse look.
+- True perspective projection with configurable field of view.
+- WASD movement, mouse look, Shift sprinting, Space jumping, and Ctrl/C crouching.
+- Collision against solid machines, visible structural pillars, floor boundaries, and exterior walls.
+- Sliding collision response so movement continues along an unblocked axis.
+- Safe-spawn search when the current camera target is inside geometry.
+- First-person HUD with mouse-capture, settings, and exit controls.
+- Adjustable walking speed, eye height, field of view, mouse sensitivity, collision, and walking motion.
+- Dedicated `validate:first-person` regression coverage and `docs/FIRST_PERSON.md`.
+
+### Improved
+
+- First-person mode expands the model to the full browser window and attempts browser full-screen mode.
+- The previous low-height orthographic walkthrough is replaced with near-plane-clipped perspective rendering.
+- Geometry behind the camera is clipped before being sent to the WebGL or Canvas renderer.
+- Smart-label density is reduced in first-person mode.
+- The previous overview camera state is restored when first-person mode ends.
+
+### Compatibility
+
+- Plant layout storage remains schema 6 under `monroe-glass-plant-layout-v6`.
+- Machine-design and rendering-preference storage keys are unchanged.
+- Existing layouts, designs, animations, floor features, walls, pillars, labels, and timeline edits are preserved.
+
+## 0.11.3 - Smart, compact machine labels
+
+### Added
+
+- Smart, All, and Off label-display modes from the existing model toolbar.
+- Type-based label importance, font sizing, and maximum text length.
+- Zoom-aware label visibility and a viewport-based label-density budget.
+- Priority ordering so selected, current-stage, and major production equipment receive clear label positions first.
+- Dedicated `validate:labels` regression coverage.
+
+### Improved
+
+- Production-machine labels are larger than support-object labels, while carts, people, and animation helpers use smaller labels.
+- Long object names are compacted using short names, common-word cleanup, and word-boundary truncation.
+- Current-stage labels use color emphasis instead of appending long source descriptions.
+- Collision avoidance and on-canvas clamping reduce label stacking and prevent labels from extending beyond the viewport.
+
+### Compatibility
+
+- Plant layout storage remains schema 6 under `monroe-glass-plant-layout-v6`.
+- Machine-design and rendering-preference storage keys are unchanged.
+- Existing layouts, object names, visibility settings, designs, animations, floor features, walls, pillars, and timeline edits are preserved.
+
+## 0.11.2 - Reliable Plant Layout scaling controls
+
+### Added
+
+- Explicit **Uniform** and **Individual axes** scaling-mode buttons in the Plant Layout editor.
+- Separate, readable scale-value layouts: one full-width uniform field or three larger X/Y/Z fields.
+- Persistent `scaleEditMode` metadata for saved objects and live Plant Layout/Designer synchronization.
+- Dedicated `validate:plant-scaling` regression coverage.
+
+### Fixed
+
+- Plant Layout scaling now changes the rendered custom design instead of only changing its outer envelope.
+- Match-design objects automatically leave match mode when the user intentionally applies instance scaling, preventing design-library refreshes from resetting the new size.
+- Individual-axis scaling now intentionally uses independent X/Y/Z design placement.
+- Dimension edits respect the selected scaling mode: Uniform changes all three dimensions proportionally, while Individual axes changes only the entered dimension.
+- Scale input boxes are wide and tall enough to display complete percentage values.
+
+### Compatibility
+
+- Plant layout storage remains schema 6 under `monroe-glass-plant-layout-v6`.
+- Existing objects infer Uniform or Individual mode from their saved dimensions and design sizing settings.
+- Machine designs, animations, floor features, walls, pillars, timeline edits, and rendering preferences are not reset.
+
+## 0.11.1 - Adaptive rendering and performance optimization
+
+### Added
+
+- Shared `render-performance.js` controller for the Plant Layout and Machine Design Studio.
+- Auto, Balanced, Quality, and Performance rendering modes.
+- Configurable Full, Reduced, Follow mode, and Off shadow quality.
+- Optional live FPS indicator and a compact performance status panel.
+- Dedicated `validate:performance` regression checks.
+
+### Optimized
+
+- Reduced the normal animated render target from an unconditional 60 FPS to an adaptive 24-45 FPS while retaining 45-60 FPS during direct interaction.
+- Limited idle redraws and stopped rendering work while the browser tab is hidden.
+- Added adaptive device-pixel-ratio limits to reduce GPU fill load on high-DPI displays.
+- Removed obsolete face and edge subdivision from the WebGL Machine Design Studio path.
+- Reused the WebGL vertex buffer instead of reallocating it for every draw call.
+- Cached parsed colors and tracked depth bounds incrementally.
+- Added off-screen object and pillar culling in the Plant Layout.
+- Bounded custom-machine shadow components and disabled expensive pillar shadows outside Quality/Full modes.
+- Added adaptive grid spacing in Machine Design Studio so large design envelopes cannot generate thousands of grid lines.
+- Removed unnecessary painter sorting when the WebGL depth buffer is active.
+
+### Compatibility
+
+- Plant layout storage remains schema 6 under `monroe-glass-plant-layout-v6`.
+- Machine designs remain under `monroe-glass-machine-designs-v1`.
+- Rendering preferences are stored separately under `monroe-glass-render-performance-v1`.
+- Existing layouts, designs, animations, assignments, floor features, walls, pillars, and timeline edits are not reset.
+
+## 0.11.0 - Unified transforms, stable structures, and walkthrough camera
+
+### Added
+
+- Exact Plant Layout fields for X/Y/Z position, X/Y/Z rotation, final dimensions, and uniform/per-axis percentage scale.
+- Synchronized Plant Layout instance controls inside Machine Design Studio.
+- Exact percentage scale controls for individual and selected designer parts.
+- Live cross-tab layout synchronization when transforms change.
+- Reusable designer presets for safety-yellow floor lines, utility trenches, and square floor drains.
+- Low-angle camera presets in both editors.
+- Low-height Plant Layout walkthrough controls using WASD, Q/E, drag-to-look, Shift speed boost, and Escape to exit.
+
+### Fixed
+
+- Removed repeated floor-dimension event-listener registration that could multiply updates and eventually freeze the page.
+- Added bounded floor dimensions, adaptive grid spacing, and a maximum rendered grid-line count for very large layouts.
+- Corrected oversized shadows by deriving custom-machine shadows from visible parts and crane shadows from narrow structural members.
+- Reworked frame-selection and transform-control formatting.
+- Preserved accurate scale percentages when dimensions are entered numerically or changed with transform handles.
+
+### Compatibility
+
+- Plant layout storage remains schema 6 under `monroe-glass-plant-layout-v6`.
+- Machine design storage remains under `monroe-glass-machine-designs-v1`.
+- Existing positions, designs, animations, floor features, walls, pillars, and timeline edits are migrated without resetting the layout.
+- Machine-design payloads advance to version 10 while remaining backward-compatible under the existing storage key.
+
+## 0.10.6 - Proportion-safe design assignment
+
+- Added Preserve proportions, Match design dimensions, and Stretch to plant object sizing modes.
+- Made Preserve proportions the default for existing and newly assigned custom designs.
+- Added one-click dimension synchronization in both the Plant Layout and Machine Design Studio.
+- Kept match-mode plant objects synchronized when a linked design envelope changes.
+- Centralized custom-design placement math so boxes, cylinders, wheels, beams, rollers, wedges, and merged components use the same offsets and scale rules.
+- Centered uniformly scaled designs inside the plant footprint without lifting them off the floor.
+- Preserved the original independent-axis behavior as an explicit opt-in stretch mode.
+- Added `validate:design-scaling` regression coverage.
+
+## 0.10.5 - Four-corner waits and model shadows
+
+- Added independent pause controls after all four legs of a four-step path.
+- Added automatic migration from the v0.10.4 axis-pair pause fields.
+- Added the same four-corner controls for scene objects, individual machine parts, and children inside merged assemblies.
+- Added soft projected ground shadows for movable plant objects and structural pillars.
+- Added soft projected shadows to every visible Machine Design Studio component.
+- Kept shadows depth-tested so they do not draw through machines, walls, or other opaque geometry.
+- Advanced machine-design payload exports to version 9 without changing the browser storage key.
+- Added `validate:four-corner-pauses` and `validate:shadows` regression checks.
+
+## 0.10.4 - Independent axis 2 pause timing
+
+- Added `animationSecondaryPauseSeconds` for four-step scene and machine-part animations.
+- Added an Axis 2 pause field to the Plant Layout, normal part inspector, and merged-child animation inspector.
+- Axis 1 pause is applied after legs 1 and 3; Axis 2 pause is applied after legs 2 and 4.
+- Existing saved animations without the new field fall back to their original pause value.
+- Advanced machine-design payload exports to version 8 without changing the storage key.
+- Added `validate:four-step-pauses` regression coverage.
+
+## 0.10.3 - Per-child merged animation and four-step motion paths
+
+- Added explicit per-child animation controls for merged Machine Design Studio components.
+- Added an inherited-only/local-animation toggle so attached children remain connected while optionally running their own animation.
+- Replaced automatic matching-animation suppression with a saved, user-controlled animation layer.
+- Added active-member selection and per-child local-animation control for Plant Layout motion hierarchies.
+- Added four-step local-axis motion for scene objects and machine parts, including up → forward → down → backward paths.
+- Added independent second-axis distance and pause-at-corner timing.
+- Advanced machine-design payload exports to version 7 while keeping the existing storage key.
+- Added `validate:hierarchical-animations` regression coverage.
+
+## 0.10.2 - Stable merged motion, bulk settings, and pause controls
+
+- Added shared-setting editing for multiple selected Machine Design Studio parts, including color, opacity, visibility, and all animation settings.
+- Added bulk settings for multiple selected Plant Layout objects, including size, rotation, timeline visibility, collision behavior, labels, locking, and animation controls.
+- Fixed merged assemblies whose children repeated the parent animation, causing doubled speed, doubled distance, and diagonal drift. Identical child motion is now inherited exactly once.
+- Replaced geometry-derived inherited animation scaling with exact animation transforms so rotating parts no longer introduce false scale or direction changes.
+- Added a persistent Pause motion / Resume motion control to the Plant Layout. Animations freeze at their current frame instead of snapping back to their starting positions.
+- Updated the Machine Design Studio animation button to pause and resume at the current frame.
+- Preserved existing layout schema 6 and machine-design storage version 6.
+
+## 0.10.1 - Hierarchical attached motion
+
+### Changed
+
+- Replaced newly created flat motion groups with true parent/child animation assemblies.
+- Added a **Motion parent** selector to the Plant Layout multi-selection panel.
+- Renamed the motion action to **Attach to parent** to make the relationship explicit.
+- Children now play their own animation first and then inherit each parent animation from the nearest parent outward.
+- Parent objects no longer inherit animation channels from their children.
+- Added support for nested motion chains, such as bridge Z travel → trolley X travel → tool-head Y travel.
+- Kept legacy `animationGroupId` layouts readable until they are reattached with the new hierarchy controls.
+
+### Machine Design Studio
+
+- Added an **Attachment parent** selector for merged items.
+- The selected child’s animation now drives the whole merged assembly.
+- Other children retain their own animations inside the driver’s moving coordinate space.
+- The active part at merge time becomes the initial animation driver.
+- Applied the same merged-item hierarchy when custom designs render in the Plant Layout.
+
+### Compatibility and validation
+
+- Added optional `motionParentId` and `motionDriverId` metadata without changing browser storage keys or layout schema.
+- Copied objects are detached from their original motion parent to prevent stale links.
+- Expanded motion regression coverage for inherited parent motion and independent child travel.
+- Updated project versioning and documentation to 0.10.1.
+
+## 0.10.0 - Condensed designer, local transforms, and expanded shape library
+
+- Reorganized Machine Design Studio into a cleaner slicer-style workspace while preserving advanced editing capabilities.
+- Added compact collapsible design actions, assignment controls, part ordering, and inspector sections.
+- Added a categorized shape picker with quick access to common primitives.
+- Added editable cylinder, sphere/ellipsoid, cone/hopper, and wedge/ramp primitives.
+- Added closed 3D rendering for the new shapes in both Machine Design Studio and the Plant Layout.
+- Added Local and World transform orientation controls, with Local selected by default.
+- Made move, rotate, and scale gizmos follow the selected part's local axes.
+- Corrected beam scaling so local X adjusts beam length, local Y adjusts beam height, and local Z adjusts beam width.
+- Added exact beam length, beam height, and beam width fields.
+- Changed custom beams in the Plant Layout from screen-width lines to closed depth-tested rectangular prisms.
+- Added regression coverage for shape availability, local transforms, beam scaling, and plant-view rendering.
+- Updated project versioning and documentation to 0.10.0.
+
+## 0.9.5 - Merged machine parts and compound motion groups
+
+### Added
+
+- Added Shift-click, Ctrl-click, and Command-click multi-selection for parts in Machine Design Studio.
+- Added **Merge selected** to turn two or more design parts into one compound item.
+- Added **Separate merged** to restore a compound item to its original parts.
+- Added **Join motion** in Plant Layout for combining selected scene objects into one motion group.
+- Added **Separate motion** without deleting or resetting either object’s individual animation settings.
+
+### Animation behavior
+
+- Every animation channel from every joined member is composed and applied to the complete group.
+- An X-axis shuttle on one object and a Z-axis shuttle on another produce a combined two-axis path for both objects.
+- Joined objects select, drag, nudge, rotate, focus, and delete as one layout selection.
+- Merged machine-design items can be moved, rotated, scaled, recolored, and animated as one item while retaining their child geometry.
+
+### Compatibility
+
+- Plant layouts remain on schema 6 and the existing browser storage key.
+- Machine-design payload metadata advances to version 5; older designs continue loading through normalization.
+
+
+## 0.9.4 - Animation pauses and multi-object selection
+
+### Added
+
+- Added `animationPauseSeconds` to scene-object animations.
+- Added a **Pause after movement** control to the Plant Layout animation inspector.
+- Added the same pause timing control to Machine Design Studio part animations.
+- Back-and-forth animations now pause at both path endpoints before resuming.
+- Added Shift-click, Ctrl-click, and Command-click multi-selection in the Plant Layout editor.
+- Added a multi-selection summary and collective color picker.
+- Added `Ctrl+A` to select every visible object at the active timeline stage.
+
+### Improved
+
+- Focus selected now frames the complete multi-object selection.
+- Nudge and Y-rotation buttons move every unlocked selected object together.
+- Remove deletes all selected objects in one undoable action.
+- Selection outlines and emphasized labels render for every selected object.
+- Single-object controls are disabled while multiple objects are selected so edits are not accidentally applied only to the primary object.
+
+### Compatibility
+
+- Plant layout storage remains `monroe-glass-plant-layout-v6` with schema 6.
+- Machine-design storage remains `monroe-glass-machine-designs-v1` with payload version 4.
+- Existing objects without pause metadata load with a pause duration of zero.
+- Existing machine positions, designs, animations, floor features, walls, pillars, and timeline edits remain preserved.
+
+## 0.9.3 - Depth-correct wheel occlusion
+
+### Fixed
+
+- Replaced plant-view wheel sprites with closed 3D cylinder geometry.
+- Custom machine-design wheels now use the same WebGL depth buffer as cabinets, bases, walls, floors, and other solid components.
+- Wheels below or behind a machine are now hidden by the machine instead of appearing through it.
+- A-frame cart and A-frame glass-truck wheels now use the same depth-tested geometry instead of Canvas 2D ellipses.
+- Wheel geometry preserves independent width, height, axle depth, component X/Y/Z rotation, machine rotation, and reveal scaling.
+
+### Compatibility
+
+- Plant layout storage remains `monroe-glass-plant-layout-v6` with schema 6.
+- Machine-design storage and payload version remain unchanged.
+- Existing layouts, custom designs, assignments, animations, floor features, walls, pillars, and timeline edits are preserved.
+
+### Validation
+
+- Added `npm run validate:wheels` to prevent plant wheels from bypassing the shared depth renderer.
+- Existing JavaScript, layout-rendering, animation, and floor-feature regression checks remain in place.
+
+## 0.9.2 - Editable floor features and rotation-aware animation paths
+
+### Added
+
+- Converted the supplied safety-yellow floor markings into regular selectable scene objects.
+- Converted the supplied construction trenches into regular selectable scene objects.
+- Added a square floor-drain object with an inset grated top.
+- Added Safety yellow floor line, Utility trench, and Square floor drain to the object-type picker and Add menu.
+- Added **Select floor feature** for cycling through floor features even when a trench is hidden by the current timeline stage.
+- Added **Reverse movement direction** for object animations.
+- Added an animation path guide for selected loop and back-and-forth objects.
+- Added `npm run validate:floor` and a floor-feature regression test.
+
+### Changed
+
+- Safety lines, trenches, and drains now use the standard object editor for X/Z location, X/Y/Z rotation, width, depth/length, height, color, visibility, locking, timeline stages, copy/paste, and removal.
+- Loop and back-and-forth animation axes are now local to the animated object. Rotating the object rotates its movement direction on all three axes.
+- Removed the legacy hard-coded `drawSafety()` and `drawTrenches()` rendering paths.
+- Existing schema-6 browser layouts receive the default floor features once through the `floorFeaturesInitialized` migration marker.
+
+### Compatibility
+
+- Plant layout storage remains `monroe-glass-plant-layout-v6` with schema 6.
+- Machine-design storage keys and payload versions are unchanged.
+- Existing machine positions, custom objects, animations, timeline edits, floor dimensions, walls, and hidden pillars remain intact.
+
+## 0.9.1 - Editable production glass and whole-machine transforms
+
+- Added X, Y, and Z base rotation fields for scene objects and animation objects.
+- Fixed scene-object and machine-part spin animations so the All axes option rotates X, Y, and Z instead of falling back to Y only.
+- Added a direct Select moving glass action in Edit Layout for the existing production-glass animation.
+- Object animations now pause by default when Edit Layout opens, making moving items easy to select and position.
+- Added Select entire machine in Machine Design Studio, including Ctrl+A.
+- Whole-machine selections can be moved, rotated, scaled uniformly, or scaled on one axis while preserving all part spacing.
+- Whole-machine selection has a combined outline, centered transform gizmo, focus behavior, nudge support, quick rotation, undo, and redo.
+- Preserved plant layout schema 6 and the existing machine-design storage key.
+
+## 0.9.0 - Scene assets and animation authoring
+
+- Added editable Design Studio presets for cutting tables, filtration equipment, general boxes, freestanding cranes, overhead bridge cranes, raw-glass racks, plant rooms, and team members.
+- Replaced the hard-coded final-stage glass and beacon motion with ordinary scene objects that can be selected, moved, copied, hidden, removed, or recreated.
+- Added scene animation presets for vertical glass flow, moving material boxes, walking team members, shuttle carts, and blinking status beacons.
+- Added per-object motion controls for path direction, amount, speed, phase, looping, back-and-forth motion, rotation, bobbing, pulsing, and blinking.
+- Added pause/preview controls so animated objects can be placed at their base positions.
+- Added part-level animation authoring to Machine Design Studio, including preview, axis selection, amount, speed, and phase.
+- Added live custom-design animation support in the main plant model.
+- Preserved the existing layout storage key and schema so moved and user-added objects remain in place.
+
+## [0.8.2] - 2026-07-31
+
+### Fixed
+
+- Kept the WebGL scene canvas locked to the exact same viewport rectangle as the transparent interaction canvas when the docked layout editor opens, closes, resizes, or switches to the mobile stacked layout.
+- Prevented machines from visually shifting away from their labels, selection outlines, overlap indicators, and pointer hitboxes while editing.
+- Removed pillar-cap z-fighting by replacing the stacked steel and yellow pillar volumes with one closed pillar whose size and color interpolate through the paint stage.
+
+### Compatibility
+
+- Plant layout schema remains version 6.
+- Machine design storage remains payload version 3.
+- Existing layouts, machine positions, custom designs, assignments, floor dimensions, walls, pillars, and timeline edits are preserved.
+
+### Validation
+
+- Public JavaScript files pass syntax validation.
+- Added a static rendering regression test that verifies desktop/mobile canvas alignment rules, live scene-canvas box synchronization, and single-volume pillar rendering.
+- Machine registry JSON and generated machine data remain valid.
+
+## [0.8.1] - 2026-07-31
+
+### Added
+
+- Linked Machine Design Studio sessions to individual plant objects.
+- Saved design changes now update the assigned machine in open plant-layout tabs through browser storage events and BroadcastChannel synchronization.
+- Added automatic machine-specific design copies so editing one existing machine does not unintentionally modify every machine using the same preset.
+
+## [0.8.0] - 2026-07-31
+
+### Changed
+
+- Replaced the Machine Design Studio painter-style surface ordering with a WebGL depth-buffer renderer.
+- Moved the plant layout scene to the same shared depth renderer so walls, machines, pillars, floors, cranes, and custom machine parts use per-pixel occlusion.
+- Kept labels, transform gizmos, selection outlines, and editor feedback on a separate transparent interface canvas.
+- Removed CAD-line rendering and the CAD-lines control from the plant viewer.
+
+### Fixed
+
+- Large platform and cabinet surfaces no longer cover smaller components that are physically above or in front of them.
+- Closed objects retain every side face while the camera orbits; faces no longer disappear because of winding or painter-order changes.
+- Parts behind a solid machine component no longer paint through the component in front.
+- Plant exterior walls are now fully opaque in the rendered scene and correctly hide equipment behind them.
+- Structural and machine edge lines remain depth-tested instead of appearing through solid geometry.
+- Transparent glass is blended after opaque geometry while still respecting the opaque depth buffer.
+
+### Compatibility
+
+- Plant layout schema remains version 6.
+- Machine design storage remains payload version 3.
+- Existing layouts, custom designs, assignments, machine positions, floor dimensions, walls, pillars, and timeline edits are preserved.
+- A Canvas 2D fallback remains available when WebGL is unavailable.
+
+### Validation
+
+- All public JavaScript files pass `node --check`.
+- The shared depth renderer passed a mocked WebGL geometry test covering opaque triangles, transparent triangles, polygon edges, and depth-tested lines.
+- Machine registry JSON and generated machine data remain unchanged.
+
+## 0.7.0 - 2026-07-30
+
+### Fixed
+- Reworked Machine Design Studio hidden-surface rendering to prevent large cabinet faces from covering parts that should be visible.
+- Added outward face winding, opaque back-face removal, fine face subdivision, and stable tie-breaking to reduce flicker and temporary de-rendering.
+- Corrected wheel scaling so X, Y, and Z handles independently change wheel width, height, and axle depth.
+
+### Changed
+- Roller beds now use actual cylindrical rollers with circular ends instead of rectangular beam blocks.
+- Built-in wheel presets now include independent width, height, and depth while retaining legacy `size` compatibility.
+- Machine design storage/export payloads advance to version 3 without changing the storage key.
+
+All notable changes to the Monroe Glass Plant Evolution project are documented here.
+
+## [0.6.0] - 2026-07-30
+
+### Added
+
+- X, Y, and Z component rotation fields in the Machine Design Studio inspector.
+- Three color-coded on-canvas rotation rings for all-axis rotation.
+- Axis selector for quick ±90-degree rotation commands.
+- Local-axis scale gizmos that remain aligned to rotated components.
+- Closed 3D prism rendering for beam and roller components.
+- Closed multi-sided wheel rendering.
+- Machine-design storage payload version 2 with transparent migration from legacy Y-only rotation values.
+
+### Changed
+
+- Replaced component-center painter sorting with one global face-level render list.
+- Added deterministic depth tie-breaking to reduce flicker from equal or nearly equal depths.
+- Changed scale behavior so colored handles always resize one axis and the center handle always scales uniformly.
+- Rendered transform gizmos as a high-contrast overlay after all model geometry.
+- Changed component picking to use the frontmost rendered face instead of projected bounding rectangles.
+- Updated plant custom-design rendering to honor component X, Y, and Z rotations.
+
+### Fixed
+
+- Transform handles can now be dragged when they are visually inside another component.
+- Components no longer change whole-object draw order based only on their center point.
+- Beam and roller parts no longer phase through cabinets as flat screen-space strokes.
+- Rotated parts no longer lose faces because only a horizontal footprint was being rendered.
+- Axis-specific scale dragging no longer depends on the former Uniform scaling checkbox.
+- Existing `rotation` values remain compatible and are synchronized with the new Y rotation field.
+
+### Validation
+
+- `public/machine-design-studio.js`, `public/plant-app.js`, and `public/machine-designs.js` pass `node --check`.
+- React TSX pages pass TypeScript syntax transpilation.
+- Inline Chromium tests loaded all 11 design presets with no console exceptions.
+- Interaction tests verified one-axis scaling, X-axis rotation, transform-handle priority inside a component, persistent selection, and design-storage version 2.
+
+## [0.5.1] - 2026-07-30
+
+### Fixed
+
+- Removed the artificial upper-pillar outline pass that could draw rear pillars through solid equipment.
+- Pillars and machines now use the same camera-depth ordering so nearer geometry naturally covers farther geometry.
+
+## [0.5.0] - 2026-07-30
+
+### Added
+
+- Slicer-style Machine Design Studio workspace with a full-height center viewport, left design/parts browser, and right object/design inspector.
+- Direct component selection from the canvas.
+- Select, Move, Rotate, Scale, and Pan tools with keyboard shortcuts.
+- X/Y/Z move and scale gizmos plus an on-canvas rotation ring.
+- Natural orbit direction, right-button orbit, middle-button pan, Shift-pan, Alt-orbit, wheel zoom, and double-click focus.
+- Configurable transform snapping and grid steps.
+- Searchable component tree with visibility toggles.
+- Front, right, top, isometric, fitted, and orientation-cube view controls.
+- Arrow-key component nudging and Shift+Arrow vertical nudging.
+- Uniform and per-axis component scaling.
+- Design-envelope fitting from actual component bounds.
+- Center-selected-component and quick ±90-degree rotation actions.
+- Smart upper-pillar visibility pass in the plant renderer.
+
+### Changed
+
+- Reversed the previous horizontal orbit calculation so left/right camera movement now follows the drag direction.
+- Reorganized machine design properties into focused transform sections rather than one long control form.
+- Moved primitive creation and component ordering into the Parts browser.
+- Improved roller-bed rendering so its rotation is visible in the design viewport.
+- Kept plant layout schema 6 and design storage version 1 unchanged to preserve all version 0.4.0 user work.
+
+### Fixed
+
+- Pillars no longer disappear completely behind machines due to the canvas painter order.
+- Component movement no longer depends on the old reversed-feeling camera drag behavior.
+- Camera panning now follows the current camera yaw instead of moving only along fixed screen axes.
+
+### Validation
+
+- All browser JavaScript files pass `node --check`.
+- Standalone Machine Design Studio and plant preview were exercised in Chromium.
+- Browser tests cover direct component selection, tool switching, natural orbit direction, component creation, design field editing, and plant pillar rendering without console errors.
+
+## [0.4.0] - 2026-07-30
+
+### Added
+
+- Non-destructive browser-layout schema 6 with exact schema 5 migration, pre-migration backup, and rolling schema 6 backup.
+- Rotated-footprint collision detection for solid plant objects.
+- Find overlap, Separate selected, and Resolve all editor actions.
+- Per-object collision mode for intentionally non-solid or overhead objects.
+- Red overlap indicators in edit mode.
+- Collision-aware label placement that reduces label-on-label obstruction.
+- Editable floor width, length, center X, and center Z.
+- Fit floor around objects and Restore CAD floor size actions.
+- A-frame glass truck object preset with a long deck, repeated stakes, six wheels, glass loads, and tow arm.
+- Dedicated Machine Design Studio route and standalone preview.
+- Component-based reusable machine design library.
+- Box, glass-panel, beam, roller-bed, and wheel components.
+- Machine design create, duplicate, reset, delete, import, export, undo, redo, camera, component move, component ordering, and assignment tools.
+- Applying a design to one plant object or every matching machine type.
+- `docs/MACHINE_DESIGN_STUDIO.md`.
+
+### Changed
+
+- Procedural boxes now render six closed faces with face-level depth sorting.
+- A-frame glass carts now include decks, casters, repeated braces, ridge rails, glass loads, and handles.
+- The plant editor exposes reusable machine design presets for each object.
+- The main navigation now links Plant layout and Machine Design Studio.
+- Layout JSON exports include floor configuration and schema version 6.
+- JavaScript validation covers the plant viewer, design preset library, and Machine Design Studio.
+
+### Fixed
+
+- Existing version 0.3.0 machine positions and user-added objects are retained during the update.
+- Missing rear and bottom faces no longer make cabinets and machine blocks appear open.
+- Overlapping labels no longer stack directly on one another when alternate positions are available.
+- Overlapping unlocked objects can be separated without manually guessing new coordinates.
+
+### Validation
+
+- All three browser JavaScript files pass `node --check`.
+- Inline headless Chromium testing verified schema 5 preservation, editor launch, A-frame truck creation, design preset controls, floor controls, Machine Design Studio component creation, and zero browser errors.
+- A collision-specific browser test verified overlap detection and automatic separation.
+
+## [0.3.0] - 2026-07-30
+
+### Added
+
+- Browser Fullscreen API support for the model frame, including an `F` keyboard shortcut.
+- Docked right-side editor workspace that remains available in full-screen mode.
+- Select & move and Navigate view interaction modes.
+- Panning from empty floor space while editing, plus Shift/Space pan and Alt/right-button orbit controls.
+- Searchable object selector and Focus selected camera action.
+- Configurable movement snapping and nudge/rotation controls.
+- Photo-refined procedural blocks for the KODIAK 10-45, SQ4020-style waterjet, Denver Surface CNC, Zafferani-style washer, tempering line, FuseCube, wrapping station, and shipping rack.
+- Add-object presets for washer, wrapping, shipping, and the other photo-refined machines.
+- `docs/MODEL_REFERENCES.md` with research sources, confidence notes, and known accuracy limits.
+- Browser-layout schema version 5 with migrations from schemas 4 and 3.
+
+### Changed
+
+- Editing now uses the full application width and temporarily hides the construction-stage side panel.
+- Entering edit mode preserves the current camera instead of forcing a top-down view.
+- The object property panel is organized around selection, navigation, nudge controls, and precise fields.
+- Baseline KODIAK, waterjet, Denver, tempering, and FuseCube registry records include refined reference profiles.
+- FuseCube baseline color and height were adjusted to better match the supplied plant photo.
+
+### Fixed
+
+- Objects can be selected and moved without losing the ability to pan, orbit, or zoom the scene.
+- Empty-space dragging no longer does nothing while editing.
+- Full-screen control text and active state now remain synchronized with browser full-screen changes.
+- `Ctrl+F` remains available for browser find and does not trigger model full screen.
+
+### Validation
+
+- `public/plant-app.js` passes `node --check`.
+- Machine registry export completes successfully.
+- Headless Chromium tests verified editor docking, object creation, object search, navigation mode, nudge/rotation controls, and full-screen activation without browser errors.
+
+## [0.2.0] - 2026-07-30
+
+### Added
+
+- General scene-object editing for machines, carts, raw-glass racks, rooms, and team-member markers.
+- User-addable general boxes, generic machines, glass racks, offices, team markers, gantry cranes, and overhead bridge cranes.
+- Rotation control for editable objects.
+- Object color, visibility, label, and position-lock controls.
+- Editable appearance and disappearance stages for every object.
+- Editable attached-crane system, capacity, and rail height.
+- Timeline scrubber and selectable autoplay speed.
+- Timeline stage editor for title, short label, phase, date, description, and detail chips.
+- Timeline stage insertion, deletion, and reordering with automatic object-stage remapping.
+- Undo and redo history for object, structure, and timeline changes.
+- Portable JSON layout export and import.
+- Browser-layout schema version 4 with automatic migration from schema version 3.
+- In-app status notifications.
+- `VERSION` file and project-level semantic versioning.
+- JavaScript syntax-validation and machine-data export scripts in `package.json`.
+
+### Changed
+
+- Converted previously hard-coded glass racks, offices, and people markers into movable model objects.
+- Improved object selection to account for rotation.
+- Updated drawing helpers so detailed machine geometry follows object rotation.
+- Improved depth ordering for model objects.
+- Reworked the layout editor into Objects, Structure, and Timeline workspaces.
+- Refined the plant canvas background, controls, stage panel, editor panel, and timeline styling.
+- Updated application metadata and standalone preview branding.
+- Renamed the package to `monroe-glass-plant-evolution`.
+
+### Fixed
+
+- Resolved the inability to move raw-glass racks, support rooms, and team markers.
+- Prevented locked objects from being dragged while keeping them selectable and editable.
+- Prevented deleted support objects from being silently restored when loading a version 4 layout.
+- Rebuilt timeline event listeners after stage edits so every stage remains clickable.
+- Escaped imported or edited timeline text before rendering it as timeline markup.
+
+### Validation
+
+- `public/plant-app.js` passes `node --check`.
+- The standalone page was loaded and exercised in headless Chromium.
+- Verified editor launch, object creation, rotation editing, timeline stage creation, undo, and JSON export without browser errors.
+
+## [0.1.0] - Baseline
+
+### Added
+
+- Initial 18-stage Monroe glass-plant construction timeline.
+- CAD-grounded floor, structural columns, production areas, and machine placement.
+- Machine, cart, and crane rendering.
+- Basic machine dragging, renaming, dimensions, copy, paste, and removal.
+- Pillar removal and wall visibility controls.
+- Browser-local layout saving.
+- Overview, floor-plan, CAD-line, label, and autoplay controls.

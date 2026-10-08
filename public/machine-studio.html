@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Build editable component-based machine models for the Monroe glass plant.">
+  <title>Machine Design Studio &middot; v0.13.80</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="plant-icon.png" type="image/png" sizes="512x512">
+  <link rel="apple-touch-icon" href="plant-icon.png">
+  <link rel="stylesheet" href="../app/globals.css">
+</head>
+<body>
+  <section class="studio-desktop-only-notice" aria-label="Desktop required">
+    <strong>Machine Design Studio is desktop-only.</strong>
+    <p>Open this editor on a desktop or laptop for the full precision editing workspace.</p>
+    <a href="preview.html">Return to Plant Evolution</a>
+  </section>
+  <main class="machine-studio-shell">
+    <header class="studio-topbar">
+      <div class="studio-brand">
+        <a class="studio-back-link" href="preview.html" aria-label="Return to plant layout"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/><path d="M8 12h10"/></svg></a>
+        <div><p>Monroe Glass Plant</p><h1>Machine Design Studio</h1></div>
+        <span class="studio-version-badge">v0.13.80</span>
+      </div>
+      <div class="studio-top-actions" role="toolbar" aria-label="Design commands">
+        <span id="save-state" class="studio-save-state">Auto-saved</span>
+        <button id="undo-design" type="button" title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H5v-4"/><path d="M5.5 7.2A8 8 0 1 1 6 17"/></svg></button>
+        <button id="redo-design" type="button" title="Redo (Ctrl+Y)" aria-label="Redo"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 7h4v-4"/><path d="M18.5 7.2A8 8 0 1 0 18 17"/></svg></button>
+        <span class="studio-toolbar-divider"></span>
+        <button id="save-design" type="button" title="Save machine (Ctrl+S)">Save</button>
+        <button id="save-design-as" type="button" title="Save as a new reusable machine (Ctrl+Shift+S)">Save as...</button>
+        <button id="save-and-place-design" type="button" class="primary">Save &amp; add to layout</button>
+        <a href="preview.html" class="studio-layout-link">Open plant layout</a>
+      </div>
+    </header>
+
+    <section class="machine-studio-workspace" aria-label="Machine design editor">
+      <aside class="studio-browser-panel">
+        <div class="studio-tabs studio-browser-tabs" role="tablist" aria-label="Design browser">
+          <button type="button" role="tab" data-browser-tab="designs" class="active" aria-selected="true">Machines</button>
+          <button type="button" role="tab" data-browser-tab="zombies" aria-selected="false">Zombies</button>
+          <button type="button" role="tab" data-browser-tab="weapons" aria-selected="false">Weapons</button>
+          <button type="button" role="tab" data-browser-tab="parts" aria-selected="false">Parts</button>
+          <button type="button" role="tab" data-browser-tab="add" aria-selected="false">Build</button>
+          <button type="button" role="tab" data-browser-tab="plant" aria-selected="false">Place</button>
+        </div>
+
+        <section data-browser-panel="designs" class="studio-browser-section">
+          <div class="studio-workflow-guide" aria-label="Machine creation workflow"><span><b>1</b> Build</span><span><b>2</b> Save</span><span><b>3</b> Place</span></div>
+          <div class="studio-panel-heading"><p>Design library</p><strong id="design-count">0 designs</strong></div>
+          <label class="studio-field studio-search-field">Search<input id="design-search" type="search" placeholder="Machine name or type"></label>
+          <div id="design-list" class="design-list" aria-label="Available machine designs"></div>
+          <div class="design-library-primary-actions" aria-label="Selected machine actions">
+            <button id="new-design" type="button" class="library-action library-action-new"><span aria-hidden="true">+</span>New machine</button>
+            <button id="duplicate-design" type="button" class="library-action library-action-copy">Save a copy...</button>
+            <button id="delete-design" type="button" class="library-action library-action-delete danger-subtle">Delete machine</button>
+          </div>
+          <details class="studio-collapsible">
+            <summary>More design actions</summary>
+            <div class="studio-button-grid">
+              <button id="reset-design" type="button">Reset selected preset</button>
+            </div>
+            <div class="studio-button-grid compact">
+              <button id="export-design" type="button">Export JSON</button><button id="import-design" type="button">Import JSON</button>
+              <input id="import-design-file" type="file" accept="application/json,.json" hidden>
+            </div>
+          </details>
+        </section>
+
+        <section data-browser-panel="zombies" class="studio-browser-section" hidden>
+          <div class="studio-panel-heading"><p>Zombie model presets</p><span>Shared with Endless mode</span></div>
+          <p class="studio-help">Select a zombie gait to edit its body, face and animation in the same 3D studio. Save to update the live model library.</p>
+          <div id="zombie-design-list" class="design-list"></div>
+        </section>
+        <section data-browser-panel="weapons" class="studio-browser-section" hidden>
+          <div class="studio-panel-heading"><p>Weapon model presets</p><span>Player · AI · Mystery Box</span></div>
+          <p class="studio-help">Edit the 3D geometry of every weapon. In the Machine inspector, set the hip-fire and ADS muzzle attachment coordinates.</p>
+          <div id="weapon-design-list" class="design-list"></div>
+        </section>
+        <section data-browser-panel="parts" class="studio-browser-section" hidden>
+          <div class="studio-panel-heading"><p>Machine parts</p><strong id="component-count">0 parts</strong></div>
+          <div class="parts-quick-actions">
+            <button id="select-all-components" type="button" title="Select every part (Ctrl+A)">Select all</button>
+            <button id="duplicate-component" type="button" title="Duplicate selected parts (Ctrl+D)">Duplicate</button>
+            <button id="copy-component" type="button" title="Copy selected parts (Ctrl+C)">Copy</button>
+            <button id="cut-component" type="button" title="Cut selected parts (Ctrl+X)">Cut</button>
+            <button id="paste-component" type="button" title="Paste copied parts (Ctrl+V)">Paste</button>
+            <button id="delete-component" type="button" title="Delete selected parts">Delete</button>
+            <button id="merge-components" type="button" disabled>Merge</button>
+            <button id="ungroup-component" type="button" disabled>Separate</button>
+          </div>
+          <label class="studio-field studio-search-field">Search<input id="component-search" type="search" placeholder="Part name or shape"></label>
+          <div id="component-list" class="component-list" aria-label="Machine design components"></div>
+          <details class="studio-collapsible compact-actions" open>
+            <summary>Part order</summary>
+            <div class="parts-order-actions"><button id="move-component-up" type="button">Move up</button><button id="move-component-down" type="button">Move down</button></div>
+          </details>
+        </section>
+
+        <section data-browser-panel="add" class="studio-browser-section" hidden>
+          <div class="studio-panel-heading"><p>Add machine parts</p><span>Placed near center</span></div>
+          <p class="studio-help">Choose a shape, add it to the current machine, then use the Transform tab on the right to place and size it.</p>
+          <section class="component-add-panel expanded-add-panel">
+            <div class="shape-quick-grid" aria-label="Common shapes">
+              <button type="button" data-add-component="box"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg></span>Box</button>
+              <button type="button" data-add-component="cylinder"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7" ry="3"/><path d="M5 5.5v13c0 1.7 3.1 3 7 3s7-1.3 7-3v-13"/></svg></span>Cylinder</button>
+              <button type="button" data-add-component="beam"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 17.5 5.5 20 8 7.5 20.5 5 18Z"/></svg></span>Beam</button>
+              <button type="button" data-add-component="glassPanel"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="m8 16 8-8"/></svg></span>Glass</button>
+              <button type="button" data-add-component="text"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M12 5v14M8.5 19h7"/></svg></span>Text</button>
+            </div>
+            <div class="shape-picker-row vertical-shape-picker">
+              <label class="studio-field">Additional shape
+                <select id="add-component-type" aria-label="Additional shape">
+                  <optgroup label="Solid shapes">
+                    <option value="sphere">Sphere / ellipsoid</option>
+                    <option value="cone">Cone / hopper</option>
+                    <option value="wedge">Wedge / ramp</option>
+                  </optgroup>
+                  <optgroup label="Machine parts">
+                    <option value="rollerBed">Roller bed</option>
+                    <option value="wheel">Wheel / caster</option>
+                    <option value="text">Text label / sign</option>
+                  </optgroup>
+                </select>
+              </label>
+              <button id="add-component-button" type="button" class="primary full-width-button">Add selected shape</button>
+            </div>
+          </section>
+          <section class="component-add-panel embedded-machine-add-panel" aria-labelledby="add-saved-machine-heading">
+            <div class="studio-panel-heading"><p id="add-saved-machine-heading">Add saved machine</p><span>Reusable assembly</span></div>
+            <p class="studio-help">Insert another saved machine design as one editable object. Its internal parts and animations are preserved and run on this machine's shared timeline.</p>
+            <label class="studio-field">Machine design<select id="add-machine-design" aria-label="Saved machine design"></select></label>
+            <button id="add-machine-design-button" type="button" class="primary full-width-button">Add machine to current design</button>
+            <p id="add-machine-design-status" class="studio-help">Choose another saved machine design.</p>
+          </section>
+          <div class="studio-callout"><strong>Animation-ready parts</strong><p>After adding a part or machine, select it and open the Animation tab on the right to build its clip timeline.</p></div>
+        </section>
+
+        <section data-browser-panel="plant" class="studio-browser-section assignment-panel" hidden>
+          <div class="studio-panel-heading"><p>Use in plant layout</p><span>Live-linked</span></div>
+          <label class="studio-field">Plant object<select id="machine-assignment"><option value="">Choose a machine&hellip;</option></select></label>
+          <label class="studio-field">Design sizing<select id="assignment-scale-mode">
+            <option value="preserve">Preserve proportions &middot; recommended</option>
+            <option value="match">Match dimensions &middot; keep synced</option>
+            <option value="stretch">Stretch to plant object</option>
+          </select></label>
+          <section class="create-plant-machine-panel" aria-labelledby="create-plant-machine-heading">
+            <div class="studio-panel-heading"><p id="create-plant-machine-heading">Create a new plant machine</p><span>Uses this design</span></div>
+            <p class="studio-help">Create a separate Plant Layout object from the current reusable design. The new object remains linked to this design for future edits.</p>
+            <label class="studio-field">Machine name<input id="new-plant-machine-name" type="text" placeholder="Defaults to the design name"></label>
+            <div class="create-machine-options">
+              <label class="studio-field">Appearance stage<select id="new-plant-machine-stage"><option value="last">Plant today</option></select></label>
+              <label class="studio-field">Placement<select id="new-plant-machine-placement"><option value="auto">Find open floor space</option><option value="center">Floor center</option><option value="origin">Plant origin</option></select></label>
+            </div>
+            <button id="create-plant-machine" type="button" class="primary full-width-button">Save &amp; add machine to Plant Layout</button>
+            <button id="open-created-plant-machine" type="button" class="full-width-button success-action" hidden>Open and position this machine</button>
+            <p id="create-plant-machine-status" class="studio-help">The design envelope becomes the new machine&rsquo;s starting dimensions.</p>
+          </section>
+          <button id="sync-machine-dimensions" type="button" class="full-width-button">Match plant dimensions to this design</button>
+          <details class="plant-instance-transform">
+            <summary>Plant instance transform</summary>
+            <p class="studio-help">These values edit the selected object in the Plant Layout and stay synchronized between pages.</p>
+            <div class="transform-subheading">Position (ft)</div><div class="axis-fields"><label class="axis-x-field">X<input data-instance-field="x" type="number" step="0.1"></label><label class="axis-y-field">Y<input data-instance-field="y" type="number" step="0.1"></label><label class="axis-z-field">Z<input data-instance-field="z" type="number" step="0.1"></label></div>
+            <div class="transform-subheading">Rotation (degrees)</div><div class="axis-fields"><label class="axis-x-field">X<input data-instance-field="rotationX" type="number" step="1"></label><label class="axis-y-field">Y<input data-instance-field="rotationY" type="number" step="1"></label><label class="axis-z-field">Z<input data-instance-field="rotationZ" type="number" step="1"></label></div>
+            <div class="transform-subheading">Final dimensions (ft)</div><div class="axis-fields"><label class="axis-x-field">Width<input data-instance-field="w" type="number" min="0.01" step="0.01"></label><label class="axis-y-field">Height<input data-instance-field="h" type="number" min="0.01" step="0.01"></label><label class="axis-z-field">Depth<input data-instance-field="d" type="number" min="0.01" step="0.01"></label></div>
+            <div class="transform-subheading">Scale (%)</div><div class="axis-fields four"><label>All<input data-instance-scale="uniform" type="number" min="1" max="10000" step="1"></label><label class="axis-x-field">X<input data-instance-scale="x" type="number" min="1" max="10000" step="1"></label><label class="axis-y-field">Y<input data-instance-scale="y" type="number" min="1" max="10000" step="1"></label><label class="axis-z-field">Z<input data-instance-scale="z" type="number" min="1" max="10000" step="1"></label></div>
+          </details>
+          <div class="assignment-actions">
+            <button id="apply-machine" type="button" class="primary">Apply to object</button>
+            <button id="apply-type" type="button">Apply to matching type</button>
+            <button id="clear-machine-design" type="button">Use built-in model</button>
+          </div>
+          <p id="assignment-status" class="studio-help">Assignments save directly to the plant layout stored in this browser.</p>
+        </section>
+      </aside>
+
+      <section class="design-viewport-panel">
+        <div class="viewport-commandbar">
+          <div class="viewport-control-group viewport-camera-group">
+            <span class="viewport-control-label">Camera</span>
+            <div role="group" aria-label="Camera views" class="view-buttons">
+              <button type="button" data-design-view="iso" class="active" title="Isometric view (0)">Iso</button>
+              <button type="button" data-design-view="front" title="Front view (1)">Front</button>
+              <button type="button" data-design-view="side" title="Right view (2)">Right</button>
+              <button type="button" data-design-view="top" title="Top view (3)">Top</button>
+              <button type="button" data-design-view="fit" title="Fit model (F)">Fit</button>
+            </div>
+          </div>
+          <div class="viewport-settings">
+            <div class="viewport-control-group viewport-axes-group">
+              <span class="viewport-control-label">Transform axes</span>
+              <div class="transform-space-toggle" role="group" aria-label="Transform orientation">
+                <button type="button" data-transform-space="local" class="active" aria-pressed="true" title="Follow the selected part">Local</button>
+                <button type="button" data-transform-space="world" aria-pressed="false" title="Follow the design grid">World</button>
+              </div>
+            </div>
+            <div class="viewport-control-group viewport-motion-group">
+              <span class="viewport-control-label">Motion preview</span>
+              <button id="preview-design-animations" type="button" class="active">Pause animations</button>
+            </div>
+            <div class="viewport-control-group viewport-snap-group">
+              <span class="viewport-control-label">Gizmo snapping</span>
+              <div class="snap-controls">
+                <label class="studio-switch"><input id="snap-enabled" type="checkbox" checked><span>Snap</span></label>
+                <label class="snap-step-control"><span>Step</span><select id="snap-step"><option value="0.01">0.01</option><option value="0.025">0.025</option><option value="0.05">0.05</option><option value="0.075">0.075</option><option value="0.1" selected>0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option><option value="1">1.0</option><option value="2">2.0</option></select></label>
+                <span id="snap-step-summary" class="snap-step-summary">0.1 ft / 0.1 deg / 0.1%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="viewport-toolrail" role="toolbar" aria-label="Transform tools">
+          <button type="button" data-design-mode="select" class="active" title="Select (V)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 18 12l-6 1.5L9.5 20 5 3Z"/></svg></span><small>Select</small></button>
+          <button type="button" data-design-mode="move" title="Move (M)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/></svg></span><small>Move</small></button>
+          <button type="button" data-design-mode="rotate" title="Rotate (R)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8V4l-3 2.2A8 8 0 1 0 20 13"/></svg></span><small>Rotate</small></button>
+          <button type="button" data-design-mode="scale" title="Scale (S)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5m11 5h5v-5"/></svg></span><small>Scale</small></button>
+          <button type="button" data-design-mode="pan" title="Pan view (H)"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V7.5a1.5 1.5 0 0 1 3 0V11M11 10V6.5a1.5 1.5 0 0 1 3 0V11"/></svg></span><small>Pan</small></button>
+          <button id="toggle-animation-timeline" type="button" class="animation-tool-button" title="Animation timeline (A)" aria-pressed="false"><span><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 5 5-5 5-5-5 5-5Z"/></svg></span><small>Animation</small></button>
+        </div>
+
+        <canvas id="machine-design-canvas" aria-label="Interactive 3D preview of the selected machine design"></canvas>
+        <section id="animation-timeline-workspace" class="animation-timeline-workspace animation-timeline-card" hidden aria-label="Part animation timeline">
+          <header class="timeline-workspace-header">
+            <div class="timeline-workspace-title"><strong>Animation timeline</strong><span id="timeline-summary">0 clips</span></div>
+            <label class="timeline-target-control">Target<select id="timeline-target-picker" aria-label="Animation target"></select></label>
+            <div class="timeline-play-actions">
+              <button id="timeline-restart" type="button" title="Restart from 0 seconds"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7H3V3"/><path d="M4 7a9 9 0 1 1-1 8"/></svg>Restart</button>
+              <button id="timeline-play" type="button" class="primary" title="Play animation preview"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>Play</button>
+              <button id="timeline-pause" type="button" title="Pause animation preview"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>Pause</button>
+              <button id="close-animation-timeline" type="button" title="Close timeline" aria-label="Close animation timeline"><svg class="studio-vector-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </div>
+          </header>
+          <div class="timeline-workspace-body">
+            <div class="timeline-workspace-main">
+              <div class="timeline-master-settings timeline-master-bar">
+                <label class="studio-switch"><input id="timeline-enabled" type="checkbox" checked><span>Enabled</span></label>
+                <label class="studio-switch"><input id="timeline-loop" type="checkbox" checked><span>Loop machine</span></label>
+                <label class="studio-field">Machine speed<input id="timeline-playback-rate" type="number" min="0" max="20" step="0.05" value="1"></label>
+                <label class="studio-field">Timeline span<input id="timeline-duration" type="number" min="30" step="5" value="30" readonly aria-readonly="true"><small>Shared &middot; expands to fit every part</small></label>
+                <label class="studio-field">Snap<select id="timeline-snap-step"><option value="0.01">0.01s</option><option value="0.05" selected>0.05s</option><option value="0.1">0.10s</option><option value="0.25">0.25s</option><option value="0.5">0.50s</option><option value="1">1.00s</option></select></label>
+              </div>
+              <div class="timeline-ruler-wrap timeline-dock-ruler">
+                <div id="timeline-scroll-viewport" class="timeline-scroll-viewport">
+                  <div id="timeline-scroll-canvas" class="timeline-scroll-canvas">
+                    <div class="timeline-ruler-scale" id="timeline-ruler-scale"></div>
+                    <div id="timeline-ruler-tracks" class="timeline-ruler-tracks" aria-label="Animation clips"></div>
+                  </div>
+                </div>
+                <input id="timeline-playhead" class="timeline-playhead" type="range" min="0" max="30" step="0.01" value="0" aria-label="Animation playhead">
+                <div class="timeline-time-readout"><span id="timeline-time-label">0.00s / 30.00s</span><span>Start &larr; left &middot; right &rarr; end &middot; extending a right edge pushes later clips; dragging a clip can overlap it</span></div>
+              </div>
+            </div>
+          </div>
+          <p id="timeline-target-help" class="timeline-workspace-help">Select one machine part, then add or drag an animation type onto the timeline.</p>
+        </section>
+
+        <div class="viewport-statusbar"><span id="active-tool-label"><strong>Select</strong> &middot; Click a part to select it</span><span>Ctrl+left-drag box select &middot; Right-drag orbit &middot; Middle-drag pan &middot; Wheel zoom &middot; <span id="designer-camera-position">Above floor &middot; full orbit enabled</span></span></div>
+        <div id="design-toast" class="design-toast" role="status" aria-live="polite"></div>
+      </section>
+
+      <aside class="studio-inspector-panel">
+        <div class="studio-tabs inspector-tabs" role="tablist" aria-label="Inspector">
+          <button type="button" role="tab" data-inspector-tab="object" class="active" aria-selected="true">Selected part</button>
+          <button type="button" role="tab" data-inspector-tab="design" aria-selected="false">Machine</button>
+        </div>
+        <section data-inspector-panel="object" class="studio-inspector-section">
+          <div class="studio-panel-heading"><p>Selection</p><span id="selected-component-type">Nothing selected</span></div>
+          <div id="empty-component-state" class="inspector-empty"><strong>Select a part in the viewport or Parts list.</strong><p>Choose a section below after selecting a part.</p></div>
+          <section id="component-properties" class="component-properties" hidden>
+            <div class="part-section-tabs" role="tablist" aria-label="Selected part editing sections">
+              <button type="button" data-part-tab="properties" class="active" aria-selected="true">Properties</button>
+              <button type="button" data-part-tab="transform" aria-selected="false">Transform</button>
+              <button type="button" data-part-tab="animation" aria-selected="false">Animation</button>
+            </div>
+
+            <section data-part-panel="properties" class="part-editor-panel">
+              <div class="inspector-primary-card">
+                <label class="studio-field">Part name<input data-component-field="name" type="text"></label>
+                <div class="inspector-row two"><label class="studio-field">Shape<select data-component-field="type"><option value="box">Box</option><option value="cylinder">Cylinder</option><option value="sphere">Sphere</option><option value="cone">Cone</option><option value="wedge">Wedge</option><option value="glassPanel">Glass panel</option><option value="beam">Beam</option><option value="rollerBed">Roller bed</option><option value="wheel">Wheel</option><option value="text">Text label</option><option value="group">Merged item</option></select></label><label class="studio-field">Color<input data-component-field="color" type="color"></label></div>
+                <div data-for-component="text" class="inspector-row two"><label class="studio-field">Label text<input data-component-field="text" type="text" maxlength="120"></label><label class="studio-field">Text color<input data-component-field="textColor" type="color"></label></div>
+                <div class="visibility-row"><label class="studio-switch"><input data-component-check="visible" type="checkbox"><span>Visible</span></label><label class="studio-field compact-field">Opacity<input data-component-field="opacity" type="number" min="0.05" max="1" step="0.05"></label></div>
+              </div>
+              <div class="studio-callout"><strong>Part workflow</strong><p>Use Transform for exact position, rotation, scale, and dimensions. Use Animation to build one or more timed clips for this part.</p></div>
+            </section>
+
+            <section data-part-panel="transform" class="part-editor-panel" hidden>
+              <details class="transform-section" open><summary>Position, rotation, and scale</summary>
+                <div class="transform-subheading">Position</div><div class="axis-fields"><label class="axis-x-field">X<input data-component-field="x" type="number" step="0.1"></label><label class="axis-y-field">Y<input data-component-field="y" type="number" step="0.1"></label><label class="axis-z-field">Z<input data-component-field="z" type="number" step="0.1"></label></div>
+                <div class="transform-subheading">Rotation</div><div class="axis-fields rotation-axis-fields"><label class="axis-x-field">X<input data-component-field="rotationX" type="number" step="1"></label><label class="axis-y-field">Y<input data-component-field="rotationY" type="number" step="1"></label><label class="axis-z-field">Z<input data-component-field="rotationZ" type="number" step="1"></label></div>
+                <div class="rotation-row rotation-actions"><label class="studio-field rotation-axis-picker">Quick axis<select id="rotation-axis"><option value="x">X</option><option value="y" selected>Y</option><option value="z">Z</option></select></label><button id="rotate-negative" type="button">&minus;90&deg;</button><button id="rotate-positive" type="button">+90&deg;</button><button id="reset-rotation" type="button">Reset</button></div>
+                <div class="transform-subheading">Scale (%)</div><div class="axis-fields four"><label>All<input data-component-scale="uniform" type="number" min="1" max="10000" step="1"></label><label class="axis-x-field">X<input data-component-scale="x" type="number" min="1" max="10000" step="1"></label><label class="axis-y-field">Y<input data-component-scale="y" type="number" min="1" max="10000" step="1"></label><label class="axis-z-field">Z<input data-component-scale="z" type="number" min="1" max="10000" step="1"></label></div>
+                <div class="transform-subheading">Mirror</div><div class="mirror-actions" role="group" aria-label="Mirror selected parts"><button type="button" data-mirror-component="x">Mirror X</button><button type="button" data-mirror-component="y">Mirror Y</button><button type="button" data-mirror-component="z">Mirror Z</button></div>
+                <button id="center-component" type="button" class="full-width-button">Center on machine</button>
+              </details>
+              <details class="transform-section" open><summary>Dimensions</summary>
+                <div class="axis-fields size-fields">
+                  <label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel text" class="axis-x-field">Width<input data-component-field="w" type="number" min="0.01" step="0.01"></label>
+                  <label data-for-component="box cylinder sphere cone wedge glassPanel wheel text" class="axis-y-field">Height<input data-component-field="h" type="number" min="0.01" step="0.01"></label>
+                  <label data-for-component="box cylinder sphere cone wedge glassPanel rollerBed wheel text" class="axis-z-field">Depth<input data-component-field="d" type="number" min="0.01" step="0.01"></label>
+                  <label data-for-component="beam" class="axis-x-field">Beam length<input data-component-field="length" type="number" min="0.01" step="0.01"></label><label data-for-component="beam" class="axis-y-field">Beam height<input data-component-field="thicknessY" type="number" min="0.01" step="0.01"></label>
+                  <label data-for-component="beam" class="axis-z-field">Beam width<input data-component-field="thicknessZ" type="number" min="0.01" step="0.01"></label>
+                  <label data-for-component="rollerBed">Roller diameter<input data-component-field="thickness" type="number" min="0.01" step="0.01"></label>
+                  <label data-for-component="rollerBed">Roller count<input data-component-field="count" type="number" min="2" step="1"></label>
+                  <label data-for-component="cylinder sphere cone">Smoothness<input data-component-field="segments" type="number" min="8" max="48" step="1"></label>
+                </div>
+                <p class="transform-help"><strong>Local scaling:</strong> X changes length/width, Y changes height, and Z changes depth. Beam X changes its length while Y and Z change its rectangular cross-section.</p>
+              </details>
+              <details class="transform-section part-envelope-panel"><summary>Individual part envelope / hitbox</summary>
+                <p id="component-envelope-status" class="transform-help">Add an independent collision envelope to this part, then edit its exact position and size.</p>
+                <div class="axis-fields"><label class="axis-x-field">X<input data-component-envelope-field="x" type="number" step="0.01"></label><label class="axis-y-field">Y<input data-component-envelope-field="y" type="number" step="0.01"></label><label class="axis-z-field">Z<input data-component-envelope-field="z" type="number" step="0.01"></label></div>
+                <div class="axis-fields size-fields"><label class="axis-x-field">Width<input data-component-envelope-field="w" type="number" min="0.01" step="0.01"></label><label class="axis-y-field">Height<input data-component-envelope-field="h" type="number" min="0.01" step="0.01"></label><label class="axis-z-field">Depth<input data-component-envelope-field="d" type="number" min="0.01" step="0.01"></label></div>
+                <div class="envelope-part-actions"><button id="fit-component-envelope" type="button">Add / tight fit to part</button><button id="remove-component-envelope" type="button" class="danger-subtle">Remove part envelope</button></div>
+              </details>
+              <details class="transform-section" data-for-component="beam"><summary>Beam endpoints</summary><div class="axis-fields"><label class="axis-x-field">End X<input data-component-field="x2" type="number" step="0.1"></label><label class="axis-y-field">End Y<input data-component-field="y2" type="number" step="0.1"></label><label class="axis-z-field">End Z<input data-component-field="z2" type="number" step="0.1"></label></div></details>
+            </section>
+
+            <section data-part-panel="animation" class="part-editor-panel part-animation-panel" hidden>
+              <div class="timeline-inspector-intro">
+                <div><strong>Animation clip settings</strong><p>Add an animation below, then select its clip in the bottom timeline to edit every setting.</p></div>
+                <button id="open-animation-timeline-panel" type="button" class="primary">Open timeline</button>
+              </div>
+
+              <section class="timeline-inspector-library" aria-label="Animation types">
+                <div class="timeline-inspector-library-heading"><strong>Add animation</strong><small>Click to append after the last clip, or drag a type onto an exact timeline position.</small></div>
+                <div id="timeline-type-palette" class="timeline-type-buttons timeline-inspector-type-buttons"></div>
+              </section>
+
+              <div id="timeline-empty" class="inspector-empty compact"><strong>No animation clip selected.</strong><p>Add an animation above, or click an existing clip in the bottom timeline.</p></div>
+              <section id="timeline-clip-editor" class="timeline-clip-editor" hidden>
+                <div class="timeline-clip-heading"><div><strong>Selected animation</strong><span id="timeline-clip-description"></span></div><div><button id="timeline-duplicate-clip" type="button">Duplicate</button><button id="timeline-delete-clip" type="button" class="danger-subtle">Delete</button></div></div>
+                <div class="timeline-clip-grid">
+                  <label class="studio-field wide">Clip name<input data-timeline-clip-field="name" type="text"></label>
+                  <label class="studio-field">Animation type<select data-timeline-clip-field="type"></select></label>
+                  <label class="studio-switch clip-enabled-switch"><input data-timeline-clip-check="enabled" type="checkbox"><span>Clip enabled</span></label>
+                  <label class="studio-field">Start (sec)<input data-timeline-clip-field="start" type="number" min="0" step="0.05"></label>
+                  <label class="studio-field">Duration (sec)<input data-timeline-clip-field="duration" type="number" min="0.05" step="0.05"></label>
+                  <label class="studio-field" data-timeline-for="oscillate loop fourStep bob pulse blink visibility">Motion time / cycle (sec)<input data-timeline-clip-field="cycleSeconds" type="number" min="0.05" step="0.05"></label>
+                  <label class="studio-field" data-timeline-for="oscillate">Pause at forward end (sec)<input data-timeline-clip-field="pauseAtPositive" type="number" min="0" step="0.05"></label>
+                  <label class="studio-field" data-timeline-for="oscillate">Pause at return end (sec)<input data-timeline-clip-field="pauseAtNegative" type="number" min="0" step="0.05"></label>
+                  <label class="studio-field" data-timeline-for="loop bob pulse blink visibility">Pause after cycle (sec)<input data-timeline-clip-field="cyclePause" type="number" min="0" step="0.05"></label>
+                  <label class="studio-field" data-timeline-for="oscillate loop bob pulse blink visibility">Repeat count<input data-timeline-clip-field="repeatCount" type="number" min="0" step="1"><small>0 fills the clip</small></label>
+                  <label class="studio-field">Easing<select data-timeline-clip-field="easing"><option value="linear">Linear</option><option value="easeIn">Ease in</option><option value="easeOut">Ease out</option><option value="easeInOut">Ease in/out</option><option value="smooth">Smooth step</option><option value="step">Step at end</option></select></label>
+                  <label class="studio-field" data-timeline-for="oscillate loop fourStep bob pulse blink visibility">Phase (degrees)<input data-timeline-clip-field="phase" type="number" step="5"></label>
+                  <label class="studio-switch" data-timeline-for="oscillate loop bob pulse blink visibility"><input data-timeline-clip-check="yoyo" type="checkbox"><span>Reverse every other cycle</span></label>
+                  <label class="studio-switch"><input data-timeline-clip-check="holdEnd" type="checkbox"><span>Hold final value</span></label>
+                </div>
+                <details class="transform-section timeline-motion-settings" data-timeline-for="move oscillate loop fourStep rotate bob pulse splitRectangles blink visibility" open><summary>Motion settings</summary>
+                  <div class="timeline-clip-grid">
+                    <label class="studio-field" data-timeline-for="move oscillate loop fourStep rotate pulse splitRectangles"><span id="timeline-axis-label">Axis</span><select data-timeline-clip-field="axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option><option value="all">All axes</option></select></label>
+                    <label class="studio-field" data-timeline-for="move oscillate loop fourStep rotate bob pulse splitRectangles"><span id="timeline-amount-label">Distance / amount</span><input data-timeline-clip-field="amount" type="number" step="0.1"></label>
+                    <div class="timeline-rotation-flip wide" data-timeline-for="rotate"><button id="timeline-flip-rotation" type="button">Flip rotation animation</button><small id="timeline-rotation-direction">Current direction: forward (+)</small></div>
+                    <label class="studio-field" data-timeline-for="rotate">Pivot offset X (ft)<input data-timeline-clip-field="rotationPivotX" type="number" step="0.1"><small>Measured from the part center in local coordinates</small></label>
+                    <label class="studio-field" data-timeline-for="rotate">Pivot offset Y (ft)<input data-timeline-clip-field="rotationPivotY" type="number" step="0.1"></label>
+                    <label class="studio-field" data-timeline-for="rotate">Pivot offset Z (ft)<input data-timeline-clip-field="rotationPivotZ" type="number" step="0.1"></label>
+                    <label class="studio-field" data-timeline-for="fourStep">Second axis<select data-timeline-clip-field="secondaryAxis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label>
+                    <label class="studio-field" data-timeline-for="fourStep"><span>Second distance (ft)</span><input data-timeline-clip-field="secondaryAmount" type="number" step="0.1"></label>
+                    <label class="studio-field" data-timeline-for="splitRectangles">Minimum columns<input data-timeline-clip-field="splitColumnsMin" type="number" min="1" max="8" step="1"></label>
+                    <label class="studio-field" data-timeline-for="splitRectangles">Maximum columns<input data-timeline-clip-field="splitColumnsMax" type="number" min="1" max="8" step="1"><small>The saved seed selects one stable count in this range</small></label>
+                    <label class="studio-field" data-timeline-for="splitRectangles">Rows<input data-timeline-clip-field="splitRows" type="number" min="1" max="8" step="1"></label>
+                    <label class="studio-field" data-timeline-for="splitRectangles">Depth layers<input data-timeline-clip-field="splitLayers" type="number" min="1" max="4" step="1"></label>
+                    <label class="studio-field" data-timeline-for="splitRectangles">Random seed<input data-timeline-clip-field="splitSeed" type="number" step="1"><small>Same seed keeps the pattern repeatable</small></label>
+                    <label class="studio-field" data-timeline-for="splitRectangles">Rotation scatter (degrees)<input data-timeline-clip-field="splitRotation" type="number" min="0" max="360" step="1"></label>
+                    <label class="studio-field" data-timeline-for="blink">Minimum opacity<input data-timeline-clip-field="blinkMinOpacity" type="number" min="0" max="1" step="0.05"><small>0 is fully invisible</small></label>
+                    <label class="studio-field" data-timeline-for="blink">Visible portion<input data-timeline-clip-field="blinkDutyCycle" type="number" min="0.01" max="0.99" step="0.05"></label>
+                    <label class="studio-field" data-timeline-for="visibility">Visibility action<select data-timeline-clip-field="visibilityAction"><option value="show">Show during clip</option><option value="hide">Hide during clip</option><option value="toggle">Toggle each cycle</option></select></label>
+                  </div>
+                  <div class="four-step-pause-grid" data-timeline-for="fourStep"><label class="studio-field">Pause after step 1<input data-timeline-clip-field="step1Pause" type="number" min="0" step="0.05"></label><label class="studio-field">Pause after step 2<input data-timeline-clip-field="step2Pause" type="number" min="0" step="0.05"></label><label class="studio-field">Pause after step 3<input data-timeline-clip-field="step3Pause" type="number" min="0" step="0.05"></label><label class="studio-field">Pause after step 4<input data-timeline-clip-field="step4Pause" type="number" min="0" step="0.05"></label></div>
+                </details>
+              </section>
+
+              <details class="transform-section group-motion-driver" data-for-component="group"><summary>Merged-part attachment behavior</summary>
+                <label class="studio-field">Attachment parent<select id="group-motion-driver"></select></label>
+                <p>The attachment parent carries the merged assembly. Choose the whole merged item or a child using the target selector in the bottom timeline.</p>
+              </details>
+            </section>
+          </section>
+        </section>
+
+        <section data-inspector-panel="design" class="studio-inspector-section" hidden>
+          <div class="studio-panel-heading"><p>Machine properties</p><span>Reusable preset</span></div>
+          <div class="design-properties-grid">
+            <label class="studio-field wide">Design name<input id="design-name" type="text"></label>
+            <label class="studio-field wide">Machine type<input id="design-machine-type" type="text"></label>
+            <details class="transform-section wide design-envelope-panel" open>
+              <summary>Design envelope</summary>
+              <div class="axis-fields size-fields envelope-size-fields"><label class="axis-x-field">Width (ft)<input id="design-base-w" type="number" min="0.01" step="0.01"></label><label class="axis-z-field">Depth (ft)<input id="design-base-d" type="number" min="0.01" step="0.01"></label><label class="axis-y-field">Height (ft)<input id="design-base-h" type="number" min="0.01" step="0.01"></label></div>
+              <div class="transform-subheading envelope-position-heading">Envelope position (ft)</div>
+              <div class="axis-fields envelope-position-fields"><label class="axis-x-field">X<input id="design-base-x" type="number" step="0.01"></label><label class="axis-y-field">Y<input id="design-base-y" type="number" step="0.01"></label><label class="axis-z-field">Z<input id="design-base-z" type="number" step="0.01"></label></div>
+              <p id="design-envelope-status" class="transform-help envelope-status">The envelope can be as small as 0.01 ft on each axis.</p>
+              <section class="machine-envelope-shape" aria-labelledby="machine-envelope-shape-heading">
+                <div class="studio-panel-heading compact"><p id="machine-envelope-shape-heading">Walk-around shape</p><span id="design-envelope-piece-count">Base rectangle</span></div>
+                <p class="transform-help">Build the machine hitbox from multiple boxes. Two overlapping boxes can form an L shape; add more for detailed walk-around clearance.</p>
+                <label class="studio-field">Envelope piece<select id="design-envelope-piece"><option value="">Base rectangle</option></select></label>
+                <div class="axis-fields"><label class="axis-x-field">X<input data-design-envelope-field="x" type="number" step="0.01"></label><label class="axis-y-field">Y<input data-design-envelope-field="y" type="number" step="0.01"></label><label class="axis-z-field">Z<input data-design-envelope-field="z" type="number" step="0.01"></label></div>
+                <div class="axis-fields size-fields"><label class="axis-x-field">Width<input data-design-envelope-field="w" type="number" min="0.01" step="0.01"></label><label class="axis-y-field">Height<input data-design-envelope-field="h" type="number" min="0.01" step="0.01"></label><label class="axis-z-field">Depth<input data-design-envelope-field="d" type="number" min="0.01" step="0.01"></label></div>
+                <div class="envelope-shape-actions"><button id="add-design-envelope-piece" type="button">Add box</button><button id="duplicate-design-envelope-piece" type="button">Duplicate</button><button id="remove-design-envelope-piece" type="button" class="danger-subtle">Remove</button><button id="reset-design-envelope-shape" type="button">Use one base box</button></div>
+              </section>
+              <div class="envelope-fit-options"><label class="studio-field">Fit parts<select id="envelope-fit-scope"><option value="all">All parts</option><option value="visible">Visible parts only</option></select></label><label class="studio-field">Edge clearance (in)<input id="envelope-fit-clearance" type="number" min="0" max="120" step="0.125" value="0"></label></div>
+              <label class="studio-switch envelope-visibility-switch"><input id="show-design-envelope" type="checkbox" checked><span>Show envelope outline in the viewport</span></label>
+              <button id="fit-envelope" type="button" class="full-width-button">Move &amp; tight fit to parts</button>
+            </details>
+            <section class="studio-combat-anchors wide" id="combat-anchors-panel" hidden>
+              <div class="studio-panel-heading compact"><p>Combat muzzle origins</p><span>Design-local coordinates (ft)</span></div>
+              <p class="studio-help">The +X end of a weapon points toward its muzzle. Edit these values to move where the first-person weapon fires when aiming and hip-firing.</p>
+              <div class="transform-subheading">Hip fire muzzle · X / Y / Z</div>
+              <div class="axis-fields"><label>X<input id="combat-hip-x" type="number" step="0.01"></label><label>Y<input id="combat-hip-y" type="number" step="0.01"></label><label>Z<input id="combat-hip-z" type="number" step="0.01"></label></div>
+              <div class="transform-subheading">Aiming down sights muzzle · X / Y / Z</div>
+              <div class="axis-fields"><label>X<input id="combat-ads-x" type="number" step="0.01"></label><label>Y<input id="combat-ads-y" type="number" step="0.01"></label><label>Z<input id="combat-ads-z" type="number" step="0.01"></label></div>
+              <p class="studio-help">The weapon's actual geometry is editable under Parts/Build, while these independent anchors control shot emergence.</p>
+            </section>
+            <label class="studio-field wide">Description<textarea id="design-description" rows="4"></textarea></label>
+          </div>
+        </section>
+      </aside>
+    </section>
+
+    <dialog id="save-design-as-dialog" class="studio-dialog" aria-labelledby="save-design-as-title">
+      <form id="save-design-as-form" method="dialog">
+        <div class="studio-dialog-heading"><div><p>Reusable machine</p><h2 id="save-design-as-title">Save machine as</h2></div><button id="cancel-save-design-as" type="button" aria-label="Close">&times;</button></div>
+        <p class="studio-help">This creates a separate machine in the library. You can keep editing it or add it to the plant layout.</p>
+        <label class="studio-field">Machine name<input id="save-design-as-name" type="text" required maxlength="120" autocomplete="off"></label>
+        <label class="studio-field">Machine type<input id="save-design-as-type" type="text" required maxlength="80" autocomplete="off"></label>
+        <div class="studio-dialog-actions"><button type="button" data-close-save-as>Cancel</button><button type="submit" class="primary">Save new machine</button></div>
+      </form>
+    </dialog>
+
+    <script src="editor-access.js?release=0.13.80"></script>
+    <script src="depth-scene-renderer.js?release=0.13.80"></script>
+    <script src="three-depth-scene-renderer.js?release=0.13.80"></script>
+    <script src="render-performance.js?release=0.13.80"></script>
+    <script src="spatial-index.js?release=0.13.80"></script>
+    <script src="geometry-prep-client.js?release=0.13.80"></script>
+    <script src="machine-designs.js?release=0.13.80"></script>
+    <script src="animation-timeline.js?release=0.13.80"></script>
+    <script src="animation-timeline-workspace.js?release=0.13.80"></script>
+    <script src="machine-design-studio.js?release=0.13.80"></script>
+  </main>
+</body>
+</html>

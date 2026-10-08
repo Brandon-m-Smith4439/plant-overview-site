@@ -438,7 +438,7 @@
     function combatMusicIntensity(nearby,health,nearestDistance,intermission) {
       const level=clamp(.12+Math.min(8,nearby)*.048+
         (1-clamp(health/100,0,1))*.3+
-        zombieProximityLevel(nearestDistance)*.38,0,1);
+        Math.pow(clamp((95-nearestDistance)/90,0,1),1.6)*.38,0,1);
       return intermission?level*.20:level;
     }
     function unlockCombatAudio(){
@@ -587,6 +587,7 @@
       soundEnabled=Boolean(enabled);
       try{window.localStorage?.setItem("monroe-combat-sound",soundEnabled?"on":"off");}catch{}
       if(soundEnabled)unlockCombatAudio();
+      else if(audioContext && audioContext.state==="running")audioContext.suspend().catch(()=>{});
       const control=hud.querySelector('[data-combat-pause-action="audio"]');
       if(control){
         control.textContent=soundEnabled?"♫ SOUND EFFECTS: ON":"♪ SOUND EFFECTS: MUTED";
@@ -3989,6 +3990,9 @@
           waveTotal=Math.max(0,Math.floor(number(host.waveTotal,waveTotal)));
           waveSpawned=Math.max(0,Math.floor(number(host.waveSpawned,waveSpawned)));
           waveDefeated=Math.max(0,Math.floor(number(host.waveDefeated,waveDefeated)));
+          const hostCountdown=Math.max(0,Math.floor(number(host.waveBreakRemainingMs)));
+          if(hostCountdown && !waveNextAt)playCombatSound("wave-clear",.65);
+          waveNextAt=hostCountdown?performance.now()+hostCountdown:0;
           waveSpecial=zombieWave>0 && zombieWave%5===0;
           if (Number.isFinite(Number(host.boxX)) && Number.isFinite(Number(host.boxZ))) mysteryBox={x:Number(host.boxX),z:Number(host.boxZ)};
           healthStation=waveSpecial && host.healthX!=null && host.healthZ!=null ? {x:number(host.healthX),z:number(host.healthZ)} : null;
@@ -4024,7 +4028,11 @@
         downedUntil:reviveUntil>Date.now()?reviveUntil:0,
         kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths,points:playerPoints,
       };
-      if (zombieEndless() && multiplayer?.isHost?.()) Object.assign(state,{wave:zombieWave,waveTotal,waveSpawned,waveDefeated,boxX:mysteryBox?.x,boxZ:mysteryBox?.z,healthX:healthStation?.x,healthZ:healthStation?.z});
+      if (zombieEndless() && multiplayer?.isHost?.()) Object.assign(state,{
+        wave:zombieWave,waveTotal,waveSpawned,waveDefeated,
+        waveBreakRemainingMs:waveNextAt?Math.max(0,Math.ceil(waveNextAt-now)):0,
+        boxX:mysteryBox?.x,boxZ:mysteryBox?.z,healthX:healthStation?.x,healthZ:healthStation?.z
+      });
       if (matchType === "coop" && multiplayer?.isHost?.() && roundState !== "setup") {
         const worldPacket=hostEnemySyncPacket(now);
         if (worldPacket) Object.assign(state,worldPacket);

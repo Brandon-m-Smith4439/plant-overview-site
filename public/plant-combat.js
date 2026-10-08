@@ -567,8 +567,9 @@
 
     function syncRestartButton() {
       if (!restartButton) return;
-      restartButton.disabled = false;
-      restartButton.innerHTML = '<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Play again</strong><small>Restart ' + modeConfig().label.toLowerCase() + ' mode</small></span>';
+      const waitingForHost=matchType==="coop" && multiplayer?.getLobby?.() && !multiplayer.isHost?.();
+      restartButton.disabled=Boolean(waitingForHost);
+      restartButton.innerHTML=waitingForHost ? '<span class="combat-restart-icon" aria-hidden="true">⌛</span><span class="combat-restart-copy"><strong>Waiting for host</strong><small>The host restarts the entire team</small></span>' : '<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Play again</strong><small>Restart ' + modeConfig().label.toLowerCase() + ' mode</small></span>';
     }
 
     function enemyDimensions(record) {
@@ -846,6 +847,15 @@
         if (obstacle?.kind === "glass" && shatteredGlass.has(String(obstacle.glassId || ""))) continue;
         const distance = rayAabb(origin, direction, obstacle, nearest);
         if (Number.isFinite(distance) && distance < nearest) { nearest = distance; hitObstacle = obstacle; }
+      }
+      if (hitObstacle?.kind === "machine" && hitObstacle.machineId) {
+        let paneDistance=maximumDistance, pane=null;
+        for (const obstacle of obstacles) {
+          if (obstacle?.kind !== "glass" || obstacle.machineId !== hitObstacle.machineId || shatteredGlass.has(String(obstacle.glassId || ""))) continue;
+          const distance=rayAabb(origin,direction,obstacle,paneDistance);
+          if (Number.isFinite(distance) && distance<paneDistance) {paneDistance=distance;pane=obstacle;}
+        }
+        if (pane) {hitObstacle=pane;nearest=paneDistance;}
       }
       return hitObstacle ? { distance: nearest, obstacle: hitObstacle } : null;
     }
@@ -2601,8 +2611,14 @@
         return;
       }
       if (event.type === "coop-victory" && matchType === "coop") {
-        if (event.senderId === multiplayer?.playerId || roundState === "won") return;
+        if (!active || lobby?.status !== "started" || event.senderId !== lobby.hostId || !["countdown","playing","respawning"].includes(roundState)) return;
         finishRound("won",null,null,Array.isArray(event.payload?.leaderboard) ? event.payload.leaderboard : null);
+        return;
+      }
+      if (event.type === "round-restart" && matchType === "coop") {
+        if (!active || lobby?.status !== "started" || event.senderId !== lobby.hostId || roundState === "setup") return;
+        resetRound({countdown:true});
+        options.capture?.();
         return;
       }
       if (event.type === "enemy-hit" && matchType === "coop" && ["playing","respawning"].includes(roundState)) {
@@ -2623,6 +2639,7 @@
     function multiplayerUpdate(lobby) {
       if (roundState === "setup") syncLobbyUi(lobby);
       if (!active || !lobby) return;
+      if (["won","lost"].includes(roundState)) syncRestartButton();
       (lobby.players || []).forEach((entry)=>{ if (entry.id !== multiplayer?.playerId) rememberRemoteRoundStats(entry.id,entry.state || {}); });
       if (lobby.status === "started" && roundState !== "setup") applyHostEnemySyncState(lobby);
       if (lobby.status === "started" && roundState === "setup" && multiplayerStartedRevision !== lobby.revision) {
@@ -2883,8 +2900,14 @@
     lobbyStartButton?.addEventListener("click", hostStartLobby);
     lobbyNameInput?.addEventListener("input", () => multiplayer?.updateIdentity?.(lobbyNameInput.value,selectedCharacterId));
 
-    hud.querySelector("[data-combat-restart]")?.addEventListener("click", () => {
-      resetRound({ countdown: true });
+    hud.querySelector("[data-combat-restart]")?.addEventListener("click", async () => {
+      if (matchType === "coop" && multiplayer?.getLobby?.()) {
+        if (!multiplayer.isHost?.()) return;
+        try { await multiplayer.sendEvent("round-restart",{},""); }
+        catch { setTransientStatus("Could not restart the team. Check your lobby connection.",2000); return; }
+      }
+      if (!active) return;
+      resetRound({countdown:true});
       options.capture?.();
     });
     hud.querySelector("[data-combat-pause-action='resume']")?.addEventListener("click", () => setPaused(false));

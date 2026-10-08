@@ -9146,3 +9146,36 @@ body.viewer-fullscreen-fallback-active {
   .combat-weapon-inventory {justify-content:flex-start;}
   .combat-weapon-inventory span {font-size:.55rem;padding:.25rem;}
 }
+
+/* v0.13.78: interactive Mystery Box, deliberate weapon claim */
+.combat-station-prompt {
+  min-width:min(26rem,calc(100vw - 2rem));
+  justify-content:space-between;
+  border-color:rgba(183,133,237,.65);
+  background:linear-gradient(110deg,rgba(16,11,33,.98),rgba(42,22,68,.95));
+}
+.combat-station-prompt span {
+  flex:1;
+  font-size:.73rem;
+  line-height:1.45;
+  letter-spacing:.055em;
+  white-space:normal;
+}
+.combat-station-prompt button {
+  transition:background .18s ease,box-shadow .18s ease,transform .18s ease;
+}
+.combat-station-prompt button:not(:disabled):hover {transform:translateY(-1px);box-shadow:0 .2rem 1rem rgba(197,135,246,.32);}
+.combat-station-prompt.mystery-rolling {border-color:rgba(227,173,255,.9);box-shadow:0 0 22px rgba(149,81,219,.24);}
+.combat-station-prompt.mystery-rolling span {color:#e1bdfa;}
+.combat-station-prompt.mystery-ready {border-color:rgba(129,246,176,.86);box-shadow:0 0 26px rgba(79,214,139,.23);}
+.combat-station-prompt.mystery-ready span {color:#c5f8dc;}
+.combat-station-prompt.mystery-ready button {background:linear-gradient(135deg,#267e57,#3fb17b);border-color:rgba(148,247,193,.8);animation:combat-mystery-take-pulse 1.6s ease-in-out infinite;}
+.combat-station-prompt.mystery-returning span {color:#a7a0b0;}
+@keyframes combat-mystery-take-pulse {
+  50% {box-shadow:0 0 18px rgba(87,242,154,.45);}
+}
+@media (max-width:760px) {
+  .combat-station-prompt {min-width:0;width:min(23rem,calc(100vw - 1rem));bottom:6.1rem;gap:.5rem;}
+  .combat-station-prompt span {font-size:.67rem;}
+  .combat-station-prompt button {white-space:nowrap;}
+}

@@ -782,8 +782,10 @@
       if (!active || gameMode !== "zombie") return null;
       const excludedCharacters=new Set([selectedCharacterId,...(multiplayer?.remotePlayers?.()||[]).map((player)=>String(player.characterId||""))].filter(Boolean));
       const templates = Array.isArray(options.getEnemies?.()) ? options.getEnemies().filter((machine,index) => machine && !excludedCharacters.has(enemyId(machine,index))) : [];
-      const template = templates.length ? templates[zombieSpawnSerial % templates.length] : null;
-      if (!template) return null;
+      // Zombie survival must still work even if the plant has only one or no
+      // eligible person models after lobby character selection.
+      const template = templates.length ? templates[zombieSpawnSerial % templates.length]
+        : {id:"zombie-template",type:"person",name:"Zombie",x:0,y:0,z:0,w:1.8,d:1.8,h:6.5,color:"#465744"};
       const id = `zombie-spawn-${++zombieSpawnSerial}`;
       const machine = {
         ...template,
@@ -903,7 +905,9 @@
         return;
       }
       if (now<nextZombieSpawnAt || aliveEnemies().length>=zombieAliveCap()) return;
-      const giant=waveSpecial && (waveSpawned===Math.floor(waveTotal*.45) || waveSpawned===waveTotal-1);
+      const giant=waveSpecial
+        ? (waveSpawned===Math.floor(waveTotal*.45) || waveSpawned===waveTotal-1)
+        : zombieWave>=7 && zombieWave%3===0 && waveSpawned===Math.floor(waveTotal*.7);
       if (spawnZombie(now,giant)) waveSpawned++;
       const interval=Math.max(360,Math.round((1680-zombieWave*36)*zombieDifficultyConfig().spawnRate));
       nextZombieSpawnAt=now+interval*(.78+Math.random()*.42);
@@ -1576,7 +1580,10 @@
       if (enemyCounter) enemyCounter.textContent = gameMode === "zombie"
         ? `Zombies ${alive} alive · ${regularKills + headshotKills} kills`
         : mode.enemyLabel + " " + alive + " / " + all.length;
-      if (slotCopy) slotCopy.textContent = selectedWeapon === playerLoadout()[0] ? "PRIMARY" : "SECONDARY";
+      if (slotCopy) {
+        const slot=playerLoadout().indexOf(selectedWeapon);
+        slotCopy.textContent=slot===0?"PRIMARY":slot===1?"SECONDARY":"THIRD WEAPON";
+      }
       if (weaponCopy) weaponCopy.textContent = weapon.shortLabel.toUpperCase();
       if (magazineCopy) magazineCopy.textContent = weapon.noAmmo ? "MELEE" : String(ammo.magazine);
       if (reserveCopy) reserveCopy.textContent = weapon.noAmmo ? "" : String(ammo.reserve);
@@ -1968,7 +1975,7 @@
       mouseHeld = false;
       setAiming(false);
       nextPlayerShotAt = performance.now() + 120;
-      setTransientStatus(next === playerLoadout()[0] ? "Primary equipped" : "Secondary equipped", 650);
+      setTransientStatus("Equipped " + (WEAPONS[next]?.shortLabel || "weapon"),650);
       syncHud();
     }
 
@@ -2920,6 +2927,10 @@
     }
 
     function resetCombatSessionUi() {
+      carriedWeapons=[];
+      playerPoints=0;
+      zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;
+      mysteryBox=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
       // This reset is intentionally idempotent. Combat can be exited through
       // several paths (round-end buttons, toolbar toggle, first-person exit),
       // and some of those paths can call stop() after the controller is already

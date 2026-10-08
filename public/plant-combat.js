@@ -842,7 +842,8 @@
         // Health stations are deliberately separated from the permanent
         // Mystery Box so either purchase remains easy to target on foot.
         if (String(seed).startsWith("medic") && mysteryBox && Math.hypot(x-mysteryBox.x,z-mysteryBox.z)<12) continue;
-        if (!pointBlockedByObstacle(x,z,2.3) && options.canPlaceStation?.(x,z)!==false) return {x,z};
+        const stationRadius = String(seed).startsWith("mystery") ? 3.05 : 2.3;
+        if (!pointBlockedByObstacle(x,z,stationRadius) && options.canPlaceStation?.(x,z,stationRadius)!==false) return {x,z};
       }
       // A blocked station is not placed inside solid machinery.
       return null;
@@ -850,6 +851,9 @@
 
     function mysteryPhase(now = performance.now()) {
       if (!mysteryOffer) return "idle";
+      // Pause freezes the reel and claim timer until the regular pause-time
+      // offset is applied on resume.
+      if (paused && pausedAt) now = Math.min(now, pausedAt);
       if (now >= mysteryOffer.despawnAt) {
         mysteryOffer = null; // Unclaimed prize has lowered and can be rerolled.
         return "idle";
@@ -864,6 +868,7 @@
       const phase = mysteryPhase(now);
       if (phase === "idle") return null;
       const offer = mysteryOffer;
+      if (paused && pausedAt) now = Math.min(now, pausedAt);
       const progress = clamp((now - offer.startedAt) / MYSTERY_ROLL_DURATION_MS, 0, 1);
       // Decelerating reel uses an exact integer number of steps so the
       // final visible slot always lands on the actual random prize.

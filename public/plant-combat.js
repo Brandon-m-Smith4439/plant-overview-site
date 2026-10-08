@@ -711,7 +711,7 @@
 
     function syncEnemies(reset = false) {
       const excludedCharacters = new Set([selectedCharacterId, ...(multiplayer?.remotePlayers?.() || []).map((player) => String(player.characterId || ""))].filter(Boolean));
-      const source = matchType === "private" ? [] : (Array.isArray(options.getEnemies?.()) ? options.getEnemies().filter((machine, index) => !excludedCharacters.has(enemyId(machine, index))) : []);
+      const source = matchType === "private" || zombieEndless() ? [] : (Array.isArray(options.getEnemies?.()) ? options.getEnemies().filter((machine, index) => !excludedCharacters.has(enemyId(machine, index))) : []);
       const seen = new Set();
       source.forEach((machine, index) => {
         const id = enemyId(machine, index);
@@ -772,7 +772,7 @@
       return null;
     }
 
-    function spawnZombie(now = performance.now()) {
+    function spawnZombie(now = performance.now(), giant = false) {
       if (!active || gameMode !== "zombie") return null;
       const excludedCharacters=new Set([selectedCharacterId,...(multiplayer?.remotePlayers?.()||[]).map((player)=>String(player.characterId||""))].filter(Boolean));
       const templates = Array.isArray(options.getEnemies?.()) ? options.getEnemies().filter((machine,index) => machine && !excludedCharacters.has(enemyId(machine,index))) : [];
@@ -781,11 +781,19 @@
       const id = `zombie-spawn-${++zombieSpawnSerial}`;
       const machine = {
         ...template,
-        id, instanceId:id, name:`Zombie ${zombieSpawnSerial}`, short:"Zombie",
+        id, instanceId:id, name:giant ? `GIANT ${zombieSpawnSerial}` : `Zombie ${zombieSpawnSerial}`, short:giant ? "GIANT" : "Zombie",
+        designId:giant ? "" : template.designId,
+        w:giant ? Math.max(3.2,number(template.w,1.8)*2.05) : template.w,
+        d:giant ? Math.max(3.2,number(template.d,1.8)*2.05) : template.d,
+        h:giant ? Math.max(10.5,number(template.h,6.5)*1.9) : template.h,
         visible:true, locked:true, showLabel:false, collisionMode:"ignore", combatSpawned:true,
       };
       const record = { id, synthetic:true };
       resetEnemyRecord(record, machine, zombieSpawnSerial);
+      record.giant=Boolean(giant);
+      record.wave=zombieWave;
+      record.health*=Math.min(5,1+Math.max(0,zombieWave-1)*.13)*(giant ? 7 : 1);
+      record.modeSpeedMultiplier*=giant ? .75 : 1+Math.min(.65,Math.max(0,zombieWave-1)*.018);
       const spawn = edgeSpawnPoint(record);
       if (!spawn) return null;
       record.x = spawn.x - enemyDimensions(record).w / 2;
@@ -801,10 +809,25 @@
       return record;
     }
 
-    function zombieAliveCap(now) {
-      const elapsed = Math.max(0, (now - (roundStartedAt || now)) / 1000);
-      const cap = (12 + Math.floor(elapsed / 35) * 2) * zombieDifficultyConfig().aliveCap;
-      return Math.min(38, Math.max(6, Math.round(cap)));
+    function zombieAliveCap() {
+      return Math.min(32,Math.max(7,Math.round((9 + zombieWave * 1.6) * zombieDifficultyConfig().aliveCap)));
+    }
+
+    function beginZombieWave(now) {
+      zombieWave+=1;
+      waveSpecial=zombieWave%5===0;
+      waveTotal=Math.min(72,Math.max(5,Math.round((5+zombieWave*3)*zombieDifficultyConfig().aliveCap)));
+      waveSpawned=0;
+      waveDefeated=0;
+      waveNextAt=0;
+      nextZombieSpawnAt=now+1050;
+      if (waveSpecial) {
+        healthStation=findStationPosition(13, `medic-${zombieWave}`);
+        setTransientStatus(`WAVE ${zombieWave} · GIANTS INCOMING · HEALTH STATION OPEN`,2400);
+      } else {
+        healthStation=null;
+        setTransientStatus(`WAVE ${zombieWave} · ${waveTotal} ZOMBIES`,1800);
+      }
     }
 
     function cleanupZombieCorpses(now) {
@@ -816,13 +839,20 @@
     }
 
     function updateZombieSpawns(now) {
-      if (!zombieEndless() || roundState !== "playing") return;
-      const elapsed = Math.max(0, (now - (roundStartedAt || now)) / 1000);
-      const interval = Math.max(850, (3200 - elapsed * 5.5) * zombieDifficultyConfig().spawnRate);
-      if (nextZombieSpawnAt <= 0) nextZombieSpawnAt = now + 900;
-      if (now < nextZombieSpawnAt || aliveEnemies().length >= zombieAliveCap(now)) return;
-      spawnZombie(now);
-      nextZombieSpawnAt = now + interval * (.78 + Math.random() * .42);
+      if (!zombieEndless() || coopFollower() || !["playing","respawning","respawn-choice"].includes(roundState)) return;
+      if (!zombieWave) beginZombieWave(now);
+      if (waveSpawned>=waveTotal) {
+        if (waveDefeated>=waveTotal) {
+          if (!waveNextAt) {waveNextAt=now+5700;setTransientStatus(`WAVE ${zombieWave} CLEARED`,2400);}
+          if (now>=waveNextAt) beginZombieWave(now);
+        }
+        return;
+      }
+      if (now<nextZombieSpawnAt || aliveEnemies().length>=zombieAliveCap()) return;
+      const giant=waveSpecial && (waveSpawned===Math.floor(waveTotal*.45) || waveSpawned===waveTotal-1);
+      if (spawnZombie(now,giant)) waveSpawned++;
+      const interval=Math.max(360,Math.round((1680-zombieWave*36)*zombieDifficultyConfig().spawnRate));
+      nextZombieSpawnAt=now+interval*(.78+Math.random()*.42);
     }
 
     function pickupCandidatePositions() {
@@ -991,6 +1021,7 @@
       if (!enemy || enemy.defeatedAt > 0) return;
       enemy.health = 0;
       enemy.defeatedAt = now;
+      if (zombieEndless() && !coopFollower() && enemy.wave === zombieWave) waveDefeated=Math.min(waveTotal,waveDefeated+1);
       // Start the fall on the exact kill frame. Corpses also get a small
       // obstacle-aware slide so a nearby machine cannot visually swallow the
       // rotating body and make the death look like a frozen standing pose.
@@ -1349,6 +1380,7 @@
         tracerStyle: enemy.tracerStyle || enemy.weaponKey || "rifle",
         weaponKey: enemy.weaponKey || "rifle",
         zombie: Boolean(enemy.zombie),
+        giant:Boolean(enemy.giant),
         weaponLabel: enemy.weaponLabel || ENEMY_WEAPONS[enemy.weaponKey]?.label || "Rifle",
         melee: Boolean(ENEMY_WEAPONS[enemy.weaponKey]?.melee),
         killerReveal: now < enemy.killerRevealUntil,
@@ -1422,7 +1454,7 @@
         ? clamp((now - playerDeathStartedAt) / Math.max(1, playerDeathDuration), 0, 1)
         : 0;
       return {
-        weapon: selectedWeapon,
+        weapon: currentWeapon().visual || selectedWeapon,
         firing: now < playerRecoilUntil,
         muzzleFlash: now < playerMuzzleUntil,
         recoilProgress,
@@ -1889,6 +1921,11 @@
         markEnemyDefeated(target.enemy, now, direction);
         if (headshot) headshotKills += 1;
         else regularKills += 1;
+        if (gameMode==="zombie") {
+          const earned=(headshot?150:100)*(target.enemy.giant?5:1);
+          playerPoints+=earned;
+          setTransientStatus(`+${earned} POINTS · ${headshot?"HEADSHOT":"KILL"}`,900);
+        }
       } else if (target.enemy.health > 0) {
         triggerCombatRoll(target.enemy, now, headshot ? .18 : .46);
       }

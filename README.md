@@ -1,3 +1,7 @@
+## Version 0.13.80
+
+The production client cache key is now generated from the contents of the public JavaScript assets and `app/globals.css` on every `npm run build` and `npm run dev`. The release consistency test fails the build if the generated-key loader regresses or `VERSION` differs from `package.json`. This corrects the issue where v0.13.80 gameplay code was deployed on Railway while browsers could still fetch scripts using the stale v0.13.79 query key. The release also includes the plant-member zombie, weapon, headshot, exploration and ladder code from the preceding commits. Reload the live page and confirm the network requests for `/plant-app.js` and `/plant-combat.js` include the new `release=0.13.80-...` fingerprint.
+
 ## Version 0.13.79
 
 **Zombie movement and model quality:** Endless now mixes shambler, walker, runner, sprinter, and giant zombie gait classes. Each has its own stride length, foot lift, arm swing, weight, and cadence; speed and animation are linked and co-op snapshots carry the gait identity. Zombies lunge with moving arms instead of visibly holding an enemy chainsaw, while retaining melee attacks. The head/eye renderer places pupils and eyes relative to the actual modeled Head part (with editable zombie-model eye anchors), fixing eyes around neck and mouth height.

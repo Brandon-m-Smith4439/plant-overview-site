@@ -1,3 +1,9 @@
+## 0.13.80 — 2026-10-08
+
+- Fixed production browser caching of legacy plant and combat assets: derive script URL query key from the actual JavaScript/CSS content at build time instead of a hardcoded stale version.
+- Synchronized project, app, preview, and editor versions to 0.13.80; added source-fingerprint regression coverage as a build gate.
+- Released plant-member zombie identities and accessories, rendered chainsaws, thicker animated legs, aiming/reload/viewmodel updates, expanded exterior and climbable POIs, and improved headshot detection (earlier commits).
+
 ## 0.13.79 - 2026-10-08
 
 - Added five zombie movement classes (shambler, walker, runner, sprinter, giant), each with independent travel speed, animation cycle, stride, limb swing and bob, with gait type replicated to co-op clients.

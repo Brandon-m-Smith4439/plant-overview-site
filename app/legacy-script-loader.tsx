@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { LEGACY_RELEASE_TOKEN } from "./legacy-release-token";
 import type * as ThreeNamespace from "three";
 
 declare global {
@@ -11,7 +12,7 @@ declare global {
   }
 }
 
-const LEGACY_BUILD_TOKEN = "0.13.79";
+const LEGACY_BUILD_TOKEN = LEGACY_RELEASE_TOKEN;
 const scriptLoads = new Map<string, Promise<void>>();
 
 function loadScript(source: string) {

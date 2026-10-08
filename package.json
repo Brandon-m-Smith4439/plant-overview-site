@@ -1,13 +1,14 @@
 {
   "name": "monroe-glass-plant-evolution",
-  "version": "0.13.79",
+  "version": "0.13.80",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
+    "predev": "node scripts/generate-legacy-release-token.mjs",
     "dev": "vinext dev",
-    "build": "node scripts/patch-vinext-windows-static-cache.mjs && vinext build",
+    "build": "node scripts/generate-legacy-release-token.mjs && node tests/validate-release-cache.mjs && node scripts/patch-vinext-windows-static-cache.mjs && vinext build",
     "generate:types": "wrangler types worker-configuration.d.ts --config dist/server/wrangler.json",
     "typecheck": "npm run build && npm run generate:types && tsc --noEmit --incremental false",
     "start": "vinext start",

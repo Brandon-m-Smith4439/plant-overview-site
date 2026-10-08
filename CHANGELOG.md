@@ -1,3 +1,15 @@
+## 0.13.79 - 2026-10-08
+
+- Added five zombie movement classes (shambler, walker, runner, sprinter, giant), each with independent travel speed, animation cycle, stride, limb swing and bob, with gait type replicated to co-op clients.
+- Fixed zombie eyes by positioning them relative to the real Head part rather than total actor height, and removed drawn weapons from zombie claw-run animations while preserving melee damage.
+- Raised navigation clearance around cage corners and physical machine envelopes, and forced detour route replanning after sustained lack of progress.
+- Added dark wasteland exterior terrain and sky for Zombie Mode, and arid desert environment for Combat Mode; production layout remains unchanged.
+- Changed the Mystery Box to raise the rolling weapon while the slot-machine reel spins: the winning gun peaks at the exact moment the reel lands. Retained the TAKE interaction and forfeiture timeout.
+- Relocated the Mystery Box to a valid and sufficiently distant walkable location every two completed Endless waves, shared from the multiplayer host.
+- Added 14 distinct editable weapon geometry presets and five editable zombie anatomy presets to the shared design library, accessible under dedicated Machine Studio Zombies/Weapons tabs.
+- Added persistent design-local hip-fire and ADS muzzle XYZ controls in Studio; wired designer weapon geometry into player viewmodels, AI-held weapons and Mystery Box prize rendering, with custom anchors influencing projectile emergence.
+- Bumped plant and Machine Studio cache versions to 0.13.79, expanded combat regression checks, and validated the model catalog and timed mystery-roll/relocation simulations.
+
 ## 0.13.78 - 2026-10-08
 
 - Widened the Survival Mystery Box to 5.4 world units and redesigned its 3D case and three slot-reel windows.

@@ -1,6 +1,10 @@
-## Version 0.13.80
+## v0.13.81 — Co-op recovery and environment traversal
 
-The production client cache key is now generated from the contents of the public JavaScript assets and `app/globals.css` on every `npm run build` and `npm run dev`. The release consistency test fails the build if the generated-key loader regresses or `VERSION` differs from `package.json`. This corrects the issue where v0.13.80 gameplay code was deployed on Railway while browsers could still fetch scripts using the stale v0.13.79 query key. The release also includes the plant-member zombie, weapon, headshot, exploration and ladder code from the preceding commits. Reload the live page and confirm the network requests for `/plant-app.js` and `/plant-combat.js` include the new `release=0.13.80-...` fingerprint.
+Zombie and Combat modes now have real north/south wall doorways, rooftop landing and AI climbing fixes, collision on exterior hills, and smaller gun viewmodels with safer rocket reloading. Co-op zombie synchronization carries full identity and stage geometry. Melee is bound to **F** (damage and knockback). In co-op, an alive player presses **E** within nine feet of a downed teammate to revive them within a 22-second window; the downed teammate is marked in red with a countdown, including off-screen direction cues. The multiplayer lobby validates target proximity and the revive timer. Rocket splash damage applies to the shooter, enemies, and nearby players. The build now checks gameplay regression and JavaScript syntax before deployment.
+
+## Version 0.13.81
+
+The production client cache key is now generated from the contents of the public JavaScript assets and `app/globals.css` on every `npm run build` and `npm run dev`. The release consistency test fails the build if the generated-key loader regresses or `VERSION` differs from `package.json`. This corrects the issue where v0.13.81 gameplay code was deployed on Railway while browsers could still fetch scripts using the stale v0.13.79 query key. The release also includes the plant-member zombie, weapon, headshot, exploration and ladder code from the preceding commits. Reload the live page and confirm the network requests for `/plant-app.js` and `/plant-combat.js` include the new `release=0.13.81-...` fingerprint.
 
 ## Version 0.13.79
 

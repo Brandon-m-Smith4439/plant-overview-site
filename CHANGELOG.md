@@ -1,7 +1,18 @@
-## 0.13.80 — 2026-10-08
+## 0.13.81 — 2026-10-08
+
+- Fixed co-op zombies appearing as feet-only by giving network-synthesized enemies complete layout stage, model-design, animation and elevation metadata and ensuring full-size live actor rendering.
+- Added two small combat/zombie-only north/south wall doorways; collision, ballistics and visuals share their openings. Normal plant presentation is unchanged.
+- Added solid collision to outdoor hills for players and AI; restored solid roof landing and climb animations for enemies.
+- Shrunk/offset viewmodel weapons, limited near-plane projection and reduced rocket reload movement.
+- Added F melee attacks with zombie damage, knockback, animation and co-op hit synchronization.
+- Added 22-second co-op rescue window with server-validated E revive within nine feet, red world-space and edge-of-screen countdown indicators, and support for reviving in endless mode before elimination.
+- Repaired radial rocket damage for AI, self, co-op teammates and private-match opponents.
+- Added build-gated combat regression and JavaScript syntax validation.
+
+## 0.13.81 — 2026-10-08
 
 - Fixed production browser caching of legacy plant and combat assets: derive script URL query key from the actual JavaScript/CSS content at build time instead of a hardcoded stale version.
-- Synchronized project, app, preview, and editor versions to 0.13.80; added source-fingerprint regression coverage as a build gate.
+- Synchronized project, app, preview, and editor versions to 0.13.81; added source-fingerprint regression coverage as a build gate.
 - Released plant-member zombie identities and accessories, rendered chainsaws, thicker animated legs, aiming/reload/viewmodel updates, expanded exterior and climbable POIs, and improved headshot detection (earlier commits).
 
 ## 0.13.79 - 2026-10-08

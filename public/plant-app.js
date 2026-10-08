@@ -2561,6 +2561,90 @@
       return {x,z,radius:13+(i%4)*6,height:9+(i%7)*2.4};
     });
   }
+  // Stable branch-only forest patches. Plant dimensions are the cache key so
+  // the ground scenery and the player/AI collision data NEVER disagree.
+  let deadForestCache={key:"",trees:[]};
+  function combatDeadForestTrees() {
+    const b=floorBounds(),key=b.join("|");
+    if(deadForestCache.key===key)return deadForestCache.trees;
+    const [left,front,right,back]=b;
+    const groves=[
+      [left-68,front+12,21,31],
+      [left-83,back+71,27,36],
+      [right+74,front-70,24,34],
+      [right+91,back-18,20,34],
+      [left+33,front-101,22,31],
+      [right-46,back+105,25,35],
+    ];
+    const trees=[];
+    groves.forEach(([cx,cz,count,spread],grove)=>{
+      for(let i=0;i<count;i++){
+        const angle=i*2.399963229728653+grove*.79;
+        const jitter=Math.sin(i*17.71+grove*37.17);
+        const distance=(5+Math.sqrt((i+.5)/count)*spread)*(1+jitter*.11);
+        const x=cx+Math.cos(angle)*distance,z=cz+Math.sin(angle)*distance;
+        const radius=.33+(Math.sin(i*4.87+grove)*.5+.5)*.31;
+        const height=7+(Math.sin(i*13.19+grove*8.7)*.5+.5)*9;
+        const obstacleNearPOI=combatExteriorLandmarks().some(site=>
+          x>site.x-7&&x<site.x+site.w+7&&z>site.z-7&&z<site.z+site.d+7);
+        if(!obstacleNearPOI)trees.push({x,z,radius,height,grove,i,phase:angle});
+      }
+    });
+    deadForestCache={key,trees};
+    return trees;
+  }
+
+  function drawZombieMoon() {
+    // Blocky lunar body and luminous halo remain in world-space, not on HUD.
+    const [left,front,right,back]=floorBounds();
+    const x=right+126,z=front-142,y=118;
+    box({x:x-17,y:y-17,z:z-3,w:34,h:34,d:6,color:"#d6dfdb"},1,1);
+    box({x:x-13,y:y-12,z:z-3.8,w:10,h:9,d:.75,color:"#a7b8b5"},1,1);
+    box({x:x+6,y:y+5,z:z-3.8,w:9,h:7,d:.75,color:"#abbeb7"},1,1);
+    box({x:x-1,y:y-7,z:z-4,w:6,h:5,d:1,color:"#edf4e8"},1,1);
+    const halo=[[-28,28],[-43,43],[-61,61]];
+    halo.forEach(([start,end],index)=>polygon([
+      [x+start,y+start,z+4+index*.06],[x+end,y+start,z+4+index*.06],
+      [x+end,y+end,z+4+index*.06],[x+start,y+end,z+4+index*.06],
+    ],index===0?"rgba(210,239,227,.08)":"rgba(202,230,219,.04)",
+    "rgba(190,244,234,.06)",.3,1,{transparent:true}));
+    // Patches of silver illumination make the dark ground navigable.
+    for(const [cx,cz] of [[left-45,front-43],[right+45,back+35],
+      [(left+right)*.5,front-68],[(left+right)*.5,back+78]]){
+      for(let ring=3;ring>=1;ring--){
+        const radius=ring*19;
+        polygon([[cx-radius,.02,cz-radius],[cx+radius,.02,cz-radius],
+          [cx+radius,.02,cz+radius],[cx-radius,.02,cz+radius]],
+          ring===1?"rgba(189,221,206,.085)":"rgba(159,192,179,.035)",
+          "rgba(202,231,220,.015)",.12,1,{transparent:true});
+      }
+    }
+  }
+
+  function drawDeadForest(time) {
+    const zombie=combatController?.getMode?.()==="zombie";
+    if(!zombie)return;
+    const camX=modelCenter()[0]+state.panX,camZ=modelCenter()[1]+state.panZ;
+    const walking=state.cameraMode==="walk";
+    for(const tree of combatDeadForestTrees()){
+      if(walking&&Math.hypot(camX-tree.x,camZ-tree.z)>188)continue;
+      const dark=tree.grove%2===0?"#242625":"#2c2927";
+      const sway=Math.sin(time*.00035+tree.phase)*.13;
+      const {x,z,height:h,radius:r}=tree;
+      // No foliage: thick gnarly trunk, bare angled limbs and forked twigs.
+      box({x:x-r,y:0,z:z-r,w:r*2,h:h*.64,d:r*2,color:dark,rotationZ:tree.phase*11},1,1);
+      line3d([x,h*.42,z],[x+sway,h*.83,z],"#353a35",Math.max(3,r*7),1);
+      for(let arm=0;arm<5;arm++){
+        const angle=tree.phase+arm*2.39996,reach=(3.2+arm%3*1.5)*(.8+r);
+        const y=h*(.43+arm*.065),bx=x+Math.cos(angle)*reach,bz=z+Math.sin(angle)*reach;
+        const tip=[bx+sway,y+1.7+arm*.13,bz];
+        line3d([x,y-.95,z],tip,arm%2?"#2f342f":"#383a32",Math.max(2,r*5-arm*.28),1);
+        if(arm%2===0)line3d(tip,[bx+Math.sin(angle)*reach*.48,y+3.1+arm*.24,
+          bz-Math.cos(angle)*reach*.48],"#33392f",2.2,1);
+      }
+    }
+  }
+
   function combatExteriorLandmarks() {
     const [left,front,right,back]=floorBounds();
     return [
@@ -2587,6 +2671,9 @@
     const hillsOpen = combatExteriorHills().every(hill =>
       Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
     if(!hillsOpen)return false;
+    if(combatController?.getMode?.()==="zombie" &&
+      combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p+.20))
+      return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
       const onRoof=Number(state.walkVerticalOffset)>=site.h+.35 &&
@@ -2848,6 +2935,11 @@
         kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
         w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44
       }));
+      if(combatController?.getMode?.()==="zombie")
+        combatDeadForestTrees().forEach(tree=>entries.push({
+          kind:"forest-trunk",x:tree.x-tree.radius,y:0,z:tree.z-tree.radius,
+          w:tree.radius*2,h:tree.height*.65,d:tree.radius*2
+        }));
     }
     combatOccluderCache = { at: now, entries };
     return entries;
@@ -9013,7 +9105,7 @@
     if(!combatController?.isActive?.())return;
     const zombie=combatController.getMode?.()==="zombie";
     const [left,front,right,back]=floorBounds();
-    const span=390,fill=zombie?"#242724":"#d2ab72",edge=zombie?"#555b52":"#e6c389";
+    const span=390,fill=zombie?"#323934":"#d2ab72",edge=zombie?"#586459":"#e6c389";
     const quads=[
       [[left-span,-.35,front-span],[right+span,-.35,front-span],[right+span,-.35,front],[left-span,-.35,front]],
       [[left-span,-.35,back],[right+span,-.35,back],[right+span,-.35,back+span],[left-span,-.35,back+span]],
@@ -9048,6 +9140,7 @@
         }
       }
     }
+    if(zombie){drawZombieMoon();drawDeadForest(performance.now());}
     // Traversable exterior points of interest, roof decks and climbable ladders.
     combatExteriorLandmarks().forEach((site,index)=>{
       box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,color:zombie?"#424a40":"#ad9270"},1,1);

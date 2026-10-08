@@ -11365,11 +11365,17 @@
         rotationY:180-(Number(playerState.yaw)||0)*180/Math.PI,
         rotation:180-(Number(playerState.yaw)||0)*180/Math.PI,
         combatState:{
-          zombie:false,
+          // Living co-op teammates remain human. Only players who miss
+          // the revive window switch to their OWN plant-member zombie model.
+          zombie:Boolean(playerState.revenant),
           movementBlend:playerState.moving ? 1 : .08,
           walkPhase:time*.008 + (String(player.id||"").length%7)*.71,
-          weaponKey:playerState.weapon === "handgun" ? "pistol" : (playerState.weapon || "rifle"),
-          shotProgress:0,reloadProgress:0,firing:false,muzzleFlash:false,recoil:false,hitReact:0,defeated:playerState.alive === false,deathProgress:playerState.alive === false ? 1 : 0,
+          weaponKey:playerState.revenant ? "chainsaw" : (playerState.weapon === "handgun" ? "pistol" : (playerState.weapon || "rifle")),
+          shotProgress:playerState.revenant ? 1-Number(playerState.meleeSwing||0) : 0,
+          reloadProgress:0,firing:playerState.revenant && Number(playerState.meleeSwing)>0,
+          muzzleFlash:false,recoil:false,hitReact:0,
+          defeated:playerState.alive === false && !playerState.revenant,
+          deathProgress:playerState.alive === false && !playerState.revenant ? 1 : 0,
           health:Number(playerState.health ?? 100),
           allyOutline:lobby.config?.matchType === "coop" && allyDistance >= ALLY_OUTLINE_DISTANCE,
         },
@@ -11415,7 +11421,7 @@
       const characterName=String(template?.name || template?.short || "Plant character");
       const point=project(Number(playerState.x),Number(playerState.y || 5.5)+1.25,Number(playerState.z));
       if (point[0] < -260 || point[0] > canvas.width+260 || point[1] < -120 || point[1] > canvas.height+120) continue;
-      const playerName=String(player.name || "Player");
+      const playerName=String(player.name || "Player")+(playerState.revenant?" · INFECTED":"");
       const distanceScale=lobby.config?.matchType === "coop" ? clamp(1-(Math.max(0,allyDistance-28)/122)*.5,.5,1) : 1;
       const labelAlpha=lobby.config?.matchType === "coop" ? clamp((ALLY_LABEL_HIDE_DISTANCE-allyDistance)/(ALLY_LABEL_HIDE_DISTANCE-ALLY_LABEL_FADE_DISTANCE),0,1) : 1;
       ctx.save();

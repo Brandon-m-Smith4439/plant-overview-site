@@ -168,7 +168,7 @@ assert.ok(css.includes(".combat-round-overlay.victory") && css.includes(".combat
 assert.ok(plant.includes('data-touch-combat="fire"') && plant.includes('data-touch-combat="aim"') && plant.includes('data-touch-combat="reload"') && plant.includes('data-touch-combat="swap"'), "Mobile Combat Mode action controls are missing.");
 assert.ok(plant.includes("navigator.maxTouchPoints") && combat.includes("setTriggerHeld") && combat.includes("setAiming: (enabled)"), "Touch players must be combat-engaged without desktop pointer lock and expose fire/aim APIs.");
 assert.ok(css.includes(".combat-mode-active .touch-combat-actions") && css.includes(".touch-combat-fire"), "Mobile Combat Mode controls are not styled for touch screens.");
-assert.ok(plant.includes("const eyeY=height*.835") && plant.includes("const eyeZ=depth*.285") && plant.includes("eyeWidth*.38"), "Combat eyes must be above the mouth on the upper head rather than the neck.");
+assert.ok(plant.includes("const minFront=Number(headPart.z)") && plant.includes("Number(headPart.h)*.74") && plant.includes("drawDesignBox(actor,shape,design"), "Combat eyes must be above the mouth on the upper head rather than the neck.");
 assert.ok(plant.includes("Large shoulder-fired launcher built from multiple 3D collars") && plant.includes("weaponMuzzleZ=-3.30"), "Enemy Rocket Launcher must render as a layered shoulder-fired 3D weapon.");
 assert.ok(plant.includes("Full 3D service rifle") && plant.includes('enemyWeapon === "sniper"') && plant.includes('enemyWeapon === "chainsaw"'), "AI rifle, sniper, and chainsaw models must have distinct detailed right-hand 3D geometry.");
 // v0.13.61: shared envelopes, reliable owner Combat entry, stronger weapon placement, and deterministic deaths.
@@ -237,9 +237,26 @@ assert.ok(lobbyRoute.includes("Owner password session required") && lobbyRoute.i
 assert.ok(combat.includes('data-match-type="private"') && combat.includes('data-match-type="coop"') && combat.includes('player-hit') && combat.includes('enemy-hit'), "Lobby setup must support Private Match plus shared Combat/Zombie co-op hit events.");
 assert.ok(plant.includes("drawCombatRemotePlayers") && combat.includes("remotePlayers"), "Remote lobby players must render as their selected plant characters on the layout.");
 
+// v0.13.79: user-editable 3D model catalog, exterior, speed-specific gaits and simultaneous reel/rise.
+const studioSource = fs.readFileSync(new URL("../public/machine-design-studio.js", import.meta.url), "utf8");
+const presets = fs.readFileSync(new URL("../public/machine-designs.js", import.meta.url), "utf8");
+const studioHtml = fs.readFileSync(new URL("../public/machine-studio.html", import.meta.url), "utf8");
+assert.ok(combat.includes("ZOMBIE_GAITS") && combat.includes("gaitClass=giant") && combat.includes("record.gaitCycle=gait.cycle"),"Each speed class must have its own running animation cadence.");
+assert.ok(plant.includes("const gaitStride") && plant.includes("const gaitBob") && plant.includes('zombieGait==="sprinter"'),"Zombie limb motion must change with the speed class.");
+assert.ok(lobbyRoute.includes("gaitClass:") && combat.includes("snapshot.gaitClass"),"Multiplayer must synchronize each zombie gait class.");
+assert.ok(combat.includes('const rise = phase==="rolling" ? progress*progress*(3-2*progress)') && combat.includes("const riseEndsAt = rollEndsAt"),"Prize must rise as reel spins and peak on winning frame.");
+assert.ok(combat.includes("moveMysteryBoxForWave()") && combat.includes("(zombieWave-1)%2===0"),"Mystery Box should move after every two completed waves.");
+assert.ok(combat.includes("navProgressDistance") && combat.includes("navigationRadius(record)") && combat.includes("enemy.navExpires=0"),"Cage navigation needs clearance and anti-stuck replanning.");
+assert.ok(plant.includes("combat-zombie-wasteland") && plant.includes("combat-desert-exterior") && plant.includes("drawCombatExterior"),"Each mode must have its own outdoor biome.");
+assert.ok(presets.includes('designs["combat-weapon-"+key]') && presets.includes('designs["combat-zombie-"+key]'),"All weapon and zombie speed classes need editable 3D presets.");
+assert.ok(studioHtml.includes('data-browser-tab="weapons"') && studioHtml.includes('data-browser-tab="zombies"') && studioHtml.includes('id="combat-hip-x"') && studioHtml.includes('id="combat-ads-x"'),"Designer must have combat model tabs and separate hip/ADS editing.");
+assert.ok(studioSource.includes("combatAnchors") && studioSource.includes("updateCombatAnchorPanel") && studioSource.includes("renderCombatAssetLists"),"Designer must preserve and save custom muzzle anchors.");
+assert.ok(plant.includes("sharedWeaponModel.components") && plant.includes("mysteryWeaponDesign.components") && plant.includes("enemyModel.components"),"Editable 3D weapons must render for player, enemy, and Mystery Box.");
+assert.ok(combat.includes("getWeaponMuzzleAnchor") && plant.includes("getWeaponMuzzleAnchor:"),"Edited hip/ADS muzzle anchors must affect live bullet origin.");
+
 // v0.13.78: mystery prize stages, conditional pickup, and obstacle-aware routing.
 assert.ok(combat.includes("MYSTERY_ROLL_DURATION_MS = 4800") && combat.includes("MYSTERY_REEL_STEPS = 35") && combat.includes("Math.pow(1 - progress, 2.3)"), "Mystery box reel should visibly spin and decelerate before landing on its prize.");
-assert.ok(combat.includes('phase === "rolling" ? MYSTERY_WEAPON_POOL[index] : offer.prizeKey') && combat.includes("MYSTERY_RISE_DURATION_MS = 1750"), "The displayed reel must stop on the gun that rises from the box.");
+assert.ok(combat.includes('phase === "rolling" ? MYSTERY_WEAPON_POOL[index] : offer.prizeKey') && combat.includes("const riseEndsAt = rollEndsAt"), "The displayed reel must stop on the gun that rises from the box.");
 assert.ok(combat.includes("MYSTERY_CLAIM_WINDOW_MS = 11500") && combat.includes("MYSTERY_LOWER_DURATION_MS = 2300") && combat.includes("now >= mysteryOffer.despawnAt"), "Unclaimed guns must visibly lower, despawn, and release the box for a new spin.");
 assert.ok(combat.includes('if (phase === "ready") return claimMysteryWeapon();') && combat.includes('mysteryOffer = null;') && combat.includes("playerPoints -= cost"), "Paying must start the reel; a separate E claim grants the gun without a second charge.");
 assert.ok(combat.includes("mysteryOffer=null;healthStation=null;nearestStation=null") && combat.includes('"rollEndsAt","riseEndsAt","lowerStartsAt","despawnAt"'), "Restart/exit must reset prizes, and pause must freeze active mystery timers.");
@@ -260,7 +277,7 @@ assert.ok(combat.includes('headshot?150:100') && combat.includes('waveSpecial?2:
 assert.ok(combat.includes("MAX_CARRIED_WEAPONS = 3") && combat.includes("MYSTERY_WEAPON_POOL") && combat.includes("data-combat-inventory"), "Random mystery weapons and three carried slots must be supported.");
 assert.ok(combat.includes("combat-team-panel") && combat.includes("teamPanel") && lobbyRoute.includes("points:"), "All multiplayer survivors must have visible synchronized points.");
 assert.ok(combat.includes("healthStation=findStationPosition") && combat.includes("lastHealthPurchaseWave") && plant.includes("effects.stations"), "The health station must appear on special waves, with per-player purchase tracking and world rendering.");
-assert.ok(plant.includes("const eyeY=height*.835") && plant.includes("const eyeZ=depth*.285"), "Enemy eyes must be placed on the upper face rather than neck height.");
+assert.ok(plant.includes("const eyeY=fallbackHead.y+fallbackHead.h*.74") && plant.includes("eyeZ=fallbackHead.z-"), "Enemy eyes must be placed on the upper face rather than neck height.");
 assert.ok(css.includes(".combat-wave-progress") && css.includes(".combat-station-prompt") && css.includes(".combat-weapon-inventory"), "Survival HUD, interactions and inventory must have responsive styling.");
 
 // v0.13.76: host-coordinated replay, collision ordering and rack/truck geometry.

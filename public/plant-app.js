@@ -10805,6 +10805,36 @@
       });
     }
 
+    // Guarantee a pair of visible eyes even on legacy Designer assets that
+    // already contain hidden, embedded or misaligned eye components. Render as
+    // physically protruding eye sockets on BOTH face orientations after the head.
+    if (zombie) {
+      const face = headPart
+        ? {x:Number(headPart.x),y:Number(headPart.y),z:Number(headPart.z),
+           w:Math.max(.4,Number(headPart.w)),h:Math.max(.55,Number(headPart.h)),
+           d:Math.max(.36,Number(headPart.d))}
+        : {x:width*.32,y:height*.73,z:depth*.30,w:width*.36,h:height*.14,d:depth*.38};
+      const eyeW=Math.max(.13,face.w*.24),eyeH=Math.max(.13,face.h*.22),eyeD=Math.max(.14,face.d*.18);
+      for (const side of [-1,1]) {
+        const frontZ=side<0 ? face.z-eyeD*.78 : face.z+face.d-eyeD*.23;
+        for (const fraction of [.16,.62]) {
+          const x=face.x+face.w*fraction,y=face.y+face.h*.63;
+          const z=frontZ+(side<0 ? -.08 : .08);
+          if(design && headPart){
+            const white={x,y,z,w:eyeW,h:eyeH,d:eyeD,color:"#f3f5dc"};
+            drawDesignBox(actor,white,design,alpha, grow);
+            drawDesignBox(actor,{...white,x:x+eyeW*.32,y:y+eyeH*.13,
+              z:z+(side<0 ? -eyeD*.34 : eyeD*.34),w:eyeW*.39,
+              h:eyeH*.64,d:eyeD*.42,color:"#a01920"},design,alpha,grow);
+          }else{
+            box(localBox3d(actor,x,z,eyeW,eyeD,eyeH,"#f3f5dc",y),alpha,1);
+            box(localBox3d(actor,x+eyeW*.32,z+(side<0 ? -eyeD*.36 : eyeD*.36),
+              eyeW*.39,eyeD*.42,eyeH*.64,"#a01920",y+eyeH*.13),alpha,1);
+          }
+        }
+      }
+    }
+
     // Two-segment legs create an actual walking gait instead of sliding feet.
     const hipY = height * .43;
     const kneeY = height * .22;
@@ -10893,6 +10923,10 @@
       leftGrip[2]=fast ? -.48-pump*.42 : -.92-pump*.14;
       rightGrip[2]=fast ? -.52+pump*.42 : -.90+pump*.14;
       if(zombieGait==="giant") {leftGrip[1]-=.22;rightGrip[1]-=.22;}
+      if(enemyWeapon==="chainsaw" && shotPulse>.001) {
+        leftGrip[1]+=shotPulse*.65;rightGrip[1]+=shotPulse*.45;
+        leftGrip[2]-=shotPulse*.68;rightGrip[2]-=shotPulse*.52;
+      }
     }
 
     // Both arms reach a real right-hand weapon. During enemy reloads the
@@ -10909,7 +10943,12 @@
       ? -reloadWave * ((enemyWeapon === "rocket" || enemyWeapon === "bazooka") ? .42 : .18)
       : 0;
     const weaponZKick = shotPulse*.22 - meleeLunge*.72;
-    const weaponPoint = (x,y,z) => [x, y + reloadDrop + z*reloadTilt, z + weaponZKick];
+    const slashPulse=enemyWeapon==="chainsaw" ? Math.sin(Math.PI*shotProgress) : 0;
+    const weaponPoint = (x,y,z) => [
+      x+slashPulse*.42*Math.min(1,Math.abs(z)/2),
+      y+reloadDrop+z*reloadTilt+slashPulse*.26,
+      z+weaponZKick-slashPulse*.45
+    ];
     const weaponBox = (centerX, centerZ, w, d, h, color, centerY) => {
       const posed = weaponPoint(centerX, centerY, centerZ);
       box(localBox3d(actor,posed[0]-w/2,posed[2]-d/2,w,d,h,color,posed[1]-h/2),alpha,1);
@@ -10950,6 +10989,25 @@
       weaponMuzzleX=weaponCenterX+(Number(anchor.z)-bd*.5)*width*.37/bd;
       weaponMuzzleY=gripY+(Number(anchor.y)-bh*.5)*height*.18/bh;
       weaponMuzzleZ=-Number(anchor.x)*barrelLength/bw-.12;
+      if(enemyWeapon==="chainsaw"){
+        // All custom chainsaw models receive a moving high-contrast chain and
+        // bright diagonal slash; previously this animation only ran in fallback.
+        const speed=.03,offset=(time*speed)%.23;
+        for(let tooth=0;tooth<12;tooth++){
+          const z=-.48-((tooth*.23+offset)%2.35);
+          for(const side of [-1,1]){
+            const v=weaponPoint(weaponCenterX+side*width*.15,gripY+.10,z);
+            const w=weaponPoint(weaponCenterX+side*width*.25,gripY+.22,z-.12);
+            localLine3d(actor,v,w,tooth%2?"#f6cd58":"#e3e8e0",2.8,alpha);
+          }
+        }
+        if(slashPulse>.01) {
+          const p=weaponPoint(weaponCenterX,gripY+.2,-1.7);
+          localLine3d(actor,[p[0]-.9*slashPulse,p[1]+.6*slashPulse,p[2]],
+            [p[0]+.9*slashPulse,p[1]-.5*slashPulse,p[2]-.45],
+            "#ffe899",5*slashPulse,alpha*.87);
+        }
+      }
     } else if (enemyWeapon === "chainsaw") {
       // Heavy layered motor housing + thick guide bar + moving chain teeth.
       weaponMuzzleX = weaponCenterX;

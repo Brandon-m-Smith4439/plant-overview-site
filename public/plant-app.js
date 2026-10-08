@@ -11194,7 +11194,8 @@
   }
 
   function viewmodelProject(point) {
-    const depth = Math.max(.18, Number(point[2]) || .18);
+    // Clip long barrels before projection so reload animation cannot fill the viewport.
+    const depth = Math.max(.9, Number(point[2]) || .9);
     const fov = 61 * Math.PI / 180;
     const focal = canvas.height / Math.max(.1, 2 * Math.tan(fov / 2));
     return [canvas.width/2 + Number(point[0]) * focal / depth, canvas.height/2 - Number(point[1]) * focal / depth, depth];

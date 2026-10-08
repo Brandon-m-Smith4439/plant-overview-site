@@ -30,6 +30,13 @@
   const MYSTERY_WEAPON_POOL = Object.freeze(["smg","carbine","lmg","burst","revolver","dmr","autoShotgun","heavyPistol","sniper","rocket","shotgun"]);
   const HOST_ENEMY_SYNC_INTERVAL_MS = 180;
   const COOP_ENEMY_PREDICTION_MS = 240;
+  // Occupancy-grid routing is deliberately capped and cached: it runs only
+  // when the straight path is obstructed, never once per enemy per frame.
+  const NAV_CELL_SIZE = 3.25;
+  const NAV_BUCKET_SIZE = 13;
+  const NAV_ROUTE_MAX_EXPANSIONS = 650;
+  const NAV_ROUTE_REPLAN_MS = 900;
+  const NAV_REBUILDS_PER_FRAME = 2;
   const ZOMBIE_DIFFICULTIES = Object.freeze({
     easy: Object.freeze({ key:"easy", label:"Easy", health:.72, speed:.58, damage:.70, spawnRate:1.45, aliveCap:.72, initialExtra:1, pickupRespawn:.72 }),
     normal: Object.freeze({ key:"normal", label:"Normal", health:1, speed:.72, damage:1, spawnRate:1.18, aliveCap:.9, initialExtra:3, pickupRespawn:.9 }),
@@ -506,6 +513,8 @@
     let lastAppliedHostWorldSeq = -1;
     const hostEnemySyncSamples = new Map();
     const roundStatOverrides = new Map();
+    const navCache = {at:-Infinity,buckets:new Map(),bounds:null,obstacles:[]};
+    let navFramePlans = 0;
     // Prevent network reconciliation from awarding the same zombie twice.
     const creditedKillIds = new Set();
 
@@ -683,6 +692,14 @@
       record.heading = unit * Math.PI * 2;
       record.nextHeadingAt = 0;
       record.blockedUntil = 0;
+      record.navRoute = null;
+      record.navIndex = 0;
+      record.navTargetX = NaN;
+      record.navTargetZ = NaN;
+      record.navExpires = 0;
+      record.navBlockedFrames = 0;
+      record.navLastX = record.x;
+      record.navLastZ = record.z;
       record.nextShotAt = 0;
       record.alerted = false;
       record.lastSeenAt = 0;
@@ -1324,6 +1341,167 @@
       return best ? { ...best, distance: bestDistance } : null;
     }
 
+    // Build one lightweight broad-phase grid from the same actual machine,
+    // wall, and column envelopes used for first-person collision. Glass keeps
+    // collision only when it really has a physical panel at foot height.
+    function navigationRadius(record) {
+      const size=enemyDimensions(record);
+      return clamp(Math.max(size.w,size.d)*.42,.55,1.2);
+    }
+
+    function navigationWorld(now=performance.now()) {
+      if (now-navCache.at<1100 && navCache.obstacles.length) return navCache;
+      navCache.at=now;
+      navCache.bounds=options.getBounds?.() || null;
+      navCache.obstacles=[];
+      navCache.buckets=new Map();
+      const occluders=Array.isArray(options.getOccluders?.()) ? options.getOccluders() : [];
+      for (const o of occluders) {
+        const x=number(o.x,NaN),z=number(o.z,NaN);
+        const w=number(o.w),d=number(o.d);
+        if (!Number.isFinite(x)||!Number.isFinite(z)||w<=0||d<=0) continue;
+        if (number(o.y)>7 || number(o.y)+number(o.h,20)<.4) continue;
+        if (o.kind==="glass" && shatteredGlass.has(String(o.glassId||""))) continue;
+        const obstacle={x,z,w,d};
+        navCache.obstacles.push(obstacle);
+        const minX=Math.floor((x-1.4)/NAV_BUCKET_SIZE),maxX=Math.floor((x+w+1.4)/NAV_BUCKET_SIZE);
+        const minZ=Math.floor((z-1.4)/NAV_BUCKET_SIZE),maxZ=Math.floor((z+d+1.4)/NAV_BUCKET_SIZE);
+        for(let bx=minX;bx<=maxX;bx++) for(let bz=minZ;bz<=maxZ;bz++) {
+          const key=bx+":"+bz;
+          if (!navCache.buckets.has(key)) navCache.buckets.set(key,[]);
+          navCache.buckets.get(key).push(obstacle);
+        }
+      }
+      return navCache;
+    }
+
+    function navigationCandidates(x,z,context) {
+      return context.buckets.get(Math.floor(x/NAV_BUCKET_SIZE)+":"+Math.floor(z/NAV_BUCKET_SIZE)) || [];
+    }
+
+    function navigationOpen(x,z,radius,context) {
+      if (context.bounds?.length>=4 && (
+        x<context.bounds[0]+radius || x>context.bounds[2]-radius ||
+        z<context.bounds[1]+radius || z>context.bounds[3]-radius)) return false;
+      for (const o of navigationCandidates(x,z,context)) {
+        if (circleHitsAabb(x,z,radius,o)) return false;
+      }
+      return true;
+    }
+
+    function navigationStraight(from,to,radius,context) {
+      const dx=to.x-from.x,dz=to.z-from.z;
+      const distance=Math.hypot(dx,dz);
+      if (distance<.08) return true;
+      // Segment versus radius-expanded rectangles, using only nearby buckets.
+      const minBX=Math.floor((Math.min(from.x,to.x)-radius)/NAV_BUCKET_SIZE);
+      const maxBX=Math.floor((Math.max(from.x,to.x)+radius)/NAV_BUCKET_SIZE);
+      const minBZ=Math.floor((Math.min(from.z,to.z)-radius)/NAV_BUCKET_SIZE);
+      const maxBZ=Math.floor((Math.max(from.z,to.z)+radius)/NAV_BUCKET_SIZE);
+      const visited=new Set();
+      for (let bx=minBX;bx<=maxBX;bx++) for(let bz=minBZ;bz<=maxBZ;bz++) {
+        for (const o of context.buckets.get(bx+":"+bz)||[]) {
+          if (visited.has(o)) continue;
+          visited.add(o);
+          const left=o.x-radius-.08,right=o.x+o.w+radius+.08;
+          const top=o.z-radius-.08,bottom=o.z+o.d+radius+.08;
+          let enter=0,exit=1;
+          for(const [origin,delta,low,high] of [[from.x,dx,left,right],[from.z,dz,top,bottom]]) {
+            if (Math.abs(delta)<1e-6) {if(origin<low||origin>high){enter=2;break;}continue;}
+            const a=(low-origin)/delta,b=(high-origin)/delta;
+            enter=Math.max(enter,Math.min(a,b));
+            exit=Math.min(exit,Math.max(a,b));
+            if(enter>exit) break;
+          }
+          if(enter<=exit && enter<=1 && exit>=0) return false;
+        }
+      }
+      return true;
+    }
+
+    function navigationRoute(enemy,start,goal,now) {
+      const context=navigationWorld(now);
+      const radius=navigationRadius(enemy);
+      if (navigationStraight(start,goal,radius,context)) return [];
+      const startX=Math.floor(start.x/NAV_CELL_SIZE),startZ=Math.floor(start.z/NAV_CELL_SIZE);
+      const goalX=Math.floor(goal.x/NAV_CELL_SIZE),goalZ=Math.floor(goal.z/NAV_CELL_SIZE);
+      const key=(x,z)=>x+":"+z;
+      const point=(x,z)=>({x:(x+.5)*NAV_CELL_SIZE,z:(z+.5)*NAV_CELL_SIZE});
+      const originKey=key(startX,startZ);
+      const open=[{x:startX,z:startZ,g:0,f:0,parent:null}];
+      const known=new Map([[originKey,open[0]]]),closed=new Set();
+      let nearest=open[0],nearestScore=Math.hypot(start.x-goal.x,start.z-goal.z);
+      let finished=null,expanded=0;
+      const steps=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+      while(open.length && expanded<NAV_ROUTE_MAX_EXPANSIONS) {
+        let best=0;
+        for(let i=1;i<open.length;i++)if(open[i].f<open[best].f)best=i;
+        const current=open.splice(best,1)[0],cid=key(current.x,current.z);
+        if(closed.has(cid))continue;
+        closed.add(cid);expanded++;
+        const worldPoint=point(current.x,current.z);
+        const toGoal=Math.hypot(worldPoint.x-goal.x,worldPoint.z-goal.z);
+        if(toGoal<nearestScore) {nearestScore=toGoal;nearest=current;}
+        if(toGoal<=NAV_CELL_SIZE*1.5 && navigationStraight(worldPoint,goal,radius,context)) {finished=current;break;}
+        for(const [sx,sz] of steps) {
+          const nx=current.x+sx,nz=current.z+sz,nid=key(nx,nz);
+          if(closed.has(nid))continue;
+          const dest=point(nx,nz);
+          if(!navigationOpen(dest.x,dest.z,radius,context))continue;
+          // Diagonal corner cutting would send enemies through an envelope.
+          if(sx && sz && (!navigationOpen(point(current.x+sx,current.z).x,point(current.x+sx,current.z).z,radius,context)
+            || !navigationOpen(point(current.x,current.z+sz).x,point(current.x,current.z+sz).z,radius,context)))continue;
+          const g=current.g+(sx&&sz?1.414:1),prior=known.get(nid);
+          if(prior && prior.g<=g)continue;
+          const node={x:nx,z:nz,g,f:g+Math.hypot(dest.x-goal.x,dest.z-goal.z)/NAV_CELL_SIZE,parent:current};
+          known.set(nid,node);open.push(node);
+        }
+      }
+      // A partial route is useful when the target is enclosed; keep advancing
+      // around nearby barriers and replan after the player moves.
+      let cursor=finished||nearest;
+      if(cursor===open[0] || cursor===known.get(originKey))return [];
+      const reverse=[];
+      while(cursor?.parent && reverse.length<120){reverse.push(point(cursor.x,cursor.z));cursor=cursor.parent;}
+      reverse.reverse();
+      if(finished) reverse.push(goal);
+      // String-pull across traversable segments to remove grid-staircase jitter.
+      const route=[];let last=start;
+      for(let i=0;i<reverse.length;) {
+        let furthest=i;
+        for(let j=i+1;j<reverse.length;j++) {
+          if(navigationStraight(last,reverse[j],radius,context))furthest=j;
+          else break;
+        }
+        route.push(reverse[furthest]);last=reverse[furthest];i=furthest+1;
+      }
+      return route;
+    }
+
+    function navigateEnemy(enemy,center,target,now) {
+      const context=navigationWorld(now),radius=navigationRadius(enemy);
+      if (navigationStraight(center,target,radius,context)) {
+        enemy.navRoute=null;
+        enemy.navIndex=0;
+        return target;
+      }
+      const changed=Math.hypot(number(enemy.navTargetX,center.x)-target.x,number(enemy.navTargetZ,center.z)-target.z)>7;
+      if ((!enemy.navRoute || now>=enemy.navExpires || changed || enemy.navBlockedFrames>13) && navFramePlans<NAV_REBUILDS_PER_FRAME) {
+        navFramePlans++;
+        enemy.navRoute=navigationRoute(enemy,center,target,now);
+        enemy.navIndex=0;
+        enemy.navTargetX=target.x;enemy.navTargetZ=target.z;
+        enemy.navExpires=now+NAV_ROUTE_REPLAN_MS+(stableUnit(enemy.id)*300);
+        enemy.navBlockedFrames=0;
+      }
+      const path=enemy.navRoute;
+      if(!path?.length)return target;
+      while(enemy.navIndex<path.length-1 && Math.hypot(path[enemy.navIndex].x-center.x,path[enemy.navIndex].z-center.z)<NAV_CELL_SIZE*.72)enemy.navIndex++;
+      // Can skip waypoints when the player has moved into a newly open lane.
+      if (enemy.navIndex<path.length-1 && navigationStraight(center,path[enemy.navIndex+1],radius,context))enemy.navIndex++;
+      return path[Math.min(enemy.navIndex,path.length-1)];
+    }
+
     function enemyCanOccupy(record, centerX, centerZ) {
       const size = enemyDimensions(record);
       const radius = clamp(Math.max(size.w, size.d) * .42, .55, 1.2);
@@ -1434,7 +1612,7 @@
         } else {
           moveX = strafeX; moveZ = strafeZ; speed = 3.35 * enemy.speedBias * loadout.moveSpeed * number(enemy.modeSpeedMultiplier, 1);
         }
-      } else if (now - enemy.lastSeenAt < 1600) {
+      } else if (now - enemy.lastSeenAt < 9000) {
         const remembered = { x: enemy.lastKnownPlayerX, z: enemy.lastKnownPlayerZ };
         const rememberedDx = remembered.x - center.x;
         const rememberedDz = remembered.z - center.z;
@@ -1465,9 +1643,22 @@
         speed = 2.35 * enemy.speedBias * number(enemy.modeSpeedMultiplier, 1);
       }
 
+      const isPursuing=(lineOfSight || now-enemy.lastSeenAt<9000) && distance>loadout.preferredMax
+        && (moveX*towardX+moveZ*towardZ)>.23;
+      if(isPursuing) {
+        const waypoint=navigateEnemy(enemy,center,playerTarget,now);
+        if(waypoint!==playerTarget) {
+          const wx=waypoint.x-center.x,wz=waypoint.z-center.z,wl=Math.hypot(wx,wz)||1;
+          moveX=wx/wl;moveZ=wz/wl;
+        }
+      } else {
+        enemy.navRoute=null;enemy.navIndex=0;
+      }
       const length = Math.hypot(moveX, moveZ);
       const step = length > .001 ? Math.min(1.1, speed * deltaSeconds) : 0;
       const moved = step > 0 ? tryMoveEnemy(enemy, moveX / length * step, moveZ / length * step) : false;
+      if (moved) enemy.navBlockedFrames=0;
+      else if (isPursuing && step>0) enemy.navBlockedFrames=Math.min(30,(enemy.navBlockedFrames||0)+1);
 
       // When engaging, facing the player is authoritative even while strafing or blocked.
       // When wandering, only rotate after a successful move. This prevents blocked actors
@@ -2420,6 +2611,7 @@
 
     function updateEnemyAi(now) {
       const player = options.getPlayer?.();
+      navFramePlans=0;
       const deltaSeconds = lastFrameAt > 0 ? clamp((now - lastFrameAt) / 1000, 0, .06) : 1 / 60;
       lastFrameAt = now;
       if (coopFollower()) {

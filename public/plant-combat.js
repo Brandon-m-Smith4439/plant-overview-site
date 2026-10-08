@@ -1317,20 +1317,80 @@
       if (worldEffects.explosions.length > 28) worldEffects.explosions.splice(0,worldEffects.explosions.length-28);
     }
 
+    function splashDamage(point, target, radius, baseDamage) {
+      const distance=Math.hypot(number(target.x)-point.x,number(target.y)-point.y,number(target.z)-point.z);
+      if(distance>radius)return 0;
+      // Solid machinery or walls protect distant targets, without making
+      // a point-blank impact inexplicably deal no damage.
+      if(distance>2.25 && !hasLineOfSight({x:point.x,y:point.y+.25,z:point.z},target))return 0;
+      return Math.max(0,number(baseDamage))*clamp(1-distance/Math.max(.1,radius),.18,1);
+    }
+
     function resolveExplosionDamage(now) {
-      const player = options.getPlayer?.();
-      if (!player) return;
-      for (const explosion of worldEffects.explosions) {
-        if (explosion.resolved || now < explosion.startAt) continue;
-        explosion.resolved = true;
-        const distance = Math.hypot(number(player.x)-explosion.point.x, number(player.y,5.5)-explosion.point.y, number(player.z)-explosion.point.z);
-        if (distance > explosion.radius) continue;
-        const sourceEnemy = enemies.get(String(explosion.sourceEnemyId||""));
-        const playerPoint = {x:number(player.x),y:number(player.y,5.5),z:number(player.z)};
-        if (!hasLineOfSight({x:explosion.point.x,y:explosion.point.y+.2,z:explosion.point.z},playerPoint)) continue;
-        const falloff = clamp(1-distance/Math.max(.1,explosion.radius),.18,1);
-        const base = explosion.damageMin + Math.random()*Math.max(0,explosion.damageMax-explosion.damageMin);
-        damagePlayer(base*falloff, sourceEnemy, player);
+      const player=options.getPlayer?.();
+      for(const explosion of worldEffects.explosions){
+        if(explosion.resolved || now<explosion.startAt)continue;
+        explosion.resolved=true;
+        const radius=clamp(number(explosion.radius,10),1,14);
+        const baseDamage=number(explosion.damageMax,145);
+        const sourceEnemy=enemies.get(String(explosion.sourceEnemyId||""));
+        if(player){
+          const localPoint={x:number(player.x),y:number(player.y,5.5),z:number(player.z)};
+          const hurt=splashDamage(explosion.point,localPoint,radius,baseDamage);
+          if(hurt>0){
+            const source=sourceEnemy || {
+              id:"player-rocket",x:explosion.point.x,z:explosion.point.z,
+              weaponKey:"rocket",weaponLabel:"Rocket Launcher",
+              machine:{name:explosion.sourcePlayer?"Your rocket":"Rocket blast"}
+            };
+            // Rocket splash also harms the shooter when firing too close.
+            damagePlayer(hurt,source,player);
+          }
+        }
+        // Host owns enemy health; co-op clients report damage to the host
+        // through the established enemy-hit channel via applyPlayerHit.
+        if(!coopFollower()){
+          for(const enemy of aliveEnemies()){
+            const center=enemyCenter(enemy);
+            const hurt=splashDamage(explosion.point,center,radius,baseDamage);
+            if(hurt<=0)continue;
+            if(explosion.sourcePlayer){
+              applyPlayerHit({enemy,zone:"body",distance:Math.max(.001,Math.hypot(
+                center.x-explosion.point.x,center.y-explosion.point.y,center.z-explosion.point.z))},
+                normalizeDirection({x:center.x-explosion.point.x,y:center.y-explosion.point.y,z:center.z-explosion.point.z}),
+                explosion.point,hurt,now);
+            }else{
+              // Enemy rockets also damage nearby zombies and other enemy AI.
+              enemy.health=Math.max(0,enemy.health-hurt);
+              enemy.hitReactUntil=now+220;
+              if(enemy.health<=0)markEnemyDefeated(enemy,now);
+              pushBloodBurst(enemy,center,now,enemy.health<=0);
+            }
+          }
+        }else if(explosion.sourcePlayer){
+          for(const enemy of aliveEnemies()){
+            const center=enemyCenter(enemy);
+            const hurt=splashDamage(explosion.point,center,radius,baseDamage);
+            if(hurt<=0)continue;
+            applyPlayerHit({enemy,zone:"body",distance:Math.max(.001,Math.hypot(
+              center.x-explosion.point.x,center.y-explosion.point.y,center.z-explosion.point.z))},
+              normalizeDirection({x:center.x-explosion.point.x,y:center.y-explosion.point.y,z:center.z-explosion.point.z}),
+              explosion.point,hurt,now);
+          }
+        }
+        // One timed blast event makes player-fired and AI-fired rockets hurt
+        // every nearby multiplayer character (including co-op teammates).
+        if(multiplayer?.getLobby?.() && matchType!=="solo"){
+          if(explosion.sourcePlayer || (explosion.sourceEnemyId && multiplayer.isHost?.())){
+            multiplayer.sendEvent?.("rocket-blast",{
+              point:explosion.point,radius,damage:baseDamage,
+              enemyId:explosion.sourceEnemyId||"",weapon:"rocket"
+            },"").catch(()=>{});
+          }
+        }
+        if(explosion.sourcePlayer && aliveEnemies().length===0 && enemies.size>0 &&
+            (gameMode!=="zombie" || zombieRunType==="normal") &&
+            (matchType!=="coop" || multiplayer?.isHost?.()))scheduleVictory();
       }
     }
 
@@ -1720,13 +1780,14 @@
       // Zombies follow players up the exterior POI ladders rather than remaining
       // ground-bound whenever the player reaches a roof.
       const rooftops=Array.isArray(options.getLadderSites?.())?options.getLadderSites():[];
-      const targetRoof=enemy.zombie && rooftops.find(site=>
+      const targetRoof=rooftops.find(site=>
         playerTarget.x>=site.x-1 && playerTarget.x<=site.x+site.w+1 &&
         playerTarget.z>=site.z-1 && playerTarget.z<=site.z+site.d+1 &&
         number(playerTarget.y)>site.h+2);
-      const climbSite=targetRoof && number(enemy.elevation)<targetRoof.h
+      const climbSite=targetRoof && number(enemy.elevation)<targetRoof.h+.6
         ? targetRoof : (enemy.climbSiteId ? rooftops.find(site=>site.id===enemy.climbSiteId) : null);
-      if(climbSite && number(enemy.elevation)<climbSite.h){
+      if(climbSite && number(enemy.elevation)<climbSite.h+.6){
+        enemy.climbing=true;
         enemy.climbSiteId=climbSite.id;
         const gap=Math.hypot(center.x-climbSite.ladderX,center.z-climbSite.ladderZ);
         if(gap>1.35){
@@ -1734,17 +1795,20 @@
           moveZ=(climbSite.ladderZ-center.z)/gap;
         }else{
           moveX=0;moveZ=0;
-          enemy.elevation=Math.min(climbSite.h,number(enemy.elevation)+deltaSeconds*6);
+          enemy.elevation=Math.min(climbSite.h+.6,number(enemy.elevation)+deltaSeconds*6);
           enemy.rotationY=faceAngle(center,playerTarget);
         }
       }else if(enemy.climbSiteId && number(enemy.elevation)>0){
         const site=rooftops.find(item=>item.id===enemy.climbSiteId);
+        enemy.climbing=false;
         if(site && number(enemy.elevation)>=site.h){
-          enemy.elevation=site.h;
-          // Step toward the target across the flat roof after climbing.
+          enemy.elevation=site.h+.6;
+          // Stay on the rooftop while walking; don't path through the building.
           const gap=Math.hypot(center.x-playerTarget.x,center.z-playerTarget.z)||1;
           moveX=(playerTarget.x-center.x)/gap;moveZ=(playerTarget.z-center.z)/gap;
         }
+      }else{
+        enemy.climbing=false;
       }
       const length = Math.hypot(moveX, moveZ);
       const step = length > .001 ? Math.min(1.1, speed * deltaSeconds) : 0;
@@ -1819,7 +1883,7 @@
         rotationY: enemy.rotationY,
         movementBlend: defeated ? 0 : enemy.movementBlend,
         walkPhase: enemy.walkPhase,
-        elevation: number(enemy.elevation),
+        elevation: number(enemy.elevation),climbing:Boolean(enemy.climbing),
         gaitClass: enemy.gaitClass, gaitStride: enemy.gaitStride, gaitSwing: enemy.gaitSwing,
         gaitBob: enemy.gaitBob, gaitLean: enemy.gaitLean,
         firing: now < enemy.firingUntil,
@@ -2536,6 +2600,36 @@
       // the lowered aiming viewmodel instead of leaving it at the hip position.
       const muzzle = playerMuzzleOrigin(origin, direction, yaw, pitch, weapon, aiming);
 
+      if(weapon.explosive){
+        // Rockets have travel time and detonating splash, not hitscan damage.
+        // Select the nearest actual surface/actor so close-range rockets explode
+        // where they hit rather than passing through a zombie or another player.
+        const worldImpact=resolveWorldImpact(origin,direction,weapon.range);
+        const enemyTarget=findTarget(origin,direction,weapon.range);
+        const playerTarget=findRemotePlayerTarget(origin,direction,weapon.range);
+        let hitDistance=worldImpact.distance;
+        let destination=worldImpact.point;
+        if(enemyTarget && enemyTarget.distance<hitDistance){
+          hitDistance=enemyTarget.distance;
+          destination=pointAlongRay(origin,direction,hitDistance);
+        }
+        if(playerTarget && playerTarget.distance<hitDistance){
+          hitDistance=playerTarget.distance;
+          destination=pointAlongRay(origin,direction,hitDistance);
+        }
+        if(worldImpact.kind==="glass" && worldImpact.distance<=hitDistance+.05)pushGlassShatter(worldImpact,now);
+        const travel=Math.hypot(destination.x-muzzle.x,destination.y-muzzle.y,destination.z-muzzle.z);
+        const duration=clamp(travel/Math.max(35,weapon.projectileSpeed||84)*1000,150,1100);
+        worldEffects.rockets.push({origin:{...muzzle},target:{...destination},startAt:now,duration,style:"player-rocket"});
+        worldEffects.explosions.push({point:{...destination},startAt:now+duration,duration:900,
+          radius:weapon.explosionRadius||10,damageMin:weapon.damage,damageMax:weapon.damage,
+          sourcePlayer:true,resolved:false,seed:Math.random()*1000});
+        if(worldEffects.rockets.length>24)worldEffects.rockets.splice(0,worldEffects.rockets.length-24);
+        if(worldEffects.explosions.length>28)worldEffects.explosions.splice(0,worldEffects.explosions.length-28);
+        if(!weapon.noAmmo && ammo.magazine<=0 && ammo.reserve>0)setTransientStatus("Magazine empty - R to reload",1300);
+        syncHud();options.invalidate?.();
+        return;
+      }
       const pelletCount = Math.max(1, Math.floor(number(weapon.pellets, 1)));
       const hits = [];
       const pelletEndpoints = [];
@@ -3158,6 +3252,7 @@
         hostEnemySyncSamples.set(id,{x,z,at:now});
         const snapshot={
           id,x,z,vx,vz,rotationY:number(enemy.rotationY),giant:Boolean(enemy.giant),
+          elevation:number(enemy.elevation),climbing:Boolean(enemy.climbing),
           health:Math.max(0,number(enemy.health)), weaponKey:String(enemy.weaponKey || "rifle"),
           movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
           gaitClass:String(enemy.gaitClass||"walker"),
@@ -3236,6 +3331,8 @@
           vx:number(snapshot.vx), vz:number(snapshot.vz), movementBlend:clamp(number(snapshot.movementBlend,enemy.movementBlend),0,1), receivedAt,
         };
         enemy.health=Math.max(0,number(snapshot.health,enemy.health));
+        enemy.elevation=Math.max(0,number(snapshot.elevation,enemy.elevation));
+        enemy.climbing=Boolean(snapshot.climbing);
         enemy.weaponKey=String(snapshot.weaponKey || enemy.weaponKey || "rifle"); enemy.weaponLabel=ENEMY_WEAPONS[enemy.weaponKey]?.label || enemy.weaponLabel || "Rifle";
         enemy.synthetic=Boolean(snapshot.synthetic);
         enemy.giant=Boolean(snapshot.giant);
@@ -3258,6 +3355,36 @@
 
     function multiplayerEvent(event,lobby) {
       if (!event) return;
+      if(event.type==="rocket-blast" && event.senderId!==multiplayer?.playerId &&
+          ["private","coop"].includes(matchType) && roundState==="playing"){
+        // Remote explosions apply once on the receiving player's client.
+        // Damage is computed from the receiver's live position, never from a
+        // client-asserted victim or arbitrary raw-damage multiplier.
+        const sourcePlayer=(lobby?.players||[]).find(p=>p.id===event.senderId);
+        if(!sourcePlayer)return;
+        const enemyId=String(event.payload?.enemyId||"");
+        if(enemyId && event.senderId!==lobby?.hostId)return;
+        const raw=event.payload?.point||{};
+        const point={x:number(raw.x,NaN),y:number(raw.y,NaN),z:number(raw.z,NaN)};
+        if(![point.x,point.y,point.z].every(Number.isFinite))return;
+        const radius=clamp(number(event.payload?.radius,10),1,14);
+        const damage=clamp(number(event.payload?.damage,145),0,190);
+        const victim=options.getPlayer?.();
+        if(!victim)return;
+        const local={x:number(victim.x),y:number(victim.y,5.5),z:number(victim.z)};
+        const hurt=splashDamage(point,local,radius,damage);
+        worldEffects.explosions.push({point,startAt:performance.now(),duration:800,
+          radius,resolved:true,seed:Math.random()*1000});
+        if(hurt>0){
+          const enemy=enemyId ? enemies.get(enemyId) : null;
+          const source=enemy||{
+            id:event.senderId,x:point.x,z:point.z,weaponKey:"rocket",weaponLabel:"Rocket Launcher",
+            machine:{name:sourcePlayer.name||"Player"}
+          };
+          damagePlayer(hurt,source,victim);
+        }
+        return;
+      }
       if (event.type==="npc-hit" && matchType==="coop" && event.senderId===lobby?.hostId && event.targetId===multiplayer?.playerId && roundState==="playing") {
         const enemy=enemies.get(String(event.payload?.enemyId || ""));
         if (enemy && enemy.health>0) damagePlayer(Math.min(80,Math.max(0,number(event.payload?.damage))),enemy,options.getPlayer?.());

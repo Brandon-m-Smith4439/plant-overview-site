@@ -1688,6 +1688,22 @@
       return 180 - Math.atan2(dx, dz) * 180 / Math.PI;
     }
 
+    function crossingPortalTarget(from,to) {
+      const bounds=options.getPlantBounds?.();
+      if(!Array.isArray(bounds)||bounds.length<4)return null;
+      const [left,front,right,back]=bounds.map(Number);
+      const portals=options.getPortalWaypoints?.()||[];
+      const south=portals.find(p=>p.id==="south");
+      const east=portals.find(p=>p.id==="east");
+      // Route across a real doorway instead of steering straight into solid walls.
+      if(south && ((from.z<front-.5&&to.z>front+.5)||(from.z>front+.5&&to.z<front-.5))) {
+        return {x:south.x,z:front+(from.z<front ? 5 : -5)};
+      }
+      if(east && ((from.x>right+.5&&to.x<right-.5)||(from.x<right-.5&&to.x>right+.5))) {
+        return {x:right+(from.x>right ? -5 : 5),z:east.z};
+      }
+      return null; // North/west are open boundaries.
+    }
     function updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, lineOfSight) {
       if (enemy.health <= 0) {
         enemy.movementBlend = 0;
@@ -1782,10 +1798,17 @@
       const isPursuing=(lineOfSight || now-enemy.lastSeenAt<9000) && distance>loadout.preferredMax
         && (moveX*towardX+moveZ*towardZ)>.23;
       if(isPursuing) {
-        const waypoint=navigateEnemy(enemy,center,playerTarget,now);
-        if(waypoint!==playerTarget) {
+        const portalGoal=crossingPortalTarget(center,playerTarget);
+        const routeGoal=portalGoal||playerTarget;
+        const waypoint=navigateEnemy(enemy,center,routeGoal,now);
+        if(waypoint!==playerTarget || portalGoal) {
           const wx=waypoint.x-center.x,wz=waypoint.z-center.z,wl=Math.hypot(wx,wz)||1;
           moveX=wx/wl;moveZ=wz/wl;
+          if(portalGoal && wl<1.3){
+            const side=portalGoal.z===playerTarget.z?0:1;
+            moveX=(playerTarget.x-center.x)/Math.max(1,Math.hypot(playerTarget.x-center.x,playerTarget.z-center.z));
+            moveZ=(playerTarget.z-center.z)/Math.max(1,Math.hypot(playerTarget.x-center.x,playerTarget.z-center.z));
+          }
         }
       } else {
         enemy.navRoute=null;enemy.navIndex=0;

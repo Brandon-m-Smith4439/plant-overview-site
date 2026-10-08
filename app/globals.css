@@ -9179,3 +9179,20 @@ body.viewer-fullscreen-fallback-active {
   .combat-station-prompt span {font-size:.67rem;}
   .combat-station-prompt button {white-space:nowrap;}
 }
+
+/* v0.13.79 - survival exterior. Scope to active combat classes; normal
+   production/editor sky and geometry remain unchanged. */
+.model-frame.combat-zombie-wasteland {
+  background:
+    radial-gradient(ellipse at 68% 31%,rgba(118,104,75,.14),transparent 30%),
+    repeating-linear-gradient(166deg,transparent 0 46px,rgba(23,26,25,.12) 47px 49px),
+    linear-gradient(180deg,#11171c 0%,#222a2c 41%,#555247 70%,#353830 100%) !important;
+}
+.model-frame.combat-desert-exterior {
+  background:
+    radial-gradient(ellipse at 65% 25%,rgba(255,251,215,.77) 0 5%,rgba(255,226,160,.14) 20%,transparent 38%),
+    linear-gradient(180deg,#83b4c8 0%,#b6d4d5 41%,#ecd3ac 72%,#d4b383 100%) !important;
+}
+.studio-tabs.studio-browser-tabs { flex-wrap:wrap; }
+.studio-combat-anchors { margin-top:12px;padding:12px;border:1px solid rgba(122,179,195,.3);border-radius:10px;background:rgba(40,69,84,.08); }
+.studio-combat-anchors[hidden] { display:none !important; }

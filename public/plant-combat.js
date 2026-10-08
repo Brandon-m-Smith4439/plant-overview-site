@@ -828,7 +828,7 @@
         const radius=distance+(step%4)*3.4;
         const x=px+Math.cos(angle)*radius,z=pz+Math.sin(angle)*radius;
         if (bounds.length>=4 && (x<number(bounds[0])+4 || x>number(bounds[2])-4 || z<number(bounds[1])+4 || z>number(bounds[3])-4)) continue;
-        if (!pointBlockedByObstacle(x,z,2.3)) return {x,z};
+        if (!pointBlockedByObstacle(x,z,2.3) && options.canPlaceStation?.(x,z)!==false) return {x,z};
       }
       // A blocked station is not placed inside solid machinery.
       return null;
@@ -2341,7 +2341,7 @@
         enemy.rotationY = faceAngle(source, playerTarget);
         if (!reloading && now >= enemy.nextShotAt) {
           if (target.id && enemy.zombie && matchType==="coop") {
-            const hitDamage=(loadout.damageMin+Math.random()*Math.max(0,loadout.damageMax-loadout.damageMin))*activeDifficultyConfig().damage;
+            const hitDamage=loadout.damageMin+Math.random()*Math.max(0,loadout.damageMax-loadout.damageMin);
             enemy.nextShotAt=now+Math.max(450,loadout.fireMin);
             enemy.shotStartedAt=now;enemy.shotEndsAt=now+360;
             multiplayer?.sendEvent?.("npc-hit",{enemyId:enemy.id,damage:hitDamage},target.id).catch(()=>{});

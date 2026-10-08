@@ -2457,7 +2457,7 @@
       entries.push({ kind: "column", column, x: column.x - 1.18, z: column.z - 1.18, w: 2.36, d: 2.36 });
     });
     displayedWallSections().forEach((wall) => {
-      if (state.walls[wall.id] === false) return;
+      if (state.walls[wall.id] === false || state.walls[String(wall.id).split("-")[0]] === false) return;
       entries.push({ kind: "wall", wall, x: wall.x, z: wall.z, w: wall.w, d: wall.d });
     });
     walkCollisionCandidates().forEach((machine) => {
@@ -2782,7 +2782,7 @@
       });
     });
     displayedWallSections().forEach((wall) => {
-      if (state.walls[wall.id] === false) return;
+      if (state.walls[wall.id] === false || state.walls[String(wall.id).split("-")[0]] === false) return;
       entries.push({
         x: Number(wall.x) || 0,
         y: Number(wall.y) || 0,
@@ -6920,11 +6920,17 @@
         window.requestAnimationFrame(() => {
           if (state.cameraMode !== "walk" || combatController?.isActive?.()) return;
           combatController.start(mode);
+          // Wall geometry and the spatial index change on entering combat;
+          // the normal-mode wall index must never block a gameplay doorway.
+          invalidateWalkSpatialIndex();
+          combatOccluderCache.at=-Infinity;
           syncCombatButtons(true, mode);
           showToast(mode === "zombie" ? "Choose Zombie difficulty and Normal or Endless mode, then press Start." : "Combat starts in 2 seconds. Get ready.");
         });
       } else {
         combatController.stop();
+        invalidateWalkSpatialIndex();
+        combatOccluderCache.at=-Infinity;
         syncCombatButtons(false, mode);
         if (state.cameraMode === "walk") setWalkMode(false);
       }
@@ -13522,7 +13528,7 @@
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(
       "plant:shell",
-      `${bounds.join("|")}|${paintProgress(state.paint.wallStageId, 3).toFixed(3)}|${state.paint.wallBefore}|${state.paint.wallAfter}|${JSON.stringify(state.walls)}|${state.cameraMode}|${JSON.stringify(state.roof)}`,
+      `${bounds.join("|")}|${paintProgress(state.paint.wallStageId, 3).toFixed(3)}|${state.paint.wallBefore}|${state.paint.wallAfter}|${JSON.stringify(state.walls)}|${state.cameraMode}|${JSON.stringify(state.roof)}|${combatController?.isActive?.()?"portal-walls":"normal-walls"}`,
       drawShell,
     );
     drawRetainedObject(

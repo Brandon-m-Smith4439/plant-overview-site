@@ -499,6 +499,16 @@
     let playerDeathDuration = 5000;
     let respawnEndsAt = 0;
     let respawnDisplay = 0;
+    const COOP_REVIVE_WINDOW_MS=22000;
+    const COOP_REVIVE_RADIUS=9;
+    let reviveUntil=0;
+    let nextMeleeAt=0;
+    let meleeSwingUntil=0;
+    let lastRevivePromptAt=0;
+    const revivePrompt=document.createElement("div");
+    revivePrompt.className="combat-revive-prompt";
+    revivePrompt.hidden=true;
+    hud.appendChild(revivePrompt);
     let directionCalloutTimer = 0;
     let roundRevealSerial = 0;
     let roundStartedAt = 0;
@@ -631,8 +641,11 @@
     function syncRestartButton() {
       if (!restartButton) return;
       if (roundState==="respawn-choice") {
-        restartButton.disabled=false;
-        restartButton.innerHTML='<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Respawn</strong><small>Return to your team with full health</small></span>';
+        const waiting=reviveUntil>Date.now();
+        restartButton.disabled=waiting;
+        restartButton.innerHTML=waiting
+          ? '<span class="combat-restart-icon" aria-hidden="true">✚</span><span class="combat-restart-copy"><strong>Awaiting revive</strong><small>Teammates can rescue you before the timer runs out</small></span>'
+          : '<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Respawn</strong><small>Return to your team with full health</small></span>';
         return;
       }
       const waitingForHost=matchType==="coop" && multiplayer?.getLobby?.() && !multiplayer.isHost?.();
@@ -1982,6 +1995,7 @@
         firing: now < playerRecoilUntil,
         muzzleFlash: now < playerMuzzleUntil,
         recoilProgress,
+        meleeSwingProgress:now<meleeSwingUntil?clamp((meleeSwingUntil-now)/330,0,1):0,
         reloading,
         reloadProgress,
         moving: Boolean(player.moving),
@@ -2200,6 +2214,37 @@
     function canRespawnAfterDeath() {
       return matchType !== "private" && (gameMode === "combat" || (gameMode === "zombie" && zombieRunType === "normal"));
     }
+    function nearestDownedAlly(){
+      if(matchType!=="coop" || !multiplayer?.getLobby?.() || roundState!=="playing")return null;
+      const local=options.getPlayer?.();
+      if(!local)return null;
+      let nearest=null,best=COOP_REVIVE_RADIUS;
+      for(const ally of multiplayer.remotePlayers?.()||[]){
+        const state=ally.state||{};
+        if(state.alive!==false || number(state.downedUntil,0)<=Date.now())continue;
+        const distance=Math.hypot(number(local.x)-number(state.x),number(local.z)-number(state.z));
+        if(distance<best){best=distance;nearest={ally,distance,seconds:Math.ceil((state.downedUntil-Date.now())/1000)};}
+      }
+      return nearest;
+    }
+    function updateRevivePrompt(now=performance.now()){
+      if(now-lastRevivePromptAt<200)return;
+      lastRevivePromptAt=now;
+      const target=nearestDownedAlly();
+      revivePrompt.hidden=!target;
+      if(target)revivePrompt.textContent=`[E] REVIVE ${target.ally.name||"TEAMMATE"} · ${target.seconds}s LEFT`;
+    }
+    async function reviveNearbyAlly(){
+      const nearest=nearestDownedAlly();
+      if(!nearest)return false;
+      const target=nearest.ally;
+      // Receiver verifies the current down timer and actual sender distance.
+      try{
+        await multiplayer.sendEvent("revive-player",{targetId:target.id},target.id);
+        setTransientStatus(`Reviving ${target.name||"teammate"}`,1100);
+      }catch{setTransientStatus("Revive failed - check connection",1100);}
+      return true;
+    }
 
     function localRoundStats() {
       return { kills:regularKills+headshotKills, headshots:headshotKills, deaths:playerDeaths, points:playerPoints };
@@ -2285,6 +2330,8 @@
       const killerLabel=String(killer?.machine?.name || "Zombie");
       const distance=source&&player ? Math.hypot(source.x-number(player.x),source.z-number(player.z)) : 0;
       roundState="respawning";
+      reviveUntil=matchType==="coop"&&multiplayer?.getLobby?.()
+        ? Date.now()+COOP_REVIVE_WINDOW_MS : 0;
       respawnEndsAt=now+RESPAWN_DELAY_MS;
       playerDeathStartedAt=now;
       playerDeathDuration=RESPAWN_DELAY_MS;
@@ -2315,24 +2362,40 @@
     }
 
     function updatePlayerRespawn(now) {
-      if (roundState==="respawn-choice") return true;
-      if (roundState!=="respawning") return false;
-      if (now<respawnEndsAt) return true;
-      respawnEndsAt=0;
-      roundState="respawn-choice";
-      if (roundOverlay) {roundOverlay.hidden=false;roundOverlay.classList.remove("victory","killer-reveal");}
-      if (killerReveal) killerReveal.hidden=false;
-      roundActions?.classList.remove("locked");
+      if(roundState!=="respawning" && roundState!=="respawn-choice")return false;
+      const waiting=reviveUntil>Date.now();
+      if(roundState==="respawning" && now<respawnEndsAt)return true;
+      if(roundState==="respawning"){
+        respawnEndsAt=0;
+        roundState="respawn-choice";
+        if(roundOverlay){roundOverlay.hidden=false;roundOverlay.classList.remove("victory","killer-reveal");}
+        if(killerReveal)killerReveal.hidden=false;
+        roundActions?.classList.remove("locked");
+        options.releasePointer?.();
+      }
+      if(waiting){
+        if(roundCopy)roundCopy.textContent="Teammate can revive you · "+Math.ceil((reviveUntil-Date.now())/1000)+" seconds remaining.";
+        syncRestartButton();
+        return true;
+      }
+      if(reviveUntil){
+        reviveUntil=0;
+        if(!canRespawnAfterDeath()){
+          finishRound("lost");
+          return true;
+        }
+        if(roundCopy)roundCopy.textContent="Revive window expired. Select Respawn to return to the fight.";
+      }
       syncRestartButton();
-      options.releasePointer?.();
-      options.invalidate?.();
       return true;
     }
 
-    function resumePlayerAfterDeath() {
-      if (!active || roundState!=="respawn-choice") return false;
+    function resumePlayerAfterDeath(revived=false) {
+      if (!active || !["respawn-choice","respawning"].includes(roundState)) return false;
+      if(!revived && (roundState==="respawning" || reviveUntil>Date.now()))return false;
       roundRevealSerial++;
-      respawnEndsAt=0;respawnDisplay=0;playerHealth=100;playerShield=SHIELD_MAX;
+      respawnEndsAt=0;respawnDisplay=0;reviveUntil=0;
+      playerHealth=revived?75:100;playerShield=revived?0:SHIELD_MAX;
       lastDamageAt=performance.now();lastShieldUpdateAt=lastDamageAt;
       playerDeathStartedAt=0;roundState="playing";
       frame.classList.remove("combat-death-cinematic","combat-player-dead");
@@ -2340,7 +2403,7 @@
       if (killerReveal) killerReveal.hidden=true;
       options.resetDeathCinematic?.();
       options.setMovementLocked?.(false);
-      setTransientStatus("RESPAWNED · BACK IN THE FIGHT",1200);
+      setTransientStatus(revived?"REVIVED BY TEAMMATE":"RESPAWNED · BACK IN THE FIGHT",1200);
       syncHud();
       multiplayer?.heartbeat?.();
       window.requestAnimationFrame(()=>options.capture?.());
@@ -2577,6 +2640,48 @@
       };
     }
 
+    function meleeAttack(){
+      if(!active||paused||roundState!=="playing")return false;
+      const now=performance.now();
+      if(now<nextMeleeAt)return false;
+      const player=options.getPlayer?.();
+      if(!player?.engaged)return false;
+      nextMeleeAt=now+780;
+      meleeSwingUntil=now+330;
+      const origin={x:number(player.x),y:number(player.y,5.5),z:number(player.z)};
+      const direction=directionFromCamera(player);
+      const target=findTarget(origin,direction,6.5);
+      if(target && target.enemy.health>0 && target.distance<=6.5){
+        const impact=pointAlongRay(origin,direction,target.distance);
+        const enemy=target.enemy;
+        const previousHealth=enemy.health;
+        enemy.health=Math.max(0,enemy.health-42);
+        enemy.hitReactUntil=now+360;
+        enemy.blockedUntil=now+500;
+        const shove=normalizeDirection({x:enemyCenter(enemy).x-origin.x,y:0,z:enemyCenter(enemy).z-origin.z});
+        tryMoveEnemy(enemy,shove.x*3.5,shove.z*3.5);
+        pushBloodBurst(enemy,impact,now,enemy.health<=0);
+        if(previousHealth>0 && enemy.health<=0){
+          markEnemyDefeated(enemy,now,shove);
+          regularKills++;
+        }
+        if(matchType==="coop" && multiplayer?.getLobby?.())
+          multiplayer.sendEvent?.("enemy-hit",{enemyId:enemy.id,damage:42,
+            knockX:shove.x*3.5,knockZ:shove.z*3.5,deaths:playerDeaths,
+            kills:regularKills+headshotKills},"").catch(()=>{});
+        showHitmarker(enemy.health<=0,false);
+      }
+      if(matchType==="private" && multiplayer?.getLobby?.()){
+        const remote=findRemotePlayerTarget(origin,direction,6.5);
+        if(remote && remote.distance<=6.5)
+          multiplayer.sendEvent?.("player-hit",{damage:32,headshot:false,weapon:"melee"},
+            remote.player.id).catch(()=>{});
+      }
+      setTransientStatus("MELEE · [F] TO STRIKE",420);
+      options.invalidate?.();
+      return true;
+    }
+
     function fire() {
       if (!active || reloading || roundState !== "playing") return;
       const player = options.getPlayer?.();
@@ -2714,7 +2819,7 @@
       else setTransientStatus("Incoming fire - " + sourceName, 600);
       if (playerHealth <= 0) {
         recordPlayerDeath();
-        if (canRespawnAfterDeath()) beginPlayerRespawn(enemy,player);
+        if (canRespawnAfterDeath() || (matchType==="coop" && multiplayer?.getLobby?.()))beginPlayerRespawn(enemy,player);
         else finishRound("lost", enemy, player);
       }
       syncHud();
@@ -2905,6 +3010,7 @@
       hostWorldSeq = 0;
       lastAppliedHostWorldSeq = -1;
       playerShield = SHIELD_MAX;
+      reviveUntil=0;nextMeleeAt=0;meleeSwingUntil=0;revivePrompt.hidden=true;
       aiming = false;
       frame.classList.remove("combat-aiming");
       if (scopeOverlay) scopeOverlay.hidden = true;
@@ -3039,6 +3145,7 @@
         frameRequest = window.requestAnimationFrame(loop);
         return;
       }
+      updateRevivePrompt(now);
       if (updatePlayerRespawn(now)) {
         if (matchType==="coop" && multiplayer?.isHost?.()) {
           cleanupZombieCorpses(now);
@@ -3355,6 +3462,16 @@
 
     function multiplayerEvent(event,lobby) {
       if (!event) return;
+      if(event.type==="revive-player" && matchType==="coop" &&
+          event.targetId===multiplayer?.playerId && reviveUntil>Date.now()
+          && ["respawning","respawn-choice"].includes(roundState)){
+        const sender=(lobby?.players||[]).find(p=>p.id===event.senderId);
+        const s=sender?.state||{},local=options.getPlayer?.();
+        if(!sender||!local||s.alive!==true)return;
+        if(Math.hypot(number(s.x)-number(local.x),number(s.z)-number(local.z))>COOP_REVIVE_RADIUS+1.5)return;
+        resumePlayerAfterDeath(true);
+        return;
+      }
       if(event.type==="rocket-blast" && event.senderId!==multiplayer?.playerId &&
           ["private","coop"].includes(matchType) && roundState==="playing"){
         // Remote explosions apply once on the receiving player's client.
@@ -3425,6 +3542,9 @@
         const damage=Math.max(0,number(event.payload?.damage));
         enemy.health=Math.max(0,enemy.health-damage);
         enemy.hitReactUntil=performance.now()+180;
+        if(number(event.payload?.knockX)||number(event.payload?.knockZ))
+          tryMoveEnemy(enemy,clamp(number(event.payload.knockX),-4,4),
+            clamp(number(event.payload.knockZ),-4,4));
         if (enemy.health<=0) {
           markEnemyDefeated(enemy,performance.now());
           if (aliveEnemies().length===0 && enemies.size>0 && (gameMode!=="zombie" || zombieRunType==="normal")) scheduleVictory();
@@ -3467,7 +3587,10 @@
       lastLocalSyncSample={x,z,at:now};
       const state={
         x,y:number(player.y,5.5),z,yaw:number(player.yaw),pitch:number(player.pitch),vx,vz,moving:Boolean(player.moving),
-        health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,alive:!["lost","respawning","respawn-choice"].includes(roundState),kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths,points:playerPoints,
+        health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,
+        alive:!["lost","respawning","respawn-choice"].includes(roundState),
+        downedUntil:reviveUntil>Date.now()?reviveUntil:0,
+        kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths,points:playerPoints,
       };
       if (zombieEndless() && multiplayer?.isHost?.()) Object.assign(state,{wave:zombieWave,waveTotal,waveSpawned,waveDefeated,boxX:mysteryBox?.x,boxZ:mysteryBox?.z,healthX:healthStation?.x,healthZ:healthStation?.z});
       if (matchType === "coop" && multiplayer?.isHost?.() && roundState !== "setup") {
@@ -3602,6 +3725,7 @@
       if (matchSetup) matchSetup.hidden = true;
       multiplayer?.leave?.();
       multiplayerStartedRevision=0;
+      reviveUntil=0;revivePrompt.hidden=true;
       options.onStateChange?.(false, gameMode);
       options.invalidate?.();
     }
@@ -3609,7 +3733,13 @@
     function handleKeyDown(event) {
       if (!active || roundState === "setup") return;
       if (event.target?.matches?.("input, select, textarea, [contenteditable='true']")) return;
-      if (event.code === "KeyE") {event.preventDefault();buyNearbyStation();return;}
+      if (event.code === "KeyE") {
+        event.preventDefault();
+        if(nearestDownedAlly())reviveNearbyAlly();
+        else buyNearbyStation();
+        return;
+      }
+      if (event.code === "KeyF") {event.preventDefault();meleeAttack();return;}
       if (event.code === "Digit1") {
         event.preventDefault();
         switchWeapon(playerLoadout()[0]);
@@ -3779,6 +3909,7 @@
       },
       destroy() {
         stop();
+        revivePrompt.remove();
         document.removeEventListener("keydown", handleKeyDown, true);
         document.removeEventListener("mousedown", handleMouseDown, true);
         document.removeEventListener("mouseup", handleMouseUp, true);

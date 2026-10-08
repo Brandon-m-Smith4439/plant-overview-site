@@ -2631,7 +2631,7 @@
       const count=state.stageFloat >= stages.length-1 ? 5 : 3;
       for(let panel=0;panel<count;panel+=1){
         const offset=2.2+panel*Math.max(1.3,(machine.w-5)/Math.max(1,count-1));
-        specs.push({id:`procedural-lite-${panel}`,box:localBox3d(machine,Math.min(offset,machine.w-1),.55,.55,Math.max(.5,machine.d-2),Math.max(2,machine.h+4),colors.glass,1)});
+        specs.push({id:`procedural-lite-${panel}`,box:localBox3d(machine,Math.min(offset,machine.w-1),1,.55,Math.max(.5,machine.d-2),Math.max(2,machine.h+4),colors.glass)});
       }
     } else if (type === "aFrame" || type === "aFrameTruck") {
       const panelDepth=Math.max(.3,machine.d*.12);
@@ -2734,6 +2734,7 @@
         const centerZ = Number(hitbox.z) + halfDepth;
         entries.push({
           kind:"machine",
+          machineId:String(machine.instanceId || machine.id || machine.name || "machine"),
           x: centerX - extentX,
           y: Number(hitbox.y) || 0,
           z: centerZ - extentZ,
@@ -11521,8 +11522,8 @@
         localLine(machine,[x,1,machine.d-.6],[x,topHeight,machine.d/2],machine.color,isTruck ? 3 : 2.5,alpha);
       }
       localLine(machine,[.5,topHeight,machine.d/2],[machine.w-.5,topHeight,machine.d/2],machine.color,isTruck ? 4 : 3,alpha);
-      if (!proceduralGlassShattered(machine,"procedural-glass-left")) box(localBox(machine,1,1.4,.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
-      if (!proceduralGlassShattered(machine,"procedural-glass-right")) box(localBox(machine,1,1.4,machine.d-Math.max(.4,machine.d*.12)-.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass),alpha*.54,1);
+      if (!proceduralGlassShattered(machine,"procedural-glass-left")) box(localBox3d(machine,1,.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass,1.4),alpha*.54,1);
+      if (!proceduralGlassShattered(machine,"procedural-glass-right")) box(localBox3d(machine,1,machine.d-Math.max(.3,machine.d*.12)-.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass,1.4),alpha*.54,1);
       const wheelXs = isTruck ? [1.5,machine.w/2,machine.w-1.5] : [1,machine.w-1];
       wheelXs.forEach((x) => {
         [0.7,machine.d-.7].forEach((z) => {

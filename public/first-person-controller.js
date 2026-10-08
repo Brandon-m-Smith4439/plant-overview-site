@@ -388,6 +388,13 @@
       setInputLocked,
       isInputLocked: () => inputLocked,
       isMoving: () => Math.abs(velocityX) + Math.abs(velocityZ) > 0.02 || keys.size > 0 || Math.abs(touchForward) + Math.abs(touchStrafe) > .02,
+      isSprinting: () => enabled && !inputLocked &&
+        (touchSprinting || keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
+        (Math.hypot(velocityX,velocityZ)>1.2 || Math.hypot(touchForward,touchStrafe)>.12),
+      // Expose a normalized gait phase for viewmodel running animation.
+      gaitMotion: () => ({sprinting:enabled&&!inputLocked &&
+        (touchSprinting||keys.has("ShiftLeft")||keys.has("ShiftRight")),
+        phase:bobTime,speed:Math.hypot(velocityX,velocityZ)}),
       destroy() {
         stop();
         document.removeEventListener("keydown", handleKeyDown, true);

@@ -1373,6 +1373,9 @@
       if (!enemy || enemy.defeatedAt > 0) return;
       enemy.health = 0;
       enemy.defeatedAt = now;
+      const local=options.getPlayer?.();
+      const distance=Math.hypot(number(local?.x)-number(enemy.x),number(local?.z)-number(enemy.z));
+      playCombatSound("enemy-down",clamp(35/Math.max(10,distance),.1,.8));
       if (zombieEndless() && !coopFollower() && enemy.wave === zombieWave) waveDefeated=Math.min(waveTotal,waveDefeated+1);
       // Start the fall on the exact kill frame. Corpses also get a small
       // obstacle-aware slide so a nearby machine cannot visually swallow the
@@ -1473,6 +1476,7 @@
       for(const explosion of worldEffects.explosions){
         if(explosion.resolved || now<explosion.startAt)continue;
         explosion.resolved=true;
+        playCombatSound("explosion",.88);
         const radius=clamp(number(explosion.radius,10),1,14);
         const baseDamage=number(explosion.damageMax,145);
         const sourceEnemy=enemies.get(String(explosion.sourceEnemyId||""));
@@ -2601,6 +2605,7 @@
       if(!active || gameMode!=="zombie" || matchType!=="coop")return false;
       roundRevealSerial++;
       playerZombie=true;reviveUntil=0;respawnEndsAt=0;respawnDisplay=0;
+      playCombatSound("zombie-turn",1);
       playerHealth=165;playerShield=0;selectedWeapon="chainsaw";
       playerDeathStartedAt=0;roundState="playing";
       frame.classList.remove("combat-death-cinematic","combat-player-dead");
@@ -2629,6 +2634,7 @@
       options.resetDeathCinematic?.();
       options.setMovementLocked?.(false);
       setTransientStatus(revived?"REVIVED BY TEAMMATE":"RESPAWNED · BACK IN THE FIGHT",1200);
+      playCombatSound(revived?"revive":"pickup",.85);
       syncHud();
       multiplayer?.heartbeat?.();
       window.requestAnimationFrame(()=>options.capture?.());
@@ -2774,6 +2780,7 @@
       reloading = true;
       mouseHeld = false;
       setAiming(false);
+      playCombatSound("reload",.8);
       reloadStartedAt = performance.now();
       reloadEndsAt = reloadStartedAt + weapon.reloadMs;
       const serial = ++reloadSerial;
@@ -2789,6 +2796,7 @@
         reloadStartedAt = 0;
         reloadEndsAt = 0;
         setTransientStatus("Reloaded", 600);
+        playCombatSound("reload-end",.85);
         syncHud();
       }, weapon.reloadMs);
     }
@@ -2874,6 +2882,7 @@
       if(!player?.engaged)return false;
       nextMeleeAt=now+780;
       meleeSwingUntil=now+330;
+      playCombatSound(playerZombie?"chainsaw":"melee",.85);
       const origin={x:number(player.x),y:number(player.y,5.5),z:number(player.z)};
       const direction=directionFromCamera(player);
       const target=findTarget(origin,direction,6.5);
@@ -2921,6 +2930,8 @@
       nextPlayerShotAt = now + weapon.fireInterval;
       if (!weapon.noAmmo && ammo.magazine <= 0) { startReload(); return; }
       if (!weapon.noAmmo) ammo.magazine -= 1;
+      playCombatSound(weapon.key==="rocket"?"rocket":weapon.key==="chainsaw"?"chainsaw":
+        SOUND_PRESETS[weapon.key]?weapon.key:weapon.key==="smg"?"rifle":"handgun",.95);
       playerRecoilUntil = now + Math.max(90, weapon.fireInterval * .9);
       playerMuzzleUntil = weapon.melee ? 0 : now + 68;
 
@@ -3035,11 +3046,22 @@
       if (healthDamage > 0) {
         playerHealth = Math.max(0, playerHealth - healthDamage);
         showDamage();
+        playCombatSound("health-hit",.9);
+        frame.classList.remove("combat-health-hit");
+        void frame.offsetWidth;
+        frame.classList.add("combat-health-hit");
+        window.setTimeout(()=>frame.classList.remove("combat-health-hit"),570);
       } else if (shieldTrack) {
+        playCombatSound("shield-hit",.85);
         shieldTrack.classList.remove("hit");
         void shieldTrack.offsetWidth;
         shieldTrack.classList.add("hit");
         window.setTimeout(() => shieldTrack.classList.remove("hit"), 220);
+      }
+      if(absorbed>0 && playerShield<=0){
+        playCombatSound("shield-break",1);
+        frame.classList.add("combat-shield-break-flash");
+        window.setTimeout(()=>frame.classList.remove("combat-shield-break-flash"),1100);
       }
       showIncomingDirection(enemy, player, true);
       const sourceName = String(enemy?.machine?.name || "Enemy");
@@ -3047,6 +3069,7 @@
       else if (absorbed > 0 && healthDamage <= 0) setTransientStatus("Shield hit - " + sourceName, 520);
       else setTransientStatus("Incoming fire - " + sourceName, 600);
       if (playerHealth <= 0) {
+        playCombatSound("zombie-turn",.8);
         recordPlayerDeath();
         if(playerZombie)finishRound("lost",enemy,player);
         else if (canRespawnAfterDeath() || (matchType==="coop" && multiplayer?.getLobby?.()))beginPlayerRespawn(enemy,player);
@@ -3094,6 +3117,15 @@
       const shotDuration = loadout.melee ? 430 : loadout.explosive ? 390 : loadout.key === "sniper" ? 320 : 230;
       enemy.shotStartedAt = now;
       enemy.shotEndsAt = now + shotDuration;
+      if(loadout.melee){
+        const listener=options.getPlayer?.();
+        const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
+        playCombatSound("chainsaw",clamp(22/Math.max(8,distance),.09,.62));
+      }else if(Math.random()<.26){
+        const listener=options.getPlayer?.();
+        const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
+        playCombatSound("enemy-shot",clamp(22/Math.max(8,distance),.09,.5));
+      }
       enemy.firingUntil = now + shotDuration;
       enemy.muzzleFlashUntil = loadout.melee ? 0 : now + (loadout.explosive ? 145 : loadout.key === "sniper" ? 105 : 88);
       enemy.recoilUntil = now + (loadout.key === "sniper" || loadout.explosive ? 290 : 195);
@@ -3388,6 +3420,7 @@
         return;
       }
       updatePlayerShield(now);
+      updateCombatSoundscape(now);
       resolveExplosionDamage(now);
       if (!updateCountdown(now)) {
         if(playerIsSprinting()){
@@ -3685,7 +3718,13 @@
           targetX:number(snapshot.x,enemy.x), targetZ:number(snapshot.z,enemy.z), targetRotationY:number(snapshot.rotationY,enemy.rotationY),
           vx:number(snapshot.vx), vz:number(snapshot.vz), movementBlend:clamp(number(snapshot.movementBlend,enemy.movementBlend),0,1), receivedAt,
         };
+        const previouslyAlive=enemy.health>0;
         enemy.health=Math.max(0,number(snapshot.health,enemy.health));
+        if(previouslyAlive&&enemy.health<=0){
+          const listener=options.getPlayer?.();
+          const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
+          playCombatSound("enemy-down",clamp(35/Math.max(10,distance),.1,.8));
+        }
         // Corpse locations remain authoritative; do not smooth a fallen
         // employee back into a standing/animated walking position.
         if(enemy.health<=0) {
@@ -4018,6 +4057,7 @@
 
     function handleKeyDown(event) {
       if (!active || roundState === "setup") return;
+      unlockCombatAudio();
       if (event.target?.matches?.("input, select, textarea, [contenteditable='true']")) return;
       if(playerZombie && ["KeyE","Digit1","Digit2","Digit3","KeyR"].includes(event.code)){
         event.preventDefault();
@@ -4050,6 +4090,7 @@
       if(event.code==="KeyE")cancelReviveHold();
     }
     function handleMouseDown(event) {
+      unlockCombatAudio();
       if (!active || paused || ["lost","won"].includes(roundState) || options.isPointerLocked?.() !== true) return;
       if (event.button === 2) { event.preventDefault(); setAiming(true); return; }
       if (event.button !== 0) return;
@@ -4158,7 +4199,15 @@
       options.capture?.();
     });
     stationBuyButton?.addEventListener("click", () => buyNearbyStation());
-    hud.querySelector("[data-combat-pause-action='resume']")?.addEventListener("click", () => setPaused(false));
+    setCombatSoundEnabled(soundEnabled);
+    hud.querySelector("[data-combat-pause-action='audio']")?.addEventListener("click", () => {
+      setCombatSoundEnabled(!soundEnabled);
+    });
+    hud.querySelector("[data-combat-pause-action='resume']")?.addEventListener("click", () => {
+      unlockCombatAudio();
+      playCombatSound("pause",.7);
+      setPaused(false);
+    });
     hud.querySelector("[data-combat-pause-action='exit']")?.addEventListener("click", () => {
       stop();
       options.exitCombat?.();

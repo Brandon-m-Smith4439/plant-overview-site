@@ -6873,7 +6873,7 @@
       getEnemyHeadVolume: combatHeadVolume,
       getOccluders: combatOccluders,
       getBounds: floorBounds,
-      canPlaceStation: (x,z) => walkCanOccupy(x,z,2.3),
+      canPlaceStation: (x,z,radius=2.3) => walkCanOccupy(x,z,radius),
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
       capture: () => firstPersonController?.capture?.(),
       setMovementLocked: (locked) => firstPersonController?.setInputLocked?.(locked),

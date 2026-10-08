@@ -667,10 +667,10 @@
       const designedHead = options.getEnemyHeadVolume?.(record.machine, baseX, baseZ);
       const fallbackHead = {
         center: { x: baseX + size.w * .5, y: baseY + size.h * .805, z: baseZ + size.d * .5 },
-        radius: clamp(Math.min(size.w, size.d) * .31, .38, .62),
+        radius: clamp(Math.min(size.w, size.d) * .36, .46, .86),
       };
       const head = designedHead?.center && Number.isFinite(number(designedHead.radius, NaN))
-        ? { center:{ x:number(designedHead.center.x), y:number(designedHead.center.y), z:number(designedHead.center.z) }, radius:clamp(number(designedHead.radius), .32, .78) }
+        ? { center:{ x:number(designedHead.center.x), y:number(designedHead.center.y), z:number(designedHead.center.z) }, radius:clamp(number(designedHead.radius)*1.12, .44, 1.05) }
         : fallbackHead;
       return {
         head,
@@ -827,7 +827,8 @@
       const id = `zombie-spawn-${++zombieSpawnSerial}`;
       const machine = {
         ...template,
-        id, instanceId:id, name:giant ? `GIANT ${zombieSpawnSerial}` : `Zombie ${zombieSpawnSerial}`, short:giant ? "GIANT" : "Zombie",
+        id, instanceId:id, name:giant ? `GIANT ${template.name || "Plant member"}` : `${template.name || "Plant member"} · Zombie`,
+        short:giant ? "GIANT" : (template.short || template.name || "Zombie"),
         designId:giant ? "" : template.designId,
         w:giant ? Math.max(3.2,number(template.w,1.8)*2.05) : template.w,
         d:giant ? Math.max(3.2,number(template.d,1.8)*2.05) : template.d,
@@ -1369,10 +1370,10 @@
       for (const enemy of aliveEnemies()) {        const volumes = enemyHitVolumes(enemy);
         const headDistance = raySphere(origin, direction, volumes.head.center, volumes.head.radius);
         const bodyDistance = rayAabb(origin, direction, volumes.body, bestDistance);
-        const candidates = [
-          { zone: "head", distance: headDistance },
-          { zone: "body", distance: bodyDistance },
-        ];
+        // Head is authoritative when head and neck/body volumes overlap.
+        const candidates = Number.isFinite(headDistance) && headDistance < wallDistance-.05
+          ? [{zone:"head",distance:headDistance}]
+          : [{zone:"body",distance:bodyDistance}];
         for (const candidate of candidates) {
           if (!Number.isFinite(candidate.distance) || candidate.distance > bestDistance || candidate.distance >= wallDistance - .05) continue;
           best = { enemy, zone: candidate.zone };
@@ -1892,7 +1893,7 @@
         sprinting: Boolean(player.sprinting),
         engaged: Boolean(player.engaged),
         aiming,
-        scopeActive: aiming && Boolean(currentWeapon().scope),
+        scopeActive: aiming && !currentWeapon().melee,
         gameMode,
         defeated: roundState === "lost",
         deathProgress,
@@ -1903,7 +1904,7 @@
       const allowed = active && !paused && roundState === "playing" && !reloading && !currentWeapon().melee;
       aiming = Boolean(next && allowed);
       frame.classList.toggle("combat-aiming", aiming);
-      if (scopeOverlay) scopeOverlay.hidden = !(aiming && Boolean(currentWeapon().scope));
+      if (scopeOverlay) scopeOverlay.hidden = !(aiming && !currentWeapon().melee);
       options.setAimZoom?.(aiming, selectedWeapon);
       options.invalidate?.();
     }
@@ -2463,7 +2464,7 @@
         y: Math.cos(pitch),
         z: -Math.cos(yaw) * Math.sin(pitch),
       });
-      const ads = Boolean(weapon?.scope && isAiming);
+      const ads = Boolean(!weapon?.melee && isAiming);
       let forwardOffset = weapon?.key === "chainsaw" ? 1.05 : weapon?.key === "rocket" ? 1.22 : weapon?.key === "sniper" ? 1.72 : weapon?.key === "shotgun" ? 1.46 : weapon?.key === "handgun" ? .94 : (ads ? 1.66 : 1.34);
       let rightOffset = weapon?.key === "chainsaw" ? .2 : weapon?.key === "rocket" ? .3 : weapon?.key === "sniper" ? (ads ? .03 : .36) : weapon?.key === "shotgun" ? .18 : weapon?.key === "handgun" ? .28 : (ads ? .06 : .42);
       let upOffset = weapon?.key === "chainsaw" ? -.34 : weapon?.key === "rocket" ? -.22 : weapon?.key === "sniper" ? (ads ? -.11 : -.28) : weapon?.key === "shotgun" ? -.20 : weapon?.key === "handgun" ? -.24 : (ads ? -.13 : -.30);

@@ -203,18 +203,23 @@
       }
       const climb = getClimbSurface(next.x,next.z);
       const climbInput = Number(keys.has("Space") || keys.has("KeyW")) - Number(keys.has("KeyS"));
-      const roofLanding = climb?.kind === "roof" && verticalOffset >= climb.height - 1.35;
-      // Rooftop is a persistent floor at the upper face of the roof slab.
-      // Resolve contact BEFORE gravity; otherwise crossing the ladder top can
-      // move the player into the roof collider and let them fall inside.
+      const roofLanding = climb?.kind === "roof" && verticalOffset >= climb.height - 1.55;
       if (roofLanding) {
+        // A roof is a permanent floor contact, not a temporary jump apex.
         verticalVelocity = 0;
         verticalOffset = climb.height;
         jumpRequested = false;
       } else if (climb?.kind === "ladder" && climbInput !== 0) {
         verticalVelocity = 0;
-        verticalOffset = clamp(verticalOffset + climbInput * delta * 8, 0, climb.height);
+        verticalOffset = clamp(verticalOffset + climbInput * delta * 11, 0, climb.height);
         jumpRequested = false;
+        if (climbInput > 0 && verticalOffset >= climb.height - .42) {
+          // Step forward from the ladder onto the actual roof slab.
+          // Staying outside its footprint caused the previous roof fall-through.
+          verticalOffset = climb.height;
+          next.x = climb.landingX ?? climb.ladderX;
+          next.z = climb.landingZ ?? climb.z;
+        }
       } else {
         verticalVelocity -= 22 * delta;
         verticalOffset = Math.max(0, verticalOffset + verticalVelocity * delta);

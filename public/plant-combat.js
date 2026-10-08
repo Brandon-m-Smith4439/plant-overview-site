@@ -21,6 +21,13 @@
   const RESPAWN_DELAY_MS = 5000;
   const MYSTERY_BOX_COST = 950;
   const MYSTERY_ROLL_DURATION_MS = 4800;
+  const ZOMBIE_GAITS = Object.freeze({
+    shambler:{speed:.58,cycle:3.2,stride:.34,swing:.22,bob:.08,lean:2},
+    walker:{speed:.85,cycle:5.1,stride:.53,swing:.40,bob:.11,lean:4},
+    runner:{speed:1.21,cycle:8.8,stride:.82,swing:.70,bob:.20,lean:10},
+    sprinter:{speed:1.52,cycle:12.6,stride:1.04,swing:.94,bob:.27,lean:17},
+    giant:{speed:.66,cycle:3.4,stride:.64,swing:.51,bob:.16,lean:6},
+  });
   const MYSTERY_RISE_DURATION_MS = 1750;
   const MYSTERY_CLAIM_WINDOW_MS = 11500;
   const MYSTERY_LOWER_DURATION_MS = 2300;
@@ -738,6 +745,10 @@
       record.rollDirection = unit > .5 ? 1 : -1;
       record.strafeSign = unit > .5 ? 1 : -1;
       record.speedBias = .86 + unit * .3;
+      record.gaitClass = record.zombie ? "walker" : "combat";
+      record.gaitCycle = 7.5;
+      record.gaitStride = .55;record.gaitSwing=.4;record.gaitBob=.1;record.gaitLean=0;
+      record.navProgressAt = 0;
       return record;
     }
 
@@ -827,7 +838,13 @@
       record.giant=Boolean(giant);
       record.wave=zombieWave;
       record.health*=Math.min(5,1+Math.max(0,zombieWave-1)*.13)*(giant ? 7 : 1);
-      record.modeSpeedMultiplier*=giant ? .75 : 1+Math.min(.65,Math.max(0,zombieWave-1)*.018);
+      record.modeSpeedMultiplier*=1+Math.min(.65,Math.max(0,zombieWave-1)*.018);
+      const roll=stableUnit(id+":gait"),danger=Math.min(.25,Math.max(0,zombieWave-1)*.019);
+      record.gaitClass=giant ? "giant" : roll<.22-danger*.4 ? "shambler" : roll<.66-danger ? "walker" : roll<.93-danger*.55 ? "runner" : "sprinter";
+      const gait=ZOMBIE_GAITS[record.gaitClass];
+      record.modeSpeedMultiplier*=gait.speed;
+      record.gaitCycle=gait.cycle*(.89+stableUnit(id+":cadence")*.22);
+      record.gaitStride=gait.stride;record.gaitSwing=gait.swing;record.gaitBob=gait.bob;record.gaitLean=gait.lean;
       const spawn = edgeSpawnPoint(record);
       if (!spawn) return null;
       record.x = spawn.x - enemyDimensions(record).w / 2;
@@ -876,7 +893,8 @@
         return "idle";
       }
       if (now < mysteryOffer.rollEndsAt) return "rolling";
-      if (now < mysteryOffer.riseEndsAt) return "rising";
+      // The physical gun rises while the reel spins and is at its peak as the
+      // chosen weapon stops. There is no second waiting/rising phase.
       if (now < mysteryOffer.lowerStartsAt) return "ready";
       return "lowering";
     }
@@ -892,9 +910,8 @@
       const steps = Math.min(MYSTERY_REEL_STEPS, Math.floor(MYSTERY_REEL_STEPS * (1 - Math.pow(1 - progress, 2.3))));
       const index = (offer.prizeIndex + steps - MYSTERY_REEL_STEPS + MYSTERY_WEAPON_POOL.length * 4) % MYSTERY_WEAPON_POOL.length;
       const weaponKey = phase === "rolling" ? MYSTERY_WEAPON_POOL[index] : offer.prizeKey;
-      const rise = phase === "rolling" ? 0
-        : phase === "rising" ? (1 - Math.pow(1 - clamp((now - offer.rollEndsAt) / MYSTERY_RISE_DURATION_MS, 0, 1), 2))
-        : phase === "ready" ? 1
+      const rise = phase==="rolling" ? progress*progress*(3-2*progress)
+        : phase==="ready" ? 1
         : 1 - (1 - Math.pow(1 - clamp((now - offer.lowerStartsAt) / MYSTERY_LOWER_DURATION_MS, 0, 1), 2));
       return {
         phase, weaponKey, weaponName: WEAPONS[weaponKey]?.shortLabel || "Weapon",
@@ -959,8 +976,8 @@
         const key = choices[Math.floor(Math.random() * choices.length)];
         const now = performance.now();
         const rollEndsAt = now + MYSTERY_ROLL_DURATION_MS;
-        const riseEndsAt = rollEndsAt + MYSTERY_RISE_DURATION_MS;
-        const lowerStartsAt = riseEndsAt + MYSTERY_CLAIM_WINDOW_MS;
+        const riseEndsAt = rollEndsAt;
+        const lowerStartsAt = rollEndsAt + MYSTERY_CLAIM_WINDOW_MS;
         mysteryOffer = {
           prizeKey:key, prizeIndex:MYSTERY_WEAPON_POOL.indexOf(key),
           startedAt:now,rollEndsAt,riseEndsAt,lowerStartsAt,
@@ -977,8 +994,31 @@
       return true;
     }
 
+    function moveMysteryBoxForWave() {
+      if (!mysteryBox) return;
+      const previous=mysteryBox,bounds=options.getBounds?.()||[];
+      if(bounds.length<4)return;
+      const margin=9,minX=number(bounds[0])+margin,maxX=number(bounds[2])-margin;
+      const minZ=number(bounds[1])+margin,maxZ=number(bounds[3])-margin;
+      if(maxX<=minX||maxZ<=minZ)return;
+      const player=options.getPlayer?.()||{},picks=[];
+      for(let i=0;i<90;i++) {
+        const x=minX+Math.random()*(maxX-minX),z=minZ+Math.random()*(maxZ-minZ);
+        if(Math.hypot(x-previous.x,z-previous.z)<24 || Math.hypot(x-number(player.x),z-number(player.z))<11)continue;
+        if(healthStation && Math.hypot(x-healthStation.x,z-healthStation.z)<13)continue;
+        if(pointBlockedByObstacle(x,z,3.05)||options.canPlaceStation?.(x,z,3.05)===false)continue;
+        picks.push({x,z});
+        if(picks.length>=10)break;
+      }
+      if(!picks.length)return;
+      mysteryBox=picks[Math.floor(Math.random()*picks.length)];
+      mysteryOffer=null;nearestStation=null;
+      setTransientStatus("MYSTERY BOX HAS MOVED · FIND ITS NEW LOCATION",2350);
+    }
+
     function beginZombieWave(now) {
       zombieWave+=1;
+      if(zombieWave>1&&(zombieWave-1)%2===0)moveMysteryBoxForWave();
       waveSpecial=zombieWave%5===0;
       waveTotal=Math.min(72,Math.max(5,Math.round((5+zombieWave*3)*zombieDifficultyConfig().aliveCap)));
       waveSpawned=0;
@@ -1586,6 +1626,11 @@
       let moveX = 0;
       let moveZ = 0;
       const loadout = ENEMY_WEAPONS[enemy.weaponKey] || ENEMY_WEAPONS.rifle;
+      if (enemy.zombie) {
+        const gait=ZOMBIE_GAITS[enemy.gaitClass]||ZOMBIE_GAITS.walker;
+        enemy.gaitCycle=enemy.gaitCycle||gait.cycle;
+        enemy.gaitStride=gait.stride;enemy.gaitSwing=gait.swing;enemy.gaitBob=gait.bob;enemy.gaitLean=gait.lean;
+      }
       if (now < enemy.rollUntil) {
         const sideX = -towardZ * enemy.rollDirection;
         const sideZ = towardX * enemy.rollDirection;
@@ -1690,7 +1735,7 @@
         enemy.blockedUntil = now + 720;
       }
       enemy.movementBlend += ((moved ? 1 : .08) - enemy.movementBlend) * Math.min(1, deltaSeconds * 8);
-      enemy.walkPhase += deltaSeconds * (moved ? 8.5 * enemy.speedBias : .8);
+      enemy.walkPhase += deltaSeconds * (moved ? (enemy.zombie ? enemy.gaitCycle||5.1 : 8.5*enemy.speedBias) : .8);
     }
 
     function enemyRenderState(id, now = performance.now()) {
@@ -1720,6 +1765,8 @@
         rotationY: enemy.rotationY,
         movementBlend: defeated ? 0 : enemy.movementBlend,
         walkPhase: enemy.walkPhase,
+        gaitClass: enemy.gaitClass, gaitStride: enemy.gaitStride, gaitSwing: enemy.gaitSwing,
+        gaitBob: enemy.gaitBob, gaitLean: enemy.gaitLean,
         firing: now < enemy.firingUntil,
         muzzleFlash: now < enemy.muzzleFlashUntil,
         recoil: now < enemy.recoilUntil,

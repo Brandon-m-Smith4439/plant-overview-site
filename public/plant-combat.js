@@ -813,6 +813,53 @@
       return Math.min(32,Math.max(7,Math.round((9 + zombieWave * 1.6) * zombieDifficultyConfig().aliveCap)));
     }
 
+    function findStationPosition(distance=10,seed="station") {
+      const player=options.getPlayer?.() || {};
+      const bounds=options.getBounds?.() || [];
+      const px=number(player.x), pz=number(player.z);
+      for (let step=0;step<24;step++) {
+        const angle=step*Math.PI/12 + stableUnit(seed)*Math.PI*2;
+        const radius=distance+(step%4)*3.4;
+        const x=px+Math.cos(angle)*radius,z=pz+Math.sin(angle)*radius;
+        if (bounds.length>=4 && (x<number(bounds[0])+4 || x>number(bounds[2])-4 || z<number(bounds[1])+4 || z>number(bounds[3])-4)) continue;
+        if (!pointBlockedByObstacle(x,z,2.3)) return {x,z};
+      }
+      // A blocked station is not placed inside solid machinery.
+      return null;
+    }
+
+    function buyNearbyStation() {
+      if (!active || roundState!=="playing" || gameMode!=="zombie" || !nearestStation) return false;
+      const isHealth=nearestStation==="health";
+      const cost=isHealth?HEALTH_STATION_COST:MYSTERY_BOX_COST;
+      if (playerPoints<cost) {setTransientStatus(`NEED ${cost-playerPoints} MORE POINTS`,1600);return false;}
+      if (isHealth && playerHealth>=100) {setTransientStatus("HEALTH ALREADY FULL",1350);return false;}
+      playerPoints-=cost;
+      if (isHealth) {
+        playerHealth=100;playerShield=SHIELD_MAX;
+        healthStation=null;
+        setTransientStatus(`FULL HEALTH RESTORED · -${cost} POINTS`,1800);
+      } else {
+        const choices=MYSTERY_WEAPON_POOL.filter((key)=>!carriedWeapons.includes(key));
+        const key=(choices.length?choices:MYSTERY_WEAPON_POOL)[Math.floor(Math.random()*(choices.length||MYSTERY_WEAPON_POOL.length))];
+        if (!key || !WEAPONS[key]) return false;
+        if (carriedWeapons.length<MAX_CARRIED_WEAPONS) carriedWeapons.push(key);
+        else {
+          const replacement=Math.max(0,carriedWeapons.indexOf(selectedWeapon));
+          carriedWeapons[replacement]=key;
+        }
+        ammunition[key]={magazine:WEAPONS[key].magazine,reserve:WEAPONS[key].reserve};
+        selectedWeapon=key;
+        reloading=false;reloadSerial+=1;
+        setAiming(false);
+        setTransientStatus(`${WEAPONS[key].shortLabel.toUpperCase()} · -${cost} POINTS`,2400);
+      }
+      nearestStation=null;
+      syncHud();
+      multiplayer?.heartbeat?.();
+      return true;
+    }
+
     function beginZombieWave(now) {
       zombieWave+=1;
       waveSpecial=zombieWave%5===0;
@@ -1133,6 +1180,10 @@
       worldEffects.rockets = worldEffects.rockets.filter((effect) => now < effect.startAt + effect.duration + 80);
       worldEffects.explosions = worldEffects.explosions.filter((effect) => now < effect.startAt + effect.duration);
       worldEffects.glassShards = worldEffects.glassShards.filter((effect) => now < effect.startAt + effect.duration);
+      worldEffects.stations=gameMode==="zombie" ? [
+        ...(mysteryBox ? [{...mysteryBox,type:"mystery",label:"MYSTERY BOX",cost:MYSTERY_BOX_COST}] : []),
+        ...(healthStation ? [{...healthStation,type:"health",label:"HEALTH STATION",cost:HEALTH_STATION_COST}] : []),
+      ] : [];
       return worldEffects;
     }
 
@@ -1531,6 +1582,49 @@
             : (gameMode === "zombie" ? "No zombies in striking range" : "No threats in sight");
       }
       if (statusCopy && !reloading && performance.now() >= transientStatusUntil) statusCopy.textContent = "Ready";
+      if (wavePanel) wavePanel.hidden=!zombieEndless();
+      if (zombieEndless()) {
+        if (waveHeading) waveHeading.textContent=`WAVE ${zombieWave || 1}${waveSpecial?" · SPECIAL":""}`;
+        if (waveCount) waveCount.textContent=`${waveDefeated} / ${waveTotal || "—"} KILLED`;
+        if (waveBar) waveBar.style.width=(waveTotal?clamp(waveDefeated/waveTotal*100,0,100):0)+"%";
+        if (waveNote) waveNote.textContent=waveNextAt ? "CLEAR! NEXT WAVE INCOMING" : waveSpecial ? "GIANTS · DOUBLE REWARDS · HEALTH STATION" : "Zombies grow stronger every wave";
+      }
+      if (teamPanel) {
+        teamPanel.hidden=gameMode!=="zombie" && matchType==="solo";
+        if (!teamPanel.hidden) {
+          const lobby=multiplayer?.getLobby?.();
+          const players=lobby?.players?.length ? lobby.players : [{id:"solo",name:multiplayer?.storedName?.() || "You",state:{points:playerPoints,kills:regularKills+headshotKills,deaths:playerDeaths}}];
+          const rows=players.map((entry)=>{
+            const me=!lobby || entry.id===multiplayer?.playerId;
+            const pts=me?playerPoints:Math.max(0,Math.floor(number(entry.state?.points)));
+            const safeName=String(entry.name || "Player").replace(/[<>&"']/g,"");
+            return `<div class="combat-team-player${me?" me":""}"><span>${safeName}${me?" (YOU)":""}</span><strong>${pts.toLocaleString()} PTS</strong></div>`;
+          }).join("");
+          const markup='<strong class="combat-team-heading">SURVIVORS · POINTS</strong>'+rows;
+          if (teamPanel.innerHTML!==markup) teamPanel.innerHTML=markup;
+        }
+      }
+      if (inventoryPanel) {
+        const markup=playerLoadout().map((key,index)=>`<span class="${selectedWeapon===key?"active":""}"><b>${index+1}</b> ${WEAPONS[key]?.shortLabel || key}</span>`).join("");
+        if (inventoryPanel.innerHTML!==markup) inventoryPanel.innerHTML=markup;
+      }
+      if (stationPrompt) {
+        nearestStation=null;
+        if (gameMode==="zombie" && roundState==="playing") {
+          const player=options.getPlayer?.();
+          if (player) {
+            for (const [type,station] of [["mystery",mysteryBox],["health",healthStation]]) {
+              if (station && Math.hypot(number(player.x)-station.x,number(player.z)-station.z)<=6) {nearestStation=type;break;}
+            }
+          }
+        }
+        stationPrompt.hidden=!nearestStation;
+        if (nearestStation) {
+          const health=nearestStation==="health",cost=health?HEALTH_STATION_COST:MYSTERY_BOX_COST;
+          if (stationLabel) stationLabel.textContent=`${health?"FULL HEALTH":"RANDOM WEAPON"} · ${cost} PTS · YOU HAVE ${playerPoints.toLocaleString()}`;
+          if (stationBuyButton) stationBuyButton.disabled=playerPoints<cost || (health && playerHealth>=100);
+        }
+      }
     }
 
     function updatePlayerShield(now) {
@@ -1600,7 +1694,7 @@
     }
 
     function localRoundStats() {
-      return { kills:regularKills+headshotKills, headshots:headshotKills, deaths:playerDeaths };
+      return { kills:regularKills+headshotKills, headshots:headshotKills, deaths:playerDeaths, points:playerPoints };
     }
 
     function rememberRemoteRoundStats(playerId, stats = {}) {
@@ -1629,6 +1723,7 @@
           kills:Math.max(0,Math.floor(number(stats.kills))),
           headshots:Math.max(0,Math.floor(number(stats.headshots))),
           deaths:Math.max(0,Math.floor(number(stats.deaths))),
+          points:entry.id===localId ? playerPoints : Math.max(0,Math.floor(number(state.points))),
         };
       }).sort((a,b) => b.kills-a.kills || a.deaths-b.deaths || a.name.localeCompare(b.name));
     }
@@ -1657,6 +1752,7 @@
         const headshots=document.createElement("span"); headshots.innerHTML=`<small>HS</small><strong>${entry.headshots}</strong>`;
         const badges=document.createElement("em");
         const labels=[];
+        if (gameMode==="zombie") labels.push(`${entry.points.toLocaleString()} PTS`);
         if (entry.kills===mostKills) labels.push("KILL LEADER");
         if (mostDeaths>0 && entry.deaths===mostDeaths) labels.push("MOST DEATHS");
         badges.textContent=labels.join(" · ");

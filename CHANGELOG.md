@@ -1,3 +1,14 @@
+## 0.13.78 - 2026-10-08
+
+- Widened the Survival Mystery Box to 5.4 world units and redesigned its 3D case and three slot-reel windows.
+- Added a 4.8-second easing slot-machine roll that lands deterministically on the selected weapon, followed by a 1.75-second weapon rise animation, an 11.5-second claim window, and a 2.3-second visual descent and despawn if not claimed.
+- Decoupled paying 950 points from receiving the gun. Only pressing E / TAKE after the roll awards the prize; skipping it forfeits the paid roll and permits a fresh purchase once the box clears.
+- Added visible 3D rifle/shotgun/rocket/pistol/revolver prize silhouettes, colored reel labels, dynamic nearby claim instructions and distinctive animated claim/rolling HUD states.
+- Kept per-player offers, weapon inventory and purchase costs independent in co-op; paused games freeze the pending prize timer, and all round/exit resets remove stale mystery offers.
+- Removed standing original plant people from active Endless Zombie rendering without deleting any original plant data, while retaining spawned zombies, giant variants and selected multiplayer teammates.
+- Implemented cached bounded A-star waypoint routing around machine envelopes, collision boxes, walls and pillars. Added collision-grid broad-phase, direct-line shortcuts, path replanning and per-frame path-planning limits for Zombie and Combat enemy pursuit; Combat remembers last-seen targets longer.
+- Expanded static combat assertions and verified runtime simulations of obstruction avoidance and the full Mystery Box state machine.
+  
 ## 0.13.77 - 2026-10-08
 
 - Replaced timed automatic respawning in Combat and Normal Zombie with the full five-second death/attacker cinematic followed by explicit Respawn and Exit decisions; Endless remains no-respawn.

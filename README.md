@@ -1,3 +1,15 @@
+## Version 0.13.77
+
+**Player-controlled respawning.** In AI Combat and Normal Zombie modes, death runs the complete five-second fall, killer-camera and "Killed by" reveal. After the replay, the player chooses **Respawn** (full health and shield, without erasing kills or deaths) or **Exit mode**. Endless Zombie mode remains one-life survival.
+
+**Wave-based Endless Zombies.** The previous continuous-spawn loop is now a real wave system: each round has a difficulty-scaled target, a progress bar and a brief break after the last kill. Zombie health, speed, group size and spawn tempo scale with wave and Easy/Normal/Hard/Nightmare. Spawn points are selected on open map edges with obstacle checks; zombies pursue the latest location of a living player. Larger, much tougher Giant zombies appear on every fifth wave and in selected later waves. Waves 5, 10, 15, etc. bring two giants, double point rewards and a newly placed health station.
+
+**Survival economy and weapons.** Kills earn 100 points, headshot kills 150; Giants grant 5x, special waves grant 2x, combining multiplicatively. A permanently available Mystery Box costs 950 points and awards a randomized gun from an expanded pool: Viper SMG, Tactical Carbine, Belt-Fed LMG, Burst Rifle, Magnum Revolver, Precision DMR, Auto Shotgun, Heavy Pistol, plus existing special weapons. Carry up to three weapons: 1/2/3 equips the corresponding slot; a full inventory replaces the equipped weapon. A health station costs 800 points and can be used once by each player on each fifth wave when they need healing. Stand within six layout units of a station and press E (or its purchase button) to spend points. The bottom-right inventory, top wave-progress meter and left-hand survivor points board update during play; each player sees their own points deducted.
+
+**Multiplayer and visuals.** The co-op host supplies shared wave progress, giant enemy snapshots, station coordinates and authoritative enemy movement. Zombie melee attacks can target other living teammates, not only the host. Station placement is walkability-checked and the health station remains separated from the mystery box. Enemy eyes have been moved back onto the upper face; the glass and larger explosion effects from 0.13.75 are retained.
+
+Regression checks were updated. Source-level coverage passed 180 assertions excluding the separate published-workspace fixture, which the repository connector returned as empty. Simulated gameplay checks verified wave spawning, player-selected respawn after the full replay, random weapon purchases and health purchases.
+
 ## Version 0.13.76
 
 Co-op victories, individual kill/death/headshot statistics, three-second respawns in Combat and Normal Zombie, and 300%-scale explosion/glass effects are retained from 0.13.75. Co-op Play again is now synchronized: the host restarts the whole lobby, teammates see Waiting for host until then, and only the host may emit victory or restart events. Corrected A-frame rack/truck pane geometry and rack glass hitboxes; bullets can hit the glass inside machine collision envelopes.

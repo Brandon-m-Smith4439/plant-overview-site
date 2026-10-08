@@ -22,7 +22,7 @@ type PlayerState = {
   health?: number; shield?: number; moving?: boolean; sprinting?: boolean; weapon?: string;
   revivingTargetId?: string; reviveProgress?: number;
   alive?: boolean; revenant?: boolean; meleeSwing?: number; downedUntil?: number; kills?: number; headshots?: number; deaths?: number; points?: number; worldSeq?: number;
-  wave?: number; waveTotal?: number; waveSpawned?: number; waveDefeated?: number;
+  wave?: number; waveTotal?: number; waveSpawned?: number; waveDefeated?: number; waveBreakRemainingMs?: number;
   boxX?: number; boxZ?: number; healthX?: number | null; healthZ?: number | null;
   enemies?: EnemySyncState[]; glass?: string[];
 };
@@ -177,6 +177,7 @@ function sanitizeState(value: unknown): PlayerState {
     waveTotal:Math.max(0,Math.min(100,Math.floor(finite(source.waveTotal)))),
     waveSpawned:Math.max(0,Math.min(100,Math.floor(finite(source.waveSpawned)))),
     waveDefeated:Math.max(0,Math.min(100,Math.floor(finite(source.waveDefeated)))),
+    waveBreakRemainingMs:Math.max(0,Math.min(15000,Math.floor(finite(source.waveBreakRemainingMs)))),
     boxX:source.boxX==null ? undefined : finite(source.boxX),
     boxZ:source.boxZ==null ? undefined : finite(source.boxZ),
     healthX:source.healthX==null ? null : finite(source.healthX),

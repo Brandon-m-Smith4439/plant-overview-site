@@ -7066,6 +7066,7 @@
         yaw: state.yaw,
         pitch: state.pitch,
         moving: firstPersonController?.isMoving?.() === true,
+        sprinting: firstPersonController?.isSprinting?.() === true,
         engaged: state.cameraMode === "walk" && (
           firstPersonController?.isPointerLocked?.() === true
           || window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches === true
@@ -10756,16 +10757,24 @@
     const width = Math.max(1.4, Number(actor.w) || 1.8);
     const depth = Math.max(1.2, Number(actor.d) || 1.8);
     const height = Math.max(5.5, Number(actor.h) || 6.5) * grow;
+    const sprinting=Boolean(combat.sprinting);
+    const reviving=Boolean(combat.reviving);
     const movement = combat.defeated ? 0 : (combat.climbing ? 1 : clamp(Number(combat.movementBlend) || 0, 0, 1));
-    const phase = Number(combat.walkPhase) || time * .008;
+    const phase = Number(combat.walkPhase) || time * (sprinting ? .015 : .008);
+    const intensity=sprinting ? 1.7 : (combat.zombie && /runner|sprinter/.test(combat.gaitClass||"") ? 1.35 : 1);
+    // Whole-body counter-rotation makes the gait weighty without changing
+    // authoritative foot positions or collider/headshot volumes.
+    const bodySway=Math.sin(phase)*movement*intensity;
+    actor.rotationZ=Number(actor.rotationZ||0)+bodySway*(sprinting?2.9:1.25);
+    actor.rotationX=Number(actor.rotationX||0)+Math.abs(Math.sin(phase))*movement*(sprinting?2.4:1.0);
     const zombieGait = combat.zombie ? String(combat.gaitClass||"walker") : "combat";
     const gaitStride = combat.zombie ? Number(combat.gaitStride)||.53 : .55;
     const gaitSwing = combat.zombie ? Number(combat.gaitSwing)||.4 : .45;
     const gaitBob = combat.zombie ? Number(combat.gaitBob)||.11 : .12;
     const gaitLean = combat.zombie ? Number(combat.gaitLean)||0 : 0;
-    const stride = Math.sin(phase) * gaitStride * movement;
-    const liftLeft = Math.max(0, Math.sin(phase)) * gaitBob * 1.5 * movement;
-    const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * gaitBob * 1.5 * movement;
+    const stride = Math.sin(phase) * gaitStride * movement * intensity;
+    const liftLeft = Math.max(0, Math.sin(phase)) * gaitBob * 1.9 * movement * intensity;
+    const liftRight = Math.max(0, Math.sin(phase + Math.PI)) * gaitBob * 1.9 * movement * intensity;
     const hit = clamp(Number(combat.hitReact) || 0, 0, 1);
     // A zombie is the original employee model, NOT a generic zombie gait preset.
     const design = machine.designId ? designLibrary[machine.designId] : null;
@@ -10792,7 +10801,10 @@
           box(localBox3d(actor,width*.25,depth*.24,width*.5,depth*.52,height*.34,bodyColor,height*.4),alpha,1);
         if(!staticIdentityParts.some(part=>/^head$/i.test(String(part.name||""))))
           box(localBox3d(actor,width*.32,depth*.3,width*.36,depth*.38,height*.14,skin,height*.75),alpha,1);
-        const jawPulse = zombie ? Math.abs(Math.sin(time*.007 + phase*.38))*.11 : 0;
+        const jawPulse = zombie ? Math.abs(Math.sin(time*.007 + phase*.38))*.16 : 0;
+        const headNod=Math.sin(phase*.5)*movement*(sprinting?.15:.08);
+        const torsoBounce=Math.abs(Math.sin(phase))*movement*(sprinting?.17:.10);
+        const shoulderTwist=Math.sin(phase)*movement*(sprinting?3.6:1.9);
         const actualHead = designParts.find((part)=>/^head$/i.test(String(part?.name||"")) && Number(part.h)>.08);
         const posedIdentityParts = staticIdentityParts.map((part) => {
           const name = String(part?.name || "");
@@ -10809,8 +10821,12 @@
             color: zombie && skinPart ? (combat.giant ? "#8ba875" : "#79a36b")
               : zombie && eyePart ? (/pupil|iris/i.test(name) ? "#b12229" : "#e7e99b")
               : part.color,
-            y: anchoredEye ? eyeY : Number(part.y || 0) - (jawPart ? jawPulse : 0),
-            z: anchoredEye ? eyeZ : part.z,
+            y: (anchoredEye ? eyeY : Number(part.y || 0) - (jawPart ? jawPulse : 0)) +
+              ((/head|hair|hat|face|eye|pupil|mouth|cigarette|nose|jaw/i.test(name)) ? headNod
+              : (/torso|chest|shirt|vest/i.test(name) ? torsoBounce : 0)),
+            z: anchoredEye ? eyeZ : (Number(part.z||0) + (/head|hair|hat|face|eye|pupil|mouth|cigarette|nose|jaw/i.test(name)
+              ? Math.sin(phase)*movement*.075 : 0)),
+            rotationY:Number(part.rotationY||0)+(/torso|chest|shirt|vest/i.test(name)?shoulderTwist:0),
           };
         });
         drawCustomDesign(actor, alpha, grow, time, 3, posedIdentityParts, machineCurveSegments(actor));
@@ -11002,7 +11018,13 @@
       -.72+supportReloadBack*reloadWave,
     ];
     const rightGrip = [weaponCenterX + hit*.045,gripY+.025,gripZ + meleeLunge*.08];
-    if(combat.climbing){
+    if(reviving && !zombie){
+      // Rescue animation: human kneels and reaches both hands toward the
+      // wounded teammate; no static rifle pose during the interaction.
+      const pulse=Math.abs(Math.sin(time*.009));
+      leftGrip[1]=height*.32+pulse*.21;rightGrip[1]=height*.34+pulse*.18;
+      leftGrip[2]=-1.15;rightGrip[2]=-1.05;
+    }else if(combat.climbing){
       leftGrip[1]=shoulderY+.42+Math.max(0,Math.sin(phase))*.62;
       rightGrip[1]=shoulderY+.42+Math.max(0,-Math.sin(phase))*.62;
       leftGrip[2]=-.48;rightGrip[2]=-.48;
@@ -11026,8 +11048,15 @@
     // support hand visibly leaves the fore-end and reaches toward the magazine
     // or launcher breech; firing adds a short recoil/lunge pose instead of only
     // flashing the muzzle.
-    localLine3d(actor,leftShoulder,leftGrip,bodyColor,3.6,alpha);
-    localLine3d(actor,rightShoulder,rightGrip,bodyColor,3.6,alpha);
+    localLine3d(actor,leftShoulder,leftGrip,bodyColor,sprinting?5.0:4.1,alpha);
+    localLine3d(actor,rightShoulder,rightGrip,bodyColor,sprinting?5.0:4.1,alpha);
+    if(reviving && !zombie) {
+      // Pulsing sterile-green rescue glow at the hands, also visible in co-op.
+      const pulse=.7+.3*Math.abs(Math.sin(time*.013));
+      for(const point of [leftGrip,rightGrip])
+        line3d([point[0]-.24,point[1],point[2]-.18],
+          [point[0]+.22,point[1]+.14,point[2]-.30],"#8df9bf",4.3,pulse*alpha);
+    }
 
     const reloadTilt = combat.reloading
       ? reloadWave * ((enemyWeapon === "rocket" || enemyWeapon === "bazooka") ? .19 : enemyWeapon === "sniper" ? .12 : .085)
@@ -11461,8 +11490,10 @@
           // Living co-op teammates remain human. Only players who miss
           // the revive window switch to their OWN plant-member zombie model.
           zombie:Boolean(playerState.revenant),
+          reviving:Boolean(playerState.revivingTargetId),
+          sprinting:Boolean(playerState.sprinting),
           movementBlend:playerState.moving ? 1 : .08,
-          walkPhase:time*.008 + (String(player.id||"").length%7)*.71,
+          walkPhase:time*(playerState.sprinting?.015:.008) + (String(player.id||"").length%7)*.71,
           weaponKey:playerState.revenant ? "chainsaw" : (playerState.weapon === "handgun" ? "pistol" : (playerState.weapon || "rifle")),
           shotProgress:playerState.revenant ? 1-Number(playerState.meleeSwing||0) : 0,
           reloadProgress:0,firing:playerState.revenant && Number(playerState.meleeSwing)>0,
@@ -11815,9 +11846,11 @@
     if (!combat) return;
     const pixelRatio = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
     const moving = combat.moving ? 1 : 0;
-    const walkPhase = time * (combat.sprinting ? .0155 : .0125);
-    const bobX = Math.sin(walkPhase) * .028 * moving;
-    const bobY = Math.abs(Math.cos(walkPhase)) * .035 * moving;
+    const sprint=Boolean(combat.sprinting&&moving&&!combat.reviving);
+    const revive=clamp(Number(combat.reviveProgress)||0,0,1);
+    const walkPhase = time * (sprint ? .021 : .0125);
+    const bobX = Math.sin(walkPhase) * (sprint?.065:.028) * moving;
+    const bobY = Math.abs(Math.cos(walkPhase)) * (sprint?.092:.035) * moving;
     const recoil = clamp(Number(combat.recoilProgress)||0,0,1);
     const reload = clamp(Number(combat.reloadProgress)||0,0,1);
     const reloadArc = Math.sin(reload * Math.PI);
@@ -11830,12 +11863,16 @@
       // A smaller 3D gun held farther from the camera leaves a readable view
       // of the world even while swapping magazines or shouldering a rocket.
       scale:combat.weapon==="rocket" ? .70 : .78,
-      x: .49 + bobX*(1-aim*.78) - aim*.14 + deathDrop*.18 - meleeSwing*.22,
-      y: -.42 - bobY*(1-aim*.8) - aim*.35 - reloadArc*.07 + recoil*.045 - deathDrop*.72 + meleeSwing*.10,
-      z: 1.60 - aim*.18 - recoil*.11 + reloadArc*.17 + deathDrop*.12,
-      rotationX: -4 - recoil*6 + reloadArc*(combat.weapon==="rocket"?3:12) + deathDrop*28,
+      x: .49 + bobX*(1-aim*.78) - aim*.14 + deathDrop*.18 - meleeSwing*.22 +
+        (sprint?.75:0),
+      y: -.42 - bobY*(1-aim*.8) - aim*.35 - reloadArc*.07 + recoil*.045 -
+        deathDrop*.72 + meleeSwing*.10 - (sprint?.62:0),
+      z: 1.60 - aim*.18 - recoil*.11 + reloadArc*.17 + deathDrop*.12 + (sprint?.32:0),
+      rotationX: -4 - recoil*6 + reloadArc*(combat.weapon==="rocket"?3:12) + deathDrop*28 +
+        (sprint?24+Math.sin(walkPhase)*4:0),
       rotationY: -6 + aim*5.2 + bobX*40*(1-aim*.8),
-      rotationZ: -2 + Math.sin(walkPhase*.5)*1.1*moving + reloadArc*(combat.weapon==="rocket"?6:18) + meleeSwing*19 + deathDrop*24,
+      rotationZ: -2 + Math.sin(walkPhase*.5)*(sprint?5:1.1)*moving +
+        reloadArc*(combat.weapon==="rocket"?6:18) + meleeSwing*19 + deathDrop*24 +(sprint?-34:0),
     };
     const metal="#303a40", dark="#151c20", mid="#4f5b61", skin="#d7a381", steel="#77858b", accent="#202a2f";
     let parts = combat.weapon === "handgun" ? [
@@ -11938,6 +11975,16 @@
         color:part.color||"#58686c",
         rotationX:Number(part.rotationX)||0,rotationY:Number(part.rotationY)||0,rotationZ:Number(part.rotationZ)||0,
       }));
+    }
+    if(combat.reviving){
+      const pulse=Math.sin(time*.011)*.06;
+      const reach=.38+revive*.24;
+      // First-person hands visibly extend and compress with rescue progress.
+      drawViewmodelBox({x:-.32,y:-.31+pulse,z:-.54-reach,
+        w:.28,h:.22,d:.38,color:skin,rotationX:-27},root,1);
+      drawViewmodelBox({x:.25,y:-.27-pulse,z:-.57-reach,
+        w:.28,h:.22,d:.38,color:skin,rotationX:-24},root,1);
+      return;
     }
     // Explicit hands survive any swap to a custom 3D weapon asset.
     drawViewmodelBox({x:.17,y:-.35,z:.22,w:.25,h:.23,d:.32,color:skin,rotationZ:-12},root,1);

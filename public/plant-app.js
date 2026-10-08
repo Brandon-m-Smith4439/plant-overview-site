@@ -11066,26 +11066,105 @@
       return [[1,0,0],[0,1,0]];
     };
 
+    // Survival stations use real 3D geometry, not a billboard. The Mystery
+    // Box is wide enough for a full-sized long gun and keeps the roll display
+    // visible from a first-person approach.
     for (const station of effects.stations || []) {
       const health=station.type==="health";
       const x=Number(station.x),z=Number(station.z);
-      const pulse=.75+.25*Math.sin(time*.006);
-      const main=health?"#e8f6f7":"#643ac6";
-      const accent=health?"#62f1c8":"#f3cf70";
-      box({x:x-1.45,y:.25,z:z-1.05,w:2.9,h:2.15,d:2.1,color:"#1a2128",rotationY:0},1,1);
-      box({x:x-1.24,y:.9,z:z-1.08,w:2.48,h:1.24,d:.20,color:main,rotationY:0},.93,1);
-      box({x:x-.55,y:2.4,z:z-.55,w:1.1,h:.35,d:1.1,color:accent,rotationY:0},.8*pulse,1);
-      const ring=[];for(let index=0;index<20;index++){const a=index/20*Math.PI*2;ring.push([x+Math.cos(a)*3.6,.1,z+Math.sin(a)*3.6]);}
-      polygon(ring,health?"rgba(77,223,171,.06)":"rgba(164,108,248,.06)",health?"rgba(99,248,189,.73)":"rgba(220,165,255,.72)",1.5,pulse,{transparent:true});
-      const textPoint=project(x,4,z);
-      if (Number.isFinite(textPoint?.[0]) && Number.isFinite(textPoint?.[1]) && textPoint[2]>0) {
-        const ratio=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
+      if (!Number.isFinite(x)||!Number.isFinite(z)) continue;
+      const pulse=.74+.26*Math.sin(time*.006);
+      const body=health?"#23433f":"#29203e";
+      const accent=health?"#62f1c8":"#e4a8fa";
+      const width=health?3.1:5.4;
+      const depth=health?2.1:3.0;
+      const frontZ=z-depth*.5;
+      box({x:x-width*.5,y:.15,z:frontZ,w:width,h:2.12,d:depth,color:"#11171e",rotationY:0},.99,1);
+      box({x:x-width*.5+.14,y:.38,z:frontZ-.05,w:width-.28,h:1.64,d:.22,color:body,rotationY:0},.96,1);
+      box({x:x-width*.5+.12,y:2.18,z:frontZ-.10,w:width-.24,h:.32,d:depth+.18,color:health?"#a6e6cd":"#5f447e",rotationY:0},1,1);
+      box({x:x-width*.5+.34,y:2.55,z:frontZ+.18,w:width-.68,h:.19,d:depth-.36,color:health?"#85d1b7":"#aa78d9",rotationY:0},.85,1);
+      if (!health) {
+        // Three recessed glowing reel windows along the wide front.
+        for (let i=0;i<3;i++) {
+          const reelX=x-2.04+i*1.37;
+          box({x:reelX,y:1.13,z:frontZ-.16,w:1.25,h:.75,d:.13,color:"#0a0d1b",rotationY:0},1,1);
+          box({x:reelX+.09,y:1.22,z:frontZ-.22,w:1.06,h:.53,d:.09,color:i===1?"#7748af":"#39294e",rotationY:0},i===1?pulse:.9,1);
+        }
+        line3d([x-2.13,1.07,frontZ-.28],[x+2.13,1.07,frontZ-.28],"rgba(235,181,255,.9)",2.6,pulse);
+        const offer=station.offer;
+        if (offer) {
+          const rolling=offer.phase==="rolling";
+          const isReturning=offer.phase==="lowering";
+          const raise=Math.max(0,Math.min(1,Number(offer.rise)||0));
+          const bob=(offer.phase==="ready"?Math.sin(time*.0034)*.11:0);
+          const weaponY=2.92+raise*2.65+bob;
+          const weaponKey=String(offer.weaponKey||"rifle");
+          const pistol=/pistol|revolver/i.test(weaponKey);
+          const rocket=/rocket/i.test(weaponKey);
+          const sniper=/sniper|dmr/i.test(weaponKey);
+          const shotgun=/shotgun/i.test(weaponKey);
+          const lmg=/lmg/i.test(weaponKey);
+          const longGun=!pistol;
+          const length=pistol?2.0:rocket?4.0:sniper?4.55:lmg?4.25:3.9;
+          const left=x-length*.5;
+          const tone=rolling?"#d2a1fb":isReturning?"#776a83":"#d7e4ed";
+          // Barrel points to +X. Receiver, grip, stock, optic, magazine and
+          // muzzle are recognizable silhouette parts for every prize category.
+          box({x:left+.68,y:weaponY,z:z-.32,w:pistol?.9:1.65,h:.48,d:.62,color:tone,rotationY:0},1,1);
+          box({x:left+(pistol?1.52:2.25),y:weaponY+.18,z:z-.17,w:pistol?.45:rocket?1.5:sniper?1.85:1.43,h:rocket?.37:.23,d:rocket?.47:.25,color:rocket?"#798a96":"#a0b1b9",rotationY:0},1,1);
+          box({x:left+.89,y:weaponY-.68,z:z-.23,w:.34,h:.84,d:.35,color:"#1e252e",rotationY:0},1,1);
+          if (longGun) {
+            box({x:left+.06,y:weaponY-.12,z:z-.26,w:.74,h:.38,d:.5,color:"#2a303d",rotationY:0},1,1);
+            box({x:left+1.46,y:weaponY-.45,z:z-.24,w:.45,h:.59,d:.38,color:shotgun?"#6a4730":"#2a303d",rotationY:0},1,1);
+            box({x:left+1.13,y:weaponY+.5,z:z-.22,w:sniper?.9:.56,h:.22,d:.34,color:"#161f2a",rotationY:0},1,1);
+            if (lmg) box({x:left+1.65,y:weaponY-.6,z:z-.27,w:.9,h:.42,d:.47,color:"#58616b",rotationY:0},1,1);
+          }
+          if (rocket) box({x:left+2.5,y:weaponY+.08,z:z-.36,w:1.05,h:.46,d:.62,color:"#c07e32",rotationY:0},.96,1);
+          const haloRadius=1.25+raise*.75;
+          const ring=[];
+          for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,weaponY-.75,z+Math.sin(angle)*.82]);}
+          polygon(ring,"rgba(166,105,242,.055)","rgba(236,171,255,.64)",1.7,.55+pulse*.32,{transparent:true});
+          // The reel text changes alongside the physical prize model, slows to
+          // the chosen gun, then says TAKE before dropping back through the lid.
+          const reelPoint=project(x,2.0,frontZ-.26);
+          if (Number.isFinite(reelPoint?.[0]) && Number.isFinite(reelPoint?.[1]) && reelPoint[3]>0) {
+            const scale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
+            ctx.save();
+            ctx.textAlign="center";ctx.textBaseline="middle";
+            ctx.font=`900 ${Math.max(12,14*scale)}px "Segoe UI",sans-serif`;
+            const ticker=rolling ? "◀ "+String(offer.weaponName||"WEAPON").toUpperCase()+" ▶" : String(offer.finalWeaponName||"WEAPON").toUpperCase();
+            ctx.strokeStyle="rgba(7,7,17,.96)";ctx.lineWidth=3.5*scale;
+            ctx.strokeText(ticker,reelPoint[0],reelPoint[1]);
+            ctx.fillStyle=rolling?"#f0c6ff":isReturning?"#b4a3c7":"#ffeaa8";
+            ctx.fillText(ticker,reelPoint[0],reelPoint[1]);
+            ctx.restore();
+          }
+        }
+      } else {
+        box({x:x-.58,y:1.24,z:frontZ-.12,w:1.16,h:.26,d:.13,color:"#a7ffe5",rotationY:0},1,1);
+        box({x:x-.13,y:.85,z:frontZ-.15,w:.26,h:1.04,d:.16,color:"#a7ffe5",rotationY:0},1,1);
+      }
+      const radius=health?3.4:4.0;
+      const floorRing=[];
+      for(let i=0;i<24;i++) {const angle=i/24*Math.PI*2;floorRing.push([x+Math.cos(angle)*radius,.07,z+Math.sin(angle)*radius]);}
+      polygon(floorRing,health?"rgba(77,223,171,.045)":"rgba(164,108,248,.06)",health?"rgba(99,248,189,.62)":"rgba(220,165,255,.72)",1.5,pulse,{transparent:true});
+      const labelY=health?3.95:station.offer?.phase==="ready"?7.2:5.1;
+      const textPoint=project(x,labelY,z);
+      if (Number.isFinite(textPoint?.[0]) && Number.isFinite(textPoint?.[1]) && textPoint[3]>0) {
+        const scale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
+        const offer=station.offer;
+        const label=health?"HEALTH STATION · 800 PTS":!offer?"MYSTERY BOX · 950 PTS":
+          offer.phase==="rolling"?"MYSTERY BOX · ROLLING":
+          offer.phase==="rising"?"YOUR WEAPON IS RISING":
+          offer.phase==="ready"?"PRESS E TO TAKE · "+String(offer.remainingSeconds)+"S":
+          "WEAPON RETURNING";
         ctx.save();
-        ctx.font=`800 ${Math.max(11,12*ratio)}px "Segoe UI",sans-serif`;
+        ctx.font=`800 ${Math.max(11,12*scale)}px "Segoe UI",sans-serif`;
         ctx.textAlign="center";ctx.textBaseline="middle";
-        ctx.strokeStyle="rgba(10,18,25,.92)";ctx.lineWidth=3*ratio;
-        const label=health?"HEALTH STATION · 800 PTS":"MYSTERY BOX · 950 PTS";
-        ctx.strokeText(label,textPoint[0],textPoint[1]);ctx.fillStyle=health?"#a4ffe1":"#ffe0a2";ctx.fillText(label,textPoint[0],textPoint[1]);
+        ctx.strokeStyle="rgba(10,18,25,.92)";ctx.lineWidth=3*scale;
+        ctx.strokeText(label,textPoint[0],textPoint[1]);
+        ctx.fillStyle=health?"#a4ffe1":"#ffe0a2";
+        ctx.fillText(label,textPoint[0],textPoint[1]);
         ctx.restore();
       }
     }

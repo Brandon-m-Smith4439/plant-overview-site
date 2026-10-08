@@ -10484,8 +10484,8 @@
     const designParts = Array.isArray(design?.components) ? design.components : [];
     const namedPart = (pattern) => designParts.find((part) => pattern.test(String(part?.name || "")));
     const zombie = Boolean(combat.zombie);
-    const bodyColor = zombie ? "#465744" : (namedPart(/torso/i)?.color || machine.color || "#1e7b78");
-    const skin = zombie ? "#839b68" : (namedPart(/head/i)?.color || "#e6b993");
+    const bodyColor = zombie ? (combat.giant ? "#755348" : "#465744") : (namedPart(/torso/i)?.color || machine.color || "#1e7b78");
+    const skin = zombie ? (combat.giant ? "#96ad72" : "#839b68") : (namedPart(/head/i)?.color || "#e6b993");
     const pants = zombie ? "#2a332d" : (namedPart(/(?:left|right) leg/i)?.color || "#26363d");
     const boot = "#161d21";
     const weapon = "#20282d";
@@ -10525,14 +10525,9 @@
         rotationZ:Number(headPart.rotationZ)||0,
       };
       if (zombie) drawDesignBox(actor,{...headPart,color:skin},design,alpha*.995,grow);
-      const eyeW=Math.max(.10,hw*.19), eyeH=Math.max(.08,hh*.12), eyeD=Math.max(.055,hd*.075);
-      const eyeY=hy+hh*.57;
-      const eyeZ=hz-eyeD*1.38;
-      const eyes=[hx+hw*.18,hx+hw*.63];
-      eyes.forEach((eyeX) => {
-        drawDesignBox(actor,{...inheritedRotation,x:eyeX,y:eyeY,z:eyeZ,w:eyeW,h:eyeH,d:eyeD,color:eyeWhite},design,alpha,grow);
-        drawDesignBox(actor,{...inheritedRotation,x:eyeX+eyeW*.34,y:eyeY+eyeH*.12,z:eyeZ-eyeD*.72,w:eyeW*.34,h:eyeH*.76,d:eyeD*.72,color:pupil},design,alpha,grow);
-      });
+      // Eye decals are attached to the model's upper head in actor-space below,
+      // not to Designer component coordinates that can be scaled/offset into a neck.
+      // Keep the custom head texture and scars, but render the eyes once for all actors.
       if (zombie) {
         const faceFront=hz-eyeD*.92;
         const woundA=[
@@ -10551,12 +10546,18 @@
       // protruding eyes so Zombie Mode remains readable without a design.
       const headX=width*.32, headY=height*.73, headZ=depth*.30, headW=width*.36, headH=height*.14, headD=depth*.38;
       if (zombie) box(localBox3d(actor,headX,headZ,headW,headD,headH,skin,headY),alpha*.995,1);
-      const eyeY=headY+headH*.56, eyeZ=headZ-.065;
-      [width*.37,width*.55].forEach((eyeX) => {
-        box(localBox3d(actor,eyeX,eyeZ,width*.105,.07,height*.026,eyeWhite,eyeY),alpha,1);
-        box(localBox3d(actor,eyeX+width*.034,eyeZ-.035,width*.037,.034,height*.019,pupil,eyeY+height*.003),alpha,1);
-      });
+      // Same upper-face coordinates are used for generic and custom characters.
     }
+
+    // Face is local -Z. Embed whites into the upper head and put pupils just
+    // ahead of them instead of sticking both decals under the mouth/neck.
+    const eyeY=height*.835;
+    const eyeZ=depth*.285;
+    const eyeWidth=width*.115,eyeHeight=height*.034,eyeDepth=Math.max(.08,depth*.085);
+    [width*.325,width*.555].forEach((eyeX) => {
+      box(localBox3d(actor,eyeX,eyeZ,eyeWidth,eyeDepth,eyeHeight,eyeWhite,eyeY),alpha,1);
+      box(localBox3d(actor,eyeX+eyeWidth*.31,eyeZ-eyeDepth*.19,eyeWidth*.38,eyeDepth*.55,eyeHeight*.7,pupil,eyeY+eyeHeight*.1),alpha,1);
+    });
 
     // Two-segment legs create an actual walking gait instead of sliding feet.
     const hipY = height * .43;
@@ -11062,6 +11063,30 @@
       if (nx >= nz) return [[0,1,0],[0,0,1]];
       return [[1,0,0],[0,1,0]];
     };
+
+    for (const station of effects.stations || []) {
+      const health=station.type==="health";
+      const x=Number(station.x),z=Number(station.z);
+      const pulse=.75+.25*Math.sin(time*.006);
+      const main=health?"#e8f6f7":"#643ac6";
+      const accent=health?"#62f1c8":"#f3cf70";
+      box({x:x-1.45,y:.25,z:z-1.05,w:2.9,h:2.15,d:2.1,color:"#1a2128",rotationY:0},1,1);
+      box({x:x-1.24,y:.9,z:z-1.08,w:2.48,h:1.24,d:.20,color:main,rotationY:0},.93,1);
+      box({x:x-.55,y:2.4,z:z-.55,w:1.1,h:.35,d:1.1,color:accent,rotationY:0},.8*pulse,1);
+      const ring=[];for(let index=0;index<20;index++){const a=index/20*Math.PI*2;ring.push([x+Math.cos(a)*3.6,.1,z+Math.sin(a)*3.6]);}
+      polygon(ring,health?"rgba(77,223,171,.06)":"rgba(164,108,248,.06)",health?"rgba(99,248,189,.73)":"rgba(220,165,255,.72)",1.5,pulse,{transparent:true});
+      const textPoint=project(x,4,z);
+      if (Number.isFinite(textPoint?.[0]) && Number.isFinite(textPoint?.[1]) && textPoint[2]>0) {
+        const ratio=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
+        ctx.save();
+        ctx.font=`800 ${Math.max(11,12*ratio)}px "Segoe UI",sans-serif`;
+        ctx.textAlign="center";ctx.textBaseline="middle";
+        ctx.strokeStyle="rgba(10,18,25,.92)";ctx.lineWidth=3*ratio;
+        const label=health?"HEALTH STATION · 800 PTS":"MYSTERY BOX · 950 PTS";
+        ctx.strokeText(label,textPoint[0],textPoint[1]);ctx.fillStyle=health?"#a4ffe1":"#ffe0a2";ctx.fillText(label,textPoint[0],textPoint[1]);
+        ctx.restore();
+      }
+    }
 
     for (const pickup of effects.pickups || []) {
       if (!pickup.active) continue;

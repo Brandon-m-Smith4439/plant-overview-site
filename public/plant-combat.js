@@ -2,7 +2,8 @@
   "use strict";
 
   const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
-  const SHIELD_MAX = 22;
+  const SHIELD_MAX = 30;
+  const ZOMBIE_WAVE_BREAK_MS = 11000;
   const SHIELD_RECHARGE_DELAY_MS = 2800;
   const SHIELD_RECHARGE_PER_SECOND = 7;
   const HEADSHOT_DAMAGE_MULTIPLIER = 3;
@@ -237,10 +238,11 @@
       '</div>',
       '<div class="combat-wave-panel" data-combat-wave-panel hidden><div class="combat-wave-heading"><strong data-combat-wave-heading>WAVE 1</strong><span data-combat-wave-count>0 / 0</span></div><div class="combat-wave-progress"><i data-combat-wave-bar></i></div><small data-combat-wave-note>Survive every wave</small></div>',
       '<div class="combat-team-panel" data-combat-team-panel hidden></div>',
+      '<div class="combat-points-panel" data-combat-points-panel hidden><span>AVAILABLE POINTS</span><strong data-combat-points-value>0</strong><small>USE AT STATIONS</small></div>',
       '<div class="combat-health-panel">',
         '<div class="combat-health-heading"><span>HEALTH</span><strong data-combat-health-value>100</strong></div>',
         '<div class="combat-health-track"><span data-combat-health-bar></span></div>',
-        '<div class="combat-shield-heading"><span>SHIELD</span><strong data-combat-shield-value>22</strong></div>',
+        '<div class="combat-shield-heading"><span>SHIELD</span><strong data-combat-shield-value>30</strong></div>',
         '<div class="combat-shield-track"><span data-combat-shield-bar></span></div>',
         '<div class="combat-vitals-alert" data-combat-shield-warning hidden>⚠ SHIELD DOWN · NO PROTECTION</div>',
         '<div class="combat-vitals-status" data-combat-vitals-status>SHIELD ONLINE</div>',
@@ -416,14 +418,29 @@
       "revive-start":{freq:350,tail:.25,type:"sine",noise:.03,gain:.12,slide:1.36},
       "zombie-turn":{freq:95,tail:.92,type:"sawtooth",noise:.39,gain:.25,slide:.34},
       footstep:{freq:88,tail:.12,type:"triangle",noise:.29,gain:.13,slide:.68},
-      "zombie-growl":{freq:67,tail:.75,type:"sawtooth",noise:.23,gain:.15,slide:.68},
+      "zombie-growl":{freq:67,tail:.9,type:"sawtooth",noise:.34,gain:.26,slide:.54},
       wind:{freq:58,tail:1.55,type:"sine",noise:.9,gain:.08,slide:.89},
+      "wave-clear":{freq:560,tail:1.05,type:"triangle",noise:.04,gain:.26,slide:1.48},
+      "wave-start":{freq:130,tail:.82,type:"sawtooth",noise:.46,gain:.28,slide:2.65},
+      "wave-tick":{freq:720,tail:.11,type:"sine",noise:0,gain:.16,slide:1.15},
       "shield-ready":{freq:660,tail:.41,type:"sine",noise:.02,gain:.10,slide:1.5},
       pickup:{freq:620,tail:.18,type:"sine",noise:.08,gain:.15,slide:1.52},
       pause:{freq:250,tail:.13,type:"triangle",noise:.06,gain:.12,slide:.75},
     });
     let soundEventsInWindow=0,soundWindowStartsAt=0;
-    let nextFootstepAt=0,nextAmbientAt=0,shieldWasEmpty=false;
+    let nextFootstepAt=0,nextAmbientAt=0,nextMusicAt=0,musicBeat=0,shieldWasEmpty=false,lastWaveTick=0;
+    function zombieProximityLevel(distance) {
+      return Math.pow(clamp((95-distance)/90,0,1),1.6);
+    }
+    function waveCountdownSeconds(now,endAt) {
+      return Math.max(0,Math.ceil((endAt-now)/1000));
+    }
+    function combatMusicIntensity(nearby,health,nearestDistance,intermission) {
+      const level=clamp(.12+Math.min(8,nearby)*.048+
+        (1-clamp(health/100,0,1))*.3+
+        zombieProximityLevel(nearestDistance)*.38,0,1);
+      return intermission?level*.20:level;
+    }
     function unlockCombatAudio(){
       if(!soundEnabled)return null;
       const Context=window.AudioContext||window.webkitAudioContext;
@@ -434,7 +451,7 @@
         return audioContext;
       }catch{return null;}
     }
-    function playCombatSound(cue,volume=1){
+    function playCombatSound(cue,volume=1,pan=0){
       const ctx=audioContext;
       if(!soundEnabled||!ctx||ctx.state!=="running")return;
       const preset=SOUND_PRESETS[cue]||SOUND_PRESETS.pickup;
@@ -450,7 +467,12 @@
         tone.gain.setValueAtTime(.001,now);
         tone.gain.linearRampToValueAtTime(level,now+.007);
         tone.gain.exponentialRampToValueAtTime(.001,now+tail);
-        osc.connect(tone);tone.connect(ctx.destination);
+        const spatial=typeof ctx.createStereoPanner==="function" ? ctx.createStereoPanner() : null;
+        if(spatial){
+          spatial.pan.setValueAtTime(clamp(pan,-.85,.85),now);
+          spatial.connect(ctx.destination);
+        }
+        osc.connect(tone);tone.connect(spatial||ctx.destination);
         osc.start(now);osc.stop(now+tail+.015);
         if(preset.noise>.01){
           if(!noiseBuffer){
@@ -465,10 +487,67 @@
           gain.gain.setValueAtTime(.0001,now);
           gain.gain.linearRampToValueAtTime(level*preset.noise*.55,now+.005);
           gain.gain.exponentialRampToValueAtTime(.0001,now+tail);
-          noise.connect(filter);filter.connect(gain);gain.connect(ctx.destination);
+          noise.connect(filter);filter.connect(gain);gain.connect(spatial||ctx.destination);
           noise.start(now,Math.random()*.3,tail);
         }
       }catch{/* Audio is cosmetic; never interrupt combat if a device lacks it. */}
+    }
+    // Short procedural score phrases stay quiet under footsteps and weapon
+    // sounds, and get faster/denser only when threat distance or health warrants.
+    function playMusicTone(frequency,start,duration,gain=.02,type="sine"){
+      const ctx=audioContext;
+      if(!ctx || ctx.state!=="running" || !soundEnabled)return;
+      try{
+        const osc=ctx.createOscillator(),amp=ctx.createGain();
+        osc.type=type;
+        osc.frequency.setValueAtTime(Math.max(35,frequency),start);
+        amp.gain.setValueAtTime(.0001,start);
+        amp.gain.linearRampToValueAtTime(Math.max(.001,gain),start+.055);
+        amp.gain.exponentialRampToValueAtTime(.0001,start+duration);
+        osc.connect(amp);amp.connect(ctx.destination);
+        osc.start(start);osc.stop(start+duration+.02);
+      }catch{/* Best-effort music on low-power browsers. */}
+    }
+    function playMusicStinger(kind){
+      if(!soundEnabled)return;
+      const ctx=unlockCombatAudio();
+      if(!ctx || ctx.state!=="running")return;
+      nextMusicAt=performance.now()+5100;
+      const win=kind==="victory";
+      const scale=win?[0,4,7,12,16,19]:[0,-2,-5,-7,-12,-14];
+      const base=win?220:146.83;
+      const start=ctx.currentTime+.035;
+      scale.forEach((step,i)=>{
+        const frequency=base*Math.pow(2,step/12);
+        playMusicTone(frequency,start+i*(win?.22:.29),win?.68:1.12,win?.055:.044,win?"triangle":"sawtooth");
+        if(i%2===0)playMusicTone(frequency*.5,start+i*(win?.22:.29),.82,.019,"sine");
+      });
+    }
+    function playCombatMusic(now){
+      if(!soundEnabled || !audioContext || audioContext.state!=="running"
+        || paused || roundState!=="playing" || now<nextMusicAt)return;
+      const player=options.getPlayer?.();
+      const targets=aliveEnemies();
+      const nearestDistance=player?targets.reduce((dist,e)=>{
+        const center=enemyCenter(e);
+        return Math.min(dist,Math.hypot(center.x-number(player.x),center.z-number(player.z)));
+      },120):120;
+      const closeCount=player?targets.filter(e=>{
+        const center=enemyCenter(e);
+        return Math.hypot(center.x-number(player.x),center.z-number(player.z))<29;
+      }).length:0;
+      const intensity=combatMusicIntensity(closeCount,playerHealth,nearestDistance,Boolean(waveNextAt));
+      const stepMs=1200-intensity*520;
+      const notes=[0,3,7,10,7,3,-2,3];
+      const note=notes[musicBeat%notes.length]+((Math.floor(musicBeat/8)%2)?-5:0);
+      const frequency=110*Math.pow(2,note/12);
+      const t=audioContext.currentTime+.015;
+      playMusicTone(frequency,t,stepMs/1000*.92,.009+intensity*.027,"triangle");
+      if(musicBeat%4===0)playMusicTone(frequency*.5,t,Math.max(.8,stepMs/1000*1.8),.009+intensity*.013,"sine");
+      if(intensity>.55 && musicBeat%2===0)
+        playMusicTone(frequency*2,t+.17,.28,.005+intensity*.009,"sawtooth");
+      musicBeat++;
+      nextMusicAt=now+stepMs;
     }
     function updateCombatSoundscape(now){
       if(roundState!=="playing"||paused)return;
@@ -478,11 +557,31 @@
         nextFootstepAt=now+(player.sprinting?270:420);
       }
       if(now>=nextAmbientAt){
-        const zombies=gameMode==="zombie" ? [...enemies.values()].filter(e=>e.health>0):[];
-        playCombatSound(gameMode==="zombie"&&zombies.length?"zombie-growl":"wind",
-          gameMode==="zombie"?.45:.19);
-        nextAmbientAt=now+2850+Math.random()*2700;
+        let nearestZombie=null,nearestDistance=120;
+        if(gameMode==="zombie" && player){
+          for(const enemy of aliveEnemies()){
+            const center=enemyCenter(enemy);
+            const distance=Math.hypot(center.x-number(player.x),center.z-number(player.z));
+            if(distance<nearestDistance){nearestDistance=distance;nearestZombie=center;}
+          }
+        }
+        if(nearestZombie){
+          const proximity=zombieProximityLevel(nearestDistance);
+          const angle=Math.atan2(nearestZombie.x-number(player.x),nearestZombie.z-number(player.z));
+          const pan=Math.sin(angle-number(player.yaw));
+          playCombatSound("zombie-growl",.07+proximity*.90,pan);
+          nextAmbientAt=now+(3450-proximity*2400)+Math.random()*320;
+        }else{
+          playCombatSound("wind",.16);
+          nextAmbientAt=now+3600+Math.random()*1400;
+        }
       }
+      const seconds=waveNextAt?waveCountdownSeconds(now,waveNextAt):0;
+      if(seconds>0 && seconds<=5 && seconds!==lastWaveTick){
+        lastWaveTick=seconds;
+        playCombatSound("wave-tick",.34);
+      }else if(!seconds){lastWaveTick=0;}
+      playCombatMusic(now);
     }
     function setCombatSoundEnabled(enabled){
       soundEnabled=Boolean(enabled);
@@ -496,6 +595,8 @@
       if(soundEnabled)playCombatSound("pickup",.6);
     }
 
+    const pointsPanel = hud.querySelector("[data-combat-points-panel]");
+    const pointsValue = hud.querySelector("[data-combat-points-value]");
     const healthValue = hud.querySelector("[data-combat-health-value]");
     const healthBar = hud.querySelector("[data-combat-health-bar]");
     const shieldValue = hud.querySelector("[data-combat-shield-value]");
@@ -1170,6 +1271,8 @@
       waveDefeated=0;
       waveNextAt=0;
       nextZombieSpawnAt=now+1050;
+      playCombatSound("wave-start",.86);
+      lastWaveTick=0;
       if (waveSpecial) {
         healthStation=findStationPosition(13, `medic-${zombieWave}`);
         setTransientStatus(`WAVE ${zombieWave} · GIANTS INCOMING · HEALTH STATION OPEN`,2400);
@@ -1193,7 +1296,7 @@
       if (!zombieWave) beginZombieWave(now);
       if (waveSpawned>=waveTotal) {
         if (waveDefeated>=waveTotal) {
-          if (!waveNextAt) {waveNextAt=now+5700;setTransientStatus(`WAVE ${zombieWave} CLEARED`,2400);}
+          if (!waveNextAt) {waveNextAt=now+ZOMBIE_WAVE_BREAK_MS;playCombatSound("wave-clear",.90);setTransientStatus(`WAVE ${zombieWave} CLEARED · NEXT IN 11 SECONDS`,2500);}
           if (now>=waveNextAt) beginZombieWave(now);
         }
         return;
@@ -2205,6 +2308,8 @@
       mysteryPhase();
       const all = [...enemies.values()];
       const alive = all.filter((enemy) => enemy.health > 0).length;
+      if(pointsPanel)pointsPanel.hidden=gameMode!=="zombie";
+      if(pointsValue)pointsValue.textContent=playerPoints.toLocaleString();
       if (healthValue) healthValue.textContent = String(Math.max(0, Math.ceil(playerHealth)));
       if (healthBar) healthBar.style.width = clamp(playerHealth, 0, 100) + "%";
       if (shieldValue) shieldValue.textContent = String(Math.max(0, Math.ceil(playerShield)));
@@ -2252,10 +2357,12 @@
         statusCopy.textContent = reviveHold?"HOLD E · REVIVING":playerIsSprinting()?"SPRINT · WEAPON LOWERED":"Ready";
       if (wavePanel) wavePanel.hidden=!zombieEndless();
       if (zombieEndless()) {
-        if (waveHeading) waveHeading.textContent=`WAVE ${zombieWave || 1}${waveSpecial?" · SPECIAL":""}`;
-        if (waveCount) waveCount.textContent=`${waveDefeated} / ${waveTotal || "—"} KILLED`;
-        if (waveBar) waveBar.style.width=(waveTotal?clamp(waveDefeated/waveTotal*100,0,100):0)+"%";
-        if (waveNote) waveNote.textContent=waveNextAt ? "CLEAR! NEXT WAVE INCOMING" : waveSpecial ? "GIANTS · DOUBLE REWARDS · HEALTH STATION" : "Zombies grow stronger every wave";
+        const breakSeconds=waveNextAt?waveCountdownSeconds(performance.now(),waveNextAt):0;
+        wavePanel?.classList.toggle("intermission",breakSeconds>0);
+        if(waveHeading)waveHeading.textContent=breakSeconds ? `WAVE ${zombieWave} CLEARED` : `WAVE ${zombieWave || 1}${waveSpecial?" · SPECIAL":""}`;
+        if(waveCount)waveCount.textContent=breakSeconds ? `NEXT IN ${breakSeconds}s` : `${waveDefeated} / ${waveTotal || "—"} KILLED`;
+        if(waveBar)waveBar.style.width=breakSeconds?(clamp((ZOMBIE_WAVE_BREAK_MS-(waveNextAt-performance.now()))/ZOMBIE_WAVE_BREAK_MS,0,1)*100)+"%":(waveTotal?clamp(waveDefeated/waveTotal*100,0,100):0)+"%";
+        if(waveNote)waveNote.textContent=breakSeconds ? `NEXT WAVE IN ${breakSeconds} SECONDS · RELOAD & PREPARE` : waveSpecial ? "GIANTS · DOUBLE REWARDS · HEALTH STATION" : "Zombies grow stronger every wave";
       }
       if (teamPanel) {
         teamPanel.hidden=gameMode!=="zombie" && matchType==="solo";
@@ -2656,6 +2763,7 @@
     function finishRound(kind, killer = null, player = null, leaderboardOverride = null) {
       const endedAt = performance.now();
       roundState = kind;
+      playMusicStinger(kind==="won"?"victory":"death");
       respawnEndsAt = 0;
       respawnDisplay = 0;
       paused = false;

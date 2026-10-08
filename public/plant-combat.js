@@ -891,7 +891,7 @@
     }
 
     function updateZombieSpawns(now) {
-      if (!zombieEndless() || coopFollower() || !["playing","respawning","respawn-choice"].includes(roundState)) return;
+      if (!zombieEndless() || coopFollower() || !["playing","respawning","respawn-choice","lost"].includes(roundState)) return;
       if (!zombieWave) beginZombieWave(now);
       if (waveSpawned>=waveTotal) {
         if (waveDefeated>=waveTotal) {
@@ -2293,7 +2293,8 @@
         return;
       }
       syncEnemies(false);
-      if (!player?.engaged || roundState !== "playing") {
+      const hostWithAllies=matchType==="coop" && multiplayer?.isHost?.() && (multiplayer.remotePlayers?.()||[]).some((entry)=>entry.state?.alive!==false);
+      if ((!player?.engaged || roundState!=="playing") && !hostWithAllies) {
         lastThreatCount = 0;
         aliveEnemies().forEach((enemy) => {
           enemy.movementBlend += (.14 - enemy.movementBlend) * Math.min(1, deltaSeconds * 6);
@@ -2303,10 +2304,15 @@
         return;
       }
 
-      const playerTarget = { x: number(player.x), y: number(player.y, 5.5), z: number(player.z) };
+      const localTarget={x:number(player?.x),y:number(player?.y,5.5),z:number(player?.z)};
+      const remoteTargets=matchType==="coop" && multiplayer?.isHost?.() ? (multiplayer.remotePlayers?.()||[]).filter((entry)=>entry.state?.alive!==false && number(entry.state?.health,100)>0).map((entry)=>({id:entry.id,x:number(entry.state?.x),y:number(entry.state?.y,5.5),z:number(entry.state?.z)})) : [];
+      const targets=[...(roundState==="playing" ? [{...localTarget,id:""}] : []),...remoteTargets];
       let threats = 0;
       for (const enemy of aliveEnemies()) {
         let source = enemyCenter(enemy);
+        const target=targets.reduce((closest,item)=>!closest || Math.hypot(item.x-source.x,item.z-source.z)<Math.hypot(closest.x-source.x,closest.z-source.z)?item:closest,null);
+        if (!target) continue;
+        const playerTarget={x:target.x,y:target.y,z:target.z};
         let distance = Math.hypot(playerTarget.x - source.x, playerTarget.y - source.y, playerTarget.z - source.z);
         const loadout = ENEMY_WEAPONS[enemy.weaponKey] || ENEMY_WEAPONS.rifle;
         let reloading = updateEnemyReload(enemy, loadout, now);
@@ -2315,7 +2321,9 @@
         }
         const sightRange = loadout.sightRange || Math.max(loadout.range + 22, 42);
         let lineOfSight = distance <= sightRange && hasLineOfSight(source, playerTarget);
-        updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, lineOfSight);
+        // Zombies always pursue the exact current location of the nearest living player,
+        // even when a wall or machine temporarily blocks direct sight.
+        updateEnemyMotion(enemy, playerTarget, now, deltaSeconds, enemy.zombie ? true : lineOfSight);
 
         source = enemyCenter(enemy);
         distance = Math.hypot(playerTarget.x - source.x, playerTarget.y - source.y, playerTarget.z - source.z);
@@ -2329,7 +2337,14 @@
         enemy.lastKnownPlayerZ = playerTarget.z;
         enemy.aimLockUntil = Math.max(enemy.aimLockUntil, now + 320);
         enemy.rotationY = faceAngle(source, playerTarget);
-        if (!reloading && now >= enemy.nextShotAt) fireEnemy(enemy, playerTarget, distance, now);
+        if (!reloading && now >= enemy.nextShotAt) {
+          if (target.id && enemy.zombie && matchType==="coop") {
+            const hitDamage=(loadout.damageMin+Math.random()*Math.max(0,loadout.damageMax-loadout.damageMin))*activeDifficultyConfig().damage;
+            enemy.nextShotAt=now+Math.max(450,loadout.fireMin);
+            enemy.shotStartedAt=now;enemy.shotEndsAt=now+360;
+            multiplayer?.sendEvent?.("npc-hit",{enemyId:enemy.id,damage:hitDamage},target.id).catch(()=>{});
+          } else if (!target.id) fireEnemy(enemy, playerTarget, distance, now);
+        }
       }
       lastThreatCount = threats;
       syncHud();
@@ -2691,7 +2706,7 @@
         const vz=previous ? clamp((z-previous.z)/elapsed,-36,36) : 0;
         hostEnemySyncSamples.set(id,{x,z,at:now});
         const snapshot={
-          id,x,z,vx,vz,rotationY:number(enemy.rotationY),
+          id,x,z,vx,vz,rotationY:number(enemy.rotationY),giant:Boolean(enemy.giant),
           health:Math.max(0,number(enemy.health)), weaponKey:String(enemy.weaponKey || "rifle"),
           movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
           synthetic:Boolean(enemy.synthetic), defeatedAt:number(enemy.defeatedAt),
@@ -2771,6 +2786,7 @@
         enemy.health=Math.max(0,number(snapshot.health,enemy.health));
         enemy.weaponKey=String(snapshot.weaponKey || enemy.weaponKey || "rifle"); enemy.weaponLabel=ENEMY_WEAPONS[enemy.weaponKey]?.label || enemy.weaponLabel || "Rifle";
         enemy.synthetic=Boolean(snapshot.synthetic);
+        enemy.giant=Boolean(snapshot.giant);
         if (enemy.health<=0) {
           enemy.defeatedAt=number(snapshot.defeatedAt,enemy.defeatedAt || receivedAt);
           enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt || enemy.defeatedAt;
@@ -2784,6 +2800,11 @@
 
     function multiplayerEvent(event,lobby) {
       if (!event) return;
+      if (event.type==="npc-hit" && matchType==="coop" && event.senderId===lobby?.hostId && event.targetId===multiplayer?.playerId && roundState==="playing") {
+        const enemy=enemies.get(String(event.payload?.enemyId || ""));
+        if (enemy && enemy.health>0) damagePlayer(Math.min(80,Math.max(0,number(event.payload?.damage))),enemy,options.getPlayer?.());
+        return;
+      }
       if (event.type === "player-hit" && event.targetId === multiplayer?.playerId && matchType === "private" && roundState === "playing") {
         const sender=(lobby?.players||[]).find((player) => player.id===event.senderId);
         const state=sender?.state || {};
@@ -2811,7 +2832,7 @@
         options.capture?.();
         return;
       }
-      if (event.type === "enemy-hit" && matchType === "coop" && ["playing","respawning"].includes(roundState)) {
+      if (event.type === "enemy-hit" && matchType === "coop" && ["playing","respawning","respawn-choice","lost"].includes(roundState)) {
         if (!multiplayer?.isHost?.()) return;
         rememberRemoteRoundStats(event.senderId,event.payload || {});
         const enemy=enemies.get(String(event.payload?.enemyId || ""));
@@ -2829,6 +2850,18 @@
     function multiplayerUpdate(lobby) {
       if (roundState === "setup") syncLobbyUi(lobby);
       if (!active || !lobby) return;
+      if (zombieEndless() && coopFollower() && lobby.status==="started") {
+        const host=(lobby.players||[]).find((entry)=>entry.id===lobby.hostId)?.state;
+        if (host) {
+          zombieWave=Math.max(0,Math.floor(number(host.wave,zombieWave)));
+          waveTotal=Math.max(0,Math.floor(number(host.waveTotal,waveTotal)));
+          waveSpawned=Math.max(0,Math.floor(number(host.waveSpawned,waveSpawned)));
+          waveDefeated=Math.max(0,Math.floor(number(host.waveDefeated,waveDefeated)));
+          waveSpecial=zombieWave>0 && zombieWave%5===0;
+          if (Number.isFinite(Number(host.boxX)) && Number.isFinite(Number(host.boxZ))) mysteryBox={x:Number(host.boxX),z:Number(host.boxZ)};
+          healthStation=waveSpecial && host.healthX!=null && host.healthZ!=null ? {x:number(host.healthX),z:number(host.healthZ)} : null;
+        }
+      }
       if (["won","lost"].includes(roundState)) syncRestartButton();
       (lobby.players || []).forEach((entry)=>{ if (entry.id !== multiplayer?.playerId) rememberRemoteRoundStats(entry.id,entry.state || {}); });
       if (lobby.status === "started" && roundState !== "setup") applyHostEnemySyncState(lobby);
@@ -2849,8 +2882,9 @@
       lastLocalSyncSample={x,z,at:now};
       const state={
         x,y:number(player.y,5.5),z,yaw:number(player.yaw),pitch:number(player.pitch),vx,vz,moving:Boolean(player.moving),
-        health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,alive:!["lost","respawning"].includes(roundState),kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths,
+        health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,alive:!["lost","respawning","respawn-choice"].includes(roundState),kills:regularKills+headshotKills,headshots:headshotKills,deaths:playerDeaths,points:playerPoints,
       };
+      if (zombieEndless() && multiplayer?.isHost?.()) Object.assign(state,{wave:zombieWave,waveTotal,waveSpawned,waveDefeated,boxX:mysteryBox?.x,boxZ:mysteryBox?.z,healthX:healthStation?.x,healthZ:healthStation?.z});
       if (matchType === "coop" && multiplayer?.isHost?.() && roundState !== "setup") {
         const worldPacket=hostEnemySyncPacket(now);
         if (worldPacket) Object.assign(state,worldPacket);

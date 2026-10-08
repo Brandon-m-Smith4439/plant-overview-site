@@ -3987,7 +3987,12 @@
       if (zombieEndless() && coopFollower() && lobby.status==="started") {
         const host=(lobby.players||[]).find((entry)=>entry.id===lobby.hostId)?.state;
         if (host) {
+          const previousWave=zombieWave;
           zombieWave=Math.max(0,Math.floor(number(host.wave,zombieWave)));
+          if(zombieWave>previousWave && previousWave>0){
+            playCombatSound("wave-start",.70);
+            lastWaveTick=0;
+          }
           waveTotal=Math.max(0,Math.floor(number(host.waveTotal,waveTotal)));
           waveSpawned=Math.max(0,Math.floor(number(host.waveSpawned,waveSpawned)));
           waveDefeated=Math.max(0,Math.floor(number(host.waveDefeated,waveDefeated)));

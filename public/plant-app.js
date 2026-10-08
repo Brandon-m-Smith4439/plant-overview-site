@@ -2598,7 +2598,7 @@
     const height=Math.max(1,Number(positioned.h)||6.5);
     return {
       center:{x:Number(x)+(Number(positioned.w)||1.8)/2,y:(Number(positioned.y)||0)+height*.80,z:Number(z)+(Number(positioned.d)||1.8)/2},
-      radius:Math.max(.38,Math.min(.66,Math.min(Number(positioned.w)||1.8,Number(positioned.d)||1.8)*.32)),
+      radius:Math.max(.38,Math.min(height>9?1.7:.66,Math.min(Number(positioned.w)||1.8,Number(positioned.d)||1.8)*.32)),
     };
   }
 
@@ -6873,6 +6873,7 @@
       getEnemyHeadVolume: combatHeadVolume,
       getOccluders: combatOccluders,
       getBounds: floorBounds,
+      canPlaceStation: (x,z) => walkCanOccupy(x,z,2.3),
       isPointerLocked: () => firstPersonController?.isPointerLocked?.() === true,
       capture: () => firstPersonController?.capture?.(),
       setMovementLocked: (locked) => firstPersonController?.setInputLocked?.(locked),
@@ -10519,6 +10520,7 @@
     if (design && headPart) {
       const hx=Number(headPart.x), hy=Number(headPart.y), hz=Number(headPart.z);
       const hw=Math.max(.05,Number(headPart.w)), hh=Math.max(.05,Number(headPart.h)), hd=Math.max(.05,Number(headPart.d));
+      const eyeD=Math.max(.055,hd*.075);
       const inheritedRotation={
         rotationX:Number(headPart.rotationX)||0,
         rotationY:Number.isFinite(Number(headPart.rotationY))?Number(headPart.rotationY):(Number(headPart.rotation)||0),

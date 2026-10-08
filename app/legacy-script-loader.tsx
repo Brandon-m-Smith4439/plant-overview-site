@@ -11,7 +11,7 @@ declare global {
   }
 }
 
-const LEGACY_BUILD_TOKEN = "0.13.76";
+const LEGACY_BUILD_TOKEN = "0.13.77";
 const scriptLoads = new Map<string, Promise<void>>();
 
 function loadScript(source: string) {

@@ -1,3 +1,7 @@
+## Version 0.13.76
+
+Co-op victories, individual kill/death/headshot statistics, three-second respawns in Combat and Normal Zombie, and 300%-scale explosion/glass effects are retained from 0.13.75. Co-op Play again is now synchronized: the host restarts the whole lobby, teammates see Waiting for host until then, and only the host may emit victory or restart events. Corrected A-frame rack/truck pane geometry and rack glass hitboxes; bullets can hit the glass inside machine collision envelopes.
+
 ## Version 0.13.75
 
 Version 0.13.75 expands multiplayer round flow and destructible-glass feedback. Co-op victory is now host-authoritative and broadcast to every teammate so all players receive the same victory screen. Multiplayer round stats track kills, headshots, and deaths per player and the victory screen includes a ranked team leaderboard with kill-leader and most-deaths callouts. AI Combat and Normal Zombie runs now use a three-second downed/respawn flow instead of ending the round on the first death; Endless Zombie remains the survival mode where death ends the run.

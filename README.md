@@ -1,4 +1,12 @@
-## v0.13.83 — Co-op Death Sync, Moonlit Wasteland, Animation & Audio
+## Version 0.13.84 — Zombie audio and wave pacing
+
+- Zombie growls increase in volume and cadence as zombies approach, with left/right positioning from the camera yaw; distant enemies grow quiet.
+- Procedural, low-volume music changes tension with enemy distance, nearby enemy count and health, with distinct death/victory themes and wave cues; no downloadable audio files or third-party soundtrack licenses.
+- Endless Zombie mode uses an 11-second intermission with a countdown and progress bar. In co-op, host remaining intermission time is synced to followers.
+- Shield strength increased from 22 to 30. Combat health/shield bars are larger, and Zombie points have a dedicated left-side HUD panel beneath vitals.
+- The pause-menu sound toggle mutes ambience, music and combat effects together.
+
+## v0.13.84 — Co-op Death Sync, Moonlit Wasteland, Animation & Audio
 
 Zombie Mode now includes large dense groves of dead, branch-only trees with trunk collision for both players and AI, a blocky glowing moon, and subtle lunar ground lighting. Enemy death animation timing is synchronized using elapsed animation age rather than host-browser timestamps. Both living and zombie characters have stronger gait, head, body, and arm motion.
 

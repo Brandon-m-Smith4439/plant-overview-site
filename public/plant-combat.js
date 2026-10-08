@@ -2764,7 +2764,8 @@
     function finishRound(kind, killer = null, player = null, leaderboardOverride = null) {
       const endedAt = performance.now();
       roundState = kind;
-      playMusicStinger(kind==="won"?"victory":"death");
+      if(kind==="won")playMusicStinger("victory");
+      else playMusicStinger("death");
       respawnEndsAt = 0;
       respawnDisplay = 0;
       paused = false;

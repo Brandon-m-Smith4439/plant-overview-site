@@ -1,4 +1,11 @@
-## 0.13.83 — 2026-10-08
+## 0.13.84 — 2026-10-08
+
+- Added proximity-based directional zombie ambience and dynamic procedural tension music with distinct victory/death stingers.
+- Added wave start, clear and last-five-seconds countdown cues; extended endless-mode wave intermission to 11 seconds and synchronized the timer in co-op.
+- Increased maximum shield to 30 and enlarged health/shield gauges; added a dedicated Zombie points balance panel.
+- Added v0.13.84 regression tests for proximity falloff, wave countdown, soundtrack cues, shield values, points layout and co-op intermission sync.
+
+## 0.13.84 — 2026-10-08
 
 - Co-op enemy death animations now synchronize elapsed death age and falling direction rather than incompatible browser timestamps; corpses retain their pose and position across network updates.
 - Dense deterministic groves of branch-only dead trees are added throughout the Zombie Mode wasteland, with solid trunks in player and AI obstacle navigation.
@@ -8,7 +15,7 @@
 - Reviving a teammate now moves the player's hands in first-person and visibly animates their character for remote co-op viewers.
 - Revamped HUD with larger health and shield meters, persistent shield-down warning, shield-break flash, critical-health pulse, and distinct health-hit effects.
 - Added a configurable procedural Web Audio soundscape covering weapon fire/reloads, explosions, melee/chainsaws, footsteps, enemy death/groans, ambient wind, shield/health hits, revives and transformed players. Sound toggle in the tactical pause menu.
-- Added v0.13.83 behavior tests and build gates for forest geometry/collision, cross-browser death timing, sprint restriction, revival pose state, HUD and audio.
+- Added v0.13.84 behavior tests and build gates for forest geometry/collision, cross-browser death timing, sprint restriction, revival pose state, HUD and audio.
 
 ## 0.13.82 — 2026-10-08
 

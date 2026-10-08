@@ -237,6 +237,19 @@ assert.ok(lobbyRoute.includes("Owner password session required") && lobbyRoute.i
 assert.ok(combat.includes('data-match-type="private"') && combat.includes('data-match-type="coop"') && combat.includes('player-hit') && combat.includes('enemy-hit'), "Lobby setup must support Private Match plus shared Combat/Zombie co-op hit events.");
 assert.ok(plant.includes("drawCombatRemotePlayers") && combat.includes("remotePlayers"), "Remote lobby players must render as their selected plant characters on the layout.");
 
+// v0.13.78: mystery prize stages, conditional pickup, and obstacle-aware routing.
+assert.ok(combat.includes("MYSTERY_ROLL_DURATION_MS = 4800") && combat.includes("MYSTERY_REEL_STEPS = 35") && combat.includes("Math.pow(1 - progress, 2.3)"), "Mystery box reel should visibly spin and decelerate before landing on its prize.");
+assert.ok(combat.includes('phase === "rolling" ? MYSTERY_WEAPON_POOL[index] : offer.prizeKey') && combat.includes("MYSTERY_RISE_DURATION_MS = 1750"), "The displayed reel must stop on the gun that rises from the box.");
+assert.ok(combat.includes("MYSTERY_CLAIM_WINDOW_MS = 11500") && combat.includes("MYSTERY_LOWER_DURATION_MS = 2300") && combat.includes("now >= mysteryOffer.despawnAt"), "Unclaimed guns must visibly lower, despawn, and release the box for a new spin.");
+assert.ok(combat.includes('if (phase === "ready") return claimMysteryWeapon();') && combat.includes('mysteryOffer = null;') && combat.includes("playerPoints -= cost"), "Paying must start the reel; a separate E claim grants the gun without a second charge.");
+assert.ok(combat.includes("mysteryOffer=null;healthStation=null;nearestStation=null") && combat.includes('"rollEndsAt","riseEndsAt","lowerStartsAt","despawnAt"'), "Restart/exit must reset prizes, and pause must freeze active mystery timers.");
+assert.ok(plant.includes("const width=health?3.1:5.4") && plant.includes("const offer=station.offer") && plant.includes("weaponY=2.92+raise*2.65+bob"), "The physically wider 3D box must animate a prize above its lid.");
+assert.ok(css.includes(".combat-station-prompt.mystery-ready") && css.includes(".combat-station-prompt.mystery-rolling"), "Take-weapon and spinning states need distinct HUD feedback.");
+assert.ok(combat.includes("function navigationRoute(") && combat.includes("function navigationStraight(") && combat.includes("NAV_ROUTE_MAX_EXPANSIONS") && combat.includes("NAV_REBUILDS_PER_FRAME"), "Enemies must navigate physical envelopes using capped, cached waypoint routing.");
+assert.ok(combat.includes("navigateEnemy(enemy,center,playerTarget,now)") && combat.includes("enemy.navBlockedFrames"), "Combat and Zombie pursuit must use detours when straight pursuit is obstructed.");
+assert.ok(plant.includes("combatController?.isEndlessZombie?.() ? [] : combatBaseEnemyMachines()") && plant.includes("!machine.combatSpawned"), "Endless mode must suppress standing plant people while retaining synthetic zombies.");
+assert.ok(combat.includes('isEndlessZombie: () => active && zombieEndless()'), "The renderer must read the active Endless state, not a stale setup selection.");
+
 // v0.13.77: waves, points, special enemies, stations, weapons, and cinematic respawn choice.
 assert.ok(combat.includes('roundState="respawn-choice"') && combat.includes("function resumePlayerAfterDeath") && combat.includes('roundState==="respawn-choice"'), "Respawn must wait for a full cinematic and an explicit player choice.");
 assert.ok(combat.includes('playerDeathDuration=RESPAWN_DELAY_MS') && combat.includes("RESPAWN_DELAY_MS = 5000") && combat.includes('Killed by '), "The full five-second who-killed-you replay must play before the choice.");

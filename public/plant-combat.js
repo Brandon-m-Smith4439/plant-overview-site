@@ -653,7 +653,7 @@
       const size = enemyDimensions(record);
       return {
         x: number(record.x, number(record.machine?.x)) + size.w / 2,
-        y: number(record.machine?.y) + size.h * .54,
+        y: number(record.machine?.y) + number(record.elevation) + size.h * .54,
         z: number(record.z, number(record.machine?.z)) + size.d / 2,
         radius: clamp(Math.max(size.w, size.d) * .46, .58, 1.35),
       };
@@ -662,9 +662,9 @@
     function enemyHitVolumes(record) {
       const size = enemyDimensions(record);
       const baseX = number(record.x, number(record.machine?.x));
-      const baseY = number(record.machine?.y);
+      const baseY = number(record.machine?.y) + number(record.elevation);
       const baseZ = number(record.z, number(record.machine?.z));
-      const designedHead = options.getEnemyHeadVolume?.(record.machine, baseX, baseZ);
+      const designedHead = options.getEnemyHeadVolume?.({...record.machine,y:baseY}, baseX, baseZ);
       const fallbackHead = {
         center: { x: baseX + size.w * .5, y: baseY + size.h * .805, z: baseZ + size.d * .5 },
         radius: clamp(Math.min(size.w, size.d) * .36, .46, .86),
@@ -716,6 +716,7 @@
       record.killerRevealUntil = 0;
       record.movementBlend = .16;
       record.walkPhase = unit * Math.PI * 2;
+      record.elevation = 0;
       record.firingUntil = 0;
       record.muzzleFlashUntil = 0;
       record.recoilUntil = 0;
@@ -1575,7 +1576,7 @@
       for (const obstacle of obstacles) {
         const baseY = number(obstacle.y);
         const height = Math.max(.01, number(obstacle.h, 20));
-        if (baseY > size.h || baseY + height < .15) continue;
+        if (baseY > number(record.elevation)+size.h || baseY + height < number(record.elevation)+.15) continue;
         if (circleHitsAabb(centerX, centerZ, radius, obstacle)) return false;
       }
       for (const other of aliveEnemies()) {
@@ -1716,6 +1717,35 @@
       } else {
         enemy.navRoute=null;enemy.navIndex=0;
       }
+      // Zombies follow players up the exterior POI ladders rather than remaining
+      // ground-bound whenever the player reaches a roof.
+      const rooftops=Array.isArray(options.getLadderSites?.())?options.getLadderSites():[];
+      const targetRoof=enemy.zombie && rooftops.find(site=>
+        playerTarget.x>=site.x-1 && playerTarget.x<=site.x+site.w+1 &&
+        playerTarget.z>=site.z-1 && playerTarget.z<=site.z+site.d+1 &&
+        number(playerTarget.y)>site.h+2);
+      const climbSite=targetRoof && number(enemy.elevation)<targetRoof.h
+        ? targetRoof : (enemy.climbSiteId ? rooftops.find(site=>site.id===enemy.climbSiteId) : null);
+      if(climbSite && number(enemy.elevation)<climbSite.h){
+        enemy.climbSiteId=climbSite.id;
+        const gap=Math.hypot(center.x-climbSite.ladderX,center.z-climbSite.ladderZ);
+        if(gap>1.35){
+          moveX=(climbSite.ladderX-center.x)/gap;
+          moveZ=(climbSite.ladderZ-center.z)/gap;
+        }else{
+          moveX=0;moveZ=0;
+          enemy.elevation=Math.min(climbSite.h,number(enemy.elevation)+deltaSeconds*6);
+          enemy.rotationY=faceAngle(center,playerTarget);
+        }
+      }else if(enemy.climbSiteId && number(enemy.elevation)>0){
+        const site=rooftops.find(item=>item.id===enemy.climbSiteId);
+        if(site && number(enemy.elevation)>=site.h){
+          enemy.elevation=site.h;
+          // Step toward the target across the flat roof after climbing.
+          const gap=Math.hypot(center.x-playerTarget.x,center.z-playerTarget.z)||1;
+          moveX=(playerTarget.x-center.x)/gap;moveZ=(playerTarget.z-center.z)/gap;
+        }
+      }
       const length = Math.hypot(moveX, moveZ);
       const step = length > .001 ? Math.min(1.1, speed * deltaSeconds) : 0;
       const moved = step > 0 ? tryMoveEnemy(enemy, moveX / length * step, moveZ / length * step) : false;
@@ -1789,6 +1819,7 @@
         rotationY: enemy.rotationY,
         movementBlend: defeated ? 0 : enemy.movementBlend,
         walkPhase: enemy.walkPhase,
+        elevation: number(enemy.elevation),
         gaitClass: enemy.gaitClass, gaitStride: enemy.gaitStride, gaitSwing: enemy.gaitSwing,
         gaitBob: enemy.gaitBob, gaitLean: enemy.gaitLean,
         firing: now < enemy.firingUntil,

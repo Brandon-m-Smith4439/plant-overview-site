@@ -18,7 +18,11 @@
   const AMMO_PICKUP_RADIUS = 3.25;
   const ZOMBIE_SETTINGS_STORAGE_KEY = "monroe-glass-zombie-settings-v2";
   const COMBAT_SETTINGS_STORAGE_KEY = "monroe-glass-combat-settings-v1";
-  const RESPAWN_DELAY_MS = 3000;
+  const RESPAWN_DELAY_MS = 5000;
+  const MYSTERY_BOX_COST = 950;
+  const HEALTH_STATION_COST = 800;
+  const MAX_CARRIED_WEAPONS = 3;
+  const MYSTERY_WEAPON_POOL = Object.freeze(["smg","carbine","lmg","burst","revolver","dmr","autoShotgun","heavyPistol","sniper","rocket","shotgun"]);
   const HOST_ENEMY_SYNC_INTERVAL_MS = 180;
   const COOP_ENEMY_PREDICTION_MS = 240;
   const ZOMBIE_DIFFICULTIES = Object.freeze({
@@ -34,8 +38,8 @@
     nightmare: Object.freeze({ key:"nightmare", label:"Nightmare", health:1.48, speed:1.22, damage:1.46, accuracy:1.16, fireRate:.74 }),
   });
   const ZOMBIE_RUN_TYPES = Object.freeze({
-    normal: Object.freeze({ key:"normal", label:"Normal", description:"Clear every zombie currently in the plant. No respawns." }),
-    endless: Object.freeze({ key:"endless", label:"Endless", description:"Zombies keep spawning from the plant edges. Survive as long as possible." }),
+    normal: Object.freeze({ key:"normal", label:"Normal", description:"Clear the plant. Death replay, then choose Respawn or Exit." }),
+    endless: Object.freeze({ key:"endless", label:"Endless", description:"Survive escalating waves, giant bosses, and every fifth special wave. No respawns." }),
   });
 
   const ENEMY_WEAPONS = Object.freeze({
@@ -96,6 +100,14 @@
       key: "rocket", shortLabel: "Rocket Launcher", magazine: 1, reserve: 7, damage: 145,
       range: 245, fireInterval: 1350, reloadMs: 2850, automatic: false, explosive: true, projectileSpeed: 84, explosionRadius: 10,
     }),
+    smg: Object.freeze({key:"smg",shortLabel:"Viper SMG",magazine:42,reserve:252,damage:24,range:155,fireInterval:66,reloadMs:1300,automatic:true,visual:"rifle"}),
+    carbine: Object.freeze({key:"carbine",shortLabel:"Tactical Carbine",magazine:36,reserve:180,damage:41,range:235,fireInterval:112,reloadMs:1550,automatic:true,scope:true,visual:"rifle"}),
+    lmg: Object.freeze({key:"lmg",shortLabel:"Belt-Fed LMG",magazine:90,reserve:360,damage:30,range:205,fireInterval:88,reloadMs:3900,automatic:true,visual:"rifle"}),
+    burst: Object.freeze({key:"burst",shortLabel:"Burst Rifle",magazine:33,reserve:165,damage:53,range:235,fireInterval:205,reloadMs:1600,automatic:false,scope:true,visual:"rifle"}),
+    revolver: Object.freeze({key:"revolver",shortLabel:"Magnum Revolver",magazine:6,reserve:66,damage:126,range:165,fireInterval:490,reloadMs:1750,automatic:false,visual:"handgun"}),
+    dmr: Object.freeze({key:"dmr",shortLabel:"Precision DMR",magazine:12,reserve:72,damage:89,range:320,fireInterval:365,reloadMs:1900,automatic:false,scope:true,visual:"sniper"}),
+    autoShotgun: Object.freeze({key:"autoShotgun",shortLabel:"Auto Shotgun",magazine:16,reserve:96,damage:13,range:80,fireInterval:265,reloadMs:2250,automatic:true,pellets:9,spread:.11,visual:"shotgun"}),
+    heavyPistol: Object.freeze({key:"heavyPistol",shortLabel:"Heavy Pistol",magazine:12,reserve:84,damage:79,range:170,fireInterval:235,reloadMs:1400,automatic:false,visual:"handgun"}),
     chainsaw: Object.freeze({
       key: "chainsaw", shortLabel: "Chainsaw", magazine: 1, reserve: 0, damage: 92,
       range: 5.8, fireInterval: 390, reloadMs: 0, automatic: true, melee: true, noAmmo: true,
@@ -204,6 +216,8 @@
         '<div class="combat-high-score" data-combat-high-score>BEST --:--</div>',
         '<div class="combat-enemy-counter" data-combat-enemies>Enemies 0 / 0</div>',
       '</div>',
+      '<div class="combat-wave-panel" data-combat-wave-panel hidden><div class="combat-wave-heading"><strong data-combat-wave-heading>WAVE 1</strong><span data-combat-wave-count>0 / 0</span></div><div class="combat-wave-progress"><i data-combat-wave-bar></i></div><small data-combat-wave-note>Survive every wave</small></div>',
+      '<div class="combat-team-panel" data-combat-team-panel hidden></div>',
       '<div class="combat-health-panel">',
         '<div class="combat-health-heading"><span>HEALTH</span><strong data-combat-health-value>100</strong></div>',
         '<div class="combat-health-track"><span data-combat-health-bar></span></div>',
@@ -298,6 +312,7 @@
           '</div>',
         '</div>',
       '</div>',
+      '<div class="combat-station-prompt" data-combat-station-prompt hidden><span data-combat-station-label></span><button type="button" data-combat-station-buy>BUY [E]</button></div>',
       '<div class="combat-weapon-panel">',
         '<div class="combat-weapon-copy">',
           '<span data-combat-slot>PRIMARY</span>',
@@ -305,7 +320,8 @@
           '<small data-combat-status>Ready</small>',
         '</div>',
         '<div class="combat-ammo"><strong data-combat-mag>30</strong><span>/</span><b data-combat-reserve>120</b></div>',
-        '<div class="combat-controls">Mouse 1 fire - <b>Right click</b> aim - <b>1/2</b> switch - <b>R</b> reload</div>',
+        '<div class="combat-weapon-inventory" data-combat-inventory></div>',
+        '<div class="combat-controls">Fire · Right click aim · <b>1/2/3</b> weapons · <b>R</b> reload · <b>E</b> buy</div>',
       '</div>',
       '<div class="combat-round-overlay" data-combat-round hidden>',
         '<div class="combat-round-card">',
@@ -400,6 +416,16 @@
     const victoryShield = hud.querySelector("[data-combat-victory-shield]");
     const deathCountCopy = hud.querySelector("[data-combat-deaths]");
     const scoreboard = hud.querySelector("[data-combat-scoreboard]");
+    const wavePanel = hud.querySelector("[data-combat-wave-panel]");
+    const waveHeading = hud.querySelector("[data-combat-wave-heading]");
+    const waveCount = hud.querySelector("[data-combat-wave-count]");
+    const waveBar = hud.querySelector("[data-combat-wave-bar]");
+    const waveNote = hud.querySelector("[data-combat-wave-note]");
+    const teamPanel = hud.querySelector("[data-combat-team-panel]");
+    const inventoryPanel = hud.querySelector("[data-combat-inventory]");
+    const stationPrompt = hud.querySelector("[data-combat-station-prompt]");
+    const stationLabel = hud.querySelector("[data-combat-station-label]");
+    const stationBuyButton = hud.querySelector("[data-combat-station-buy]");
 
     const enemies = new Map();
     const ammunition = Object.fromEntries(Object.entries(WEAPONS).map(([key, weapon]) => [key, { magazine: weapon.magazine, reserve: weapon.reserve }]));
@@ -420,6 +446,18 @@
     let regularKills = 0;
     let headshotKills = 0;
     let playerDeaths = 0;
+    let playerPoints = 0;
+    let carriedWeapons = [];
+    let zombieWave = 0;
+    let waveTotal = 0;
+    let waveSpawned = 0;
+    let waveDefeated = 0;
+    let waveNextAt = 0;
+    let waveSpecial = false;
+    let mysteryBox = null;
+    let healthStation = null;
+    let nearestStation = null;
+    let lastStationHudAt = -Infinity;
     let reloading = false;
     let reloadSerial = 0;
     let nextPlayerShotAt = 0;
@@ -514,8 +552,7 @@
     }
 
     function playerLoadout() {
-      const primary = PLAYER_PRIMARY_WEAPONS.includes(selectedPrimaryWeapon) ? selectedPrimaryWeapon : modeConfig().defaultWeapon;
-      return [primary, "handgun"];
+      return carriedWeapons.length ? carriedWeapons : [PLAYER_PRIMARY_WEAPONS.includes(selectedPrimaryWeapon) ? selectedPrimaryWeapon : modeConfig().defaultWeapon,"handgun"];
     }
 
     function currentWeapon() {

@@ -3105,6 +3105,7 @@
           id,x,z,vx,vz,rotationY:number(enemy.rotationY),giant:Boolean(enemy.giant),
           health:Math.max(0,number(enemy.health)), weaponKey:String(enemy.weaponKey || "rifle"),
           movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
+          gaitClass:String(enemy.gaitClass||"walker"),
           synthetic:Boolean(enemy.synthetic), defeatedAt:number(enemy.defeatedAt),
         };
         if (enemy.synthetic) snapshot.machine={
@@ -3183,6 +3184,12 @@
         enemy.weaponKey=String(snapshot.weaponKey || enemy.weaponKey || "rifle"); enemy.weaponLabel=ENEMY_WEAPONS[enemy.weaponKey]?.label || enemy.weaponLabel || "Rifle";
         enemy.synthetic=Boolean(snapshot.synthetic);
         enemy.giant=Boolean(snapshot.giant);
+        enemy.zombie=gameMode==="zombie";
+        const key=String(snapshot.gaitClass||"walker");
+        enemy.gaitClass=ZOMBIE_GAITS[key]?key:(enemy.giant?"giant":"walker");
+        const gait=ZOMBIE_GAITS[enemy.gaitClass];
+        enemy.gaitCycle=gait.cycle;enemy.gaitStride=gait.stride;enemy.gaitSwing=gait.swing;
+        enemy.gaitBob=gait.bob;enemy.gaitLean=gait.lean;
         if (enemy.health<=0) {
           enemy.defeatedAt=number(snapshot.defeatedAt,enemy.defeatedAt || receivedAt);
           enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt || enemy.defeatedAt;

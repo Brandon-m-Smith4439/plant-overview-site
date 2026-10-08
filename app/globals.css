@@ -9273,7 +9273,7 @@ body.viewer-fullscreen-fallback-active {
 .combat-revive-prompt {min-width:min(380px,75vw);padding-bottom:12px;}
 .combat-revive-prompt:after {content:"";position:absolute;left:7px;right:7px;bottom:4px;height:4px;
   border-radius:3px;background:linear-gradient(90deg,#ffbac0,#ff425f);
-  transform-origin:left;transform:scaleX(calc(var(--revive-progress,0%) / 100%));}
+  transform-origin:left;transform:scaleX(var(--revive-progress,0));}
 @media(max-width:680px){
   .combat-pause-header{padding:24px 21px 20px;gap:12px;}
   .combat-pause-emblem{width:42px;height:42px;border-radius:12px;}

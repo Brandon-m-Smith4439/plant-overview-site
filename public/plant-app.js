@@ -10694,6 +10694,17 @@
       -.72+supportReloadBack*reloadWave,
     ];
     const rightGrip = [weaponCenterX + hit*.045,gripY+.025,gripZ + meleeLunge*.08];
+    if(zombie) {
+      const pump=Math.sin(phase)*gaitSwing*movement;
+      const fast=zombieGait==="runner"||zombieGait==="sprinter";
+      // Zombie shufflers reach forward; runners pump bent arms, sprinters lunge,
+      // and giants swing heavily with a slower weighty follow-through.
+      leftGrip[1]=gripY+(fast?.36:.13)+Math.max(0,pump)*.33;
+      rightGrip[1]=gripY+(fast?.38:.13)+Math.max(0,-pump)*.33;
+      leftGrip[2]=fast ? -.48-pump*.42 : -.92-pump*.14;
+      rightGrip[2]=fast ? -.52+pump*.42 : -.90+pump*.14;
+      if(zombieGait==="giant") {leftGrip[1]-=.22;rightGrip[1]-=.22;}
+    }
 
     // Both arms reach a real right-hand weapon. During enemy reloads the
     // support hand visibly leaves the fore-end and reaches toward the magazine
@@ -10730,7 +10741,11 @@
     // The same editable Combat Weapon geometry drives enemy-held firearms.
     // Local +X on the asset becomes forward (-Z) for the character.
     const enemyModel=designLibrary["combat-weapon-"+(enemyWeapon==="bazooka"?"rocket":enemyWeapon)];
-    if(enemyModel?.machineType==="combatWeapon" && enemyModel.components?.length) {
+    if(zombie) {
+      // Clawing, animated zombie arms replace the combat soldier's displayed
+      // chainsaw while the melee collision/attack behavior stays unchanged.
+      weaponMuzzleZ=-.5;
+    } else if(enemyModel?.machineType==="combatWeapon" && enemyModel.components?.length) {
       const base=enemyModel.base||{},bw=Math.max(.2,Number(base.w)||4);
       const bd=Math.max(.2,Number(base.d)||1.25),bh=Math.max(.2,Number(base.h)||1.65);
       const barrelLength=enemyWeapon==="sniper"?3.5:enemyWeapon==="chainsaw"?2.1:2.8;

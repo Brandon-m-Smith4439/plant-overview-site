@@ -3459,6 +3459,11 @@
           movementBlend:clamp(number(enemy.movementBlend,.08),0,1), walkPhase:number(enemy.walkPhase),
           gaitClass:String(enemy.gaitClass||"walker"),
           synthetic:Boolean(enemy.synthetic), defeatedAt:number(enemy.defeatedAt),
+          // Monotonic clocks are local to each browser; synchronize elapsed
+          // animation age, never the host's performance.now() timestamp.
+          deathAgeMs:enemy.health<=0 ? clamp(now-number(enemy.deathAnimationStartedAt,now),0,6000) : 0,
+          deathDirection:number(enemy.deathDirection,1),
+          deathPushX:number(enemy.deathPushX),deathPushZ:number(enemy.deathPushZ),
         };
         if (enemy.synthetic) snapshot.machine={
           name:String(enemy.machine?.name || "Zombie"),
@@ -3539,10 +3544,17 @@
           vx:number(snapshot.vx), vz:number(snapshot.vz), movementBlend:clamp(number(snapshot.movementBlend,enemy.movementBlend),0,1), receivedAt,
         };
         enemy.health=Math.max(0,number(snapshot.health,enemy.health));
+        // Corpse locations remain authoritative; do not smooth a fallen
+        // employee back into a standing/animated walking position.
+        if(enemy.health<=0) {
+          enemy.x=number(snapshot.x,enemy.x);
+          enemy.z=number(snapshot.z,enemy.z);
+          enemy.remoteSync=null;
+        }
         enemy.elevation=Math.max(0,number(snapshot.elevation,enemy.elevation));
         enemy.climbing=Boolean(snapshot.climbing);
         if(snapshot.attacking){
-          const duration=enemy.weaponKey==="chainsaw"?420:320;
+          const duration=String(snapshot.weaponKey||enemy.weaponKey)==="chainsaw"?430:320;
           enemy.shotStartedAt=receivedAt-clamp(number(snapshot.attackProgress),0,1)*duration;
           enemy.shotEndsAt=enemy.shotStartedAt+duration;
         }else{
@@ -3559,8 +3571,21 @@
         enemy.gaitCycle=gait.cycle;enemy.gaitStride=gait.stride;enemy.gaitSwing=gait.swing;
         enemy.gaitBob=gait.bob;enemy.gaitLean=gait.lean;
         if (enemy.health<=0) {
-          enemy.defeatedAt=number(snapshot.defeatedAt,enemy.defeatedAt || receivedAt);
-          enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt || enemy.defeatedAt;
+          // Incoming deathAgeMs is relative and safe across browser clocks.
+          // Preserve earliest observed start so later packets cannot rewind
+          // the animation; new clients join at the correct point in the fall.
+          const age=clamp(number(snapshot.deathAgeMs),0,6000);
+          const localStart=receivedAt-age;
+          enemy.deathAnimationStartedAt=enemy.deathAnimationStartedAt>0
+            ? Math.min(enemy.deathAnimationStartedAt,localStart)
+            : localStart;
+          enemy.defeatedAt=enemy.deathAnimationStartedAt;
+          enemy.deathDirection=number(snapshot.deathDirection,enemy.deathDirection||1);
+          enemy.deathPushX=number(snapshot.deathPushX);
+          enemy.deathPushZ=number(snapshot.deathPushZ);
+          enemy.movementBlend=0;
+          enemy.firingUntil=0;
+          enemy.rollUntil=0;
         }
       }
       [...enemies.entries()].forEach(([id,enemy]) => { if (enemy.synthetic && !seen.has(id)) enemies.delete(id); });

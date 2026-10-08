@@ -9366,3 +9366,70 @@ body.viewer-fullscreen-fallback-active {
 @media(prefers-reduced-motion:reduce){
   .combat-vitals-alert,.combat-health-critical .combat-health-track>span{animation:none;}
 }
+
+/* v0.13.84: legible points/vitals, deliberate wave countdown hierarchy. */
+.combat-health-panel {
+  width:min(21rem,43vw);
+  padding:1.12rem 1.25rem 1rem;
+  border-color:rgba(140,232,205,.49);
+}
+.combat-health-heading,.combat-shield-heading {
+  font-size:.79rem;
+  letter-spacing:.12em;
+}
+.combat-health-heading strong {font-size:1.84rem;line-height:1.1;}
+.combat-shield-heading strong {font-size:1.66rem;line-height:1.1;}
+.combat-health-track {height:1.12rem;margin:.48rem 0 .75rem;border-radius:.46rem;}
+.combat-shield-track {height:1.06rem;margin:.48rem 0 .69rem;border-radius:.46rem;}
+.combat-health-track>span,.combat-shield-track>span {border-radius:inherit;}
+.combat-points-panel {
+  position:absolute;z-index:5;left:1rem;top:16.7rem;
+  display:flex;align-items:center;justify-content:space-between;gap:1.15rem;
+  box-sizing:border-box;width:min(21rem,43vw);
+  padding:.72rem .98rem;border:1px solid rgba(252,215,129,.52);
+  border-radius:.82rem;background:linear-gradient(110deg,rgba(58,38,14,.93),rgba(22,25,19,.90));
+  box-shadow:0 .35rem 1.5rem rgba(0,0,0,.32);backdrop-filter:blur(10px);
+}
+.combat-points-panel[hidden]{display:none !important;}
+.combat-points-panel>span{font-size:.63rem;letter-spacing:.12em;font-weight:900;color:#e9cd91;}
+.combat-points-panel>strong {font-size:1.42rem;font-variant-numeric:tabular-nums;
+  font-weight:950;color:#ffe8a0;letter-spacing:-.03em;text-shadow:0 0 14px rgba(255,210,108,.25);}
+.combat-points-panel>small {font-size:.50rem;font-weight:850;letter-spacing:.08em;color:#cbb783;}
+.combat-team-panel {top:22.0rem;width:min(21rem,43vw);max-height:calc(100% - 23.25rem);}
+.combat-team-player{min-height:2rem;gap:.75rem;}
+.combat-team-player strong{font-size:.9rem;}
+.combat-wave-panel {width:min(25rem,46vw);}
+.combat-wave-panel.intermission {
+  border-color:rgba(120,224,232,.55);
+  background:linear-gradient(145deg,rgba(12,48,51,.94),rgba(9,21,26,.93));
+  box-shadow:0 .5rem 1.9rem rgba(1,17,21,.55),inset 0 1px rgba(159,255,255,.08);
+}
+.combat-wave-panel.intermission .combat-wave-heading span{
+  font-size:.96rem;color:#abf8e7;letter-spacing:.08em;font-variant-numeric:tabular-nums;
+}
+.combat-wave-panel.intermission .combat-wave-progress i{
+  background:linear-gradient(90deg,#57b4bc,#b0f9eb);
+}
+.combat-wave-panel.intermission small {font-size:.69rem;color:#c7f2e9;font-weight:800;}
+@media(max-width:760px) {
+  .combat-mode-active .combat-health-panel {
+    top:max(.55rem,env(safe-area-inset-top)) !important;
+    left:max(.55rem,env(safe-area-inset-left));
+    width:min(15rem,49vw);padding:.8rem .78rem;
+  }
+  .combat-health-heading strong {font-size:1.48rem;}
+  .combat-shield-heading strong {font-size:1.30rem;}
+  .combat-health-track,.combat-shield-track{height:.84rem;}
+  .combat-points-panel{left:.55rem;top:13.0rem;width:min(15rem,49vw);
+    padding:.55rem .6rem;gap:.35rem;}
+  .combat-points-panel>span{font-size:.49rem;}
+  .combat-points-panel>strong{font-size:1.12rem;}
+  .combat-points-panel>small{display:none;}
+  .combat-team-panel{left:.55rem;top:17rem;width:min(15rem,49vw);max-height:20vh;}
+  .combat-wave-panel{left:50%;top:4rem;width:min(19rem,60vw);}
+  .combat-wave-panel.intermission .combat-wave-heading span{font-size:.75rem;}
+}
+@media(max-height:600px){
+  .combat-points-panel{top:12.3rem;}
+  .combat-team-panel{top:16.2rem;max-height:17vh;}
+}

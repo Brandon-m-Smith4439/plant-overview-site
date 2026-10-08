@@ -242,6 +242,8 @@
         '<div class="combat-health-track"><span data-combat-health-bar></span></div>',
         '<div class="combat-shield-heading"><span>SHIELD</span><strong data-combat-shield-value>22</strong></div>',
         '<div class="combat-shield-track"><span data-combat-shield-bar></span></div>',
+        '<div class="combat-vitals-alert" data-combat-shield-warning hidden>⚠ SHIELD DOWN · NO PROTECTION</div>',
+        '<div class="combat-vitals-status" data-combat-vitals-status>SHIELD ONLINE</div>',
         '<small data-combat-threat>No threats in sight</small>',
       '</div>',
       '<div class="combat-hitmarker" data-combat-hitmarker aria-hidden="true"><i></i><i></i><i></i><i></i></div>',
@@ -393,6 +395,8 @@
     const shieldValue = hud.querySelector("[data-combat-shield-value]");
     const shieldBar = hud.querySelector("[data-combat-shield-bar]");
     const shieldTrack = hud.querySelector(".combat-shield-track");
+    const shieldWarning=hud.querySelector("[data-combat-shield-warning]");
+    const vitalsStatus=hud.querySelector("[data-combat-vitals-status]");
     const enemyCounter = hud.querySelector("[data-combat-enemies]");
     const modeBadge = hud.querySelector("[data-combat-mode-badge]");
     const highScoreCopy = hud.querySelector("[data-combat-high-score]");
@@ -518,6 +522,7 @@
     const COOP_REVIVE_RADIUS=9;
     const COOP_REVIVE_HOLD_MS=3500;
     let reviveHold=null;
+    let lastReviveAnimationAt=0;
     let playerZombie=false;
     let reviveUntil=0;
     let nextMeleeAt=0;
@@ -2034,6 +2039,8 @@
       return {
         weapon: selectedWeapon,
         firing: now < playerRecoilUntil,
+        reviving:Boolean(reviveHold),
+        reviveProgress:reviveHold?clamp((now-reviveHold.startedAt)/COOP_REVIVE_HOLD_MS,0,1):0,
         muzzleFlash: now < playerMuzzleUntil,
         recoilProgress,
         meleeSwingProgress:now<meleeSwingUntil?clamp((meleeSwingUntil-now)/330,0,1):0,
@@ -2051,7 +2058,8 @@
     }
 
     function setAiming(next) {
-      const allowed = active && !paused && roundState === "playing" && !reloading && !currentWeapon().melee;
+      const allowed = active && !paused && roundState === "playing" &&
+        !reloading && !currentWeapon().melee && !playerIsSprinting() && !reviveHold;
       aiming = Boolean(next && allowed);
       frame.classList.toggle("combat-aiming", aiming);
       if (scopeOverlay) scopeOverlay.hidden = !(aiming && !currentWeapon().melee);
@@ -2066,6 +2074,11 @@
       if (defeated) hitmarker?.classList.add("defeated");
       if (headshot) hitmarker?.classList.add("headshot");
       window.setTimeout(() => hitmarker?.classList.remove("visible", "defeated", "headshot"), 160);
+    }
+
+    function playerIsSprinting(){
+      const player=options.getPlayer?.();
+      return Boolean(player?.sprinting && player?.moving && roundState==="playing" && !paused);
     }
 
     function showDamage() {
@@ -2086,6 +2099,17 @@
       if (healthBar) healthBar.style.width = clamp(playerHealth, 0, 100) + "%";
       if (shieldValue) shieldValue.textContent = String(Math.max(0, Math.ceil(playerShield)));
       if (shieldBar) shieldBar.style.width = (clamp(playerShield, 0, SHIELD_MAX) / SHIELD_MAX * 100) + "%";
+      const shieldDown=playerShield<=.01 && !playerZombie;
+      const critical=playerHealth<=32;
+      frame.classList.toggle("combat-shield-down",shieldDown && roundState==="playing");
+      frame.classList.toggle("combat-health-critical",critical && roundState==="playing");
+      frame.classList.toggle("combat-is-sprinting",playerIsSprinting());
+      frame.classList.toggle("combat-is-reviving",Boolean(reviveHold));
+      if(shieldWarning)shieldWarning.hidden=!shieldDown;
+      if(vitalsStatus)vitalsStatus.textContent=playerZombie?"INFECTED · NO SHIELD"
+        :shieldDown?"SHIELD OFFLINE — SEEK COVER"
+        :critical?"CRITICAL HEALTH — FIND COVER"
+        :playerShield<SHIELD_MAX*.4?"SHIELD LOW":"SHIELD ONLINE";
       const mode = modeConfig();
       const modeStamp = gameMode === "zombie" ? `zombie:${zombieDifficulty}:${zombieRunType}` : gameMode;
       if (modeBadge && modeBadge.dataset.mode !== modeStamp) {
@@ -2114,7 +2138,8 @@
             ? String(lastThreatCount) + (lastThreatCount === 1 ? (gameMode === "zombie" ? " zombie is" : " enemy has") : (gameMode === "zombie" ? " zombies are" : " enemies have")) + (gameMode === "zombie" ? " charging" : " line of sight")
             : (gameMode === "zombie" ? "No zombies in striking range" : "No threats in sight");
       }
-      if (statusCopy && !reloading && performance.now() >= transientStatusUntil) statusCopy.textContent = "Ready";
+      if (statusCopy && !reloading && performance.now() >= transientStatusUntil)
+        statusCopy.textContent = reviveHold?"HOLD E · REVIVING":playerIsSprinting()?"SPRINT · WEAPON LOWERED":"Ready";
       if (wavePanel) wavePanel.hidden=!zombieEndless();
       if (zombieEndless()) {
         if (waveHeading) waveHeading.textContent=`WAVE ${zombieWave || 1}${waveSpecial?" · SPECIAL":""}`;
@@ -2289,6 +2314,7 @@
       revivePrompt.hidden=!target;
       if(!target)return;
       const held=reviveHold?.targetId===target.ally.id;
+      if(held && playerIsSprinting())cancelReviveHold();
       const fraction=held?clamp((now-reviveHold.startedAt)/COOP_REVIVE_HOLD_MS,0,1):0;
       revivePrompt.style.setProperty("--revive-progress",String(fraction));
       revivePrompt.textContent=held
@@ -2305,7 +2331,11 @@
     function beginReviveHold(){
       const target=nearestDownedAlly();
       if(!target||reviveHold)return false;
+      if(playerIsSprinting())return false;
       reviveHold={targetId:target.ally.id,startedAt:performance.now(),sent:false};
+      lastReviveAnimationAt=performance.now();
+      setAiming(false);mouseHeld=false;
+      playCombatSound("revive-start");
       multiplayer.sendEvent("revive-begin",{},target.ally.id)
         .catch(()=>{reviveHold=null;setTransientStatus("Revive unavailable",1200);});
       updateRevivePrompt(performance.now()+101);
@@ -2626,7 +2656,8 @@
     }
 
     function startReload() {
-      if (!active || reloading || roundState !== "playing") return;
+      if (!active || reloading || roundState !== "playing" ||
+          reviveHold || (playerIsSprinting() && !currentWeapon().melee)) return;
       const weapon = currentWeapon();
       const ammo = currentAmmo();
       if (weapon.noAmmo) return;
@@ -2773,7 +2804,8 @@
 
     function fire() {
       if(playerZombie){meleeAttack();return;}
-      if (!active || reloading || roundState !== "playing") return;
+      if (!active || reloading || roundState !== "playing" ||
+          playerIsSprinting() || reviveHold) return;
       const player = options.getPlayer?.();
       if (!player?.engaged) return;
       const now = performance.now();
@@ -3252,6 +3284,10 @@
       updatePlayerShield(now);
       resolveExplosionDamage(now);
       if (!updateCountdown(now)) {
+        if(playerIsSprinting()){
+          mouseHeld=false;
+          if(aiming)setAiming(false);
+        }
         if (mouseHeld && currentWeapon().automatic) fire();
         cleanupZombieCorpses(now);
         updateZombieSpawns(now);
@@ -3725,6 +3761,9 @@
       const state={
         x,y:number(player.y,5.5),z,yaw:number(player.yaw),pitch:number(player.pitch),vx,vz,moving:Boolean(player.moving),
         health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,
+        sprinting:Boolean(player.sprinting && player.moving),
+        revivingTargetId:reviveHold?.targetId||"",
+        reviveProgress:reviveHold?clamp((now-reviveHold.startedAt)/COOP_REVIVE_HOLD_MS,0,1):0,
         alive:!playerZombie && !["lost","respawning","respawn-choice"].includes(roundState),
         revenant:playerZombie,
         meleeSwing:now<meleeSwingUntil?clamp((meleeSwingUntil-now)/330,0,1):0,
@@ -3885,7 +3924,7 @@
         else buyNearbyStation();
         return;
       }
-      if (event.code === "KeyF") {event.preventDefault();meleeAttack();return;}
+      if (event.code === "KeyF") {event.preventDefault();if(!reviveHold)meleeAttack();return;}
       if (event.code === "Digit1") {
         event.preventDefault();
         switchWeapon(playerLoadout()[0]);
@@ -3909,6 +3948,7 @@
       if (event.button === 2) { event.preventDefault(); setAiming(true); return; }
       if (event.button !== 0) return;
       event.preventDefault();
+      if(playerIsSprinting()||reviveHold)return;
       if (currentWeapon().automatic) mouseHeld = true;
       fire();
     }
@@ -3929,7 +3969,8 @@
         mouseHeld = false;
         return;
       }
-      if (!active || paused || ["lost", "won"].includes(roundState)) return;
+      if (!active || paused || ["lost", "won"].includes(roundState) ||
+          playerIsSprinting() || reviveHold) return;
       if (currentWeapon().automatic) mouseHeld = true;
       fire();
     }

@@ -57,7 +57,7 @@ assert.ok(combat.includes('multiplayer.sendEvent("revive-begin"')&&
   server.includes('now-start.createdAt<3000'),"Server must enforce minimum revive hold duration");
 assert.ok(combat.includes("function becomePlayerZombie()")&&combat.includes("playerZombie=true"),
   "Expired unrevived co-op zombie players must turn into hostile zombies");
-assert.ok(combat.includes("revenant:playerZombie")&&server.includes("revenant:Boolean(source.revenant)"),
+assert.ok(combat.includes("revenant:playerZombie")&&server.includes("revenant: Boolean(source.revenant)"),
   "Host and other players must receive the transformed player's identity");
 assert.ok(plant.includes("zombie:Boolean(playerState.revenant)"),"Living teammates must remain human");
 assert.ok(combat.includes('Boolean(state.revenant)===Boolean(playerZombie)')&&

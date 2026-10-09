@@ -2820,7 +2820,13 @@
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
       const onRoof=Number(state.walkVerticalOffset)>=site.h+.35 &&
         x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55;
-      return onRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
+      if(site.kind==="skyscraper")
+        return skyscraperWalkAllowed(site,x,z,p,Number(state.walkVerticalOffset));
+      // The player must reach the actual rim before triggering a safe drop.
+      const nearRoof=Number(state.walkVerticalOffset)>=site.h-.6 &&
+        x>=site.x-p-1&&x<=site.x+site.w+p+1 &&
+        z>=site.z-p-1&&z<=site.z+site.d+p+1;
+      return onRoof||nearRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
     });
   }
 
@@ -3070,9 +3076,12 @@
       });
     });
     if(combatController?.isActive?.()){
-      combatExteriorLandmarks().forEach((site)=>entries.push({
-        kind:"exterior-building",x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d
-      }));
+      combatExteriorLandmarks().forEach(site=>{
+        if(site.kind==="skyscraper")
+          skyscraperWallSections(site).forEach(wall=>entries.push({kind:"exterior-building",...wall}));
+        else entries.push({kind:"exterior-building",x:site.x,y:0,z:site.z,
+          w:site.w,h:site.h,d:site.d});
+      });
       if(combatController?.getMode?.()!=="zombie")
         combatExteriorHills().forEach((hill)=>entries.push({
           kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
@@ -3084,11 +3093,13 @@
         entries.push({kind:"explosive-barrel",barrelId:barrel.id,
           x:barrel.x-.88,y:0,z:barrel.z-.88,w:1.76,h:3,d:1.76});
       });
-      if(combatController?.getMode?.()==="zombie")
-        combatDeadForestTrees().forEach(tree=>entries.push({
+      if(combatController?.getMode?.()==="zombie"){
+        const px=modelCenter()[0]+state.panX,pz=modelCenter()[1]+state.panZ;
+        forestTreesNear(px,pz,175).forEach(tree=>entries.push({
           kind:"forest-trunk",x:tree.x-tree.radius,y:0,z:tree.z-tree.radius,
           w:tree.radius*2,h:tree.height*.65,d:tree.radius*2
         }));
+      }
     }
     combatOccluderCache = { at: now, entries };
     return entries;
@@ -9290,10 +9301,33 @@
         }
       }
     }
-    if(zombie){drawZombieMoon();drawDeadForest(performance.now());}
+    if(zombie)drawZombieMoon();
     // Traversable exterior points of interest, roof decks and climbable ladders.
     combatExteriorLandmarks().forEach((site,index)=>{
-      box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,color:zombie?"#424a40":"#ad9270"},1,1);
+      if(site.kind==="skyscraper"){
+        // A traversable ruined lobby, doorway, internal rooms and climb shaft.
+        const facade=zombie?"#48534f":"#929285";
+        skyscraperWallSections(site).forEach((wall,i)=>box({...wall,
+          color:i===2?"#66716f":facade},1,1));
+        box({x:site.x+.6,y:0,z:site.z+.6,w:site.w-1.2,h:.24,d:site.d-1.2,
+          color:"#5c625e"},1,1);
+        // Alternating exterior stories with narrow lit window slits.
+        for(let level=14;level<site.h-8;level+=14){
+          for(let col=0;col<4;col++){
+            const px=site.x+4+col*8.7;
+            box({x:px,y:level,z:site.z-.07,w:5,h:2.3,d:.18,
+              color:col%2?"#839592":"#57706d"},.92,1);
+          }
+          box({x:site.x+.9,y:level,z:site.z+site.d-.12,w:site.w-1.8,h:.55,d:.18,
+            color:"#86908a"},1,1);
+        }
+        // Interior shaft stays unobstructed so the entire climb reaches roof.
+        box({x:site.ladderX-2.25,y:0,z:site.ladderZ-2.25,w:4.5,h:.30,d:4.5,
+          color:"#9f8c5b"},1,1);
+      }else{
+        box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,
+          color:zombie?"#424a40":"#ad9270"},1,1);
+      }
       box({x:site.x-.55,y:site.h,z:site.z-.55,w:site.w+1.1,h:.6,d:site.d+1.1,color:zombie?"#73786a":"#dfbd87"},1,1);
       // Lighter raised coping makes the roof's walkable edges unmistakable.
       const rimY=site.h+.61,rim=zombie?"#dddcc5":"#eadac3";
@@ -9317,6 +9351,12 @@
       box({x:x-.91,y:.45,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
       box({x:x-.91,y:1.9,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
       box({x:x-.72,y:2.8,z:z-.72,w:1.44,h:.18,d:1.44,color:"#472219"},1,1);
+    });
+    // Fixed mystery pads help players identify where the box can reappear.
+    if(zombie)combatMysterySpots().forEach(spot=>{
+      const y=spot.y+.04,x=spot.x,z=spot.z;
+      box({x:x-3.3,y,z:z-2.1,w:6.6,h:.10,d:4.2,color:"#655078"},.78,1);
+      box({x:x-2.85,y:y+.11,z:z-1.65,w:5.7,h:.08,d:3.3,color:"#30263c"},1,1);
     });
     // Ridgelines supply actual vertical scenery beyond the rock scatter.
     for(const hill of combatExteriorHills()){
@@ -13984,6 +14024,14 @@
     if(zombieExterior||desertExterior)drawRetainedObject(
       "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}|${combatController?.explosiveRevision?.()||0}`,drawCombatExterior
     );
+    if(zombieExterior){
+      // Visibility-dependent forest is retained per player travel cell, not
+      // permanently frozen at the initial camera location.
+      const camX=modelCenter()[0]+state.panX,camZ=modelCenter()[1]+state.panZ;
+      drawRetainedObject("plant:dead-forest",
+        `${bounds.join("|")}|${Math.floor(camX/12)}|${Math.floor(camZ/12)}`,
+        ()=>drawDeadForest(time));
+    }
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(
       "plant:shell",

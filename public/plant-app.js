@@ -2622,8 +2622,27 @@
       const phase=i*2.399963229728653+.41;
       addDeadTree(x,z,8+side,i,phase);
     }
-    deadForestCache={key,trees};
+    const buckets=new Map(),bucketSize=16;
+    trees.forEach(tree=>{
+      const k=Math.floor(tree.x/bucketSize)+":"+Math.floor(tree.z/bucketSize);
+      if(!buckets.has(k))buckets.set(k,[]);
+      buckets.get(k).push(tree);
+    });
+    deadForestCache={key,trees,buckets,bucketSize};
     return trees;
+  }
+
+  function forestTreesNear(x,z,radius=4) {
+    combatDeadForestTrees();
+    const {buckets,bucketSize}=deadForestCache;
+    if(!buckets)return deadForestCache.trees;
+    const reach=Math.ceil(radius/bucketSize)+1,cx=Math.floor(x/bucketSize),cz=Math.floor(z/bucketSize);
+    const near=[];
+    for(let dx=-reach;dx<=reach;dx++)for(let dz=-reach;dz<=reach;dz++)
+      for(const tree of buckets.get((cx+dx)+":"+(cz+dz))||[]){
+        if(Math.hypot(x-tree.x,z-tree.z)<=radius+tree.radius)near.push(tree);
+      }
+    return near;
   }
 
   function drawZombieMoon() {
@@ -2660,7 +2679,7 @@
     const walking=state.cameraMode==="walk";
     for(const tree of combatDeadForestTrees()){
       const distance=Math.hypot(camX-tree.x,camZ-tree.z);
-      if(walking&&distance>240)continue;
+      if(walking&&distance>185)continue;
       const dark=tree.grove%2===0?"#242625":"#2c2927";
       const sway=Math.sin(time*.00035+tree.phase)*.13;
       const {x,z,height:h,radius:r}=tree;
@@ -2673,7 +2692,7 @@
       line3d([x,h*.90,z],[x+sway,h,z],"#454d43",Math.max(3,r*5),1);
       // Tall upward-reaching limbs start in the upper half of the trunk.
       // Reduce the number of finer twigs at a distance for co-op FPS.
-      const limbCount=walking&&distance>120?2:walking&&distance>75?4:7;
+      const limbCount=walking&&distance>105?2:walking&&distance>55?3:5;
       for(let arm=0;arm<limbCount;arm++){
         const angle=tree.phase+arm*2.39996322972865;
         const reach=(4.2+arm%3*2.2)*(.9+r*.65);
@@ -2681,7 +2700,7 @@
         const bx=x+Math.cos(angle)*reach,bz=z+Math.sin(angle)*reach;
         const tip=[bx+sway,y+h*(.16+(arm%3)*.035),bz];
         line3d([x,y,z],tip,arm%2?"#3d443e":"#47483e",Math.max(2.8,r*5-arm*.25),1);
-        if((!walking||distance<105) && arm%2===0){
+        if((!walking||distance<65) && arm%2===0){
           line3d(tip,[bx+Math.cos(angle+.6)*reach*.46,y+h*.27,
             bz+Math.sin(angle+.6)*reach*.46],"#454b41",2.4,1);
           line3d(tip,[bx+Math.cos(angle-.9)*reach*.35,y+h*.24,
@@ -2697,7 +2716,53 @@
       {id:"north-outpost",label:"Ranger Outpost",x:left+35,z:front-84,w:24,d:22,h:14},
       {id:"east-relay",label:"Radio Relay",x:right+53,z:front+30,w:21,d:24,h:18},
       {id:"south-shelter",label:"Abandoned Depot",x:left+55,z:back+61,w:31,d:27,h:12},
-    ].map((site)=>({...site,ladderX:site.x+site.w*.5,ladderZ:site.z+site.d+1.25}));
+      {id:"wasteland-tower",label:"Abandoned Skyscraper",kind:"skyscraper",
+        x:right+92,z:back+76,w:38,d:34,h:90},
+    ].map(site=>({...site,
+      ladderX:site.kind==="skyscraper"?site.x+site.w-6:site.x+site.w*.5,
+      ladderZ:site.kind==="skyscraper"?site.z+site.d-6:site.z+site.d+1.25,
+      interiorLadder:site.kind==="skyscraper",
+    }));
+  }
+  function skyscraperWallSections(site) {
+    const t=1.3,gap=6.8,cx=site.x+site.w*.5;
+    return [
+      {x:site.x,y:0,z:site.z,w:cx-gap-site.x,h:site.h,d:t},
+      {x:cx+gap,y:0,z:site.z,w:site.x+site.w-cx-gap,h:site.h,d:t},
+      {x:cx-gap,y:11,z:site.z,w:gap*2,h:site.h-11,d:t},
+      {x:site.x,y:0,z:site.z+site.d-t,w:site.w,h:site.h,d:t},
+      {x:site.x,y:0,z:site.z,w:t,h:site.h,d:site.d},
+      {x:site.x+site.w-t,y:0,z:site.z,w:t,h:site.h,d:site.d},
+    ];
+  }
+  function skyscraperWalkAllowed(site,x,z,radius,elevation) {
+    if(elevation>=site.h-.6)return true;
+    return skyscraperWallSections(site).every(wall=>{
+      if(wall.y>8)return true;
+      const nx=clamp(x,wall.x,wall.x+wall.w),nz=clamp(z,wall.z,wall.z+wall.d);
+      return Math.hypot(x-nx,z-nz)>=radius;
+    });
+  }
+  function combatMysterySpots() {
+    const [left,front,right,back]=floorBounds(),sites=combatExteriorLandmarks();
+    const tower=sites.find(s=>s.kind==="skyscraper");
+    const spots=[
+      {id:"west-woods",x:left-42,z:front+44,y:0},
+      {id:"east-relay-yard",x:right+39,z:front+9,y:0},
+      {id:"north-ridge",x:(left+right)*.5,z:front-54,y:0},
+      {id:"south-depot-yard",x:left+56,z:back+45,y:0},
+      {id:"east-woods",x:right+61,z:back+27,y:0},
+      {id:"center-lane",x:(left+right)*.58,z:(front+back)*.63,y:0},
+      {id:"tower-roof",x:tower.x+16,z:tower.z+16,y:tower.h+.6},
+      ...sites.filter(site=>site.kind!=="skyscraper").map(site=>({
+        id:site.id+"-roof",x:site.x+site.w*.35,z:site.z+site.d*.4,y:site.h+.6
+      }))
+    ];
+    return spots.filter(spot=>spot.y>1 || (
+      !forestTreesNear(spot.x,spot.z,5).length &&
+      !sites.some(site=>spot.x>site.x-4&&spot.x<site.x+site.w+4&&
+        spot.z>site.z-4&&spot.z<site.z+site.d+4)
+    ));
   }
   // Only a handful of barrels, generated deterministically for collision,
   // projectiles and rendering in both game modes.
@@ -2727,7 +2792,10 @@
   function combatClimbSurface(x,z) {
     if(!combatController?.isActive?.())return null;
     for(const site of combatExteriorLandmarks()){
-      const roofHeight=site.h+.6; // upper face of visible roof slab
+      const roofHeight=site.h+.6;
+      if(site.interiorLadder && Math.hypot(x-site.ladderX,z-site.ladderZ)<3.5)
+        return {...site,kind:"ladder",height:roofHeight,
+          landingX:site.ladderX+2.5,landingZ:site.ladderZ-2.5}; // upper face of visible roof slab
       if(x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55)
         return {...site,kind:"roof",height:roofHeight};
       if(Math.hypot(x-site.ladderX,z-site.ladderZ)<4.7)
@@ -2743,7 +2811,8 @@
       combatExteriorHills().every(hill=>Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
     if(!hillsOpen)return false;
     if(combatController?.getMode?.()==="zombie" &&
-      combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
+      (typeof forestTreesNear==="function"?forestTreesNear(x,z,p+1.4):combatDeadForestTrees())
+        .some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
       return false;
     if(typeof combatExplosiveBarrels==="function" && combatExplosiveBarrels().some(barrel=>!combatController?.isExplosiveDestroyed?.(barrel.id) &&
       Math.hypot(x-barrel.x,z-barrel.z)<barrel.radius+p))return false;

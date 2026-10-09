@@ -9476,3 +9476,32 @@ body.viewer-fullscreen-fallback-active {
     bottom:calc(10rem + env(safe-area-inset-bottom)) !important;
   }
 }
+
+/* v0.13.86 — Distinct acquired-weapon rarity surfaces. Weapon models and
+   mystery pedestal share the same rarity names from plant-combat. */
+.combat-mode-active[data-weapon-rarity="uncommon"] .combat-weapon-panel {
+  border-color:rgba(95,230,154,.75);background:linear-gradient(135deg,rgba(16,62,43,.95),rgba(6,24,27,.93));
+  box-shadow:0 0 23px rgba(54,201,117,.22);
+}
+.combat-mode-active[data-weapon-rarity="rare"] .combat-weapon-panel {
+  border-color:rgba(94,185,255,.84);background:linear-gradient(135deg,rgba(14,52,97,.95),rgba(7,20,45,.94));
+  box-shadow:0 0 25px rgba(52,145,255,.28);
+}
+.combat-mode-active[data-weapon-rarity="epic"] .combat-weapon-panel {
+  border-color:rgba(205,119,255,.86);background:linear-gradient(135deg,rgba(67,26,105,.96),rgba(30,14,53,.94));
+  box-shadow:0 0 26px rgba(183,78,255,.30);
+}
+.combat-mode-active[data-weapon-rarity="mythic"] .combat-weapon-panel {
+  border-color:rgba(255,199,83,.95);
+  background:linear-gradient(125deg,rgba(116,59,14,.98),rgba(54,29,13,.96) 52%,rgba(28,19,34,.96));
+  box-shadow:0 0 28px rgba(255,165,45,.38),inset 0 1px rgba(255,233,171,.2);
+}
+.combat-mode-active[data-weapon-rarity="mythic"] .combat-weapon-copy strong {
+  color:#ffe8a8;text-shadow:0 0 13px rgba(255,204,96,.43);
+}
+.combat-station-prompt.mystery-rolling {
+  background:linear-gradient(130deg,rgba(48,28,66,.94),rgba(17,19,40,.93));
+}
+.combat-station-prompt.mystery-ready {
+  background:linear-gradient(130deg,rgba(21,65,48,.93),rgba(17,21,39,.94));
+}

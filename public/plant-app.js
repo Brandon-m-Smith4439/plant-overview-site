@@ -2660,10 +2660,12 @@
     const walking=state.cameraMode==="walk";
     for(const tree of combatDeadForestTrees()){
       const distance=Math.hypot(camX-tree.x,camZ-tree.z);
-      if(walking&&distance>188)continue;
+      if(walking&&distance>240)continue;
       const dark=tree.grove%2===0?"#242625":"#2c2927";
       const sway=Math.sin(time*.00035+tree.phase)*.13;
       const {x,z,height:h,radius:r}=tree;
+      // The lighter stump base marks the precise physical trunk.
+      box({x:x-r*1.2,y:0,z:z-r*1.2,w:r*2.4,h:.55,d:r*2.4,color:"#54594d"},1,1);
       // Two upright tapered trunk sections and a high pointed crown make
       // these actual dead trees, not sideways bars lying in the wasteland.
       box({x:x-r,y:0,z:z-r,w:r*2,h:h*.69,d:r*2,color:dark},1,1);
@@ -2697,11 +2699,36 @@
       {id:"south-shelter",label:"Abandoned Depot",x:left+55,z:back+61,w:31,d:27,h:12},
     ].map((site)=>({...site,ladderX:site.x+site.w*.5,ladderZ:site.z+site.d+1.25}));
   }
+  // Only a handful of barrels, generated deterministically for collision,
+  // projectiles and rendering in both game modes.
+  let barrelCache={key:"",positions:[]};
+  function combatExplosiveBarrels() {
+    const b=floorBounds(),key=b.join("|");
+    if(barrelCache.key===key)return barrelCache.positions;
+    const [left,front,right,back]=b,midX=(left+right)*.5,midZ=(front+back)*.5;
+    const candidates=[
+      [left-25,front+25],[right+25,back-28],[midX-32,front-38],
+      [midX+38,back+43],[left-45,midZ-28],[right+45,midZ+25],
+      [left-69,back-38],[right+67,front+44],[left+25,front-55],
+      [right-25,back+57],[left-31,back-55],[right+31,front-55]
+    ];
+    const trees=combatDeadForestTrees(),hills=combatExteriorHills(),buildings=combatExteriorLandmarks();
+    const positions=[];
+    for(const [x,z] of candidates){
+      if(trees.some(tree=>Math.hypot(tree.x-x,tree.z-z)<tree.radius+5))continue;
+      if(hills.some(hill=>Math.hypot(hill.x-x,hill.z-z)<hill.radius*.72+5))continue;
+      if(buildings.some(site=>x>site.x-7&&x<site.x+site.w+7&&z>site.z-7&&z<site.z+site.d+7))continue;
+      positions.push({id:"explosive-"+positions.length,x,z,radius:1});
+      if(positions.length>=4)break;
+    }
+    barrelCache={key,positions};
+    return positions;
+  }
   function combatClimbSurface(x,z) {
     if(!combatController?.isActive?.())return null;
     for(const site of combatExteriorLandmarks()){
       const roofHeight=site.h+.6; // upper face of visible roof slab
-      if(x>=site.x&&x<=site.x+site.w&&z>=site.z&&z<=site.z+site.d)
+      if(x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55)
         return {...site,kind:"roof",height:roofHeight};
       if(Math.hypot(x-site.ladderX,z-site.ladderZ)<4.7)
         return {...site,kind:"ladder",height:roofHeight,landingX:site.ladderX,landingZ:site.z+site.d-2};
@@ -2712,16 +2739,18 @@
     if(!combatController?.isActive?.())return false;
     const b=combatWorldBounds(),p=Math.max(.45,Number(radius)||1.2);
     if(x<b[0]+p||x>b[2]-p||z<b[1]+p||z>b[3]-p)return false;
-    const hillsOpen = combatExteriorHills().every(hill =>
-      Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
+    const hillsOpen = combatController?.getMode?.()==="zombie" ||
+      combatExteriorHills().every(hill=>Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
     if(!hillsOpen)return false;
     if(combatController?.getMode?.()==="zombie" &&
-      combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p+.20))
+      combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
       return false;
+    if(combatExplosiveBarrels().some(barrel=>!combatController?.isExplosiveDestroyed?.(barrel.id) &&
+      Math.hypot(x-barrel.x,z-barrel.z)<barrel.radius+p))return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
       const onRoof=Number(state.walkVerticalOffset)>=site.h+.35 &&
-        x>=site.x-.45&&x<=site.x+site.w+.45&&z>=site.z-.45&&z<=site.z+site.d+.45;
+        x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55;
       return onRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
     });
   }
@@ -2832,7 +2861,7 @@
     const name=String(component.name || component.id || "").toLowerCase();
     const opacity=Number(component.opacity ?? 1);
     return component.type === "glassPanel"
-      || /glass|window|windshield|cutting surface|observation/.test(name)
+      || /glass|window|windshield|cutting surface|observation|pane|sheet|lite|transparent/.test(name)
       || (opacity < .9 && ["#8fc6d4","#9ed8e6","#a8dce8"].includes(String(component.color || "").toLowerCase()));
   }
 
@@ -2975,11 +3004,17 @@
       combatExteriorLandmarks().forEach((site)=>entries.push({
         kind:"exterior-building",x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d
       }));
-      combatExteriorHills().forEach((hill)=>entries.push({
-        kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
-        w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44,
-        navRadius:hill.radius*.72
-      }));
+      if(combatController?.getMode?.()!=="zombie")
+        combatExteriorHills().forEach((hill)=>entries.push({
+          kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
+          w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44,
+          navRadius:hill.radius*.72
+        }));
+      combatExplosiveBarrels().forEach(barrel=>{
+        if(combatController?.isExplosiveDestroyed?.(barrel.id))return;
+        entries.push({kind:"explosive-barrel",barrelId:barrel.id,
+          x:barrel.x-.88,y:0,z:barrel.z-.88,w:1.76,h:3,d:1.76});
+      });
       if(combatController?.getMode?.()==="zombie")
         combatDeadForestTrees().forEach(tree=>entries.push({
           kind:"forest-trunk",x:tree.x-tree.radius,y:0,z:tree.z-tree.radius,
@@ -9191,6 +9226,12 @@
     combatExteriorLandmarks().forEach((site,index)=>{
       box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,color:zombie?"#424a40":"#ad9270"},1,1);
       box({x:site.x-.55,y:site.h,z:site.z-.55,w:site.w+1.1,h:.6,d:site.d+1.1,color:zombie?"#73786a":"#dfbd87"},1,1);
+      // Lighter raised coping makes the roof's walkable edges unmistakable.
+      const rimY=site.h+.61,rim=zombie?"#dddcc5":"#eadac3";
+      box({x:site.x-.63,y:rimY,z:site.z-.63,w:site.w+1.26,h:.25,d:.35,color:rim},1,1);
+      box({x:site.x-.63,y:rimY,z:site.z+site.d+.28,w:site.w+1.26,h:.25,d:.35,color:rim},1,1);
+      box({x:site.x-.63,y:rimY,z:site.z-.28,w:.35,h:.25,d:site.d+.56,color:rim},1,1);
+      box({x:site.x+site.w+.28,y:rimY,z:site.z-.28,w:.35,h:.25,d:site.d+.56,color:rim},1,1);
       box({x:site.x+2,y:site.h+.7,z:site.z+2,w:2,h:4+index,d:2,color:zombie?"#413938":"#b5a482"},1,1);
       // Railings and ladder are 3D geometry, not floating UI.
       for(const side of [site.ladderX-.72,site.ladderX+.72])
@@ -9199,6 +9240,14 @@
         box({x:site.ladderX-.76,y:h,z:site.ladderZ-.17,w:1.52,h:.18,d:.28,color:"#d2c9aa"},1,1);
       box({x:site.x+site.w*.24,y:site.h+.65,z:site.z+site.d*.42,
         w:site.w*.48,h:.12,d:.26,color:"#d8c299"},1,1);
+    });
+    combatExplosiveBarrels().forEach(barrel=>{
+      if(combatController?.isExplosiveDestroyed?.(barrel.id))return;
+      const x=barrel.x,z=barrel.z;
+      box({x:x-.88,y:0,z:z-.88,w:1.76,h:2.8,d:1.76,color:"#ac2923"},1,1);
+      box({x:x-.91,y:.45,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
+      box({x:x-.91,y:1.9,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
+      box({x:x-.72,y:2.8,z:z-.72,w:1.44,h:.18,d:1.44,color:"#472219"},1,1);
     });
     // Ridgelines supply actual vertical scenery beyond the rock scatter.
     for(const hill of combatExteriorHills()){
@@ -10537,7 +10586,9 @@
     const renderComponents = lodLevel >= 2 ? visibleComponents : representativeDesignComponents(visibleComponents);
     try {
       renderComponents.forEach((component) => {
-      if (combatController?.isActive?.() && carrierGlassComponent(machine,component) && combatController.isGlassShattered?.(machine.instanceId,component.id)) return;
+      if (combatController?.isActive?.() && carrierGlassComponent(machine,component) &&
+        combatController.isGlassShattered?.(machine.instanceId||machine.id||machine.name,
+          component.id||component.name||"glass")) return;
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
       if (component.type === "box" || component.type === "glassPanel" || component.type === "text") {
         drawDesignBox(machine, component, design, componentAlpha, grow);
@@ -11639,6 +11690,7 @@
       return [[1,0,0],[0,1,0]];
     };
 
+    const mysteryRarityColors={common:"#b8c6cc",uncommon:"#70edaa",rare:"#69b9ff",epic:"#cb8cff",mythic:"#ffca58",cursed:"#f15a72"};
     // Survival stations use real 3D geometry, not a billboard. The Mystery
     // Box is wide enough for a full-sized long gun and keeps the roll display
     // visible from a first-person approach.
@@ -11647,8 +11699,9 @@
       const x=Number(station.x),z=Number(station.z);
       if (!Number.isFinite(x)||!Number.isFinite(z)) continue;
       const pulse=.74+.26*Math.sin(time*.006);
-      const body=health?"#23433f":"#29203e";
-      const accent=health?"#62f1c8":"#e4a8fa";
+      const glowColor=mysteryRarityColors[station.offer?.rarity] || "#e4a8fa";
+      const body=health?"#23433f":station.offer?.rarity==="mythic"?"#47301b":station.offer?.rarity==="cursed"?"#40232e":"#29203e";
+      const accent=health?"#62f1c8":glowColor;
       const width=health?3.1:5.4;
       const depth=health?2.1:3.0;
       const frontZ=z-depth*.5;
@@ -11673,7 +11726,15 @@
           const weaponY=2.92+raise*2.65+bob;
           const weaponKey=String(offer.weaponKey||"rifle");
           const mysteryWeaponDesign=designLibrary["combat-weapon-"+weaponKey];
-          if (mysteryWeaponDesign?.components?.length) {
+          if(weaponKey==="teddy"){
+            // A simple blocky teddy silhouette signals the rare losing roll.
+            box({x:x-.48,y:weaponY-.15,z:z-.35,w:.96,h:.84,d:.7,color:"#94624d"},1,1);
+            box({x:x-.38,y:weaponY+.60,z:z-.25,w:.76,h:.65,d:.57,color:"#ba8c66"},1,1);
+            for(const side of [-1,1]){
+              box({x:x+side*.43-.17,y:weaponY+1.04,z:z-.23,w:.34,h:.34,d:.34,color:"#94624d"},1,1);
+              box({x:x+side*.36-.15,y:weaponY-.38,z:z-.23,w:.3,h:.4,d:.4,color:"#805442"},1,1);
+            }
+          } else if (mysteryWeaponDesign?.components?.length) {
             const base=mysteryWeaponDesign.base||{},ww=Math.max(.2,Number(base.w)||4);
             const hh=Math.max(.2,Number(base.h)||1.65),dd=Math.max(.2,Number(base.d)||1.25);
             drawCustomDesign({id:"mystery-display-"+weaponKey,instanceId:"mystery-display-"+weaponKey,
@@ -11689,7 +11750,7 @@
           const longGun=!pistol;
           const length=pistol?2.0:rocket?4.0:sniper?4.55:lmg?4.25:3.9;
           const left=x-length*.5;
-          const tone=rolling?"#d2a1fb":isReturning?"#776a83":"#d7e4ed";
+          const tone=rolling?glowColor:isReturning?"#776a83":glowColor;
           // Barrel points to +X. Receiver, grip, stock, optic, magazine and
           // muzzle are recognizable silhouette parts for every prize category.
           box({x:left+.68,y:weaponY,z:z-.32,w:pistol?.9:1.65,h:.48,d:.62,color:tone,rotationY:0},1,1);
@@ -11706,7 +11767,7 @@
           const haloRadius=1.25+raise*.75;
           const ring=[];
           for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,weaponY-.75,z+Math.sin(angle)*.82]);}
-          polygon(ring,"rgba(166,105,242,.055)","rgba(236,171,255,.64)",1.7,.55+pulse*.32,{transparent:true});
+          polygon(ring,"rgba(166,105,242,.08)",glowColor,2.2,.65+pulse*.28,{transparent:true});
           // The reel text changes alongside the physical prize model, slows to
           // the chosen gun, then says TAKE before dropping back through the lid.
           const reelPoint=project(x,2.0,frontZ-.26);
@@ -11718,7 +11779,7 @@
             const ticker=rolling ? "◀ "+String(offer.weaponName||"WEAPON").toUpperCase()+" ▶" : String(offer.finalWeaponName||"WEAPON").toUpperCase();
             ctx.strokeStyle="rgba(7,7,17,.96)";ctx.lineWidth=3.5*scale;
             ctx.strokeText(ticker,reelPoint[0],reelPoint[1]);
-            ctx.fillStyle=rolling?"#f0c6ff":isReturning?"#b4a3c7":"#ffeaa8";
+            ctx.fillStyle=isReturning?"#b4a3c7":glowColor;
             ctx.fillText(ticker,reelPoint[0],reelPoint[1]);
             ctx.restore();
           }
@@ -11739,14 +11800,15 @@
         const label=health?"HEALTH STATION · 800 PTS":!offer?"MYSTERY BOX · 950 PTS":
           offer.phase==="rolling"?"MYSTERY BOX · ROLLING":
           offer.phase==="rising"?"YOUR WEAPON IS RISING":
-          offer.phase==="ready"?"PRESS E TO TAKE · "+String(offer.remainingSeconds)+"S":
+          offer.phase==="teddy"?"TEDDY BEAR · BOX RELOCATING":
+          offer.phase==="ready"?"PRESS E TO TAKE · "+String(offer.finalRarity||"").toUpperCase():
           "WEAPON RETURNING";
         ctx.save();
         ctx.font=`800 ${Math.max(11,12*scale)}px "Segoe UI",sans-serif`;
         ctx.textAlign="center";ctx.textBaseline="middle";
         ctx.strokeStyle="rgba(10,18,25,.92)";ctx.lineWidth=3*scale;
         ctx.strokeText(label,textPoint[0],textPoint[1]);
-        ctx.fillStyle=health?"#a4ffe1":"#ffe0a2";
+        ctx.fillStyle=health?"#a4ffe1":mysteryRarityColors[offer?.rarity]||"#ffe0a2";
         ctx.fillText(label,textPoint[0],textPoint[1]);
         ctx.restore();
       }
@@ -13253,6 +13315,10 @@
     for (const { machine, rendered, alpha, grow } of entries) {
       if (combatController?.isActive?.() && combatEnemyMachine(machine)) continue;
       const design = designLibrary[rendered.designId];
+      // Glass must pass the per-component shattered-state renderer instead
+      // of an instanced cache that keeps intact glass around after a hit.
+      if(combatController?.isActive?.() && design?.components &&
+         visibleDesignComponents(design,time).some(part=>carrierGlassComponent(rendered,part)))continue;
       if (!design || !machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 2
         || state.selectedMachineIds.has(machine.instanceId) || alpha < .9999 || grow < .9999) continue;
       const partition = designRenderPartition(design);
@@ -13491,6 +13557,7 @@
         animated ? Math.floor(time / (renderPerformance.animationSampleMs?.() || 33)) : "static",
         design ? objectRenderIdentity(design) : "",
         machineCurveSegments(rendered),
+        combatController?.isActive?.() ? combatController.glassRevision?.() || 0 : 0,
       ].join("|");
       drawRetainedObject(`plant:machine:${machine.instanceId}`, revision, () => {
         drawCrane(rendered,alpha);
@@ -13846,7 +13913,7 @@
     renderPerformance.beginPhase?.("structure");
     const bounds = floorBounds();
     if(zombieExterior||desertExterior)drawRetainedObject(
-      "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}`,drawCombatExterior
+      "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}|${combatController?.explosiveRevision?.()||0}`,drawCombatExterior
     );
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(

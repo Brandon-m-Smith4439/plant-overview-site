@@ -35,7 +35,28 @@
   const MYSTERY_REEL_STEPS = 35;
   const HEALTH_STATION_COST = 800;
   const MAX_CARRIED_WEAPONS = 3;
-  const MYSTERY_WEAPON_POOL = Object.freeze(["smg","carbine","lmg","burst","revolver","dmr","autoShotgun","heavyPistol","sniper","rocket","shotgun"]);
+  const MYSTERY_WEAPON_POOL = Object.freeze(["smg","carbine","lmg","burst","revolver","dmr","autoShotgun","heavyPistol","sniper","rocket","shotgun","novaRifle","thunderCannon","reaperLMG"]);
+  const MYSTERY_REEL_POOL = Object.freeze([...MYSTERY_WEAPON_POOL,"teddy"]);
+  const MYSTERY_PRIZE_WEIGHTS = Object.freeze({
+    smg:14,carbine:13,lmg:12,burst:11,revolver:11,dmr:10,autoShotgun:10,
+    heavyPistol:11,sniper:8,rocket:6,shotgun:10,novaRifle:.24,thunderCannon:.16,reaperLMG:.1,teddy:4.5
+  });
+  function mysteryRarity(key) {
+    if(key==="teddy")return "cursed";
+    if(["novaRifle","thunderCannon","reaperLMG"].includes(key))return "mythic";
+    if(["rocket","sniper","dmr"].includes(key))return "epic";
+    if(["lmg","autoShotgun","revolver"].includes(key))return "rare";
+    if(["carbine","burst","heavyPistol"].includes(key))return "uncommon";
+    return "common";
+  }
+  function rollMysteryPrize(available,random=Math.random()) {
+    const pool=available.filter(key=>key==="teddy"||MYSTERY_WEAPON_POOL.includes(key));
+    const total=pool.reduce((sum,key)=>sum+(MYSTERY_PRIZE_WEIGHTS[key]||0),0);
+    if(!total)return "teddy";
+    let target=Math.min(.999999999,Math.max(0,random))*total;
+    for(const key of pool){target-=MYSTERY_PRIZE_WEIGHTS[key]||0;if(target<0)return key;}
+    return pool[pool.length-1];
+  }
   const HOST_ENEMY_SYNC_INTERVAL_MS = 180;
   const COOP_ENEMY_PREDICTION_MS = 240;
   // Occupancy-grid routing is deliberately capped and cached: it runs only
@@ -128,6 +149,9 @@
     dmr: Object.freeze({key:"dmr",shortLabel:"Precision DMR",magazine:12,reserve:72,damage:89,range:320,fireInterval:365,reloadMs:1900,automatic:false,scope:true,visual:"sniper"}),
     autoShotgun: Object.freeze({key:"autoShotgun",shortLabel:"Auto Shotgun",magazine:16,reserve:96,damage:13,range:80,fireInterval:265,reloadMs:2250,automatic:true,pellets:9,spread:.11,visual:"shotgun"}),
     heavyPistol: Object.freeze({key:"heavyPistol",shortLabel:"Heavy Pistol",magazine:12,reserve:84,damage:79,range:170,fireInterval:235,reloadMs:1400,automatic:false,visual:"handgun"}),
+    novaRifle: Object.freeze({key:"novaRifle",shortLabel:"NOVA Disruptor",magazine:65,reserve:390,damage:175,range:280,fireInterval:72,reloadMs:1580,automatic:true,visual:"rifle",scope:true}),
+    thunderCannon: Object.freeze({key:"thunderCannon",shortLabel:"Thunder Cannon",magazine:7,reserve:63,damage:270,range:110,fireInterval:590,reloadMs:2200,automatic:false,pellets:12,spread:.045,visual:"shotgun"}),
+    reaperLMG: Object.freeze({key:"reaperLMG",shortLabel:"Reaper Minigun",magazine:180,reserve:720,damage:115,range:255,fireInterval:56,reloadMs:3700,automatic:true,visual:"rifle"}),
     chainsaw: Object.freeze({
       key: "chainsaw", shortLabel: "Chainsaw", magazine: 1, reserve: 0, damage: 92,
       range: 5.8, fireInterval: 390, reloadMs: 0, automatic: true, melee: true, noAmmo: true,
@@ -677,6 +701,7 @@
     const ammunition = Object.fromEntries(Object.entries(WEAPONS).map(([key, weapon]) => [key, { magazine: weapon.magazine, reserve: weapon.reserve }]));
     const worldEffects = { tracers: [], impacts: [], bloodBursts: [], bloodPools: [], bloodFountains: [], rockets: [], explosions: [], pickups: [], glassShards: [] };
     const shatteredGlass = new Set();
+    const destroyedExplosives = new Set();
 
     let active = false;
     let aiming = false;
@@ -1135,6 +1160,14 @@
       // Pause freezes the reel and claim timer until the regular pause-time
       // offset is applied on resume.
       if (paused && pausedAt) now = Math.min(now, pausedAt);
+      if(mysteryOffer.prizeKey==="teddy"){
+        if(now<mysteryOffer.rollEndsAt)return "rolling";
+        if(now<mysteryOffer.rollEndsAt+1750)return "teddy";
+        // The box moves only after its complete reel; never while in use.
+        mysteryOffer=null;
+        moveMysteryBoxForWave(true);
+        return "idle";
+      }
       if (now >= mysteryOffer.despawnAt) {
         mysteryOffer = null; // Unclaimed prize has lowered and can be rerolled.
         return "idle";
@@ -1155,14 +1188,15 @@
       // Decelerating reel uses an exact integer number of steps so the
       // final visible slot always lands on the actual random prize.
       const steps = Math.min(MYSTERY_REEL_STEPS, Math.floor(MYSTERY_REEL_STEPS * (1 - Math.pow(1 - progress, 2.3))));
-      const index = (offer.prizeIndex + steps - MYSTERY_REEL_STEPS + MYSTERY_WEAPON_POOL.length * 4) % MYSTERY_WEAPON_POOL.length;
-      const weaponKey = phase === "rolling" ? MYSTERY_WEAPON_POOL[index] : offer.prizeKey;
+      const index = (offer.prizeIndex + steps - MYSTERY_REEL_STEPS + MYSTERY_REEL_POOL.length * 4) % MYSTERY_REEL_POOL.length;
+      const weaponKey = phase === "rolling" ? MYSTERY_REEL_POOL[index] : offer.prizeKey;
       const rise = phase==="rolling" ? progress*progress*(3-2*progress)
         : phase==="ready" ? 1
         : 1 - (1 - Math.pow(1 - clamp((now - offer.lowerStartsAt) / MYSTERY_LOWER_DURATION_MS, 0, 1), 2));
       return {
-        phase, weaponKey, weaponName: WEAPONS[weaponKey]?.shortLabel || "Weapon",
-        finalWeaponName: WEAPONS[offer.prizeKey]?.shortLabel || "Weapon",
+        phase, weaponKey, weaponName: weaponKey==="teddy"?"Teddy Bear":WEAPONS[weaponKey]?.shortLabel || "Weapon",
+        finalWeaponName: offer.prizeKey==="teddy"?"Teddy Bear":WEAPONS[offer.prizeKey]?.shortLabel || "Weapon",
+        rarity:mysteryRarity(weaponKey),finalRarity:mysteryRarity(offer.prizeKey),
         rise: clamp(rise, 0, 1), reelStep: steps,
         remainingSeconds: Math.max(0, Math.ceil((offer.lowerStartsAt - now) / 1000)),
       };
@@ -1218,15 +1252,14 @@
         setTransientStatus(`FULL HEALTH RESTORED · -${cost} POINTS`,1800);
       } else {
         const pool = MYSTERY_WEAPON_POOL.filter(key => WEAPONS[key] && !carriedWeapons.includes(key));
-        const choices = pool.length ? pool : MYSTERY_WEAPON_POOL.filter(key => WEAPONS[key]);
-        if (!choices.length) return false;
-        const key = choices[Math.floor(Math.random() * choices.length)];
+        const choices = [...(pool.length ? pool : MYSTERY_WEAPON_POOL.filter(key => WEAPONS[key])),"teddy"];
+        const key = rollMysteryPrize(choices);
         const now = performance.now();
         const rollEndsAt = now + MYSTERY_ROLL_DURATION_MS;
         const riseEndsAt = rollEndsAt;
         const lowerStartsAt = rollEndsAt + MYSTERY_CLAIM_WINDOW_MS;
         mysteryOffer = {
-          prizeKey:key, prizeIndex:MYSTERY_WEAPON_POOL.indexOf(key),
+          prizeKey:key, prizeIndex:MYSTERY_REEL_POOL.indexOf(key),
           startedAt:now,rollEndsAt,riseEndsAt,lowerStartsAt,
           despawnAt:lowerStartsAt+MYSTERY_LOWER_DURATION_MS,
         };
@@ -1241,8 +1274,10 @@
       return true;
     }
 
-    function moveMysteryBoxForWave() {
-      if (!mysteryBox) return;
+    function moveMysteryBoxForWave(fromTeddy=false) {
+      // No wave-based relocation. A teddy roll moves a box only after the
+      // animation has completely finished; never interrupt a live offer.
+      if (!mysteryBox || mysteryOffer) return;
       const previous=mysteryBox,bounds=options.getBounds?.()||[];
       if(bounds.length<4)return;
       const margin=9,minX=number(bounds[0])+margin,maxX=number(bounds[2])-margin;
@@ -1259,13 +1294,15 @@
       }
       if(!picks.length)return;
       mysteryBox=picks[Math.floor(Math.random()*picks.length)];
-      mysteryOffer=null;nearestStation=null;
+      nearestStation=null;
+      if(fromTeddy && matchType==="coop" && multiplayer?.getLobby?.())
+        multiplayer.sendEvent?.("mystery-relocate",{x:mysteryBox.x,z:mysteryBox.z},"").catch(()=>{});
       setTransientStatus("MYSTERY BOX HAS MOVED · FIND ITS NEW LOCATION",2350);
     }
 
     function beginZombieWave(now) {
       zombieWave+=1;
-      if(zombieWave>1&&(zombieWave-1)%2===0)moveMysteryBoxForWave();
+      // Mystery Box relocates only when a teddy bear is rolled, not on waves.
       waveSpecial=zombieWave%5===0;
       waveTotal=Math.min(72,Math.max(5,Math.round((5+zombieWave*3)*zombieDifficultyConfig().aliveCap)));
       waveSpawned=0;
@@ -1471,6 +1508,21 @@
       if (matchType === "coop" && multiplayer?.getLobby?.()) {
         multiplayer.sendEvent?.("glass-shatter",payload,"").catch(()=>{});
       }
+    }
+
+    function detonateExplosive(worldImpact,now){
+      const o=worldImpact?.obstacle||{};
+      if(o.kind!=="explosive-barrel")return false;
+      const id=String(o.barrelId||"");
+      if(!id || destroyedExplosives.has(id))return false;
+      destroyedExplosives.add(id);
+      const point={x:number(o.x)+number(o.w)*.5,y:2,z:number(o.z)+number(o.d)*.5};
+      worldEffects.explosions.push({point,startAt:now,duration:900,radius:12,
+        damageMax:175,sourcePlayer:true,resolved:false,seed:Math.random()*1000});
+      if(matchType==="coop" && multiplayer?.getLobby?.())
+        multiplayer.sendEvent?.("barrel-detonate",{id,point},"").catch(()=>{});
+      setTransientStatus("EXPLOSIVE BARREL DETONATED",950);
+      return true;
     }
 
     function markEnemyDefeated(enemy, now, impactDirection = null) {
@@ -2346,6 +2398,7 @@
       frame.classList.toggle("combat-shield-down",shieldDown && roundState==="playing");
       frame.classList.toggle("combat-health-critical",critical && roundState==="playing");
       frame.classList.toggle("combat-is-sprinting",playerIsSprinting());
+      frame.dataset.weaponRarity=mysteryRarity(selectedWeapon);
       frame.classList.toggle("combat-is-reviving",Boolean(reviveHold));
       if(shieldWarning)shieldWarning.hidden=!shieldDown;
       if(vitalsStatus)vitalsStatus.textContent=playerZombie?"INFECTED · NO SHIELD"
@@ -2441,8 +2494,11 @@
             } else if (offer.phase==="rising") {
               if (stationLabel) stationLabel.textContent=`${offer.finalWeaponName.toUpperCase()} · RISING OUT OF BOX`;
               if (stationBuyButton) {stationBuyButton.textContent="RISING...";stationBuyButton.disabled=true;}
+            } else if (offer.phase==="teddy") {
+              if (stationLabel) stationLabel.textContent="TEDDY BEAR! THE MYSTERY BOX IS MOVING · NO WEAPON";
+              if (stationBuyButton) {stationBuyButton.textContent="TEDDY!";stationBuyButton.disabled=true;}
             } else if (offer.phase==="ready") {
-              if (stationLabel) stationLabel.textContent=`TAKE ${offer.finalWeaponName.toUpperCase()} · ${offer.remainingSeconds}S LEFT · NO EXTRA COST`;
+              if (stationLabel) stationLabel.textContent=`${offer.finalRarity.toUpperCase()} · TAKE ${offer.finalWeaponName.toUpperCase()} · ${offer.remainingSeconds}S LEFT`;
               if (stationBuyButton) {stationBuyButton.textContent="TAKE [E]";stationBuyButton.disabled=false;}
             } else {
               if (stationLabel) stationLabel.textContent="UNCLAIMED WEAPON RETURNING TO BOX";
@@ -3098,6 +3154,7 @@
           destination=pointAlongRay(origin,direction,hitDistance);
         }
         if(worldImpact.kind==="glass" && worldImpact.distance<=hitDistance+.05)pushGlassShatter(worldImpact,now);
+        if(worldImpact.kind==="explosive-barrel" && worldImpact.distance<=hitDistance+.05)detonateExplosive(worldImpact,now);
         const travel=Math.hypot(destination.x-muzzle.x,destination.y-muzzle.y,destination.z-muzzle.z);
         const duration=clamp(travel/Math.max(35,weapon.projectileSpeed||84)*1000,150,1100);
         worldEffects.rockets.push({origin:{...muzzle},target:{...destination},startAt:now,duration,style:"player-rocket"});
@@ -3134,6 +3191,7 @@
         } else {
           if (worldImpact.landed) {
             if (worldImpact.kind === "glass") pushGlassShatter(worldImpact, now);
+            else if(worldImpact.kind==="explosive-barrel")detonateExplosive(worldImpact,now);
             else pushImpact(worldImpact.point, now, worldImpact.kind, worldImpact.normal);
           }
           const dodge = nearMissEnemy(origin,pelletDirection,weapon.range,null);
@@ -3422,6 +3480,7 @@
       worldEffects.explosions.length = 0;
       worldEffects.glassShards.length = 0;
       shatteredGlass.clear();
+      destroyedExplosives.clear();
       worldEffects.pickups.length = 0;
       lastDamageAt = 0;
       lastShieldUpdateAt = 0;
@@ -3974,6 +4033,24 @@
         applyGlassShatterPayload(event.payload, performance.now(), false);
         return;
       }
+      if(event.type==="mystery-relocate" && matchType==="coop" && gameMode==="zombie"){
+        const x=number(event.payload?.x,NaN),z=number(event.payload?.z,NaN);
+        if(Number.isFinite(x)&&Number.isFinite(z) && mysteryBox){
+          mysteryBox={x,z};mysteryOffer=null;nearestStation=null;
+          multiplayer?.heartbeat?.();
+        }
+        return;
+      }
+      if(event.type==="barrel-detonate" && matchType==="coop"){
+        const id=String(event.payload?.id||"");
+        if(!id || destroyedExplosives.has(id))return;
+        destroyedExplosives.add(id);
+        const raw=event.payload?.point||{};
+        const point={x:number(raw.x),y:number(raw.y),z:number(raw.z)};
+        worldEffects.explosions.push({point,startAt:performance.now(),duration:900,
+          radius:12,resolved:true,seed:Math.random()*1000});
+        return;
+      }
       if (event.type === "player-death" && matchType === "coop") {
         rememberRemoteRoundStats(event.senderId,event.payload || {});
         return;
@@ -4384,6 +4461,7 @@
       isCharacterOccupied: (characterId) => new Set([selectedCharacterId, ...(multiplayer?.remotePlayers?.() || []).map((player) => String(player.characterId || ""))].filter(Boolean)).has(String(characterId || "")),
       multiplayerLobby: () => multiplayer?.getLobby?.() || null,
       isGlassShattered: (machineId, componentId) => shatteredGlass.has(`${machineId}:${componentId}`),
+      isExplosiveDestroyed: (id) => destroyedExplosives.has(String(id)),
       reload: startReload,
       fire,
       setAiming: (enabled) => setAiming(Boolean(enabled)),

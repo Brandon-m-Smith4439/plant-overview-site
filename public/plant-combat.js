@@ -4003,10 +4003,11 @@
         const desiredX=sync.targetX+sync.vx*predict;
         const desiredZ=sync.targetZ+sync.vz*predict;
         const gap=Math.hypot(desiredX-number(enemy.x),desiredZ-number(enemy.z));
-        if (gap>14) { enemy.x=desiredX; enemy.z=desiredZ; }
+        if(gap>34) { enemy.x=desiredX; enemy.z=desiredZ; }
         else {
-          enemy.x=number(enemy.x)+(desiredX-number(enemy.x))*blend;
-          enemy.z=number(enemy.z)+(desiredZ-number(enemy.z))*blend;
+          const correction=Math.min(1,blend*(1+Math.min(2,gap/8)));
+          enemy.x=number(enemy.x)+(desiredX-number(enemy.x))*correction;
+          enemy.z=number(enemy.z)+(desiredZ-number(enemy.z))*correction;
         }
         let turn=((sync.targetRotationY-number(enemy.rotationY)+540)%360)-180;
         enemy.rotationY=number(enemy.rotationY)+turn*Math.min(1,blend*1.35);

@@ -1718,6 +1718,10 @@
         if (number(o.y)>7 || number(o.y)+number(o.h,20)<.4) continue;
         if (o.kind==="glass" && shatteredGlass.has(String(o.glassId||""))) continue;
         const obstacle={x,z,w,d};
+        if(o.kind==="desert-hill" && number(o.navRadius)>0){
+          obstacle.cx=x+w*.5;obstacle.cz=z+d*.5;
+          obstacle.navRadius=number(o.navRadius);
+        }
         navCache.obstacles.push(obstacle);
         const minX=Math.floor((x-1.4)/NAV_BUCKET_SIZE),maxX=Math.floor((x+w+1.4)/NAV_BUCKET_SIZE);
         const minZ=Math.floor((z-1.4)/NAV_BUCKET_SIZE),maxZ=Math.floor((z+d+1.4)/NAV_BUCKET_SIZE);
@@ -1739,7 +1743,9 @@
         x<context.bounds[0]+radius || x>context.bounds[2]-radius ||
         z<context.bounds[1]+radius || z>context.bounds[3]-radius)) return false;
       for (const o of navigationCandidates(x,z,context)) {
-        if (circleHitsAabb(x,z,radius,o)) return false;
+        if (o.navRadius) {
+          if(Math.hypot(x-o.cx,z-o.cz)<radius+o.navRadius)return false;
+        } else if (circleHitsAabb(x,z,radius,o)) return false;
       }
       return true;
     }
@@ -1758,6 +1764,12 @@
         for (const o of context.buckets.get(bx+":"+bz)||[]) {
           if (visited.has(o)) continue;
           visited.add(o);
+          if(o.navRadius){
+            const lengthSquared=dx*dx+dz*dz;
+            const t=lengthSquared>0?clamp(((o.cx-from.x)*dx+(o.cz-from.z)*dz)/lengthSquared,0,1):0;
+            if(Math.hypot(from.x+t*dx-o.cx,from.z+t*dz-o.cz)<o.navRadius+radius+.08)return false;
+            continue;
+          }
           const left=o.x-radius-.08,right=o.x+o.w+radius+.08;
           const top=o.z-radius-.08,bottom=o.z+o.d+radius+.08;
           let enter=0,exit=1;
@@ -1887,6 +1899,11 @@
         const baseY = number(obstacle.y);
         const height = Math.max(.01, number(obstacle.h, 20));
         if (baseY > number(record.elevation)+size.h || baseY + height < number(record.elevation)+.15) continue;
+        if(obstacle.kind==="desert-hill" && number(obstacle.navRadius)>0){
+          if(Math.hypot(centerX-(number(obstacle.x)+number(obstacle.w)*.5),
+            centerZ-(number(obstacle.z)+number(obstacle.d)*.5))<number(obstacle.navRadius)+radius)return false;
+          continue;
+        }
         if (circleHitsAabb(centerX, centerZ, radius, obstacle)) return false;
       }
       for (const other of aliveEnemies()) {

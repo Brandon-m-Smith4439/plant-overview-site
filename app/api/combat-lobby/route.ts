@@ -501,6 +501,8 @@ export async function POST(request: Request) {
       if (action === "event") {
         const type = cleanId(body.type, 40);
         if (!type) return { ok: false, status: 400, error: "Event type required." };
+        if(type==="round-restart" && lobby.roundOutcome==="gameover")
+          return {ok:false,status:409,error:"All players must vote to play again."};
         if (["coop-victory", "round-restart"].includes(type) && lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host may end or restart a co-op round." };
         if (type === "npc-hit" && lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host may issue zombie damage events." };
         if (type === "npc-hit" && !lobby.players[cleanId(body.targetId, 96)]) return { ok: false, status: 400, error: "Damage target must be a player in the lobby." };

@@ -2861,7 +2861,7 @@
     const name=String(component.name || component.id || "").toLowerCase();
     const opacity=Number(component.opacity ?? 1);
     return component.type === "glassPanel"
-      || /glass|window|windshield|cutting surface|observation/.test(name)
+      || /glass|window|windshield|cutting surface|observation|pane|sheet|lite|transparent/.test(name)
       || (opacity < .9 && ["#8fc6d4","#9ed8e6","#a8dce8"].includes(String(component.color || "").toLowerCase()));
   }
 
@@ -11690,6 +11690,7 @@
       return [[1,0,0],[0,1,0]];
     };
 
+    const mysteryRarityColors={common:"#b8c6cc",uncommon:"#70edaa",rare:"#69b9ff",epic:"#cb8cff",mythic:"#ffca58",cursed:"#f15a72"};
     // Survival stations use real 3D geometry, not a billboard. The Mystery
     // Box is wide enough for a full-sized long gun and keeps the roll display
     // visible from a first-person approach.
@@ -11698,8 +11699,9 @@
       const x=Number(station.x),z=Number(station.z);
       if (!Number.isFinite(x)||!Number.isFinite(z)) continue;
       const pulse=.74+.26*Math.sin(time*.006);
-      const body=health?"#23433f":"#29203e";
-      const accent=health?"#62f1c8":"#e4a8fa";
+      const glowColor=mysteryRarityColors[station.offer?.rarity] || "#e4a8fa";
+      const body=health?"#23433f":station.offer?.rarity==="mythic"?"#47301b":station.offer?.rarity==="cursed"?"#40232e":"#29203e";
+      const accent=health?"#62f1c8":glowColor;
       const width=health?3.1:5.4;
       const depth=health?2.1:3.0;
       const frontZ=z-depth*.5;
@@ -11724,7 +11726,15 @@
           const weaponY=2.92+raise*2.65+bob;
           const weaponKey=String(offer.weaponKey||"rifle");
           const mysteryWeaponDesign=designLibrary["combat-weapon-"+weaponKey];
-          if (mysteryWeaponDesign?.components?.length) {
+          if(weaponKey==="teddy"){
+            // A simple blocky teddy silhouette signals the rare losing roll.
+            box({x:x-.48,y:weaponY-.15,z:z-.35,w:.96,h:.84,d:.7,color:"#94624d"},1,1);
+            box({x:x-.38,y:weaponY+.60,z:z-.25,w:.76,h:.65,d:.57,color:"#ba8c66"},1,1);
+            for(const side of [-1,1]){
+              box({x:x+side*.43-.17,y:weaponY+1.04,z:z-.23,w:.34,h:.34,d:.34,color:"#94624d"},1,1);
+              box({x:x+side*.36-.15,y:weaponY-.38,z:z-.23,w:.3,h:.4,d:.4,color:"#805442"},1,1);
+            }
+          } else if (mysteryWeaponDesign?.components?.length) {
             const base=mysteryWeaponDesign.base||{},ww=Math.max(.2,Number(base.w)||4);
             const hh=Math.max(.2,Number(base.h)||1.65),dd=Math.max(.2,Number(base.d)||1.25);
             drawCustomDesign({id:"mystery-display-"+weaponKey,instanceId:"mystery-display-"+weaponKey,
@@ -11740,7 +11750,7 @@
           const longGun=!pistol;
           const length=pistol?2.0:rocket?4.0:sniper?4.55:lmg?4.25:3.9;
           const left=x-length*.5;
-          const tone=rolling?"#d2a1fb":isReturning?"#776a83":"#d7e4ed";
+          const tone=rolling?glowColor:isReturning?"#776a83":glowColor;
           // Barrel points to +X. Receiver, grip, stock, optic, magazine and
           // muzzle are recognizable silhouette parts for every prize category.
           box({x:left+.68,y:weaponY,z:z-.32,w:pistol?.9:1.65,h:.48,d:.62,color:tone,rotationY:0},1,1);
@@ -11757,7 +11767,7 @@
           const haloRadius=1.25+raise*.75;
           const ring=[];
           for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,weaponY-.75,z+Math.sin(angle)*.82]);}
-          polygon(ring,"rgba(166,105,242,.055)","rgba(236,171,255,.64)",1.7,.55+pulse*.32,{transparent:true});
+          polygon(ring,"rgba(166,105,242,.08)",glowColor,2.2,.65+pulse*.28,{transparent:true});
           // The reel text changes alongside the physical prize model, slows to
           // the chosen gun, then says TAKE before dropping back through the lid.
           const reelPoint=project(x,2.0,frontZ-.26);
@@ -11769,7 +11779,7 @@
             const ticker=rolling ? "◀ "+String(offer.weaponName||"WEAPON").toUpperCase()+" ▶" : String(offer.finalWeaponName||"WEAPON").toUpperCase();
             ctx.strokeStyle="rgba(7,7,17,.96)";ctx.lineWidth=3.5*scale;
             ctx.strokeText(ticker,reelPoint[0],reelPoint[1]);
-            ctx.fillStyle=rolling?"#f0c6ff":isReturning?"#b4a3c7":"#ffeaa8";
+            ctx.fillStyle=isReturning?"#b4a3c7":glowColor;
             ctx.fillText(ticker,reelPoint[0],reelPoint[1]);
             ctx.restore();
           }
@@ -11790,14 +11800,15 @@
         const label=health?"HEALTH STATION · 800 PTS":!offer?"MYSTERY BOX · 950 PTS":
           offer.phase==="rolling"?"MYSTERY BOX · ROLLING":
           offer.phase==="rising"?"YOUR WEAPON IS RISING":
-          offer.phase==="ready"?"PRESS E TO TAKE · "+String(offer.remainingSeconds)+"S":
+          offer.phase==="teddy"?"TEDDY BEAR · BOX RELOCATING":
+          offer.phase==="ready"?"PRESS E TO TAKE · "+String(offer.finalRarity||"").toUpperCase():
           "WEAPON RETURNING";
         ctx.save();
         ctx.font=`800 ${Math.max(11,12*scale)}px "Segoe UI",sans-serif`;
         ctx.textAlign="center";ctx.textBaseline="middle";
         ctx.strokeStyle="rgba(10,18,25,.92)";ctx.lineWidth=3*scale;
         ctx.strokeText(label,textPoint[0],textPoint[1]);
-        ctx.fillStyle=health?"#a4ffe1":"#ffe0a2";
+        ctx.fillStyle=health?"#a4ffe1":mysteryRarityColors[offer?.rarity]||"#ffe0a2";
         ctx.fillText(label,textPoint[0],textPoint[1]);
         ctx.restore();
       }

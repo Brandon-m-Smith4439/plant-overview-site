@@ -31,7 +31,7 @@ assert.ok(combat.includes("worldSeq<=lastAppliedHostWorldSeq"),
   "Out-of-order enemy snapshots cannot rewind follower positions");
 assert.ok(combat.includes("lastAppliedHostWorldSeq<0") &&
   combat.includes("syncEnemies(false)"),"Follower must avoid full base-enemy rebuild on every snapshot");
-assert.ok(plant.includes("if(gap>38)") &&
+assert.ok(plant.includes("gap>38?1") &&
   combat.includes("if(gap>34)"),
   "Minor co-op prediction errors should blend instead of snapping/teleporting");
 assert.ok(css.includes(".combat-pause-overlay[data-combat-shared-paused"),

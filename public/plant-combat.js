@@ -453,6 +453,7 @@
     });
     let soundEventsInWindow=0,soundWindowStartsAt=0;
     let nextFootstepAt=0,nextAmbientAt=0,nextMusicAt=0,musicBeat=0,shieldWasEmpty=false,lastWaveTick=0;
+    let nextMysteryMusicAt=0,mysteryMusicStep=0,mysteryMusicResultPlayed=false;
     function zombieProximityLevel(distance) {
       return Math.pow(clamp((95-distance)/90,0,1),1.6);
     }
@@ -547,6 +548,31 @@
         if(i%2===0)playMusicTone(frequency*.5,start+i*(win?.22:.29),.82,.019,"sine");
       });
     }
+    function playMysteryReelMusic(now){
+      if(!soundEnabled||!audioContext||audioContext.state!=="running"||
+        paused||!mysteryOffer)return;
+      const phase=mysteryPhase(now);
+      if(phase==="rolling" && now>=nextMysteryMusicAt){
+        const progress=clamp((now-mysteryOffer.startedAt)/MYSTERY_ROLL_DURATION_MS,0,1);
+        const melody=[0,7,12,10,7,3,5,12,15,12,7,5];
+        const frequency=261.63*Math.pow(2,melody[mysteryMusicStep%melody.length]/12);
+        const beatMs=145+progress*progress*280;
+        const at=audioContext.currentTime+.008;
+        playMusicTone(frequency,at,.19,.033,"triangle");
+        if(mysteryMusicStep%3===0)playMusicTone(frequency*.5,at,.32,.012,"sine");
+        mysteryMusicStep++;
+        nextMysteryMusicAt=now+beatMs;
+        nextMusicAt=Math.max(nextMusicAt,now+beatMs+250);
+      }else if(phase!=="rolling" && !mysteryMusicResultPlayed){
+        mysteryMusicResultPlayed=true;
+        const at=audioContext.currentTime+.01;
+        const cursed=mysteryOffer.prizeKey==="teddy";
+        [0,cursed?-5:4,cursed?-12:7].forEach((interval,index)=>{
+          playMusicTone((cursed?196:349.23)*Math.pow(2,interval/12),at+index*.15,.54,
+            cursed?.025:.036,cursed?"sawtooth":"triangle");
+        });
+      }
+    }
     function playCombatMusic(now){
       if(!soundEnabled || !audioContext || audioContext.state!=="running"
         || paused || roundState!=="playing" || now<nextMusicAt)return;
@@ -605,7 +631,8 @@
         lastWaveTick=seconds;
         playCombatSound("wave-tick",.34);
       }else if(!seconds){lastWaveTick=0;}
-      playCombatMusic(now);
+      playMysteryReelMusic(now);
+      if(!mysteryOffer)playCombatMusic(now);
     }
     function setCombatSoundEnabled(enabled){
       soundEnabled=Boolean(enabled);
@@ -1142,6 +1169,28 @@
       return Math.min(32,Math.max(7,Math.round((9 + zombieWave * 1.6) * zombieDifficultyConfig().aliveCap)));
     }
 
+    function validMysterySpots() {
+      const spots=options.getMysterySpots?.()||[];
+      return spots.filter(spot=>{
+        if(!Number.isFinite(Number(spot.x))||!Number.isFinite(Number(spot.z)))return false;
+        if(number(spot.y)>1)return true; // Roof decks are deliberately elevated.
+        const radius=3.05;
+        return !pointBlockedByObstacle(spot.x,spot.z,radius) &&
+          options.canPlaceStation?.(spot.x,spot.z,radius)!==false;
+      });
+    }
+    function chooseMysterySpot(previous=null) {
+      const player=options.getPlayer?.()||{};
+      const choices=validMysterySpots().filter(spot=>
+        !previous || spot.id!==previous.id &&
+        Math.hypot(spot.x-previous.x,spot.z-previous.z)>13);
+      if(!choices.length)return null;
+      // Initial station begins near ground level; teddy moves can land on roofs.
+      const initial=!previous;
+      const candidates=initial?choices.filter(spot=>number(spot.y)<1):choices;
+      const chosen=candidates[Math.floor(Math.random()*candidates.length)]||choices[0];
+      return {...chosen};
+    }
     function findStationPosition(distance=10,seed="station") {
       const player=options.getPlayer?.() || {};
       const bounds=options.getBounds?.() || [];
@@ -1274,6 +1323,8 @@
         const rollEndsAt = now + MYSTERY_ROLL_DURATION_MS;
         const riseEndsAt = rollEndsAt;
         const lowerStartsAt = rollEndsAt + MYSTERY_CLAIM_WINDOW_MS;
+        nextMysteryMusicAt=0;mysteryMusicStep=0;mysteryMusicResultPlayed=false;
+        unlockCombatAudio();
         mysteryOffer = {
           prizeKey:key, prizeIndex:MYSTERY_REEL_POOL.indexOf(key),
           startedAt:now,rollEndsAt,riseEndsAt,lowerStartsAt,
@@ -1294,22 +1345,9 @@
       // No wave-based relocation. A teddy roll moves a box only after the
       // animation has completely finished; never interrupt a live offer.
       if (!mysteryBox || mysteryOffer || otherPlayerUsingMysteryBox()) return;
-      const previous=mysteryBox,bounds=options.getBounds?.()||[];
-      if(bounds.length<4)return;
-      const margin=9,minX=number(bounds[0])+margin,maxX=number(bounds[2])-margin;
-      const minZ=number(bounds[1])+margin,maxZ=number(bounds[3])-margin;
-      if(maxX<=minX||maxZ<=minZ)return;
-      const player=options.getPlayer?.()||{},picks=[];
-      for(let i=0;i<90;i++) {
-        const x=minX+Math.random()*(maxX-minX),z=minZ+Math.random()*(maxZ-minZ);
-        if(Math.hypot(x-previous.x,z-previous.z)<24 || Math.hypot(x-number(player.x),z-number(player.z))<11)continue;
-        if(healthStation && Math.hypot(x-healthStation.x,z-healthStation.z)<13)continue;
-        if(pointBlockedByObstacle(x,z,3.05)||options.canPlaceStation?.(x,z,3.05)===false)continue;
-        picks.push({x,z});
-        if(picks.length>=10)break;
-      }
-      if(!picks.length)return;
-      mysteryBox=picks[Math.floor(Math.random()*picks.length)];
+      const next=chooseMysterySpot(mysteryBox);
+      if(!next)return;
+      mysteryBox=next;
       mysteryMovePending=false;nearestStation=null;
       multiplayer?.heartbeat?.();
       setTransientStatus("MYSTERY BOX HAS MOVED · FIND ITS NEW LOCATION",2350);
@@ -2487,7 +2525,8 @@
             for (const [type,station] of [["mystery",mysteryBox],["health",healthStation]]) {
               if (!station || (type==="health" && lastHealthPurchaseWave===zombieWave)) continue;
               const distance=Math.hypot(number(player.x)-station.x,number(player.z)-station.z);
-              if (distance<=nearestDistance) {nearestDistance=distance;nearestStation=type;}
+              const verticalDistance=Math.abs(number(player.y,5.5)-(number(station.y)+5.5));
+              if (distance<=nearestDistance && verticalDistance<8) {nearestDistance=distance;nearestStation=type;}
             }
           }
         }
@@ -3544,7 +3583,7 @@
       });
       syncEnemies(true);
       if (matchType !== "private") resetAmmoPickups();
-      if (zombieEndless()) mysteryBox=findStationPosition(10,"mystery");
+      if (zombieEndless()) mysteryBox=chooseMysterySpot();
       if (roundOverlay) {
         roundOverlay.hidden = true;
         roundOverlay.classList.remove("killer-reveal", "victory");
@@ -4126,7 +4165,8 @@
           if(hostCountdown && !waveNextAt)playCombatSound("wave-clear",.65);
           waveNextAt=hostCountdown?performance.now()+hostCountdown:0;
           waveSpecial=zombieWave>0 && zombieWave%5===0;
-          if (Number.isFinite(Number(host.boxX)) && Number.isFinite(Number(host.boxZ))) mysteryBox={x:Number(host.boxX),z:Number(host.boxZ)};
+          if (Number.isFinite(Number(host.boxX)) && Number.isFinite(Number(host.boxZ)))
+            mysteryBox={id:String(host.boxId||""),x:Number(host.boxX),z:Number(host.boxZ),y:number(host.boxY)};
           healthStation=waveSpecial && host.healthX!=null && host.healthZ!=null ? {x:number(host.healthX),z:number(host.healthZ)} : null;
         }
       }
@@ -4164,7 +4204,8 @@
       if (zombieEndless() && multiplayer?.isHost?.()) Object.assign(state,{
         wave:zombieWave,waveTotal,waveSpawned,waveDefeated,
         waveBreakRemainingMs:waveNextAt?Math.max(0,Math.ceil(waveNextAt-now)):0,
-        boxX:mysteryBox?.x,boxZ:mysteryBox?.z,healthX:healthStation?.x,healthZ:healthStation?.z
+        boxX:mysteryBox?.x,boxZ:mysteryBox?.z,boxY:mysteryBox?.y,boxId:mysteryBox?.id,
+        healthX:healthStation?.x,healthZ:healthStation?.z
       });
       if (matchType === "coop" && multiplayer?.isHost?.() && roundState !== "setup") {
         const worldPacket=hostEnemySyncPacket(now);

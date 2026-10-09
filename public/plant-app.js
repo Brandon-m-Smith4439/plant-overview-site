@@ -2582,7 +2582,12 @@
     ];
     const trees=[];
     const sites=combatExteriorLandmarks();
-    const entrances=combatPortalWaypoints();
+    // Keep this layout-independent so forest generation is also testable in
+    // isolation from the portal/navigation controller.
+    const entrances=[
+      {x:(left+right)*.5,z:front},{x:right,z:(front+back)*.5},
+      {x:left,z:(front+back)*.5},{x:(left+right)*.5,z:back},
+    ];
     function addDeadTree(x,z,grove,i,phase){
       // Keep the working floor, building walls, ladders and entry paths clear.
       if(x>left-8&&x<right+8&&z>front-8&&z<back+8)return;

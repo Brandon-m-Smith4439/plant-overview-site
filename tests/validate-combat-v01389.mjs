@@ -22,6 +22,17 @@ assert.ok(combat.includes('explosionRadius: 16') && combat.includes('damage: 200
   "Player rocket weapon must have increased splash radius and explosive damage");
 assert.ok(combat.includes('radius:18') && combat.includes('damageMax:225'),
   "Shootable map explosives must have increased splash radius and power");
+const soundStart=combat.indexOf("function soundPanFromWorld(");
+const soundEnd=combat.indexOf("function playWorldCombatSound(",soundStart);
+const number=(n,fallback=0)=>Number.isFinite(Number(n))?Number(n):fallback;
+const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
+const worldPan=vm.runInNewContext("("+combat.slice(soundStart,soundEnd).trim()+")",{
+  options:{getPlayer:()=>({x:0,z:0,yaw:0})},number,clamp,Math
+});
+assert.ok(worldPan({x:12,z:0})<-.75,
+  "When facing +Z, a sound at +X must come from the left speaker in this mirrored renderer");
+assert.ok(worldPan({x:-12,z:0})>.75,
+  "When facing +Z, a sound at -X must come from the right speaker");
 assert.ok(combat.includes("function playWorldCombatSound(") &&
   combat.includes("function soundPanFromWorld("),
   "World sounds must use camera-relative direction and distance attenuation");

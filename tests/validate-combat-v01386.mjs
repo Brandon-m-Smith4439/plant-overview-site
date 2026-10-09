@@ -40,9 +40,9 @@ assert.ok(combat.includes("if (mysteryOffer.prizeKey===") ||
           combat.includes('mysteryOffer.prizeKey==="teddy"'),"Teddy roll must relocate box");
 assert.ok(!combat.includes("if(zombieWave>1&&(zombieWave-1)%2===0)moveMysteryBoxForWave()"),
   "Wave transitions may not relocate an occupied mystery box");
-assert.ok(combat.includes("if (!mysteryBox || mysteryOffer) return"),
+assert.ok(combat.includes("if (!mysteryBox || mysteryOffer || otherPlayerUsingMysteryBox()) return"),
   "Active mystery spins must lock box location");
-assert.ok(combat.includes('mystery-relocate') && combat.includes('barrel-detonate'),
+assert.ok(combat.includes('mystery-relocate-request') && combat.includes('barrel-detonate'),
   "Co-op clients must synchronize box relocation and explosive barrel destruction");
 assert.ok(combat.includes('kind==="explosive-barrel"') &&
   combat.includes("function detonateExplosive(") &&

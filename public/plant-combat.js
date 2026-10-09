@@ -728,6 +728,12 @@
     let mysteryBox = null;
     // Pending prizes are per-player, never granted until the second E press.
     let mysteryOffer = null;
+    let mysteryMovePending = false;
+    function otherPlayerUsingMysteryBox() {
+      const lobby=multiplayer?.getLobby?.();
+      return matchType==="coop" && (lobby?.players||[]).some(entry=>
+        entry.id!==multiplayer?.playerId && entry.state?.mysteryBusy===true);
+    }
     let healthStation = null;
     let lastHealthPurchaseWave = -1;
     let nearestStation = null;
@@ -1156,7 +1162,11 @@
     }
 
     function mysteryPhase(now = performance.now()) {
-      if (!mysteryOffer) return "idle";
+      if(!mysteryOffer){
+        if(mysteryMovePending && (matchType!=="coop" || multiplayer?.isHost?.()))
+          moveMysteryBoxForWave(true);
+        return "idle";
+      }
       // Pause freezes the reel and claim timer until the regular pause-time
       // offset is applied on resume.
       if (paused && pausedAt) now = Math.min(now, pausedAt);
@@ -1165,7 +1175,13 @@
         if(now<mysteryOffer.rollEndsAt+1750)return "teddy";
         // The box moves only after its complete reel; never while in use.
         mysteryOffer=null;
-        moveMysteryBoxForWave(true);
+        if(matchType==="coop" && multiplayer?.getLobby?.() && !multiplayer?.isHost?.()){
+          multiplayer.sendEvent?.("mystery-relocate-request",{},"").catch(()=>{});
+        }else{
+          mysteryMovePending=true;
+          moveMysteryBoxForWave(true);
+        }
+        multiplayer?.heartbeat?.();
         return "idle";
       }
       if (now >= mysteryOffer.despawnAt) {
@@ -1277,7 +1293,7 @@
     function moveMysteryBoxForWave(fromTeddy=false) {
       // No wave-based relocation. A teddy roll moves a box only after the
       // animation has completely finished; never interrupt a live offer.
-      if (!mysteryBox || mysteryOffer) return;
+      if (!mysteryBox || mysteryOffer || otherPlayerUsingMysteryBox()) return;
       const previous=mysteryBox,bounds=options.getBounds?.()||[];
       if(bounds.length<4)return;
       const margin=9,minX=number(bounds[0])+margin,maxX=number(bounds[2])-margin;
@@ -1294,9 +1310,8 @@
       }
       if(!picks.length)return;
       mysteryBox=picks[Math.floor(Math.random()*picks.length)];
-      nearestStation=null;
-      if(fromTeddy && matchType==="coop" && multiplayer?.getLobby?.())
-        multiplayer.sendEvent?.("mystery-relocate",{x:mysteryBox.x,z:mysteryBox.z},"").catch(()=>{});
+      mysteryMovePending=false;nearestStation=null;
+      multiplayer?.heartbeat?.();
       setTransientStatus("MYSTERY BOX HAS MOVED · FIND ITS NEW LOCATION",2350);
     }
 
@@ -3493,7 +3508,7 @@
       playerPoints = 0;
       carriedWeapons=[selectedPrimaryWeapon,"handgun"].filter((weapon,index,array)=>WEAPONS[weapon]&&array.indexOf(weapon)===index);
       zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;waveSpecial=false;
-      mysteryBox=null;mysteryOffer=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
+      mysteryBox=null;mysteryOffer=null;mysteryMovePending=false;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
       respawnEndsAt = 0;
       respawnDisplay = 0;
       roundStatOverrides.clear();
@@ -4033,7 +4048,15 @@
         applyGlassShatterPayload(event.payload, performance.now(), false);
         return;
       }
+      if(event.type==="mystery-relocate-request" && matchType==="coop" && gameMode==="zombie"){
+        if(multiplayer?.isHost?.() && event.senderId!==lobby?.hostId){
+          mysteryMovePending=true;
+          moveMysteryBoxForWave(true);
+        }
+        return;
+      }
       if(event.type==="mystery-relocate" && matchType==="coop" && gameMode==="zombie"){
+        if(event.senderId!==lobby?.hostId)return;
         const x=number(event.payload?.x,NaN),z=number(event.payload?.z,NaN);
         if(Number.isFinite(x)&&Number.isFinite(z) && mysteryBox){
           mysteryBox={x,z};mysteryOffer=null;nearestStation=null;
@@ -4129,6 +4152,7 @@
         x,y:number(player.y,5.5),z,yaw:number(player.yaw),pitch:number(player.pitch),vx,vz,moving:Boolean(player.moving),
         health:playerHealth,shield:playerShield,weapon:roundState === "setup" ? selectedPrimaryWeapon : selectedWeapon,
         sprinting:Boolean(player.sprinting && player.moving),
+        mysteryBusy:Boolean(mysteryOffer),
         revivingTargetId:reviveHold?.targetId||"",
         reviveProgress:reviveHold?clamp((now-reviveHold.startedAt)/COOP_REVIVE_HOLD_MS,0,1):0,
         alive:!playerZombie && !["lost","respawning","respawn-choice"].includes(roundState),
@@ -4181,7 +4205,7 @@
       carriedWeapons=[];
       playerPoints=0;
       zombieWave=0;waveTotal=0;waveSpawned=0;waveDefeated=0;waveNextAt=0;
-      mysteryBox=null;mysteryOffer=null;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
+      mysteryBox=null;mysteryOffer=null;mysteryMovePending=false;healthStation=null;nearestStation=null;lastHealthPurchaseWave=-1;
       // This reset is intentionally idempotent. Combat can be exited through
       // several paths (round-end buttons, toolbar toggle, first-person exit),
       // and some of those paths can call stop() after the controller is already

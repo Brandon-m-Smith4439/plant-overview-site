@@ -4462,6 +4462,8 @@
       multiplayerLobby: () => multiplayer?.getLobby?.() || null,
       isGlassShattered: (machineId, componentId) => shatteredGlass.has(`${machineId}:${componentId}`),
       isExplosiveDestroyed: (id) => destroyedExplosives.has(String(id)),
+      glassRevision: () => shatteredGlass.size,
+      explosiveRevision: () => destroyedExplosives.size,
       reload: startReload,
       fire,
       setAiming: (enabled) => setAiming(Boolean(enabled)),

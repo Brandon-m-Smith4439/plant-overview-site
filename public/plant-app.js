@@ -11619,6 +11619,16 @@
     ctx.restore();
   }
 
+  // A single depth-sorted viewmodel face pass prevents one part's rear
+  // polygon painting over another part's front, the source of see-through edges.
+  let viewmodelFaceQueue=null;
+  function flushViewmodelFaces(){
+    if(!viewmodelFaceQueue)return;
+    viewmodelFaceQueue.sort((a,b)=>b.depth-a.depth);
+    for(const face of viewmodelFaceQueue)
+      drawViewmodelPolygon(face.points,face.color,null,face.alpha);
+    viewmodelFaceQueue=null;
+  }
   function drawViewmodelBox(spec, root, alpha = 1) {
     const width = Number(spec.w), height = Number(spec.h), depth = Number(spec.d);
     const center = [Number(spec.x),Number(spec.y),Number(spec.z)];
@@ -11635,7 +11645,14 @@
       {i:[3,2,1,0],c:shade(spec.color,-.28)},{i:[4,5,6,7],c:spec.color},
     ].map((face) => ({...face,points:face.i.map((index)=>local[index])}));
     faces.sort((a,b) => b.points.reduce((sum,p)=>sum+p[2],0) - a.points.reduce((sum,p)=>sum+p[2],0));
-    faces.forEach((face)=>drawViewmodelPolygon(face.points,face.c,"rgba(8,14,17,.22)",alpha));
+    if(viewmodelFaceQueue){
+      faces.forEach(face=>viewmodelFaceQueue.push({
+        points:face.points,color:face.c,alpha,
+        depth:face.points.reduce((sum,p)=>sum+p[2],0)/4,
+      }));
+    }else{
+      faces.forEach(face=>drawViewmodelPolygon(face.points,face.c,null,alpha));
+    }
   }
 
   const remotePlayerVisuals = new Map();
@@ -12072,6 +12089,7 @@
     if (state.cameraMode !== "walk" || !combatController?.isActive?.()) return;
     const combat = combatController.playerRenderState?.(time);
     if (!combat) return;
+    viewmodelFaceQueue=[];
     const pixelRatio = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
     const moving = combat.moving ? 1 : 0;
     const sprint=Boolean(combat.sprinting&&moving&&!combat.reviving);
@@ -12212,6 +12230,7 @@
         w:.28,h:.22,d:.38,color:skin,rotationX:-27},root,1);
       drawViewmodelBox({x:.25,y:-.27-pulse,z:-.57-reach,
         w:.28,h:.22,d:.38,color:skin,rotationX:-24},root,1);
+      flushViewmodelFaces();
       return;
     }
     // Explicit hands survive any swap to a custom 3D weapon asset.
@@ -12241,6 +12260,7 @@
       }
       drawViewmodelBox(spec,root,1);
     });
+    flushViewmodelFaces();
     if (combat.weapon === "rifle" && !rifleAds && !sharedWeaponModel) {
       // Hip fire keeps the physical holographic sight on the rifle model; ADS
       // hides it so the dedicated aiming sight remains completely unobstructed.

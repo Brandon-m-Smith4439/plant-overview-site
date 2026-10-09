@@ -9524,3 +9524,58 @@ body.viewer-fullscreen-fallback-active {
   cursor:not-allowed;
   filter:grayscale(.6);
 }
+
+/* v0.13.89 · unanimous rematch vote after zombie co-op wipe */
+.combat-round-overlay.coop-game-over {
+  overflow-y:auto;overscroll-behavior:contain;
+  background:radial-gradient(circle at 50% 28%,rgba(118,24,31,.38),transparent 46%),rgba(6,8,12,.87);
+  backdrop-filter:blur(8px);
+}
+.combat-round-overlay.coop-game-over .combat-round-card {
+  width:min(45rem,calc(100vw - 1.4rem));max-height:calc(100dvh - 1.4rem);
+  overflow-y:auto;padding:clamp(1rem,3vw,2rem);
+  border:1px solid rgba(253,102,108,.48);
+  background:linear-gradient(165deg,rgba(40,15,24,.97),rgba(11,17,25,.98) 73%);
+  box-shadow:0 18px 80px rgba(0,0,0,.62),0 0 40px rgba(171,37,54,.16);
+}
+.combat-round-overlay.coop-game-over .combat-victory-seal {
+  display:grid;place-items:center;margin:0 auto .45rem;
+  width:3.2rem;height:3.2rem;border:2px solid #e66e72;border-radius:50%;
+  color:#ffb8b8;background:rgba(128,17,37,.3);
+}
+.combat-round-overlay.coop-game-over .combat-victory-seal::before {content:"✕";font-size:1.65rem;font-weight:900;}
+.combat-round-overlay.coop-game-over .combat-victory-seal span,
+.combat-round-overlay.coop-game-over .combat-victory-seal small {display:none;}
+.combat-round-overlay.coop-game-over [data-combat-round-kicker] {color:#ff9c98;}
+.combat-round-overlay.coop-game-over [data-combat-round-title] {
+  color:#ffe4e5;font-size:clamp(2.2rem,6vw,3.9rem);letter-spacing:.10em;
+  text-shadow:0 0 1.1rem rgba(255,65,83,.27);
+}
+.combat-round-overlay.coop-game-over .combat-scoreboard {
+  display:grid;gap:.45rem;margin-top:1rem;padding:.8rem;
+  border:1px solid rgba(249,158,120,.24);border-radius:.85rem;
+  background:rgba(7,12,18,.66);
+}
+.combat-round-overlay.coop-game-over .combat-scoreboard-row {
+  grid-template-columns:1.5rem minmax(7rem,1fr) minmax(3.8rem,.5fr) minmax(3rem,.5fr) minmax(3.6rem,.5fr);
+  gap:.55rem;
+}
+.combat-round-overlay.coop-game-over .combat-scoreboard-row > span:nth-of-type(1) {grid-column:4;}
+.combat-round-overlay.coop-game-over .combat-scoreboard-row > span:nth-of-type(2) {grid-column:5;}
+.combat-round-overlay.coop-game-over .combat-scoreboard-row > span:nth-of-type(3) {grid-column:3;grid-row:1;}
+.combat-round-overlay.coop-game-over .combat-scoreboard-row > em {display:none;}
+.combat-round-overlay.coop-game-over .combat-victory-stats {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem;}
+.combat-round-overlay.coop-game-over .combat-round-actions {display:flex;flex-wrap:wrap;justify-content:center;}
+.combat-round-overlay.coop-game-over .combat-round-actions button:first-child {
+  background:linear-gradient(145deg,#2c8f77,#155f58);border-color:#7fe3cb;
+}
+.combat-round-overlay.coop-game-over .combat-round-actions button:first-child:disabled {opacity:.68;cursor:default;}
+@media(max-width:620px){
+  .combat-round-overlay.coop-game-over .combat-victory-stats {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .combat-round-overlay.coop-game-over .combat-scoreboard-row {
+    grid-template-columns:1.2rem minmax(4.4rem,1fr) minmax(2.7rem,.55fr) minmax(2.7rem,.55fr) minmax(3.2rem,.75fr);
+    gap:.25rem;font-size:.8rem;
+  }
+  .combat-round-overlay.coop-game-over .combat-scoreboard-row > em {display:none;}
+  .combat-round-overlay.coop-game-over .combat-scoreboard-heading span {display:block;font-size:.46rem;}
+}

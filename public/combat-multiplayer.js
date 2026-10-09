@@ -158,6 +158,22 @@
       if(response.lobby)processLobby(response.lobby);
       return response.event;
     }
+    async function endCoopRound(leaderboard=[]) {
+      if(!lobby)return null;
+      const response=await request("POST",{
+        action:"game-over",code:lobby.code,playerId:id,leaderboard
+      });
+      processLobby(response.lobby);
+      return response.lobby;
+    }
+    async function voteRematch(vote=true) {
+      if(!lobby)return null;
+      const response=await request("POST",{
+        action:"rematch-vote",code:lobby.code,playerId:id,vote:Boolean(vote)
+      });
+      processLobby(response.lobby);
+      return response.lobby;
+    }
     async function sendPause(paused) {
       if(!lobby)return null;
       const payload=await request("POST",{
@@ -221,7 +237,7 @@
     }
 
     return {
-      playerId:id, authenticate, create, join, configure, ready, startMatch, resetMatch, sendEvent, sendPause, leave,
+      playerId:id, authenticate, create, join, configure, ready, startMatch, resetMatch, sendEvent, sendPause, endCoopRound, voteRematch, leave,
       heartbeat, updateIdentity, getLobby:() => lobby, localPlayer, remotePlayers, isHost, storedName,
       latencyMs:()=>Math.round(rttMs),
       destroy(){ destroyed=true; stopHeartbeat(); leave(); },

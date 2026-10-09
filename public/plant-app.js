@@ -2745,7 +2745,7 @@
     if(combatController?.getMode?.()==="zombie" &&
       combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
       return false;
-    if(combatExplosiveBarrels().some(barrel=>!combatController?.isExplosiveDestroyed?.(barrel.id) &&
+    if(typeof combatExplosiveBarrels==="function" && combatExplosiveBarrels().some(barrel=>!combatController?.isExplosiveDestroyed?.(barrel.id) &&
       Math.hypot(x-barrel.x,z-barrel.z)<barrel.radius+p))return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);

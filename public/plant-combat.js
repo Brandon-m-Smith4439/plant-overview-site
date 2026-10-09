@@ -741,6 +741,9 @@
     let lastShieldUpdateAt = 0;
     let paused = false;
     let pausedAt = 0;
+    let sharedPausedBy="";
+    let sharedPausedName="";
+    let pauseChangePending=false;
     let gameMode = "combat";
     let selectedPrimaryWeapon = "rifle";
     let selectedWeapon = "rifle";
@@ -2618,8 +2621,48 @@
       });
     }
 
-    function setPaused(next, { capture = true } = {}) {
+    function updateSharedPauseNotice(){
+      if(!pauseOverlay)return;
+      const lobby=multiplayer?.getLobby?.();
+      const inMultiplayer=matchType!=="solo" && lobby?.status==="started";
+      const shared=Boolean(inMultiplayer && sharedPausedBy);
+      pauseOverlay.dataset.combatSharedPaused=shared?"true":"false";
+      const subtitle=pauseOverlay.querySelector("[data-combat-pause-subtitle]");
+      const heading=pauseOverlay.querySelector(".combat-pause-heading h2");
+      const initiator=sharedPausedName || "Another player";
+      if(shared){
+        if(heading)heading.textContent="PAUSED BY "+initiator.toUpperCase();
+        if(subtitle)subtitle.textContent=sharedPausedBy===multiplayer?.playerId
+          ? "You paused this match. Everyone is waiting for you to resume."
+          : initiator+" paused the match. Enemy AI and gameplay are frozen for everyone.";
+      }else if(heading)heading.textContent="Game paused";
+      const resume=pauseOverlay.querySelector('[data-combat-pause-action="resume"]');
+      if(resume){
+        const allowed=!shared || sharedPausedBy===multiplayer?.playerId || multiplayer?.isHost?.();
+        resume.disabled=!allowed;
+        const label=resume.querySelector("small");
+        if(label)label.textContent=allowed?"RETURN TO ACTION":"WAIT FOR PLAYER OR HOST";
+      }
+    }
+
+    function applySharedPause(lobby){
+      if(!active || !lobby || matchType==="solo" || lobby.status!=="started")return;
+      sharedPausedBy=String(lobby.pausedBy||"");
+      sharedPausedName=String(lobby.pausedByName||"");
+      if(pauseChangePending)return;
+      const mustPause=Boolean(sharedPausedBy);
+      if(mustPause!==paused)setPaused(mustPause,{capture:false,remote:true});
+      if(paused)updateSharedPauseNotice();
+    }
+
+    function setPaused(next, { capture = true, remote = false } = {}) {
       if (!active || ["lost","won"].includes(roundState)) return false;
+      const lobby=multiplayer?.getLobby?.();
+      const networked=matchType!=="solo" && lobby?.status==="started";
+      if(!remote && !next && networked && sharedPausedBy &&
+         sharedPausedBy!==multiplayer?.playerId && !multiplayer?.isHost?.()){
+        updateSharedPauseNotice();return false;
+      }
       const requested = Boolean(next);
       if (requested === paused) return true;
       if (requested) {
@@ -2642,6 +2685,7 @@
           if(hostiles)hostiles.textContent=String(aliveEnemies().length);
           if(elapsed)elapsed.textContent=formatTime(Math.max(0,Math.floor((pausedAt-(roundStartedAt||pausedAt))/1000)));
         }
+        updateSharedPauseNotice();
         options.hideWalkMenu?.();
         options.setMovementLocked?.(true);
         options.releasePointer?.();
@@ -2656,6 +2700,22 @@
       if (matchSetup) matchSetup.hidden = true;
         options.setMovementLocked?.(false);
         if (capture) window.requestAnimationFrame(() => options.capture?.());
+      }
+      if(networked && !remote) {
+        // Optimistically freeze locally, but only the server decides whether
+        // other players may resume the shared match.
+        pauseChangePending=true;
+        multiplayer.sendPause(requested).then(nextLobby=>{
+          sharedPausedBy=String(nextLobby?.pausedBy||"");
+          sharedPausedName=String(nextLobby?.pausedByName||"");
+          updateSharedPauseNotice();
+        }).catch(error=>{
+          setPaused(!requested,{capture:false,remote:true});
+          setTransientStatus(error?.message||"Could not update shared pause.",2400);
+        }).finally(()=>{
+          pauseChangePending=false;
+          applySharedPause(multiplayer?.getLobby?.());
+        });
       }
       options.invalidate?.();
       return true;
@@ -3943,10 +4003,11 @@
         const desiredX=sync.targetX+sync.vx*predict;
         const desiredZ=sync.targetZ+sync.vz*predict;
         const gap=Math.hypot(desiredX-number(enemy.x),desiredZ-number(enemy.z));
-        if (gap>14) { enemy.x=desiredX; enemy.z=desiredZ; }
+        if(gap>34) { enemy.x=desiredX; enemy.z=desiredZ; }
         else {
-          enemy.x=number(enemy.x)+(desiredX-number(enemy.x))*blend;
-          enemy.z=number(enemy.z)+(desiredZ-number(enemy.z))*blend;
+          const correction=Math.min(1,blend*(1+Math.min(2,gap/8)));
+          enemy.x=number(enemy.x)+(desiredX-number(enemy.x))*correction;
+          enemy.z=number(enemy.z)+(desiredZ-number(enemy.z))*correction;
         }
         let turn=((sync.targetRotationY-number(enemy.rotationY)+540)%360)-180;
         enemy.rotationY=number(enemy.rotationY)+turn*Math.min(1,blend*1.35);
@@ -3976,11 +4037,13 @@
       if (!coopFollower() || !lobby) return false;
       const host=(lobby.players||[]).find((player) => player.id===lobby.hostId);
       const worldSeq=number(host?.state?.worldSeq,-1);
-      if (worldSeq>=0 && worldSeq===lastAppliedHostWorldSeq) return false;
+      if (worldSeq>=0 && worldSeq<=lastAppliedHostWorldSeq) return false;
       const snapshots=Array.isArray(host?.state?.enemies) ? host.state.enemies : null;
       if (!snapshots) return false;
+      // Base enemies are created at round start; rebuilding them every 180 ms
+      // caused needless work and visual jitter on followers.
+      if(lastAppliedHostWorldSeq<0)syncEnemies(false);
       lastAppliedHostWorldSeq=worldSeq;
-      syncEnemies(false);
       const receivedAt=performance.now();
       const seen=new Set();
       for (const snapshot of snapshots) {
@@ -4174,6 +4237,7 @@
     function multiplayerUpdate(lobby) {
       if (roundState === "setup") syncLobbyUi(lobby);
       if (!active || !lobby) return;
+      applySharedPause(lobby);
       if (zombieEndless() && coopFollower() && lobby.status==="started") {
         const host=(lobby.players||[]).find((entry)=>entry.id===lobby.hostId)?.state;
         if (host) {

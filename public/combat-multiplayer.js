@@ -4,8 +4,14 @@
   const API = "/api/combat-lobby";
   const CLIENT_KEY = "monroe-glass-combat-player-v1";
   const NAME_KEY = "monroe-glass-combat-player-name-v1";
-  const REMOTE_STATE_INTERVAL_MS = 100;
+  // Fast enough for interpolation, while reducing server JSON and file load.
+  const REMOTE_STATE_INTERVAL_MS = 125;
   const clean = (value, max = 48) => String(value || "").replace(/[<>\u0000-\u001f]/g, "").trim().slice(0, max);
+
+  function acceptLobbySnapshot(current,next) {
+    if(!current || current.code!==next?.code)return true;
+    return (Number(next?.syncSeq)||0)>=(Number(current.syncSeq)||0);
+  }
 
   function playerId() {
     try {
@@ -41,8 +47,9 @@
     let heartbeatTimer = 0;
     let heartbeatBusy = false;
     let lastHeartbeatAt = 0;
-    let lastEventIds = new Set();
+    const seenEventIds=new Set();
     let lastStatus = "";
+    let rttMs=0;
     let destroyed = false;
 
     const emit = () => {
@@ -55,16 +62,21 @@
     const remotePlayers = () => (lobby?.players || []).filter((player) => player.id !== id);
 
     const processLobby = (next) => {
-      if (!next) return;
+      if (!next || !acceptLobbySnapshot(lobby,next)) return;
       const previousStatus = lastStatus;
       lobby = next;
       lastStatus = lobby.status || "";
       const events = Array.isArray(lobby.events) ? lobby.events : [];
-      const nextIds = new Set(events.map((event) => event.id));
       for (const event of events) {
-        if (!lastEventIds.has(event.id) && event.senderId !== id) options.onEvent?.(event, lobby);
+        if(seenEventIds.has(event.id))continue;
+        seenEventIds.add(event.id);
+        if(event.senderId!==id) options.onEvent?.(event,lobby);
       }
-      lastEventIds = nextIds;
+      // Keep an event window wider than the server's rolling event queue.
+      if(seenEventIds.size>500) {
+        const recent=[...seenEventIds].slice(-250);
+        seenEventIds.clear();recent.forEach(eventId=>seenEventIds.add(eventId));
+      }
       emit();
       if (previousStatus && previousStatus !== lastStatus) options.onStatusChange?.(lastStatus, lobby);
     };
@@ -141,9 +153,18 @@
 
     async function sendEvent(type, payload = {}, targetId = "") {
       if (!lobby) return null;
+      // A shot/event acknowledgement carries no heavyweight world snapshot.
       const response = await request("POST", { action:"event", code:lobby.code, playerId:id, type, targetId, payload });
-      processLobby(response.lobby);
+      if(response.lobby)processLobby(response.lobby);
       return response.event;
+    }
+    async function sendPause(paused) {
+      if(!lobby)return null;
+      const payload=await request("POST",{
+        action:"pause",code:lobby.code,playerId:id,paused:Boolean(paused)
+      });
+      processLobby(payload.lobby);
+      return payload.lobby;
     }
 
     async function heartbeat() {
@@ -152,6 +173,7 @@
       if (now - lastHeartbeatAt < REMOTE_STATE_INTERVAL_MS) return;
       lastHeartbeatAt = now;
       heartbeatBusy = true;
+      const startedAt=performance.now();
       try {
         const local = localPlayer();
         const state = options.getState?.() || local?.state || {};
@@ -160,6 +182,8 @@
           name:local?.name || storedName() || "Player", characterId:local?.characterId || "",
           ready:Boolean(local?.ready), state,
         });
+        rttMs=rttMs? rttMs*.76+(performance.now()-startedAt)*.24 :
+          performance.now()-startedAt;
         processLobby(payload.lobby);
       } catch (error) {
         options.onError?.(error);
@@ -197,8 +221,9 @@
     }
 
     return {
-      playerId:id, authenticate, create, join, configure, ready, startMatch, resetMatch, sendEvent, leave,
+      playerId:id, authenticate, create, join, configure, ready, startMatch, resetMatch, sendEvent, sendPause, leave,
       heartbeat, updateIdentity, getLobby:() => lobby, localPlayer, remotePlayers, isHost, storedName,
+      latencyMs:()=>Math.round(rttMs),
       destroy(){ destroyed=true; stopHeartbeat(); leave(); },
     };
   };

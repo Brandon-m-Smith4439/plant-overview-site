@@ -242,12 +242,12 @@
       }
       const climbInput = Number(keys.has("Space") || keys.has("KeyW")) - Number(keys.has("KeyS"));
       const fallingVelocity=verticalVelocity-22*delta;
-      const roofLanding=climb?.kind==="roof" && fallingVelocity<=0 &&
+      const roofLanding = climb?.kind==="roof" && fallingVelocity<=0 &&
         verticalOffset>=climb.height-1.55 &&
         verticalOffset+fallingVelocity*delta<=climb.height;
       if(roofLanding) {
         verticalVelocity=0;
-        verticalOffset=climb.height;
+        verticalOffset = climb.height;
         jumpRequested=false;
       } else if(climb?.kind==="ladder" && climbInput!==0 && !roofDropActive) {
         verticalVelocity=0;
@@ -255,8 +255,8 @@
         jumpRequested=false;
         if(climbInput>0 && verticalOffset>=climb.height-.42) {
           verticalOffset=climb.height;
-          next.x=climb.landingX??climb.ladderX;
-          next.z=climb.landingZ??climb.z;
+          next.x = climb.landingX ?? climb.ladderX;
+          next.z = climb.landingZ ?? climb.z;
         }
       } else {
         verticalVelocity=fallingVelocity;

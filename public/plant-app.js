@@ -2660,10 +2660,12 @@
     const walking=state.cameraMode==="walk";
     for(const tree of combatDeadForestTrees()){
       const distance=Math.hypot(camX-tree.x,camZ-tree.z);
-      if(walking&&distance>188)continue;
+      if(walking&&distance>240)continue;
       const dark=tree.grove%2===0?"#242625":"#2c2927";
       const sway=Math.sin(time*.00035+tree.phase)*.13;
       const {x,z,height:h,radius:r}=tree;
+      // The lighter stump base marks the precise physical trunk.
+      box({x:x-r*1.2,y:0,z:z-r*1.2,w:r*2.4,h:.55,d:r*2.4,color:"#54594d"},1,1);
       // Two upright tapered trunk sections and a high pointed crown make
       // these actual dead trees, not sideways bars lying in the wasteland.
       box({x:x-r,y:0,z:z-r,w:r*2,h:h*.69,d:r*2,color:dark},1,1);
@@ -2701,7 +2703,7 @@
     if(!combatController?.isActive?.())return null;
     for(const site of combatExteriorLandmarks()){
       const roofHeight=site.h+.6; // upper face of visible roof slab
-      if(x>=site.x&&x<=site.x+site.w&&z>=site.z&&z<=site.z+site.d)
+      if(x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55)
         return {...site,kind:"roof",height:roofHeight};
       if(Math.hypot(x-site.ladderX,z-site.ladderZ)<4.7)
         return {...site,kind:"ladder",height:roofHeight,landingX:site.ladderX,landingZ:site.z+site.d-2};
@@ -2712,16 +2714,16 @@
     if(!combatController?.isActive?.())return false;
     const b=combatWorldBounds(),p=Math.max(.45,Number(radius)||1.2);
     if(x<b[0]+p||x>b[2]-p||z<b[1]+p||z>b[3]-p)return false;
-    const hillsOpen = combatExteriorHills().every(hill =>
-      Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
+    const hillsOpen = combatController?.getMode?.()==="zombie" ||
+      combatExteriorHills().every(hill=>Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
     if(!hillsOpen)return false;
     if(combatController?.getMode?.()==="zombie" &&
-      combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p+.20))
+      combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
       return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
       const onRoof=Number(state.walkVerticalOffset)>=site.h+.35 &&
-        x>=site.x-.45&&x<=site.x+site.w+.45&&z>=site.z-.45&&z<=site.z+site.d+.45;
+        x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55;
       return onRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
     });
   }
@@ -10537,7 +10539,9 @@
     const renderComponents = lodLevel >= 2 ? visibleComponents : representativeDesignComponents(visibleComponents);
     try {
       renderComponents.forEach((component) => {
-      if (combatController?.isActive?.() && carrierGlassComponent(machine,component) && combatController.isGlassShattered?.(machine.instanceId,component.id)) return;
+      if (combatController?.isActive?.() && carrierGlassComponent(machine,component) &&
+        combatController.isGlassShattered?.(machine.instanceId||machine.id||machine.name,
+          component.id||component.name||"glass")) return;
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
       if (component.type === "box" || component.type === "glassPanel" || component.type === "text") {
         drawDesignBox(machine, component, design, componentAlpha, grow);

@@ -25,7 +25,7 @@ assert.ok(server.includes('if (action === "event")') &&
   server.includes("scheduleDeferredPersist(store)"),"Frequent combat events must not fsync on every shot");
 assert.ok(combat.includes("multiplayer.sendPause(") &&
   combat.includes("applySharedPause("),"Co-op clients must exchange and apply a shared pause state");
-assert.ok(combat.includes("data-combat-shared-paused") &&
+assert.ok(combat.includes("pauseOverlay.dataset.combatSharedPaused") &&
   combat.includes("PAUSED BY"),"Other players must see who paused the match");
 assert.ok(combat.includes("worldSeq<=lastAppliedHostWorldSeq"),
   "Out-of-order enemy snapshots cannot rewind follower positions");

@@ -431,18 +431,21 @@
     ["dmr","Precision DMR",4.75,.24,"#52605d","#222a30","scope"],
     ["autoShotgun","Automatic Shotgun",3.5,.45,"#3f474a","#776349","shotgun"],
     ["heavyPistol","Heavy Pistol",2.55,.48,"#444d54","#8d7d65","pistol"],
+    ["novaRifle","NOVA Disruptor",4.6,.37,"#6bd5ba","#174c5d","optic"],
+    ["thunderCannon","Thunder Cannon",4.15,.57,"#dfa847","#4c2925","shotgun"],
+    ["reaperLMG","Reaper Minigun",5.3,.65,"#aa6fc8","#272639","heavy"],
     ["chainsaw","Combat Chainsaw",3.4,.56,"#ae4f22","#2a3536","chainsaw"],
   ];
   gunTypes.forEach(([key,name,length,thickness,primary,secondary,style])=>{
     const h=1.65,d=1.25,barrelStart=length*.53,barrelEnd=length-.1;
     const parts=[
       box("gun-stock","Rear stock",.08,.66,.36,length*.25,.42,.52,secondary),
-      box("gun-receiver","Main receiver",length*.29,.62,.27,length*.32,.52,.68,primary),
+      box("gun-receiver","Main receiver",length*.27,.59,.23,length*.36,.59,.77,primary),
       box("gun-barrel","Front barrel",barrelStart,.79,.57,barrelEnd-barrelStart,.20,thickness,secondary),
       box("gun-muzzle","Muzzle device",length-.21,.75,.51,.21,.28,thickness+.12,"#141f27"),
       box("gun-grip","Pistol grip",length*.34,.13,.44,.27,.56,.3,secondary),
       box("gun-magazine","Magazine",length*.49,.09,.36,.35,.55,.44,"#20282c"),
-      box("gun-handguard","Hand guard",length*.57,.65,.25,length*.2,.44,.67,primary),
+      box("gun-handguard","Hand guard",length*.55,.63,.22,length*.25,.48,.73,primary),
     ];
     if(["optic","scope"].includes(style)) {
       parts.push(box("scope-base","Scope mount",length*.37,1.13,.48,length*.28,.14,.32,"#181e27"));

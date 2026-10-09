@@ -3709,6 +3709,9 @@
       worldEffects.rockets.length = 0;
       worldEffects.explosions.length = 0;
       worldEffects.glassShards.length = 0;
+      frame.classList.remove("combat-team-gameover");
+      roundOverlay?.classList.remove("coop-game-over");
+      gameOverAnnounced=false;
       shatteredGlass.clear();
       destroyedExplosives.clear();
       worldEffects.pickups.length = 0;
@@ -3823,6 +3826,12 @@
         lastShieldUpdateAt = now;
         options.invalidate?.();
         frameRequest = window.requestAnimationFrame(loop);
+        return;
+      }
+      if(roundState==="gameover"){
+        lastFrameAt=now;lastShieldUpdateAt=now;
+        options.invalidate?.();
+        frameRequest=window.requestAnimationFrame(loop);
         return;
       }
       if (paused) {
@@ -4329,6 +4338,32 @@
       if (roundState === "setup") syncLobbyUi(lobby);
       if (!active || !lobby) return;
       applySharedPause(lobby);
+      if(gameMode==="zombie" && matchType==="coop" && lobby.status==="started"){
+        const generation=Math.max(0,Math.floor(number(lobby.roundGeneration)));
+        if(generation>lastRematchGeneration){
+          lastRematchGeneration=generation;
+          gameOverAnnounced=false;
+          if(roundState==="gameover"){
+            resetRound({countdown:true});
+            options.capture?.();
+            return;
+          }
+        }
+        if(lobby.roundOutcome==="gameover"){
+          finishCoopGameOver(lobby);
+          // The server's final standings are authoritative for all clients.
+          if(roundState==="gameover" && Array.isArray(lobby.finalLeaderboard) &&
+            lobby.finalLeaderboard.length){
+            renderRoundLeaderboard(lobby.finalLeaderboard.map(entry=>({
+              ...entry,character:roundLeaderboard().find(e=>e.id===entry.id)?.character||"Survivor",
+              deaths:entry.downs,headshots:0
+            })));
+          }
+          syncRestartButton();
+          return;
+        }
+        if(multiplayer?.isHost?.())checkCoopGameOver(lobby);
+      }
       if (zombieEndless() && coopFollower() && lobby.status==="started") {
         const host=(lobby.players||[]).find((entry)=>entry.id===lobby.hostId)?.state;
         if (host) {
@@ -4521,6 +4556,8 @@
       if (matchSetup) matchSetup.hidden = true;
       multiplayer?.leave?.();
       multiplayerStartedRevision=0;
+      lastRematchGeneration=0;
+      gameOverAnnounced=false;
       reviveUntil=0;reviveHold=null;playerZombie=false;revivePrompt.hidden=true;
       options.onStateChange?.(false, gameMode);
       options.invalidate?.();
@@ -4660,6 +4697,11 @@
 
     hud.querySelector("[data-combat-restart]")?.addEventListener("click", async () => {
       if (roundState==="respawn-choice") {resumePlayerAfterDeath();return;}
+      if(roundState==="gameover" && matchType==="coop" && multiplayer?.getLobby?.()){
+        try{await multiplayer.voteRematch(true);}
+        catch(error){setTransientStatus(error?.message||"Vote could not be recorded.",2300);}
+        return;
+      }
       if (matchType === "coop" && multiplayer?.getLobby?.()) {
         if (!multiplayer.isHost?.()) return;
         try { await multiplayer.sendEvent("round-restart",{},""); }

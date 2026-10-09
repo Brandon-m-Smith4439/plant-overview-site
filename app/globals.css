@@ -9433,3 +9433,46 @@ body.viewer-fullscreen-fallback-active {
   .combat-points-panel{top:12.3rem;}
   .combat-team-panel{top:16.2rem;max-height:17vh;}
 }
+
+/* v0.13.85: ground-level HUD. Keep vitals in the bottom-left while points
+   and team standings occupy the upper-left, clear of the weapon panel. */
+.combat-mode-active .combat-health-panel {
+  top:auto !important;
+  bottom:max(1rem,env(safe-area-inset-bottom)) !important;
+  left:max(1rem,env(safe-area-inset-left));
+  width:min(21rem,36vw);
+  z-index:6;
+}
+.combat-points-panel {
+  top:1rem;
+  left:1rem;
+}
+.combat-team-panel {
+  top:5rem;
+  max-height:min(30vh,22rem);
+}
+@media(max-width:760px) {
+  .combat-mode-active .combat-health-panel {
+    top:auto !important;
+    bottom:calc(.6rem + env(safe-area-inset-bottom)) !important;
+    left:max(.55rem,env(safe-area-inset-left)) !important;
+    width:min(15rem,49vw);
+  }
+  .combat-points-panel {
+    top:.65rem;
+    left:.55rem;
+    width:min(15rem,49vw);
+  }
+  .combat-team-panel {
+    top:4.35rem;
+    left:.55rem;
+    width:min(15rem,49vw);
+    max-height:26vh;
+  }
+}
+@media(max-width:760px) and (pointer:coarse) {
+  /* On touch devices, place the lower-left vitals just above movement controls. */
+  .combat-mode-active .combat-health-panel {
+    bottom:calc(10rem + env(safe-area-inset-bottom)) !important;
+  }
+}

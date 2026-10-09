@@ -6,6 +6,18 @@
     value < target ? Math.min(target, value + amount) : Math.max(target, value - amount)
   );
 
+  // Cross a roof rim with enough horizontal clearance to fall beside the
+  // building, rather than dropping partially inside its wall collision.
+  function roofDropPosition(site, point, radius=1.2) {
+    const clearance=Math.max(.45,Number(radius)||1.2)+.22;
+    return {
+      x:point.x<site.x ? Math.min(point.x,site.x-clearance)
+        : point.x>site.x+site.w ? Math.max(point.x,site.x+site.w+clearance) : point.x,
+      z:point.z<site.z ? Math.min(point.z,site.z-clearance)
+        : point.z>site.z+site.d ? Math.max(point.z,site.z+site.d+clearance) : point.z,
+    };
+  }
+
   window.createPlantFirstPersonController = function createPlantFirstPersonController(options) {
     const canvas = options.canvas;
     const getCamera = options.getCamera;
@@ -24,6 +36,7 @@
     let velocityZ = 0;
     let verticalVelocity = 0;
     let verticalOffset = 0;
+    let roofDropActive = false;
     let bobTime = 0;
     let bobOffset = 0;
     let jumpRequested = false;
@@ -77,6 +90,7 @@
       velocityZ = 0;
       verticalVelocity = 0;
       verticalOffset = 0;
+      roofDropActive = false;
       bobTime = 0;
       bobOffset = 0;
       jumpRequested = false;
@@ -197,51 +211,60 @@
         config.collision,
       );
 
-      if (jumpRequested && verticalOffset <= 0.001) {
-        verticalVelocity = 8.2;
-        jumpRequested = false;
+      const previousSurface=roofDropActive?null:getClimbSurface(camera.x,camera.z);
+      const roofJumpReady=previousSurface?.kind==="roof" &&
+        Math.abs(verticalOffset-previousSurface.height)<.65 && verticalVelocity<=0;
+      if(jumpRequested && (verticalOffset<=.001 || roofJumpReady)) {
+        // Space works on a rooftop as well as on the ground.
+        verticalVelocity=8.2;
+        jumpRequested=false;
       }
-      // On a roof the player must retain supporting ground. Prevent a step
-      // over its rim from placing the camera inside the building facade.
-      // The ladder remains a legitimate way to climb down.
-      const previousSurface=getClimbSurface(camera.x,camera.z);
-      const roofEdgeSupport=previousSurface?.kind==="roof" &&
-        verticalOffset>=previousSurface.height-1.55;
-      let climb=getClimbSurface(next.x,next.z);
-      if(roofEdgeSupport && (!climb || (climb.kind==="ladder" &&
-        verticalOffset>climb.height-.6))) {
-        // Rooftop movement cannot drift off the slab into unsupported space.
-        // Crossing onto a ladder is allowed only when intentionally descending.
-        const descending=climb?.kind==="ladder" &&
+      let climb=roofDropActive?null:getClimbSurface(next.x,next.z);
+      if(previousSurface?.kind==="roof" &&
+        verticalOffset>=previousSurface.height-.6 && climb?.kind!=="roof") {
+        const descending=climb?.kind==="ladder" && verticalVelocity<=0 &&
           (keys.has("KeyS") || touchForward<-.2);
         if(!descending){
-          next.x=camera.x;
-          next.z=camera.z;
-          climb=previousSurface;
+          const drop=roofDropPosition(previousSurface,next,config.radius);
+          if(canOccupy(drop.x,drop.z,config.radius)) {
+            next.x=drop.x;
+            next.z=drop.z;
+            roofDropActive=true;
+            climb=null;
+          }else{
+            // Trees or scenery immediately beside the facade: stay on the
+            // supported roof instead of entering a trapped collision volume.
+            next.x=camera.x;
+            next.z=camera.z;
+            climb=previousSurface;
+          }
         }
       }
       const climbInput = Number(keys.has("Space") || keys.has("KeyW")) - Number(keys.has("KeyS"));
-      const roofLanding = climb?.kind === "roof" && verticalOffset >= climb.height - 1.55;
-      if (roofLanding) {
-        // A roof is a permanent floor contact, not a temporary jump apex.
-        verticalVelocity = 0;
-        verticalOffset = climb.height;
-        jumpRequested = false;
-      } else if (climb?.kind === "ladder" && climbInput !== 0) {
-        verticalVelocity = 0;
-        verticalOffset = clamp(verticalOffset + climbInput * delta * 11, 0, climb.height);
-        jumpRequested = false;
-        if (climbInput > 0 && verticalOffset >= climb.height - .42) {
-          // Step forward from the ladder onto the actual roof slab.
-          // Staying outside its footprint caused the previous roof fall-through.
-          verticalOffset = climb.height;
-          next.x = climb.landingX ?? climb.ladderX;
-          next.z = climb.landingZ ?? climb.z;
+      const fallingVelocity=verticalVelocity-22*delta;
+      const roofLanding=climb?.kind==="roof" && fallingVelocity<=0 &&
+        verticalOffset>=climb.height-1.55 &&
+        verticalOffset+fallingVelocity*delta<=climb.height;
+      if(roofLanding) {
+        verticalVelocity=0;
+        verticalOffset=climb.height;
+        jumpRequested=false;
+      } else if(climb?.kind==="ladder" && climbInput!==0 && !roofDropActive) {
+        verticalVelocity=0;
+        verticalOffset=clamp(verticalOffset+climbInput*delta*11,0,climb.height);
+        jumpRequested=false;
+        if(climbInput>0 && verticalOffset>=climb.height-.42) {
+          verticalOffset=climb.height;
+          next.x=climb.landingX??climb.ladderX;
+          next.z=climb.landingZ??climb.z;
         }
       } else {
-        verticalVelocity -= 22 * delta;
-        verticalOffset = Math.max(0, verticalOffset + verticalVelocity * delta);
-        if (verticalOffset <= 0) verticalVelocity = 0;
+        verticalVelocity=fallingVelocity;
+        verticalOffset=Math.max(0,verticalOffset+verticalVelocity*delta);
+        if(verticalOffset<=0){
+          verticalVelocity=0;
+          roofDropActive=false;
+        }
       }
 
       if (moving && verticalOffset <= 0.001) bobTime += delta * (sprinting ? 12 : 8.5);

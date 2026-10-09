@@ -90,8 +90,8 @@
     smg: Object.freeze({ key: "smg", label: "SMG", range: 95, preferredMin: 18, preferredMax: 44, moveSpeed: 1.16, fireMin: 280, fireMax: 520, magazine: 32, reloadMs: 1700, damageMin: 4, damageMax: 7, accuracyNear: .68, accuracyFalloff: 170, tracer: "smg" }),
     shotgun: Object.freeze({ key: "shotgun", label: "Shotgun", range: 58, preferredMin: 11, preferredMax: 28, moveSpeed: 1.08, fireMin: 1050, fireMax: 1550, magazine: 6, reloadMs: 2350, damageMin: 10, damageMax: 18, accuracyNear: .84, accuracyFalloff: 92, tracer: "shotgun" }),
     sniper: Object.freeze({ key: "sniper", label: "Sniper", range: 180, preferredMin: 72, preferredMax: 125, moveSpeed: .78, fireMin: 2200, fireMax: 3300, magazine: 5, reloadMs: 2750, damageMin: 18, damageMax: 27, accuracyNear: .9, accuracyFalloff: 360, tracer: "sniper" }),
-    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, sightRange: 150, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, magazine: 1, reloadMs: 3100, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka", explosive: true, projectileSpeed: 92, explosionRadius: 9 }),
-    rocket: Object.freeze({ key: "rocket", label: "Rocket Launcher", range: 155, sightRange: 170, preferredMin: 58, preferredMax: 108, moveSpeed: .68, fireMin: 3100, fireMax: 4500, magazine: 1, reloadMs: 3500, damageMin: 22, damageMax: 34, accuracyNear: .78, accuracyFalloff: 285, tracer: "rocket", explosive: true, projectileSpeed: 76, explosionRadius: 11 }),
+    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, sightRange: 150, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, magazine: 1, reloadMs: 3100, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka", explosive: true, projectileSpeed: 92, explosionRadius: 12 }),
+    rocket: Object.freeze({ key: "rocket", label: "Rocket Launcher", range: 155, sightRange: 170, preferredMin: 58, preferredMax: 108, moveSpeed: .68, fireMin: 3100, fireMax: 4500, magazine: 1, reloadMs: 3500, damageMin: 22, damageMax: 34, accuracyNear: .78, accuracyFalloff: 285, tracer: "rocket", explosive: true, projectileSpeed: 76, explosionRadius: 14 }),
     pistol: Object.freeze({ key: "pistol", label: "Pistol", range: 88, preferredMin: 18, preferredMax: 42, moveSpeed: 1.08, fireMin: 760, fireMax: 1180, magazine: 12, reloadMs: 1500, damageMin: 7, damageMax: 11, accuracyNear: .74, accuracyFalloff: 165, tracer: "pistol" }),
     chainsaw: Object.freeze({ key: "chainsaw", label: "Chainsaw", melee: true, range: 5.4, sightRange: 165, preferredMin: 0, preferredMax: 4.9, moveSpeed: 2.8, fireMin: 430, fireMax: 650, damageMin: 13, damageMax: 20, accuracyNear: 1, accuracyFalloff: 1, tracer: null }),
   });
@@ -140,8 +140,8 @@
       range: 360, fireInterval: 980, reloadMs: 2450, automatic: false, scope: true,
     }),
     rocket: Object.freeze({
-      key: "rocket", shortLabel: "Rocket Launcher", magazine: 1, reserve: 7, damage: 145,
-      range: 245, fireInterval: 1350, reloadMs: 2850, automatic: false, explosive: true, projectileSpeed: 84, explosionRadius: 10,
+      key: "rocket", shortLabel: "Rocket Launcher", magazine: 1, reserve: 7, damage: 200,
+      range: 245, fireInterval: 1350, reloadMs: 2850, automatic: false, explosive: true, projectileSpeed: 84, explosionRadius: 16,
     }),
     smg: Object.freeze({key:"smg",shortLabel:"Viper SMG",magazine:42,reserve:252,damage:24,range:155,fireInterval:66,reloadMs:1300,automatic:true,visual:"rifle"}),
     carbine: Object.freeze({key:"carbine",shortLabel:"Tactical Carbine",magazine:36,reserve:180,damage:41,range:235,fireInterval:112,reloadMs:1550,automatic:true,scope:true,visual:"rifle"}),
@@ -1612,8 +1612,8 @@
       if(!id || destroyedExplosives.has(id))return false;
       destroyedExplosives.add(id);
       const point={x:number(o.x)+number(o.w)*.5,y:2,z:number(o.z)+number(o.d)*.5};
-      worldEffects.explosions.push({point,startAt:now,duration:900,radius:12,
-        damageMax:175,sourcePlayer:true,resolved:false,seed:Math.random()*1000});
+      worldEffects.explosions.push({point,startAt:now,duration:900,radius:18,
+        damageMax:225,sourcePlayer:true,resolved:false,seed:Math.random()*1000});
       if(matchType==="coop" && multiplayer?.getLobby?.())
         multiplayer.sendEvent?.("barrel-detonate",{id,point},"").catch(()=>{});
       setTransientStatus("EXPLOSIVE BARREL DETONATED",950);
@@ -1719,7 +1719,10 @@
       // Solid machinery or walls protect distant targets, without making
       // a point-blank impact inexplicably deal no damage.
       if(distance>2.25 && !hasLineOfSight({x:point.x,y:point.y+.25,z:point.z},target))return 0;
-      return Math.max(0,number(baseDamage))*clamp(1-distance/Math.max(.1,radius),0,1);
+      // Larger, more consistent blast damage throughout the radius, tapering
+      // to a quarter-strength shock at the edge. Occluding solid walls still
+      // block distant splash completely.
+      return Math.max(0,number(baseDamage))*(.25+.75*clamp(1-distance/Math.max(.1,radius),0,1));
     }
 
     function resolveExplosionDamage(now) {
@@ -1728,7 +1731,7 @@
         if(explosion.resolved || now<explosion.startAt)continue;
         explosion.resolved=true;
         playCombatSound("explosion",.88);
-        const radius=clamp(number(explosion.radius,10),1,14);
+        const radius=clamp(number(explosion.radius,10),1,20);
         const baseDamage=number(explosion.damageMax,145);
         const sourceEnemy=enemies.get(String(explosion.sourceEnemyId||""));
         if(player){
@@ -4237,8 +4240,8 @@
         const raw=event.payload?.point||{};
         const point={x:number(raw.x,NaN),y:number(raw.y,NaN),z:number(raw.z,NaN)};
         if(![point.x,point.y,point.z].every(Number.isFinite))return;
-        const radius=clamp(number(event.payload?.radius,10),1,14);
-        const damage=clamp(number(event.payload?.damage,145),0,190);
+        const radius=clamp(number(event.payload?.radius,10),1,20);
+        const damage=clamp(number(event.payload?.damage,145),0,250);
         const victim=options.getPlayer?.();
         if(!victim)return;
         const local={x:number(victim.x),y:number(victim.y,5.5),z:number(victim.z)};
@@ -4298,7 +4301,7 @@
         const raw=event.payload?.point||{};
         const point={x:number(raw.x),y:number(raw.y),z:number(raw.z)};
         worldEffects.explosions.push({point,startAt:performance.now(),duration:900,
-          radius:12,resolved:true,seed:Math.random()*1000});
+          radius:18,resolved:true,seed:Math.random()*1000});
         return;
       }
       if (event.type === "player-death" && matchType === "coop") {

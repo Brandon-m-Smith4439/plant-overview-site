@@ -201,7 +201,25 @@
         verticalVelocity = 8.2;
         jumpRequested = false;
       }
-      const climb = getClimbSurface(next.x,next.z);
+      // On a roof the player must retain supporting ground. Prevent a step
+      // over its rim from placing the camera inside the building facade.
+      // The ladder remains a legitimate way to climb down.
+      const previousSurface=getClimbSurface(camera.x,camera.z);
+      const roofEdgeSupport=previousSurface?.kind==="roof" &&
+        verticalOffset>=previousSurface.height-1.55;
+      let climb=getClimbSurface(next.x,next.z);
+      if(roofEdgeSupport && (!climb || (climb.kind==="ladder" &&
+        verticalOffset>climb.height-.6))) {
+        // Rooftop movement cannot drift off the slab into unsupported space.
+        // Crossing onto a ladder is allowed only when intentionally descending.
+        const descending=climb?.kind==="ladder" &&
+          (keys.has("KeyS") || touchForward<-.2);
+        if(!descending){
+          next.x=camera.x;
+          next.z=camera.z;
+          climb=previousSurface;
+        }
+      }
       const climbInput = Number(keys.has("Space") || keys.has("KeyW")) - Number(keys.has("KeyS"));
       const roofLanding = climb?.kind === "roof" && verticalOffset >= climb.height - 1.55;
       if (roofLanding) {

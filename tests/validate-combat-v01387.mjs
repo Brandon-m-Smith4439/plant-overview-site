@@ -23,7 +23,7 @@ assert.ok(combat.includes("function playMysteryReelMusic(") &&
   combat.includes("mysteryMusicStep"),
   "The mystery box should play melodic procedural reel music");
 assert.ok(combat.includes("options.getMysterySpots?.()") &&
-  combat.includes("y:number(mysteryBox.y)") &&
+  combat.includes("boxY:mysteryBox?.y") &&
   server.includes("boxY?"),
   "The box must relocate to designated sites and synchronize rooftop height");
 assert.ok(plant.includes("const stationY=Number(station.y)||0") &&
@@ -31,7 +31,7 @@ assert.ok(plant.includes("const stationY=Number(station.y)||0") &&
   "The Mystery Box needs to render at roof height");
 assert.ok(combat.includes("ZOMBIE_SPAWN_MIN_DISTANCE") &&
   combat.includes("ZOMBIE_SPAWN_MAX_DISTANCE") &&
-  combat.includes("options.canPlaceStation?.(x,z,radius)") &&
+  combat.includes("options.canPlaceStation?.(x,z,radius+.6)") &&
   combat.includes("function edgeSpawnPoint("),
   "Zombies must spawn in a bounded radius around players with robust collision rejection");
 assert.ok(plant.includes("function drawViewmodelBox(") &&

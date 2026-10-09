@@ -554,6 +554,7 @@
       if(!soundEnabled||!audioContext||audioContext.state!=="running"||
         paused||!mysteryOffer)return;
       const phase=mysteryPhase(now);
+      if(!mysteryOffer)return;
       if(phase==="rolling" && now>=nextMysteryMusicAt){
         const progress=clamp((now-mysteryOffer.startedAt)/MYSTERY_ROLL_DURATION_MS,0,1);
         const melody=[0,7,12,10,7,3,5,12,15,12,7,5];

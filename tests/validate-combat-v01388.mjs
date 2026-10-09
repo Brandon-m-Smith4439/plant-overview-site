@@ -3,7 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 const read=name=>fs.readFileSync(new URL("../"+name,import.meta.url),"utf8");
 const net=read("public/combat-multiplayer.js"),combat=read("public/plant-combat.js");
-const server=read("app/api/combat-lobby/route.ts"),css=read("app/globals.css");
+const server=read("app/api/combat-lobby/route.ts"),css=read("app/globals.css"),plant=read("public/plant-app.js");
 const extract=(source,name)=>{
   const from=source.indexOf("function "+name+"(");
   assert.ok(from>=0,"Missing function "+name);
@@ -31,6 +31,9 @@ assert.ok(combat.includes("worldSeq<=lastAppliedHostWorldSeq"),
   "Out-of-order enemy snapshots cannot rewind follower positions");
 assert.ok(combat.includes("lastAppliedHostWorldSeq<0") &&
   combat.includes("syncEnemies(false)"),"Follower must avoid full base-enemy rebuild on every snapshot");
+assert.ok(plant.includes("if(gap>38)") &&
+  combat.includes("if(gap>34)"),
+  "Minor co-op prediction errors should blend instead of snapping/teleporting");
 assert.ok(css.includes(".combat-pause-overlay[data-combat-shared-paused"),
   "Shared pause notice needs explicit UI styling");
 console.log("v0.13.88 checks passed: ordered snapshots, co-op pause, event efficiency and enemy reconciliation.");

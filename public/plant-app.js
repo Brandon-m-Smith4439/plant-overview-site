@@ -7240,6 +7240,7 @@
       getBounds: combatWorldBounds,
       getLadderSites: combatExteriorLandmarks,
       getClimbSurface: combatClimbSurface,
+      getMysterySpots: combatMysterySpots,
       getPortalWaypoints: combatPortalWaypoints,
       getPlantBounds: floorBounds,
       getWeaponMuzzleAnchor: (weaponKey,aiming) => {
@@ -11588,7 +11589,8 @@
 
   function viewmodelProject(point) {
     // Clip long barrels before projection so reload animation cannot fill the viewport.
-    const depth = Math.max(.9, Number(point[2]) || .9);
+    const clampedViewmodel=Math.max(.9,Number(point[2])||.9);
+    const depth=clampedViewmodel;
     const fov = 61 * Math.PI / 180;
     const focal = canvas.height / Math.max(.1, 2 * Math.tan(fov / 2));
     return [canvas.width/2 + Number(point[0]) * focal / depth, canvas.height/2 - Number(point[1]) * focal / depth, depth];
@@ -11604,11 +11606,16 @@
     const projected = points.map(viewmodelProject);
     ctx.save();
     ctx.globalAlpha = alpha;
+    ctx.lineJoin = "round";ctx.lineCap="round";
     ctx.beginPath();
     projected.forEach((point,index) => index ? ctx.lineTo(point[0],point[1]) : ctx.moveTo(point[0],point[1]));
     ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(1, canvas.width/1100); ctx.stroke(); }
+    if (fill) {ctx.fillStyle=fill;ctx.fill();}
+    // Fill-colored face outlines conceal subpixel cracks between adjacent
+    // polygons in the software painter, without introducing transparent seams.
+    ctx.strokeStyle=fill||stroke||"#1b272c";
+    ctx.lineWidth=Math.max(1.35,canvas.width/920);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -12185,9 +12192,9 @@
         x:((Number(part.z)||0)+(Number(part.d)||.1)*.5-bd*.5)*.63*rocketReloadScale,
         y:((Number(part.y)||0)+(Number(part.h)||.1)*.5-bh*.5)*.72*rocketReloadScale,
         z:(bw*.5-(Number(part.x)||0)-(Number(part.w)||.1)*.5)*factor*rocketReloadScale,
-        w:Math.max(.02,(Number(part.d)||.1)*.63*rocketReloadScale),
-        h:Math.max(.02,(Number(part.h)||.1)*.72*rocketReloadScale),
-        d:Math.max(.02,(Number(part.w)||.1)*factor*rocketReloadScale),
+        w:Math.max(.13,(Number(part.d)||.1)*.75*rocketReloadScale),
+        h:Math.max(.13,(Number(part.h)||.1)*.82*rocketReloadScale),
+        d:Math.max(.13,(Number(part.w)||.1)*factor*rocketReloadScale),
         color:part.color||"#58686c",
         rotationX:Number(part.rotationX)||0,rotationY:Number(part.rotationY)||0,rotationZ:Number(part.rotationZ)||0,
       }));

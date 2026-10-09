@@ -14,6 +14,8 @@
   });
   const PLAYER_PRIMARY_WEAPONS = Object.freeze(["rifle", "sniper", "shotgun", "rocket", "chainsaw"]);
   const ZOMBIE_EDGE_INSET = 8;
+  const ZOMBIE_SPAWN_MIN_DISTANCE = 34;
+  const ZOMBIE_SPAWN_MAX_DISTANCE = 88;
   const ZOMBIE_INITIAL_EXTRA = 4;
   const AMMO_PICKUP_RESPAWN_MS = 18000;
   const AMMO_PICKUP_RADIUS = 3.25;
@@ -1098,23 +1100,45 @@
     }
 
     function edgeSpawnPoint(record, player = options.getPlayer?.()) {
-      const bounds = options.getBounds?.();
-      if (!Array.isArray(bounds) || bounds.length < 4) return null;
-      const minimumX = number(bounds[0]), minimumZ = number(bounds[1]), maximumX = number(bounds[2]), maximumZ = number(bounds[3]);
-      const inset = ZOMBIE_EDGE_INSET;
-      const radius = clamp(Math.max(enemyDimensions(record).w, enemyDimensions(record).d) * .46, .72, 1.45);
-      for (let attempt = 0; attempt < 36; attempt += 1) {
-        const edge = Math.floor(Math.random() * 4);
-        const x = edge < 2
-          ? minimumX + inset + Math.random() * Math.max(1, maximumX - minimumX - inset * 2)
-          : (edge === 2 ? minimumX + inset : maximumX - inset);
-        const z = edge >= 2
-          ? minimumZ + inset + Math.random() * Math.max(1, maximumZ - minimumZ - inset * 2)
-          : (edge === 0 ? minimumZ + inset : maximumZ - inset);
-        if (player && Math.hypot(x - number(player.x), z - number(player.z)) < 32) continue;
-        if (pointBlockedByObstacle(x, z, radius)) continue;
-        if (aliveEnemies().some((enemy) => { const center = enemyCenter(enemy); return Math.hypot(center.x - x, center.z - z) < radius + center.radius + 1.2; })) continue;
-        return { x, z };
+      const bounds=options.getBounds?.();
+      if(!Array.isArray(bounds)||bounds.length<4)return null;
+      const minX=number(bounds[0]),minZ=number(bounds[1]),
+        maxX=number(bounds[2]),maxZ=number(bounds[3]);
+      const radius=clamp(Math.max(enemyDimensions(record).w,
+        enemyDimensions(record).d)*.46,.72,1.45);
+      // Every survivor is a possible spawn anchor. Do not put all zombies
+      // 180 feet away at the distant wasteland perimeter.
+      const participants=[
+        player,...(multiplayer?.remotePlayers?.()||[]).map(entry=>entry.state||entry)
+      ].filter(entry=>Number.isFinite(Number(entry?.x))&&Number.isFinite(Number(entry?.z)));
+      if(!participants.length)return null;
+      const structures=options.getLadderSites?.()||[];
+      const currentEnemies=aliveEnemies();
+      for(let attempt=0;attempt<72;attempt++){
+        const target=participants[(zombieSpawnSerial+attempt)%participants.length];
+        const angle=Math.random()*Math.PI*2;
+        const distance=ZOMBIE_SPAWN_MIN_DISTANCE+Math.random()*
+          (ZOMBIE_SPAWN_MAX_DISTANCE-ZOMBIE_SPAWN_MIN_DISTANCE);
+        const x=number(target.x)+Math.cos(angle)*distance;
+        const z=number(target.z)+Math.sin(angle)*distance;
+        if(x<minX+radius+5||x>maxX-radius-5||
+          z<minZ+radius+5||z>maxZ-radius-5)continue;
+        if(participants.some(p=>Math.hypot(x-number(p.x),z-number(p.z))<
+          ZOMBIE_SPAWN_MIN_DISTANCE-5))continue;
+        if(structures.some(site=>x>site.x-radius-5&&x<site.x+site.w+radius+5 &&
+          z>site.z-radius-5&&z<site.z+site.d+radius+5))continue;
+        if(pointBlockedByObstacle(x,z,radius+.5))continue;
+        if(options.canPlaceStation?.(x,z,radius+.6)===false)continue;
+        // Adjacent clear space prevents zombies spawning inside a tiny machine
+        // pocket from which their navigation radius cannot escape.
+        if([[3,0],[-3,0],[0,3],[0,-3]].filter(([dx,dz])=>
+          !pointBlockedByObstacle(x+dx,z+dz,radius*.75) &&
+          options.canPlaceStation?.(x+dx,z+dz,radius*.75)!==false).length<2)continue;
+        if(currentEnemies.some(enemy=>{
+          const center=enemyCenter(enemy);
+          return Math.hypot(center.x-x,center.z-z)<radius+center.radius+2;
+        }))continue;
+        return {x,z};
       }
       return null;
     }

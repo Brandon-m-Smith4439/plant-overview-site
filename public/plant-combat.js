@@ -519,6 +519,25 @@
         }
       }catch{/* Audio is cosmetic; never interrupt combat if a device lacks it. */}
     }
+    function soundPanFromWorld(point,player=options.getPlayer?.()){
+      if(!point || !player)return 0;
+      const dx=number(point.x)-number(player.x),dz=number(point.z)-number(player.z);
+      const distance=Math.hypot(dx,dz);
+      if(distance<.15)return 0;
+      // The first-person projector mirrors world-X on screen. The speaker
+      // basis must follow the same right vector as hit-direction indicators:
+      // world +X appears on the LEFT when facing world +Z.
+      const yaw=number(player.yaw);
+      return clamp((Math.sin(yaw)*dz-Math.cos(yaw)*dx)/distance,-.85,.85);
+    }
+    function playWorldCombatSound(cue,point,volume=1){
+      const player=options.getPlayer?.();
+      if(!point || !player){playCombatSound(cue,volume);return;}
+      const distance=Math.hypot(number(point.x)-number(player.x),
+        number(point.z)-number(player.z));
+      const attenuation=clamp(1-distance/190,.1,1);
+      playCombatSound(cue,volume*attenuation,soundPanFromWorld(point,player));
+    }
     // Short procedural score phrases stay quiet under footsteps and weapon
     // sounds, and get faster/denser only when threat distance or health warrants.
     function playMusicTone(frequency,start,duration,gain=.02,type="sine"){
@@ -620,9 +639,7 @@
         }
         if(nearestZombie){
           const proximity=zombieProximityLevel(nearestDistance);
-          const angle=Math.atan2(nearestZombie.x-number(player.x),nearestZombie.z-number(player.z));
-          const pan=Math.sin(angle-number(player.yaw));
-          playCombatSound("zombie-growl",.07+proximity*.90,pan);
+          playWorldCombatSound("zombie-growl",nearestZombie,.07+proximity*.90);
           nextAmbientAt=now+(3450-proximity*2400)+Math.random()*320;
         }else{
           playCombatSound("wind",.16);
@@ -1626,7 +1643,7 @@
       enemy.defeatedAt = now;
       const local=options.getPlayer?.();
       const distance=Math.hypot(number(local?.x)-number(enemy.x),number(local?.z)-number(enemy.z));
-      playCombatSound("enemy-down",clamp(35/Math.max(10,distance),.1,.8));
+      playWorldCombatSound("enemy-down",enemyCenter(enemy),clamp(35/Math.max(10,distance),.1,.8));
       if (zombieEndless() && !coopFollower() && enemy.wave === zombieWave) waveDefeated=Math.min(waveTotal,waveDefeated+1);
       // Start the fall on the exact kill frame. Corpses also get a small
       // obstacle-aware slide so a nearby machine cannot visually swallow the
@@ -1730,7 +1747,7 @@
       for(const explosion of worldEffects.explosions){
         if(explosion.resolved || now<explosion.startAt)continue;
         explosion.resolved=true;
-        playCombatSound("explosion",.88);
+        playWorldCombatSound("explosion",explosion.point,.88);
         const radius=clamp(number(explosion.radius,10),1,20);
         const baseDamage=number(explosion.damageMax,145);
         const sourceEnemy=enemies.get(String(explosion.sourceEnemyId||""));
@@ -3547,11 +3564,11 @@
       if(loadout.melee){
         const listener=options.getPlayer?.();
         const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
-        playCombatSound("chainsaw",clamp(22/Math.max(8,distance),.09,.62));
+        playWorldCombatSound("chainsaw",enemyCenter(enemy),clamp(22/Math.max(8,distance),.09,.62));
       }else if(Math.random()<.26){
         const listener=options.getPlayer?.();
         const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
-        playCombatSound("enemy-shot",clamp(22/Math.max(8,distance),.09,.5));
+        playWorldCombatSound("enemy-shot",enemyCenter(enemy),clamp(22/Math.max(8,distance),.09,.5));
       }
       enemy.firingUntil = now + shotDuration;
       enemy.muzzleFlashUntil = loadout.melee ? 0 : now + (loadout.explosive ? 145 : loadout.key === "sniper" ? 105 : 88);
@@ -4180,7 +4197,7 @@
         if(previouslyAlive&&enemy.health<=0){
           const listener=options.getPlayer?.();
           const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
-          playCombatSound("enemy-down",clamp(35/Math.max(10,distance),.1,.8));
+          playWorldCombatSound("enemy-down",enemyCenter(enemy),clamp(35/Math.max(10,distance),.1,.8));
         }
         // Corpse locations remain authoritative; do not smooth a fallen
         // employee back into a standing/animated walking position.
@@ -4248,6 +4265,7 @@
         const hurt=splashDamage(point,local,radius,damage);
         worldEffects.explosions.push({point,startAt:performance.now(),duration:800,
           radius,resolved:true,seed:Math.random()*1000});
+        playWorldCombatSound("explosion",point,.76);
         if(hurt>0){
           const enemy=enemyId ? enemies.get(enemyId) : null;
           const source=enemy||{
@@ -4302,6 +4320,7 @@
         const point={x:number(raw.x),y:number(raw.y),z:number(raw.z)};
         worldEffects.explosions.push({point,startAt:performance.now(),duration:900,
           radius:18,resolved:true,seed:Math.random()*1000});
+        playWorldCombatSound("explosion",point,.80);
         return;
       }
       if (event.type === "player-death" && matchType === "coop") {

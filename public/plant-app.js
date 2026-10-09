@@ -11813,7 +11813,12 @@
     for (const station of effects.stations || []) {
       const health=station.type==="health";
       const x=Number(station.x),z=Number(station.z);
+      const stationY=Number(station.y)||0;
+      const stationBox=(shape,alpha=1,grow=1)=>stationBox({...shape,
+        y:(Number(shape.y)||0)+stationY},alpha,grow);
       if (!Number.isFinite(x)||!Number.isFinite(z)) continue;
+      if(state.cameraMode==="walk" &&
+        Math.hypot(x-(modelCenter()[0]+state.panX),z-(modelCenter()[1]+state.panZ))>185)continue;
       const pulse=.74+.26*Math.sin(time*.006);
       const glowColor=mysteryRarityColors[station.offer?.rarity] || "#e4a8fa";
       const body=health?"#23433f":station.offer?.rarity==="mythic"?"#47301b":station.offer?.rarity==="cursed"?"#40232e":"#29203e";
@@ -11821,16 +11826,16 @@
       const width=health?3.1:5.4;
       const depth=health?2.1:3.0;
       const frontZ=z-depth*.5;
-      box({x:x-width*.5,y:.15,z:frontZ,w:width,h:2.12,d:depth,color:"#11171e",rotationY:0},.99,1);
-      box({x:x-width*.5+.14,y:.38,z:frontZ-.05,w:width-.28,h:1.64,d:.22,color:body,rotationY:0},.96,1);
-      box({x:x-width*.5+.12,y:2.18,z:frontZ-.10,w:width-.24,h:.32,d:depth+.18,color:health?"#a6e6cd":"#5f447e",rotationY:0},1,1);
-      box({x:x-width*.5+.34,y:2.55,z:frontZ+.18,w:width-.68,h:.19,d:depth-.36,color:health?"#85d1b7":"#aa78d9",rotationY:0},.85,1);
+      stationBox({x:x-width*.5,y:.15,z:frontZ,w:width,h:2.12,d:depth,color:"#11171e",rotationY:0},.99,1);
+      stationBox({x:x-width*.5+.14,y:.38,z:frontZ-.05,w:width-.28,h:1.64,d:.22,color:body,rotationY:0},.96,1);
+      stationBox({x:x-width*.5+.12,y:2.18,z:frontZ-.10,w:width-.24,h:.32,d:depth+.18,color:health?"#a6e6cd":"#5f447e",rotationY:0},1,1);
+      stationBox({x:x-width*.5+.34,y:2.55,z:frontZ+.18,w:width-.68,h:.19,d:depth-.36,color:health?"#85d1b7":"#aa78d9",rotationY:0},.85,1);
       if (!health) {
         // Three recessed glowing reel windows along the wide front.
         for (let i=0;i<3;i++) {
           const reelX=x-2.04+i*1.37;
-          box({x:reelX,y:1.13,z:frontZ-.16,w:1.25,h:.75,d:.13,color:"#0a0d1b",rotationY:0},1,1);
-          box({x:reelX+.09,y:1.22,z:frontZ-.22,w:1.06,h:.53,d:.09,color:i===1?"#7748af":"#39294e",rotationY:0},i===1?pulse:.9,1);
+          stationBox({x:reelX,y:1.13,z:frontZ-.16,w:1.25,h:.75,d:.13,color:"#0a0d1b",rotationY:0},1,1);
+          stationBox({x:reelX+.09,y:1.22,z:frontZ-.22,w:1.06,h:.53,d:.09,color:i===1?"#7748af":"#39294e",rotationY:0},i===1?pulse:.9,1);
         }
         line3d([x-2.13,1.07,frontZ-.28],[x+2.13,1.07,frontZ-.28],"rgba(235,181,255,.9)",2.6,pulse);
         const offer=station.offer;
@@ -11844,18 +11849,18 @@
           const mysteryWeaponDesign=designLibrary["combat-weapon-"+weaponKey];
           if(weaponKey==="teddy"){
             // A simple blocky teddy silhouette signals the rare losing roll.
-            box({x:x-.48,y:weaponY-.15,z:z-.35,w:.96,h:.84,d:.7,color:"#94624d"},1,1);
-            box({x:x-.38,y:weaponY+.60,z:z-.25,w:.76,h:.65,d:.57,color:"#ba8c66"},1,1);
+            stationBox({x:x-.48,y:weaponY-.15,z:z-.35,w:.96,h:.84,d:.7,color:"#94624d"},1,1);
+            stationBox({x:x-.38,y:weaponY+.60,z:z-.25,w:.76,h:.65,d:.57,color:"#ba8c66"},1,1);
             for(const side of [-1,1]){
-              box({x:x+side*.43-.17,y:weaponY+1.04,z:z-.23,w:.34,h:.34,d:.34,color:"#94624d"},1,1);
-              box({x:x+side*.36-.15,y:weaponY-.38,z:z-.23,w:.3,h:.4,d:.4,color:"#805442"},1,1);
+              stationBox({x:x+side*.43-.17,y:weaponY+1.04,z:z-.23,w:.34,h:.34,d:.34,color:"#94624d"},1,1);
+              stationBox({x:x+side*.36-.15,y:weaponY-.38,z:z-.23,w:.3,h:.4,d:.4,color:"#805442"},1,1);
             }
           } else if (mysteryWeaponDesign?.components?.length) {
             const base=mysteryWeaponDesign.base||{},ww=Math.max(.2,Number(base.w)||4);
             const hh=Math.max(.2,Number(base.h)||1.65),dd=Math.max(.2,Number(base.d)||1.25);
             drawCustomDesign({id:"mystery-display-"+weaponKey,instanceId:"mystery-display-"+weaponKey,
               type:"combatWeapon",designId:mysteryWeaponDesign.id,
-              x:x-ww/2,y:weaponY-hh*.52,z:z-dd/2,w:ww,h:hh,d:dd,
+              x:x-ww/2,y:stationY+weaponY-hh*.52,z:z-dd/2,w:ww,h:hh,d:dd,
               color:"#d5dce6",rotationY:0},1,1,time,3,mysteryWeaponDesign.components,12);
           } else {
                     const pistol=/pistol|revolver/i.test(weaponKey);
@@ -11869,24 +11874,24 @@
           const tone=rolling?glowColor:isReturning?"#776a83":glowColor;
           // Barrel points to +X. Receiver, grip, stock, optic, magazine and
           // muzzle are recognizable silhouette parts for every prize category.
-          box({x:left+.68,y:weaponY,z:z-.32,w:pistol?.9:1.65,h:.48,d:.62,color:tone,rotationY:0},1,1);
-          box({x:left+(pistol?1.52:2.25),y:weaponY+.18,z:z-.17,w:pistol?.45:rocket?1.5:sniper?1.85:1.43,h:rocket?.37:.23,d:rocket?.47:.25,color:rocket?"#798a96":"#a0b1b9",rotationY:0},1,1);
-          box({x:left+.89,y:weaponY-.68,z:z-.23,w:.34,h:.84,d:.35,color:"#1e252e",rotationY:0},1,1);
+          stationBox({x:left+.68,y:weaponY,z:z-.32,w:pistol?.9:1.65,h:.48,d:.62,color:tone,rotationY:0},1,1);
+          stationBox({x:left+(pistol?1.52:2.25),y:weaponY+.18,z:z-.17,w:pistol?.45:rocket?1.5:sniper?1.85:1.43,h:rocket?.37:.23,d:rocket?.47:.25,color:rocket?"#798a96":"#a0b1b9",rotationY:0},1,1);
+          stationBox({x:left+.89,y:weaponY-.68,z:z-.23,w:.34,h:.84,d:.35,color:"#1e252e",rotationY:0},1,1);
           if (longGun) {
-            box({x:left+.06,y:weaponY-.12,z:z-.26,w:.74,h:.38,d:.5,color:"#2a303d",rotationY:0},1,1);
-            box({x:left+1.46,y:weaponY-.45,z:z-.24,w:.45,h:.59,d:.38,color:shotgun?"#6a4730":"#2a303d",rotationY:0},1,1);
-            box({x:left+1.13,y:weaponY+.5,z:z-.22,w:sniper?.9:.56,h:.22,d:.34,color:"#161f2a",rotationY:0},1,1);
-            if (lmg) box({x:left+1.65,y:weaponY-.6,z:z-.27,w:.9,h:.42,d:.47,color:"#58616b",rotationY:0},1,1);
+            stationBox({x:left+.06,y:weaponY-.12,z:z-.26,w:.74,h:.38,d:.5,color:"#2a303d",rotationY:0},1,1);
+            stationBox({x:left+1.46,y:weaponY-.45,z:z-.24,w:.45,h:.59,d:.38,color:shotgun?"#6a4730":"#2a303d",rotationY:0},1,1);
+            stationBox({x:left+1.13,y:weaponY+.5,z:z-.22,w:sniper?.9:.56,h:.22,d:.34,color:"#161f2a",rotationY:0},1,1);
+            if (lmg) stationBox({x:left+1.65,y:weaponY-.6,z:z-.27,w:.9,h:.42,d:.47,color:"#58616b",rotationY:0},1,1);
           }
-          if (rocket) box({x:left+2.5,y:weaponY+.08,z:z-.36,w:1.05,h:.46,d:.62,color:"#c07e32",rotationY:0},.96,1);
+          if (rocket) stationBox({x:left+2.5,y:weaponY+.08,z:z-.36,w:1.05,h:.46,d:.62,color:"#c07e32",rotationY:0},.96,1);
           }
           const haloRadius=1.25+raise*.75;
           const ring=[];
-          for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,weaponY-.75,z+Math.sin(angle)*.82]);}
+          for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,stationY+weaponY-.75,z+Math.sin(angle)*.82]);}
           polygon(ring,"rgba(166,105,242,.08)",glowColor,2.2,.65+pulse*.28,{transparent:true});
           // The reel text changes alongside the physical prize model, slows to
           // the chosen gun, then says TAKE before dropping back through the lid.
-          const reelPoint=project(x,2.0,frontZ-.26);
+          const reelPoint=project(x,stationY+2.0,frontZ-.26);
           if (Number.isFinite(reelPoint?.[0]) && Number.isFinite(reelPoint?.[1]) && reelPoint[3]>0) {
             const scale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
             ctx.save();
@@ -11901,15 +11906,15 @@
           }
         }
       } else {
-        box({x:x-.58,y:1.24,z:frontZ-.12,w:1.16,h:.26,d:.13,color:"#a7ffe5",rotationY:0},1,1);
-        box({x:x-.13,y:.85,z:frontZ-.15,w:.26,h:1.04,d:.16,color:"#a7ffe5",rotationY:0},1,1);
+        stationBox({x:x-.58,y:1.24,z:frontZ-.12,w:1.16,h:.26,d:.13,color:"#a7ffe5",rotationY:0},1,1);
+        stationBox({x:x-.13,y:.85,z:frontZ-.15,w:.26,h:1.04,d:.16,color:"#a7ffe5",rotationY:0},1,1);
       }
       const radius=health?3.4:4.0;
       const floorRing=[];
-      for(let i=0;i<24;i++) {const angle=i/24*Math.PI*2;floorRing.push([x+Math.cos(angle)*radius,.07,z+Math.sin(angle)*radius]);}
+      for(let i=0;i<24;i++) {const angle=i/24*Math.PI*2;floorRing.push([x+Math.cos(angle)*radius,stationY+.07,z+Math.sin(angle)*radius]);}
       polygon(floorRing,health?"rgba(77,223,171,.045)":"rgba(164,108,248,.06)",health?"rgba(99,248,189,.62)":"rgba(220,165,255,.72)",1.5,pulse,{transparent:true});
       const labelY=health?3.95:station.offer?.phase==="ready"?7.2:5.1;
-      const textPoint=project(x,labelY,z);
+      const textPoint=project(x,stationY+labelY,z);
       if (Number.isFinite(textPoint?.[0]) && Number.isFinite(textPoint?.[1]) && textPoint[3]>0) {
         const scale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
         const offer=station.offer;

@@ -2568,28 +2568,53 @@
     const b=floorBounds(),key=b.join("|");
     if(deadForestCache.key===key)return deadForestCache.trees;
     const [left,front,right,back]=b;
+    // Eight compact, dense groves plus a broad sparse tree belt give the
+    // wasteland a forest silhouette without planting trees inside the factory.
     const groves=[
-      [left-68,front+12,21,31],
-      [left-83,back+71,27,36],
-      [right+74,front-70,24,34],
-      [right+91,back-18,20,34],
-      [left+33,front-101,22,31],
-      [right-46,back+105,25,35],
+      [left-55,front-28,45,29],
+      [left-83,back+58,43,28],
+      [right+65,front-53,46,30],
+      [right+73,back+55,44,29],
+      [left+12,front-91,48,31],
+      [right-24,back+103,50,32],
+      [left-123,(front+back)*.45,41,29],
+      [right+122,(front+back)*.62,42,28],
     ];
     const trees=[];
+    const sites=combatExteriorLandmarks();
+    const entrances=combatPortalWaypoints();
+    function addDeadTree(x,z,grove,i,phase){
+      // Keep the working floor, building walls, ladders and entry paths clear.
+      if(x>left-8&&x<right+8&&z>front-8&&z<back+8)return;
+      if(entrances.some(gate=>Math.hypot(x-gate.x,z-gate.z)<21))return;
+      if(sites.some(site=>x>site.x-9&&x<site.x+site.w+9&&
+        z>site.z-9&&z<site.z+site.d+9))return;
+      const radius=.30+(Math.sin(i*4.87+grove*3.1)*.5+.5)*.33;
+      const height=7+(Math.sin(i*13.19+grove*8.7)*.5+.5)*10;
+      trees.push({x,z,radius,height,grove,i,phase});
+    }
     groves.forEach(([cx,cz,count,spread],grove)=>{
       for(let i=0;i<count;i++){
         const angle=i*2.399963229728653+grove*.79;
         const jitter=Math.sin(i*17.71+grove*37.17);
-        const distance=(5+Math.sqrt((i+.5)/count)*spread)*(1+jitter*.11);
-        const x=cx+Math.cos(angle)*distance,z=cz+Math.sin(angle)*distance;
-        const radius=.33+(Math.sin(i*4.87+grove)*.5+.5)*.31;
-        const height=7+(Math.sin(i*13.19+grove*8.7)*.5+.5)*9;
-        const obstacleNearPOI=combatExteriorLandmarks().some(site=>
-          x>site.x-7&&x<site.x+site.w+7&&z>site.z-7&&z<site.z+site.d+7);
-        if(!obstacleNearPOI)trees.push({x,z,radius,height,grove,i,phase:angle});
+        const distance=(3+Math.sqrt((i+.5)/count)*spread)*(1+jitter*.11);
+        addDeadTree(cx+Math.cos(angle)*distance,
+          cz+Math.sin(angle)*distance,grove,i,angle);
       }
     });
+    // Scattered dead trees between forest sections stop the barren terrain
+    // looking like six isolated clumps. The seed is stable across all clients.
+    for(let i=0;i<88;i++){
+      const side=i%4,along=.08+((i*37)%85)/100;
+      const setback=29+(i*23)%127;
+      let x=left+(right-left)*along,z=front+(back-front)*along;
+      if(side===0)x=left-setback;
+      else if(side===1)x=right+setback;
+      else if(side===2)z=front-setback;
+      else z=back+setback;
+      const phase=i*2.399963229728653+.41;
+      addDeadTree(x,z,8+side,i,phase);
+    }
     deadForestCache={key,trees};
     return trees;
   }
@@ -2627,19 +2652,22 @@
     const camX=modelCenter()[0]+state.panX,camZ=modelCenter()[1]+state.panZ;
     const walking=state.cameraMode==="walk";
     for(const tree of combatDeadForestTrees()){
-      if(walking&&Math.hypot(camX-tree.x,camZ-tree.z)>188)continue;
+      const distance=Math.hypot(camX-tree.x,camZ-tree.z);
+      if(walking&&distance>188)continue;
       const dark=tree.grove%2===0?"#242625":"#2c2927";
       const sway=Math.sin(time*.00035+tree.phase)*.13;
       const {x,z,height:h,radius:r}=tree;
       // No foliage: thick gnarly trunk, bare angled limbs and forked twigs.
       box({x:x-r,y:0,z:z-r,w:r*2,h:h*.64,d:r*2,color:dark,rotationZ:tree.phase*11},1,1);
       line3d([x,h*.42,z],[x+sway,h*.83,z],"#353a35",Math.max(3,r*7),1);
-      for(let arm=0;arm<5;arm++){
+      // Limit distant twigs: dense forest must not reintroduce co-op FPS drops.
+      const limbCount=walking&&distance>120?2:walking&&distance>75?3:5;
+      for(let arm=0;arm<limbCount;arm++){
         const angle=tree.phase+arm*2.39996,reach=(3.2+arm%3*1.5)*(.8+r);
         const y=h*(.43+arm*.065),bx=x+Math.cos(angle)*reach,bz=z+Math.sin(angle)*reach;
         const tip=[bx+sway,y+1.7+arm*.13,bz];
         line3d([x,y-.95,z],tip,arm%2?"#2f342f":"#383a32",Math.max(2,r*5-arm*.28),1);
-        if(arm%2===0)line3d(tip,[bx+Math.sin(angle)*reach*.48,y+3.1+arm*.24,
+        if(arm%2===0&&(!walking||distance<105))line3d(tip,[bx+Math.sin(angle)*reach*.48,y+3.1+arm*.24,
           bz-Math.cos(angle)*reach*.48],"#33392f",2.2,1);
       }
     }
@@ -2933,7 +2961,8 @@
       }));
       combatExteriorHills().forEach((hill)=>entries.push({
         kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
-        w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44
+        w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44,
+        navRadius:hill.radius*.72
       }));
       if(combatController?.getMode?.()==="zombie")
         combatDeadForestTrees().forEach(tree=>entries.push({

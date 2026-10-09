@@ -245,7 +245,7 @@ assert.ok(combat.includes("ZOMBIE_GAITS") && combat.includes("gaitClass=giant") 
 assert.ok(plant.includes("const gaitStride") && plant.includes("const gaitBob") && plant.includes('zombieGait==="sprinter"'),"Zombie limb motion must change with the speed class.");
 assert.ok(lobbyRoute.includes("gaitClass:") && combat.includes("snapshot.gaitClass"),"Multiplayer must synchronize each zombie gait class.");
 assert.ok(combat.includes('const rise = phase==="rolling" ? progress*progress*(3-2*progress)') && combat.includes("const riseEndsAt = rollEndsAt"),"Prize must rise as reel spins and peak on winning frame.");
-assert.ok(combat.includes("moveMysteryBoxForWave()") && combat.includes("(zombieWave-1)%2===0"),"Mystery Box should move after every two completed waves.");
+assert.ok(combat.includes("moveMysteryBoxForWave(true)") && !combat.includes("if(zombieWave>1&&(zombieWave-1)%2===0)moveMysteryBoxForWave()"),"Mystery Box must move only after a teddy roll has completed, never during a wave transition.");
 assert.ok(combat.includes("navProgressDistance") && combat.includes("navigationRadius(record)") && combat.includes("enemy.navExpires=0"),"Cage navigation needs clearance and anti-stuck replanning.");
 assert.ok(plant.includes("combat-zombie-wasteland") && plant.includes("combat-desert-exterior") && plant.includes("drawCombatExterior"),"Each mode must have its own outdoor biome.");
 assert.ok(presets.includes('designs["combat-weapon-"+key]') && presets.includes('designs["combat-zombie-"+key]'),"All weapon and zombie speed classes need editable 3D presets.");
@@ -256,7 +256,7 @@ assert.ok(combat.includes("getWeaponMuzzleAnchor") && plant.includes("getWeaponM
 
 // v0.13.78: mystery prize stages, conditional pickup, and obstacle-aware routing.
 assert.ok(combat.includes("MYSTERY_ROLL_DURATION_MS = 4800") && combat.includes("MYSTERY_REEL_STEPS = 35") && combat.includes("Math.pow(1 - progress, 2.3)"), "Mystery box reel should visibly spin and decelerate before landing on its prize.");
-assert.ok(combat.includes('phase === "rolling" ? MYSTERY_WEAPON_POOL[index] : offer.prizeKey') && combat.includes("const riseEndsAt = rollEndsAt"), "The displayed reel must stop on the gun that rises from the box.");
+assert.ok(combat.includes('phase === "rolling" ? MYSTERY_REEL_POOL[index] : offer.prizeKey') && combat.includes("const riseEndsAt = rollEndsAt"), "The displayed reel must stop on the winning weapon or teddy bear.");
 assert.ok(combat.includes("MYSTERY_CLAIM_WINDOW_MS = 11500") && combat.includes("MYSTERY_LOWER_DURATION_MS = 2300") && combat.includes("now >= mysteryOffer.despawnAt"), "Unclaimed guns must visibly lower, despawn, and release the box for a new spin.");
 assert.ok(combat.includes('if (phase === "ready") return claimMysteryWeapon();') && combat.includes('mysteryOffer = null;') && combat.includes("playerPoints -= cost"), "Paying must start the reel; a separate E claim grants the gun without a second charge.");
 assert.ok(combat.includes("mysteryOffer=null;healthStation=null;nearestStation=null") && combat.includes('"rollEndsAt","riseEndsAt","lowerStartsAt","despawnAt"'), "Restart/exit must reset prizes, and pause must freeze active mystery timers.");

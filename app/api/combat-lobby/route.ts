@@ -53,6 +53,11 @@ type Lobby = {
   updatedAt: number;
   status: "waiting" | "started";
   revision: number;
+  // Increases for every live state change, including movement heartbeats.
+  // Allows clients to discard responses that arrive out of order.
+  syncSeq?: number;
+  pausedBy?: string;
+  pausedAt?: number;
   seed: number;
   config: {
     mode: "combat" | "zombie";
@@ -241,6 +246,10 @@ function prune(store: Store, now = Date.now()) {
       continue;
     }
     if (!lobby.players[lobby.hostId]) lobby.hostId = playerIds[0];
+    if(lobby.pausedBy && !lobby.players[lobby.pausedBy]){
+      lobby.pausedBy="";lobby.pausedAt=0;
+      lobby.syncSeq=(lobby.syncSeq||0)+1;
+    }
     lobby.events = (lobby.events || []).filter((event) => now - finite(event.createdAt) < 60_000).slice(-MAX_EVENTS);
   }
 }
@@ -316,6 +325,10 @@ function publicLobby(lobby: Lobby, viewerId = "") {
     hostId: lobby.hostId,
     status: lobby.status,
     revision: lobby.revision,
+    syncSeq: lobby.syncSeq || 0,
+    pausedBy: lobby.pausedBy || "",
+    pausedByName: lobby.players[lobby.pausedBy||""]?.name || "",
+    pausedAt: lobby.pausedAt || 0,
     seed: lobby.seed,
     config: lobby.config,
     players: Object.values(lobby.players).sort((a, b) => a.joinedAt - b.joinedAt).map((player) => {
@@ -346,7 +359,11 @@ export async function POST(request: Request) {
   try { body = await request.json(); } catch { return Response.json({ ok: false, error: "Invalid JSON." }, { status: 400 }); }
   const action = cleanId(body.action, 24);
   try {
-    const mutateAction = action === "heartbeat" ? mutateHeartbeat : mutate;
+    // Movement heartbeats and shot events are ephemeral. Persist these
+    // asynchronously instead of blocking each combat event on file I/O.
+    const mutateAction = action === "heartbeat" ? mutateHeartbeat :
+      (operation: (store: Store) => Promise<unknown> | unknown) =>
+        mutate(operation,action!=="event");
     const response = await mutateAction(async (store) => {
       const now = Date.now();
       if (action === "create") {
@@ -355,7 +372,8 @@ export async function POST(request: Request) {
         const config = sanitizeConfig(body.config);
         const lobby: Lobby = {
           code, hostId: player.id, createdAt: now, updatedAt: now,
-          status: "waiting", revision: 1, seed: Math.floor(Math.random() * 2_147_483_647),
+          status: "waiting", revision: 1, syncSeq:1, pausedBy:"", pausedAt:0,
+          seed: Math.floor(Math.random() * 2_147_483_647),
           config, players: { [player.id]: player }, events: [],
         };
         store.lobbies[code] = lobby;
@@ -373,7 +391,7 @@ export async function POST(request: Request) {
         const player = makePlayer(body, existing);
         lobby.players[player.id] = player;
         lobby.updatedAt = now;
-        lobby.revision += 1;
+        lobby.revision += 1;lobby.syncSeq=(lobby.syncSeq||0)+1;
         return { ok: true, lobby: publicLobby(lobby, playerId) };
       }
       if (!playerId || !existing) return { ok: false, status: 403, error: "Join the lobby first." };
@@ -381,12 +399,14 @@ export async function POST(request: Request) {
       if (action === "heartbeat") {
         lobby.players[playerId] = makePlayer(body, existing);
         lobby.updatedAt = now;
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
         return { ok: true, lobby: publicLobby(lobby, playerId), serverTime: now };
       }
       if (action === "configure") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can change match settings." };
         if (lobby.status === "started") return { ok: false, status: 409, error: "Match already started." };
         lobby.config = sanitizeConfig(body.config, lobby.config);
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
         lobby.updatedAt = now;
         lobby.revision += 1;
         return { ok: true, lobby: publicLobby(lobby, playerId) };
@@ -394,6 +414,8 @@ export async function POST(request: Request) {
       if (action === "start") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can start the match." };
         lobby.status = "started";
+        lobby.pausedBy="";lobby.pausedAt=0;
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
         lobby.updatedAt = now;
         lobby.revision += 1;
         lobby.seed = Math.floor(Math.random() * 2_147_483_647);
@@ -402,11 +424,30 @@ export async function POST(request: Request) {
       if (action === "reset") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can reset the match." };
         lobby.status = "waiting";
+        lobby.pausedBy="";lobby.pausedAt=0;
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
         lobby.events = [];
         Object.values(lobby.players).forEach((player) => { player.ready = false; player.state = sanitizeState({}); });
         lobby.updatedAt = now;
         lobby.revision += 1;
         return { ok: true, lobby: publicLobby(lobby, playerId) };
+      }
+      if (action === "pause") {
+        if(lobby.status!=="started")return {ok:false,status:409,error:"Match has not started."};
+        const requested=body.paused===true;
+        if(requested){
+          if(lobby.pausedBy && lobby.pausedBy!==playerId)
+            return {ok:false,status:409,error:"Another player has already paused this game."};
+          lobby.pausedBy=playerId;
+          lobby.pausedAt=now;
+        }else{
+          if(lobby.pausedBy && lobby.pausedBy!==playerId && lobby.hostId!==playerId)
+            return {ok:false,status:403,error:"Only the player who paused or the host may resume."};
+          lobby.pausedBy="";lobby.pausedAt=0;
+        }
+        lobby.updatedAt=now;
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
+        return {ok:true,lobby:publicLobby(lobby,playerId)};
       }
       if (action === "event") {
         const type = cleanId(body.type, 40);
@@ -457,14 +498,21 @@ export async function POST(request: Request) {
         lobby.events.push(event);
         if (lobby.events.length > MAX_EVENTS) lobby.events.splice(0, lobby.events.length - MAX_EVENTS);
         lobby.updatedAt = now;
-        return { ok: true, event, lobby: publicLobby(lobby, playerId) };
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
+        // Event POST need not echo the entire 80-enemy world snapshot back to
+        // the sender. Every player receives it on the next lightweight poll.
+        return { ok: true, event };
       }
       if (action === "leave") {
         delete lobby.players[playerId];
         const remaining = Object.keys(lobby.players);
         if (!remaining.length) delete store.lobbies[code];
         else if (lobby.hostId === playerId) lobby.hostId = remaining[0];
-        if (store.lobbies[code]) { lobby.updatedAt = now; lobby.revision += 1; }
+        if(lobby.pausedBy===playerId){lobby.pausedBy="";lobby.pausedAt=0;}
+        if (store.lobbies[code]) {
+          lobby.updatedAt = now; lobby.revision += 1;
+          lobby.syncSeq=(lobby.syncSeq||0)+1;
+        }
         return { ok: true, lobby: store.lobbies[code] ? publicLobby(lobby, playerId) : null };
       }
       return { ok: false, status: 400, error: "Unknown lobby action." };

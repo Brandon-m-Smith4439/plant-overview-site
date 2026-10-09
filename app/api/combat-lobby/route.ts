@@ -58,6 +58,10 @@ type Lobby = {
   syncSeq?: number;
   pausedBy?: string;
   pausedAt?: number;
+  roundOutcome?: "" | "gameover";
+  roundGeneration?: number;
+  rematchVotes?: Record<string, boolean>;
+  finalLeaderboard?: Array<{id:string;name:string;points:number;kills:number;downs:number}>;
   seed: number;
   config: {
     mode: "combat" | "zombie";
@@ -329,6 +333,10 @@ function publicLobby(lobby: Lobby, viewerId = "") {
     pausedBy: lobby.pausedBy || "",
     pausedByName: lobby.players[lobby.pausedBy||""]?.name || "",
     pausedAt: lobby.pausedAt || 0,
+    roundOutcome:lobby.roundOutcome||"",
+    roundGeneration:lobby.roundGeneration||0,
+    rematchVotes:lobby.rematchVotes||{},
+    finalLeaderboard:lobby.finalLeaderboard||[],
     seed: lobby.seed,
     config: lobby.config,
     players: Object.values(lobby.players).sort((a, b) => a.joinedAt - b.joinedAt).map((player) => {
@@ -373,6 +381,7 @@ export async function POST(request: Request) {
         const lobby: Lobby = {
           code, hostId: player.id, createdAt: now, updatedAt: now,
           status: "waiting", revision: 1, syncSeq:1, pausedBy:"", pausedAt:0,
+          roundOutcome:"",roundGeneration:0,rematchVotes:{},finalLeaderboard:[],
           seed: Math.floor(Math.random() * 2_147_483_647),
           config, players: { [player.id]: player }, events: [],
         };
@@ -414,6 +423,7 @@ export async function POST(request: Request) {
       if (action === "start") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can start the match." };
         lobby.status = "started";
+        lobby.roundOutcome="";lobby.rematchVotes={};lobby.finalLeaderboard=[];
         lobby.pausedBy="";lobby.pausedAt=0;
         lobby.syncSeq=(lobby.syncSeq||0)+1;
         lobby.updatedAt = now;
@@ -424,6 +434,7 @@ export async function POST(request: Request) {
       if (action === "reset") {
         if (lobby.hostId !== playerId) return { ok: false, status: 403, error: "Only the host can reset the match." };
         lobby.status = "waiting";
+        lobby.roundOutcome="";lobby.rematchVotes={};lobby.finalLeaderboard=[];
         lobby.pausedBy="";lobby.pausedAt=0;
         lobby.syncSeq=(lobby.syncSeq||0)+1;
         lobby.events = [];
@@ -431,6 +442,44 @@ export async function POST(request: Request) {
         lobby.updatedAt = now;
         lobby.revision += 1;
         return { ok: true, lobby: publicLobby(lobby, playerId) };
+      }
+      if (action === "game-over") {
+        if(lobby.status!=="started" || lobby.hostId!==playerId ||
+          lobby.config.matchType!=="coop" || lobby.config.mode!=="zombie")
+          return {ok:false,status:403,error:"Only the zombie co-op host can finish the match."};
+        if(lobby.roundOutcome==="gameover")
+          return {ok:true,lobby:publicLobby(lobby,playerId)};
+        const submitted=Array.isArray(body.leaderboard)?body.leaderboard:[];
+        const byId=new Map(submitted.filter(x=>x&&typeof x==="object").map(x=>[cleanId(x.id,96),x]));
+        lobby.finalLeaderboard=Object.values(lobby.players).map(entry=>{
+          const sent=byId.get(entry.id),source=sent&&typeof sent==="object"?
+            sent as Record<string,unknown>:{};
+          return {id:entry.id,name:entry.name,
+            points:Math.max(0,Math.min(10_000_000,Math.floor(finite(source.points,entry.state.points||0)))),
+            kills:Math.max(0,Math.floor(finite(source.kills,entry.state.kills||0))),
+            downs:Math.max(0,Math.floor(finite(source.downs,entry.state.deaths||0)))};
+        }).sort((a,b)=>b.points-a.points || b.kills-a.kills || a.downs-b.downs);
+        lobby.roundOutcome="gameover";
+        lobby.rematchVotes={};
+        lobby.pausedBy="";lobby.pausedAt=0;
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
+        lobby.updatedAt=now;
+        return {ok:true,lobby:publicLobby(lobby,playerId)};
+      }
+      if (action === "rematch-vote") {
+        if(lobby.status!=="started" || lobby.roundOutcome!=="gameover")
+          return {ok:false,status:409,error:"There is no finished co-op round to vote on."};
+        lobby.rematchVotes={...(lobby.rematchVotes||{}),[playerId]:Boolean(body.vote)};
+        const remaining=Object.keys(lobby.players);
+        if(remaining.length && remaining.every(id=>lobby.rematchVotes?.[id]===true)){
+          lobby.roundGeneration=(lobby.roundGeneration||0)+1;
+          lobby.roundOutcome="";
+          lobby.finalLeaderboard=[];lobby.rematchVotes={};
+          lobby.pausedBy="";lobby.pausedAt=0;
+        }
+        lobby.syncSeq=(lobby.syncSeq||0)+1;
+        lobby.updatedAt=now;
+        return {ok:true,lobby:publicLobby(lobby,playerId)};
       }
       if (action === "pause") {
         if(lobby.status!=="started")return {ok:false,status:409,error:"Match has not started."};
@@ -509,6 +558,14 @@ export async function POST(request: Request) {
         if (!remaining.length) delete store.lobbies[code];
         else if (lobby.hostId === playerId) lobby.hostId = remaining[0];
         if(lobby.pausedBy===playerId){lobby.pausedBy="";lobby.pausedAt=0;}
+        if(lobby.rematchVotes)delete lobby.rematchVotes[playerId];
+        if(store.lobbies[code] && lobby.roundOutcome==="gameover"){
+          const present=Object.keys(lobby.players);
+          if(present.length && present.every(id=>lobby.rematchVotes?.[id]===true)){
+            lobby.roundGeneration=(lobby.roundGeneration||0)+1;
+            lobby.roundOutcome="";lobby.rematchVotes={};lobby.finalLeaderboard=[];
+          }
+        }
         if (store.lobbies[code]) {
           lobby.updatedAt = now; lobby.revision += 1;
           lobby.syncSeq=(lobby.syncSeq||0)+1;

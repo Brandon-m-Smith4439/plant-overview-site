@@ -13304,6 +13304,10 @@
     for (const { machine, rendered, alpha, grow } of entries) {
       if (combatController?.isActive?.() && combatEnemyMachine(machine)) continue;
       const design = designLibrary[rendered.designId];
+      // Glass must pass the per-component shattered-state renderer instead
+      // of an instanced cache that keeps intact glass around after a hit.
+      if(combatController?.isActive?.() && design?.components &&
+         visibleDesignComponents(design,time).some(part=>carrierGlassComponent(rendered,part)))continue;
       if (!design || !machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 2
         || state.selectedMachineIds.has(machine.instanceId) || alpha < .9999 || grow < .9999) continue;
       const partition = designRenderPartition(design);
@@ -13542,6 +13546,7 @@
         animated ? Math.floor(time / (renderPerformance.animationSampleMs?.() || 33)) : "static",
         design ? objectRenderIdentity(design) : "",
         machineCurveSegments(rendered),
+        combatController?.isActive?.() ? combatController.glassRevision?.() || 0 : 0,
       ].join("|");
       drawRetainedObject(`plant:machine:${machine.instanceId}`, revision, () => {
         drawCrane(rendered,alpha);
@@ -13897,7 +13902,7 @@
     renderPerformance.beginPhase?.("structure");
     const bounds = floorBounds();
     if(zombieExterior||desertExterior)drawRetainedObject(
-      "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}`,drawCombatExterior
+      "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}|${combatController?.explosiveRevision?.()||0}`,drawCombatExterior
     );
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(

@@ -11686,8 +11686,11 @@
     const predict=target.moving === false ? 0 : age;
     const desiredX=visual.targetX+visual.vx*predict, desiredZ=visual.targetZ+visual.vz*predict;
     const gap=Math.hypot(desiredX-visual.x,desiredZ-visual.z);
-    const blend=gap>16 ? 1 : 1-Math.exp(-Math.max(.001,frameDt)*13);
-    visual.x+=(desiredX-visual.x)*blend; visual.z+=(desiredZ-visual.z)*blend;
+    const baseBlend=1-Math.exp(-Math.max(.001,frameDt)*13);
+    // Blend routine network corrections. Snap only on genuine long-distance
+    // teleports or respawns rather than on ordinary Wi-Fi jitter.
+    const blend=gap>38?1:Math.min(1,baseBlend*(1+Math.min(2,gap/8)));
+    visual.x+=(desiredX-visual.x)*blend;visual.z+=(desiredZ-visual.z)*blend;
     let yawDelta=((visual.targetYaw-visual.yaw+Math.PI)%(Math.PI*2))-Math.PI;
     visual.yaw+=yawDelta*Math.min(1,blend*1.35);
     return {...target,x:visual.x,z:visual.z,yaw:visual.yaw};

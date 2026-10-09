@@ -2733,6 +2733,10 @@
       {x:site.x,y:0,z:site.z+site.d-t,w:site.w,h:site.h,d:t},
       {x:site.x,y:0,z:site.z,w:t,h:site.h,d:site.d},
       {x:site.x+site.w-t,y:0,z:site.z,w:t,h:site.h,d:site.d},
+      // Two accessible lobby rooms separated by a broad central aisle.
+      {x:site.x+t,y:0,z:site.z+14,w:site.w*.29,h:10,d:t},
+      {x:site.x+site.w*.72,y:0,z:site.z+14,w:site.w*.28-t,h:10,d:t},
+      {x:site.x+site.w*.48,y:0,z:site.z+19,w:t,h:10,d:9},
     ];
   }
   function skyscraperWalkAllowed(site,x,z,radius,elevation) {
@@ -14061,7 +14065,7 @@
       // permanently frozen at the initial camera location.
       const camX=modelCenter()[0]+state.panX,camZ=modelCenter()[1]+state.panZ;
       drawRetainedObject("plant:dead-forest",
-        `${bounds.join("|")}|${Math.floor(camX/12)}|${Math.floor(camZ/12)}`,
+        `${bounds.join("|")}|${Math.floor(camX/24)}|${Math.floor(camZ/24)}`,
         ()=>drawDeadForest(time));
     }
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);

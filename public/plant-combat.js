@@ -818,6 +818,8 @@
     let matchType = "solo";
     let multiplayer = null;
     let multiplayerStartedRevision = 0;
+    let lastRematchGeneration = 0;
+    let gameOverAnnounced = false;
     let lastLocalSyncSample = null;
     let lastHostEnemySyncAt = -Infinity;
     let cachedEnemySyncState = [];
@@ -941,6 +943,18 @@
         restartButton.innerHTML=waiting
           ? '<span class="combat-restart-icon" aria-hidden="true">✚</span><span class="combat-restart-copy"><strong>Awaiting revive</strong><small>Teammates can rescue you before the timer runs out</small></span>'
           : '<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Respawn</strong><small>Return to your team with full health</small></span>';
+        return;
+      }
+      if(roundState==="gameover" && matchType==="coop" && multiplayer?.getLobby?.()){
+        const lobby=multiplayer.getLobby();
+        const total=(lobby.players||[]).length;
+        const votes=Object.values(lobby.rematchVotes||{}).filter(Boolean).length;
+        const voted=lobby.rematchVotes?.[multiplayer.playerId]===true;
+        restartButton.disabled=voted;
+        restartButton.innerHTML='<span class="combat-restart-icon" aria-hidden="true">↻</span>'+
+          '<span class="combat-restart-copy"><strong>'+
+          (voted?"Vote recorded":"Vote to play again")+'</strong><small>'+
+          votes+' / '+total+' players ready to replay</small></span>';
         return;
       }
       const waitingForHost=matchType==="coop" && multiplayer?.getLobby?.() && !multiplayer.isHost?.();
@@ -2812,6 +2826,7 @@
           kills:Math.max(0,Math.floor(number(stats.kills))),
           headshots:Math.max(0,Math.floor(number(stats.headshots))),
           deaths:Math.max(0,Math.floor(number(stats.deaths))),
+          downs:Math.max(0,Math.floor(number(stats.downs,stats.deaths))),
           points:entry.id===localId ? playerPoints : Math.max(0,Math.floor(number(state.points))),
         };
       }).sort((a,b) => b.kills-a.kills || a.deaths-b.deaths || a.name.localeCompare(b.name));
@@ -2822,11 +2837,14 @@
       scoreboard.innerHTML="";
       scoreboard.hidden=!Array.isArray(entries) || entries.length < 2;
       if (scoreboard.hidden) return entries;
+      const gameOver=roundState==="gameover";
       const mostKills=Math.max(...entries.map((entry)=>number(entry.kills)));
       const mostDeaths=Math.max(...entries.map((entry)=>number(entry.deaths)));
       const title=document.createElement("div");
       title.className="combat-scoreboard-heading";
-      title.innerHTML='<strong>TEAM LEADERBOARD</strong><span>KILLS · DEATHS · HEADSHOTS</span>';
+      title.innerHTML=gameOver
+        ? '<strong>FINAL TEAM LEADERBOARD</strong><span>NAME · POINTS · KILLS · DOWNS</span>'
+        : '<strong>TEAM LEADERBOARD</strong><span>KILLS · DEATHS · HEADSHOTS</span>';
       scoreboard.appendChild(title);
       entries.forEach((entry,index) => {
         const row=document.createElement("div");
@@ -2838,10 +2856,14 @@
         identity.append(playerName,character);
         const kills=document.createElement("span"); kills.innerHTML=`<small>K</small><strong>${entry.kills}</strong>`;
         const deaths=document.createElement("span"); deaths.innerHTML=`<small>D</small><strong>${entry.deaths}</strong>`;
-        const headshots=document.createElement("span"); headshots.innerHTML=`<small>HS</small><strong>${entry.headshots}</strong>`;
+        const headshots=document.createElement("span");
+        headshots.innerHTML=gameOver
+          ? `<small>PTS</small><strong>${Math.max(0,number(entry.points)).toLocaleString()}</strong>`
+          : `<small>HS</small><strong>${entry.headshots}</strong>`;
+        if(gameOver)deaths.innerHTML=`<small>DOWNS</small><strong>${Math.max(0,Math.floor(number(entry.downs,entry.deaths)))}</strong>`;
         const badges=document.createElement("em");
         const labels=[];
-        if (gameMode==="zombie") labels.push(`${entry.points.toLocaleString()} PTS`);
+        if (gameMode==="zombie" && !gameOver) labels.push(`${entry.points.toLocaleString()} PTS`);
         if (entry.kills===mostKills) labels.push("KILL LEADER");
         if (mostDeaths>0 && entry.deaths===mostDeaths) labels.push("MOST DEATHS");
         badges.textContent=labels.join(" · ");
@@ -2849,6 +2871,75 @@
         scoreboard.appendChild(row);
       });
       return entries;
+    }
+
+    function finishCoopGameOver(lobby = multiplayer?.getLobby?.()) {
+      if(!active || roundState==="gameover")return false;
+      // Everyone sees the same terminal screen; do not trigger the local
+      // killer-replay sequence or let surviving zombie AI continue moving.
+      roundState="gameover";
+      gameOverAnnounced=true;
+      ++roundRevealSerial;
+      respawnEndsAt=0;reviveUntil=0;respawnDisplay=0;
+      paused=false;pausedAt=0;playerDeathStartedAt=0;
+      mouseHeld=false;setAiming(false);
+      frame.classList.remove("combat-paused","combat-death-cinematic","combat-player-dead");
+      frame.classList.add("combat-team-gameover");
+      if(pauseOverlay)pauseOverlay.hidden=true;
+      if(killerReveal)killerReveal.hidden=true;
+      if(countdownOverlay)countdownOverlay.hidden=true;
+      options.resetDeathCinematic?.();
+      options.hideWalkMenu?.();
+      options.setMovementLocked?.(true);
+      options.releasePointer?.();
+      playMusicStinger("death");
+      if(roundOverlay){
+        roundOverlay.hidden=false;
+        roundOverlay.classList.remove("victory","killer-reveal");
+        roundOverlay.classList.add("coop-game-over");
+      }
+      if(roundKicker)roundKicker.textContent="ZOMBIE SURVIVAL · TEAM ELIMINATED";
+      if(roundTitle)roundTitle.textContent="GAME OVER";
+      if(roundCopy)roundCopy.textContent="Every survivor is down. Vote together to play another round or leave the match.";
+      if(timeLabel)timeLabel.textContent="SURVIVAL TIME";
+      const duration=Math.max(0,Math.round((performance.now()-(roundStartedAt||performance.now()))/1000));
+      if(victoryTime)victoryTime.textContent=formatTime(duration);
+      if(bestTime)bestTime.textContent=formatTime(recordRoundTime(duration));
+      if(regularKillsCopy)regularKillsCopy.textContent=String(regularKills);
+      if(headshotKillsCopy)headshotKillsCopy.textContent=String(headshotKills);
+      if(victoryHealth)victoryHealth.textContent="0";
+      if(victoryShield)victoryShield.textContent="0";
+      if(deathCountCopy)deathCountCopy.textContent=String(playerDeaths);
+      const results=Array.isArray(lobby?.finalLeaderboard)&&lobby.finalLeaderboard.length
+        ? lobby.finalLeaderboard.map(entry=>({...entry,
+          character:roundLeaderboard().find(e=>e.id===entry.id)?.character||"Survivor",
+          deaths:entry.downs,headshots:0}))
+        :roundLeaderboard();
+      renderRoundLeaderboard(results);
+      roundActions?.classList.remove("locked");
+      syncRestartButton();syncHud();
+      options.invalidate?.();
+      return true;
+    }
+    function checkCoopGameOver(lobby=multiplayer?.getLobby?.()) {
+      if(!active || gameMode!=="zombie" || matchType!=="coop" ||
+        !multiplayer?.isHost?.() || !lobby || lobby.status!=="started" ||
+        gameOverAnnounced || lobby.roundOutcome==="gameover" ||
+        ["setup","countdown","gameover","won"].includes(roundState))return false;
+      const humans=(lobby.players||[]);
+      if(!humans.length)return false;
+      const localAlive=!playerZombie && playerHealth>0 &&
+        !["respawning","respawn-choice","lost"].includes(roundState);
+      const allDown=humans.every(entry=>entry.id===multiplayer.playerId
+        ? !localAlive : entry.state?.alive===false);
+      if(!allDown)return false;
+      const leaderboard=roundLeaderboard().map(e=>({
+        id:e.id,name:e.name,kills:e.kills,points:e.points,downs:e.deaths
+      }));
+      finishCoopGameOver(lobby);
+      multiplayer.endCoopRound?.(leaderboard).catch(error=>
+        setTransientStatus(error?.message||"Could not synchronize the game over.",3000));
+      return true;
     }
 
     function recordPlayerDeath() {

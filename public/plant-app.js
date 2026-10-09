@@ -2699,6 +2699,31 @@
       {id:"south-shelter",label:"Abandoned Depot",x:left+55,z:back+61,w:31,d:27,h:12},
     ].map((site)=>({...site,ladderX:site.x+site.w*.5,ladderZ:site.z+site.d+1.25}));
   }
+  // Only a handful of barrels, generated deterministically for collision,
+  // projectiles and rendering in both game modes.
+  let barrelCache={key:"",positions:[]};
+  function combatExplosiveBarrels() {
+    const b=floorBounds(),key=b.join("|");
+    if(barrelCache.key===key)return barrelCache.positions;
+    const [left,front,right,back]=b,midX=(left+right)*.5,midZ=(front+back)*.5;
+    const candidates=[
+      [left-25,front+25],[right+25,back-28],[midX-32,front-38],
+      [midX+38,back+43],[left-45,midZ-28],[right+45,midZ+25],
+      [left-69,back-38],[right+67,front+44],[left+25,front-55],
+      [right-25,back+57],[left-31,back-55],[right+31,front-55]
+    ];
+    const trees=combatDeadForestTrees(),hills=combatExteriorHills(),buildings=combatExteriorLandmarks();
+    const positions=[];
+    for(const [x,z] of candidates){
+      if(trees.some(tree=>Math.hypot(tree.x-x,tree.z-z)<tree.radius+5))continue;
+      if(hills.some(hill=>Math.hypot(hill.x-x,hill.z-z)<hill.radius*.72+5))continue;
+      if(buildings.some(site=>x>site.x-7&&x<site.x+site.w+7&&z>site.z-7&&z<site.z+site.d+7))continue;
+      positions.push({id:"explosive-"+positions.length,x,z,radius:1});
+      if(positions.length>=4)break;
+    }
+    barrelCache={key,positions};
+    return positions;
+  }
   function combatClimbSurface(x,z) {
     if(!combatController?.isActive?.())return null;
     for(const site of combatExteriorLandmarks()){
@@ -2720,6 +2745,8 @@
     if(combatController?.getMode?.()==="zombie" &&
       combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
       return false;
+    if(combatExplosiveBarrels().some(barrel=>!combatController?.isExplosiveDestroyed?.(barrel.id) &&
+      Math.hypot(x-barrel.x,z-barrel.z)<barrel.radius+p))return false;
     return combatExteriorLandmarks().every(site=>{
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
       const onRoof=Number(state.walkVerticalOffset)>=site.h+.35 &&
@@ -2977,11 +3004,17 @@
       combatExteriorLandmarks().forEach((site)=>entries.push({
         kind:"exterior-building",x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d
       }));
-      combatExteriorHills().forEach((hill)=>entries.push({
-        kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
-        w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44,
-        navRadius:hill.radius*.72
-      }));
+      if(combatController?.getMode?.()!=="zombie")
+        combatExteriorHills().forEach((hill)=>entries.push({
+          kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
+          w:hill.radius*1.44,h:hill.height,d:hill.radius*1.44,
+          navRadius:hill.radius*.72
+        }));
+      combatExplosiveBarrels().forEach(barrel=>{
+        if(combatController?.isExplosiveDestroyed?.(barrel.id))return;
+        entries.push({kind:"explosive-barrel",barrelId:barrel.id,
+          x:barrel.x-.88,y:0,z:barrel.z-.88,w:1.76,h:3,d:1.76});
+      });
       if(combatController?.getMode?.()==="zombie")
         combatDeadForestTrees().forEach(tree=>entries.push({
           kind:"forest-trunk",x:tree.x-tree.radius,y:0,z:tree.z-tree.radius,
@@ -9193,6 +9226,12 @@
     combatExteriorLandmarks().forEach((site,index)=>{
       box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,color:zombie?"#424a40":"#ad9270"},1,1);
       box({x:site.x-.55,y:site.h,z:site.z-.55,w:site.w+1.1,h:.6,d:site.d+1.1,color:zombie?"#73786a":"#dfbd87"},1,1);
+      // Lighter raised coping makes the roof's walkable edges unmistakable.
+      const rimY=site.h+.61,rim=zombie?"#dddcc5":"#eadac3";
+      box({x:site.x-.63,y:rimY,z:site.z-.63,w:site.w+1.26,h:.25,d:.35,color:rim},1,1);
+      box({x:site.x-.63,y:rimY,z:site.z+site.d+.28,w:site.w+1.26,h:.25,d:.35,color:rim},1,1);
+      box({x:site.x-.63,y:rimY,z:site.z-.28,w:.35,h:.25,d:site.d+.56,color:rim},1,1);
+      box({x:site.x+site.w+.28,y:rimY,z:site.z-.28,w:.35,h:.25,d:site.d+.56,color:rim},1,1);
       box({x:site.x+2,y:site.h+.7,z:site.z+2,w:2,h:4+index,d:2,color:zombie?"#413938":"#b5a482"},1,1);
       // Railings and ladder are 3D geometry, not floating UI.
       for(const side of [site.ladderX-.72,site.ladderX+.72])
@@ -9201,6 +9240,14 @@
         box({x:site.ladderX-.76,y:h,z:site.ladderZ-.17,w:1.52,h:.18,d:.28,color:"#d2c9aa"},1,1);
       box({x:site.x+site.w*.24,y:site.h+.65,z:site.z+site.d*.42,
         w:site.w*.48,h:.12,d:.26,color:"#d8c299"},1,1);
+    });
+    combatExplosiveBarrels().forEach(barrel=>{
+      if(combatController?.isExplosiveDestroyed?.(barrel.id))return;
+      const x=barrel.x,z=barrel.z;
+      box({x:x-.88,y:0,z:z-.88,w:1.76,h:2.8,d:1.76,color:"#ac2923"},1,1);
+      box({x:x-.91,y:.45,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
+      box({x:x-.91,y:1.9,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
+      box({x:x-.72,y:2.8,z:z-.72,w:1.44,h:.18,d:1.44,color:"#472219"},1,1);
     });
     // Ridgelines supply actual vertical scenery beyond the rock scatter.
     for(const hill of combatExteriorHills()){

@@ -1950,11 +1950,20 @@
       const south=portals.find(p=>p.id==="south");
       const east=portals.find(p=>p.id==="east");
       // Route across a real doorway instead of steering straight into solid walls.
+      // A coordinate crossing is only a wall crossing when the segment actually
+      // intersects that wall's finite span. Outside the building corners, both
+      // actors can walk directly across the same line without using a door.
       if(south && ((from.z<front-.5&&to.z>front+.5)||(from.z>front+.5&&to.z<front-.5))) {
-        return {x:south.x,z:front+(from.z<front ? 5 : -5)};
+        const t=(front-from.z)/(to.z-from.z);
+        const crossingX=from.x+(to.x-from.x)*t;
+        if(crossingX>=left && crossingX<=right)
+          return {x:south.x,z:front+(from.z<front ? 5 : -5)};
       }
       if(east && ((from.x>right+.5&&to.x<right-.5)||(from.x<right-.5&&to.x>right+.5))) {
-        return {x:right+(from.x>right ? -5 : 5),z:east.z};
+        const t=(right-from.x)/(to.x-from.x);
+        const crossingZ=from.z+(to.z-from.z)*t;
+        if(crossingZ>=front && crossingZ<=back)
+          return {x:right+(from.x>right ? -5 : 5),z:east.z};
       }
       return null; // North/west are open boundaries.
     }

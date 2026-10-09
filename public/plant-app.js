@@ -2594,8 +2594,10 @@
       if(entrances.some(gate=>Math.hypot(x-gate.x,z-gate.z)<21))return;
       if(sites.some(site=>x>site.x-9&&x<site.x+site.w+9&&
         z>site.z-9&&z<site.z+site.d+9))return;
-      const radius=.30+(Math.sin(i*4.87+grove*3.1)*.5+.5)*.33;
-      const height=7+(Math.sin(i*13.19+grove*8.7)*.5+.5)*10;
+      const radius=.53+(Math.sin(i*4.87+grove*3.1)*.5+.5)*.45;
+      // Make each leafless tree taller than the exterior buildings: imposing,
+      // upright silhouettes with height variation rather than flat brush.
+      const height=50+(Math.sin(i*13.19+grove*8.7)*.5+.5)*52;
       trees.push({x,z,radius,height,grove,i,phase});
     }
     groves.forEach(([cx,cz,count,spread],grove)=>{
@@ -2609,7 +2611,7 @@
     });
     // Scattered dead trees between forest sections stop the barren terrain
     // looking like six isolated clumps. The seed is stable across all clients.
-    for(let i=0;i<88;i++){
+    for(let i=0;i<164;i++){
       const side=i%4,along=.08+((i*37)%85)/100;
       const setback=29+(i*23)%127;
       let x=left+(right-left)*along,z=front+(back-front)*along;
@@ -2662,18 +2664,27 @@
       const dark=tree.grove%2===0?"#242625":"#2c2927";
       const sway=Math.sin(time*.00035+tree.phase)*.13;
       const {x,z,height:h,radius:r}=tree;
-      // No foliage: thick gnarly trunk, bare angled limbs and forked twigs.
-      box({x:x-r,y:0,z:z-r,w:r*2,h:h*.64,d:r*2,color:dark,rotationZ:tree.phase*11},1,1);
-      line3d([x,h*.42,z],[x+sway,h*.83,z],"#353a35",Math.max(3,r*7),1);
-      // Limit distant twigs: dense forest must not reintroduce co-op FPS drops.
-      const limbCount=walking&&distance>120?2:walking&&distance>75?3:5;
+      // Two upright tapered trunk sections and a high pointed crown make
+      // these actual dead trees, not sideways bars lying in the wasteland.
+      box({x:x-r,y:0,z:z-r,w:r*2,h:h*.69,d:r*2,color:dark},1,1);
+      box({x:x-r*.61,y:h*.68,z:z-r*.61,w:r*1.22,h:h*.25,d:r*1.22,color:"#343b36"},1,1);
+      line3d([x,h*.90,z],[x+sway,h,z],"#454d43",Math.max(3,r*5),1);
+      // Tall upward-reaching limbs start in the upper half of the trunk.
+      // Reduce the number of finer twigs at a distance for co-op FPS.
+      const limbCount=walking&&distance>120?2:walking&&distance>75?4:7;
       for(let arm=0;arm<limbCount;arm++){
-        const angle=tree.phase+arm*2.39996,reach=(3.2+arm%3*1.5)*(.8+r);
-        const y=h*(.43+arm*.065),bx=x+Math.cos(angle)*reach,bz=z+Math.sin(angle)*reach;
-        const tip=[bx+sway,y+1.7+arm*.13,bz];
-        line3d([x,y-.95,z],tip,arm%2?"#2f342f":"#383a32",Math.max(2,r*5-arm*.28),1);
-        if(arm%2===0&&(!walking||distance<105))line3d(tip,[bx+Math.sin(angle)*reach*.48,y+3.1+arm*.24,
-          bz-Math.cos(angle)*reach*.48],"#33392f",2.2,1);
+        const angle=tree.phase+arm*2.39996322972865;
+        const reach=(4.2+arm%3*2.2)*(.9+r*.65);
+        const y=h*(.43+(arm%5)*.085);
+        const bx=x+Math.cos(angle)*reach,bz=z+Math.sin(angle)*reach;
+        const tip=[bx+sway,y+h*(.16+(arm%3)*.035),bz];
+        line3d([x,y,z],tip,arm%2?"#3d443e":"#47483e",Math.max(2.8,r*5-arm*.25),1);
+        if((!walking||distance<105) && arm%2===0){
+          line3d(tip,[bx+Math.cos(angle+.6)*reach*.46,y+h*.27,
+            bz+Math.sin(angle+.6)*reach*.46],"#454b41",2.4,1);
+          line3d(tip,[bx+Math.cos(angle-.9)*reach*.35,y+h*.24,
+            bz+Math.sin(angle-.9)*reach*.35],"#353e37",2,1);
+        }
       }
     }
   }

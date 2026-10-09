@@ -2855,7 +2855,7 @@
     function renderRoundLeaderboard(entries = roundLeaderboard()) {
       if (!scoreboard) return entries;
       scoreboard.innerHTML="";
-      scoreboard.hidden=!Array.isArray(entries) || entries.length < 2;
+      scoreboard.hidden=!Array.isArray(entries) || entries.length < (roundState==="gameover"?1:2);
       if (scoreboard.hidden) return entries;
       const gameOver=roundState==="gameover";
       const mostKills=Math.max(...entries.map((entry)=>number(entry.kills)));

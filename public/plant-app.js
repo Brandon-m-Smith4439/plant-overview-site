@@ -2622,8 +2622,27 @@
       const phase=i*2.399963229728653+.41;
       addDeadTree(x,z,8+side,i,phase);
     }
-    deadForestCache={key,trees};
+    const buckets=new Map(),bucketSize=16;
+    trees.forEach(tree=>{
+      const k=Math.floor(tree.x/bucketSize)+":"+Math.floor(tree.z/bucketSize);
+      if(!buckets.has(k))buckets.set(k,[]);
+      buckets.get(k).push(tree);
+    });
+    deadForestCache={key,trees,buckets,bucketSize};
     return trees;
+  }
+
+  function forestTreesNear(x,z,radius=4) {
+    combatDeadForestTrees();
+    const {buckets,bucketSize}=deadForestCache;
+    if(!buckets)return deadForestCache.trees;
+    const reach=Math.ceil(radius/bucketSize)+1,cx=Math.floor(x/bucketSize),cz=Math.floor(z/bucketSize);
+    const near=[];
+    for(let dx=-reach;dx<=reach;dx++)for(let dz=-reach;dz<=reach;dz++)
+      for(const tree of buckets.get((cx+dx)+":"+(cz+dz))||[]){
+        if(Math.hypot(x-tree.x,z-tree.z)<=radius+tree.radius)near.push(tree);
+      }
+    return near;
   }
 
   function drawZombieMoon() {
@@ -2660,7 +2679,7 @@
     const walking=state.cameraMode==="walk";
     for(const tree of combatDeadForestTrees()){
       const distance=Math.hypot(camX-tree.x,camZ-tree.z);
-      if(walking&&distance>240)continue;
+      if(walking&&distance>185)continue;
       const dark=tree.grove%2===0?"#242625":"#2c2927";
       const sway=Math.sin(time*.00035+tree.phase)*.13;
       const {x,z,height:h,radius:r}=tree;
@@ -2673,7 +2692,7 @@
       line3d([x,h*.90,z],[x+sway,h,z],"#454d43",Math.max(3,r*5),1);
       // Tall upward-reaching limbs start in the upper half of the trunk.
       // Reduce the number of finer twigs at a distance for co-op FPS.
-      const limbCount=walking&&distance>120?2:walking&&distance>75?4:7;
+      const limbCount=walking&&distance>105?2:walking&&distance>55?3:5;
       for(let arm=0;arm<limbCount;arm++){
         const angle=tree.phase+arm*2.39996322972865;
         const reach=(4.2+arm%3*2.2)*(.9+r*.65);
@@ -2681,7 +2700,7 @@
         const bx=x+Math.cos(angle)*reach,bz=z+Math.sin(angle)*reach;
         const tip=[bx+sway,y+h*(.16+(arm%3)*.035),bz];
         line3d([x,y,z],tip,arm%2?"#3d443e":"#47483e",Math.max(2.8,r*5-arm*.25),1);
-        if((!walking||distance<105) && arm%2===0){
+        if((!walking||distance<65) && arm%2===0){
           line3d(tip,[bx+Math.cos(angle+.6)*reach*.46,y+h*.27,
             bz+Math.sin(angle+.6)*reach*.46],"#454b41",2.4,1);
           line3d(tip,[bx+Math.cos(angle-.9)*reach*.35,y+h*.24,
@@ -2697,7 +2716,57 @@
       {id:"north-outpost",label:"Ranger Outpost",x:left+35,z:front-84,w:24,d:22,h:14},
       {id:"east-relay",label:"Radio Relay",x:right+53,z:front+30,w:21,d:24,h:18},
       {id:"south-shelter",label:"Abandoned Depot",x:left+55,z:back+61,w:31,d:27,h:12},
-    ].map((site)=>({...site,ladderX:site.x+site.w*.5,ladderZ:site.z+site.d+1.25}));
+      {id:"wasteland-tower",label:"Abandoned Skyscraper",kind:"skyscraper",
+        x:right+92,z:back+76,w:38,d:34,h:90},
+    ].map(site=>({...site,
+      ladderX:site.kind==="skyscraper"?site.x+site.w-6:site.x+site.w*.5,
+      ladderZ:site.kind==="skyscraper"?site.z+site.d-6:site.z+site.d+1.25,
+      interiorLadder:site.kind==="skyscraper",
+    }));
+  }
+  function skyscraperWallSections(site) {
+    const t=1.3,gap=6.8,cx=site.x+site.w*.5;
+    return [
+      {x:site.x,y:0,z:site.z,w:cx-gap-site.x,h:site.h,d:t},
+      {x:cx+gap,y:0,z:site.z,w:site.x+site.w-cx-gap,h:site.h,d:t},
+      {x:cx-gap,y:11,z:site.z,w:gap*2,h:site.h-11,d:t},
+      {x:site.x,y:0,z:site.z+site.d-t,w:site.w,h:site.h,d:t},
+      {x:site.x,y:0,z:site.z,w:t,h:site.h,d:site.d},
+      {x:site.x+site.w-t,y:0,z:site.z,w:t,h:site.h,d:site.d},
+      // Two accessible lobby rooms separated by a broad central aisle.
+      {x:site.x+t,y:0,z:site.z+14,w:site.w*.29,h:10,d:t},
+      {x:site.x+site.w*.72,y:0,z:site.z+14,w:site.w*.28-t,h:10,d:t},
+      {x:site.x+site.w*.48,y:0,z:site.z+19,w:t,h:10,d:9},
+    ];
+  }
+  function skyscraperWalkAllowed(site,x,z,radius,elevation) {
+    if(elevation>=site.h-.6)return true;
+    return skyscraperWallSections(site).every(wall=>{
+      if(wall.y>8)return true;
+      const nx=clamp(x,wall.x,wall.x+wall.w),nz=clamp(z,wall.z,wall.z+wall.d);
+      return Math.hypot(x-nx,z-nz)>=radius;
+    });
+  }
+  function combatMysterySpots() {
+    const [left,front,right,back]=floorBounds(),sites=combatExteriorLandmarks();
+    const tower=sites.find(s=>s.kind==="skyscraper");
+    const spots=[
+      {id:"west-woods",x:left-42,z:front+44,y:0},
+      {id:"east-relay-yard",x:right+39,z:front+9,y:0},
+      {id:"north-ridge",x:(left+right)*.5,z:front-54,y:0},
+      {id:"south-depot-yard",x:left+56,z:back+45,y:0},
+      {id:"east-woods",x:right+61,z:back+27,y:0},
+      {id:"center-lane",x:(left+right)*.58,z:(front+back)*.63,y:0},
+      {id:"tower-roof",x:tower.x+16,z:tower.z+16,y:tower.h+.6},
+      ...sites.filter(site=>site.kind!=="skyscraper").map(site=>({
+        id:site.id+"-roof",x:site.x+site.w*.35,z:site.z+site.d*.4,y:site.h+.6
+      }))
+    ];
+    return spots.filter(spot=>spot.y>1 || (
+      !forestTreesNear(spot.x,spot.z,5).length &&
+      !sites.some(site=>spot.x>site.x-4&&spot.x<site.x+site.w+4&&
+        spot.z>site.z-4&&spot.z<site.z+site.d+4)
+    ));
   }
   // Only a handful of barrels, generated deterministically for collision,
   // projectiles and rendering in both game modes.
@@ -2727,7 +2796,10 @@
   function combatClimbSurface(x,z) {
     if(!combatController?.isActive?.())return null;
     for(const site of combatExteriorLandmarks()){
-      const roofHeight=site.h+.6; // upper face of visible roof slab
+      const roofHeight=site.h+.6;
+      if(site.interiorLadder && Math.hypot(x-site.ladderX,z-site.ladderZ)<3.5)
+        return {...site,kind:"ladder",height:roofHeight,
+          landingX:site.ladderX+2.5,landingZ:site.ladderZ-2.5}; // upper face of visible roof slab
       if(x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55)
         return {...site,kind:"roof",height:roofHeight};
       if(Math.hypot(x-site.ladderX,z-site.ladderZ)<4.7)
@@ -2743,7 +2815,8 @@
       combatExteriorHills().every(hill=>Math.hypot(x-hill.x,z-hill.z)>hill.radius*.72+p);
     if(!hillsOpen)return false;
     if(combatController?.getMode?.()==="zombie" &&
-      combatDeadForestTrees().some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
+      (typeof forestTreesNear==="function"?forestTreesNear(x,z,p+1.4):combatDeadForestTrees())
+        .some(tree=>Math.hypot(x-tree.x,z-tree.z)<tree.radius+p))
       return false;
     if(typeof combatExplosiveBarrels==="function" && combatExplosiveBarrels().some(barrel=>!combatController?.isExplosiveDestroyed?.(barrel.id) &&
       Math.hypot(x-barrel.x,z-barrel.z)<barrel.radius+p))return false;
@@ -2751,7 +2824,13 @@
       const nearestX=clamp(x,site.x,site.x+site.w),nearestZ=clamp(z,site.z,site.z+site.d);
       const onRoof=Number(state.walkVerticalOffset)>=site.h+.35 &&
         x>=site.x-.55&&x<=site.x+site.w+.55&&z>=site.z-.55&&z<=site.z+site.d+.55;
-      return onRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
+      if(site.kind==="skyscraper")
+        return skyscraperWalkAllowed(site,x,z,p,Number(state.walkVerticalOffset));
+      // The player must reach the actual rim before triggering a safe drop.
+      const nearRoof=Number(state.walkVerticalOffset)>=site.h-.6 &&
+        x>=site.x-p-1&&x<=site.x+site.w+p+1 &&
+        z>=site.z-p-1&&z<=site.z+site.d+p+1;
+      return onRoof||nearRoof||Math.hypot(x-nearestX,z-nearestZ)>=p;
     });
   }
 
@@ -3001,9 +3080,12 @@
       });
     });
     if(combatController?.isActive?.()){
-      combatExteriorLandmarks().forEach((site)=>entries.push({
-        kind:"exterior-building",x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d
-      }));
+      combatExteriorLandmarks().forEach(site=>{
+        if(site.kind==="skyscraper")
+          skyscraperWallSections(site).forEach(wall=>entries.push({kind:"exterior-building",...wall}));
+        else entries.push({kind:"exterior-building",x:site.x,y:0,z:site.z,
+          w:site.w,h:site.h,d:site.d});
+      });
       if(combatController?.getMode?.()!=="zombie")
         combatExteriorHills().forEach((hill)=>entries.push({
           kind:"desert-hill",x:hill.x-hill.radius*.72,y:0,z:hill.z-hill.radius*.72,
@@ -3015,11 +3097,13 @@
         entries.push({kind:"explosive-barrel",barrelId:barrel.id,
           x:barrel.x-.88,y:0,z:barrel.z-.88,w:1.76,h:3,d:1.76});
       });
-      if(combatController?.getMode?.()==="zombie")
-        combatDeadForestTrees().forEach(tree=>entries.push({
+      if(combatController?.getMode?.()==="zombie"){
+        const px=modelCenter()[0]+state.panX,pz=modelCenter()[1]+state.panZ;
+        forestTreesNear(px,pz,175).forEach(tree=>entries.push({
           kind:"forest-trunk",x:tree.x-tree.radius,y:0,z:tree.z-tree.radius,
           w:tree.radius*2,h:tree.height*.65,d:tree.radius*2
         }));
+      }
     }
     combatOccluderCache = { at: now, entries };
     return entries;
@@ -7160,6 +7244,7 @@
       getBounds: combatWorldBounds,
       getLadderSites: combatExteriorLandmarks,
       getClimbSurface: combatClimbSurface,
+      getMysterySpots: combatMysterySpots,
       getPortalWaypoints: combatPortalWaypoints,
       getPlantBounds: floorBounds,
       getWeaponMuzzleAnchor: (weaponKey,aiming) => {
@@ -9221,10 +9306,33 @@
         }
       }
     }
-    if(zombie){drawZombieMoon();drawDeadForest(performance.now());}
+    if(zombie)drawZombieMoon();
     // Traversable exterior points of interest, roof decks and climbable ladders.
     combatExteriorLandmarks().forEach((site,index)=>{
-      box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,color:zombie?"#424a40":"#ad9270"},1,1);
+      if(site.kind==="skyscraper"){
+        // A traversable ruined lobby, doorway, internal rooms and climb shaft.
+        const facade=zombie?"#48534f":"#929285";
+        skyscraperWallSections(site).forEach((wall,i)=>box({...wall,
+          color:i===2?"#66716f":facade},1,1));
+        box({x:site.x+.6,y:0,z:site.z+.6,w:site.w-1.2,h:.24,d:site.d-1.2,
+          color:"#5c625e"},1,1);
+        // Alternating exterior stories with narrow lit window slits.
+        for(let level=14;level<site.h-8;level+=14){
+          for(let col=0;col<4;col++){
+            const px=site.x+4+col*8.7;
+            box({x:px,y:level,z:site.z-.07,w:5,h:2.3,d:.18,
+              color:col%2?"#839592":"#57706d"},.92,1);
+          }
+          box({x:site.x+.9,y:level,z:site.z+site.d-.12,w:site.w-1.8,h:.55,d:.18,
+            color:"#86908a"},1,1);
+        }
+        // Interior shaft stays unobstructed so the entire climb reaches roof.
+        box({x:site.ladderX-2.25,y:0,z:site.ladderZ-2.25,w:4.5,h:.30,d:4.5,
+          color:"#9f8c5b"},1,1);
+      }else{
+        box({x:site.x,y:0,z:site.z,w:site.w,h:site.h,d:site.d,
+          color:zombie?"#424a40":"#ad9270"},1,1);
+      }
       box({x:site.x-.55,y:site.h,z:site.z-.55,w:site.w+1.1,h:.6,d:site.d+1.1,color:zombie?"#73786a":"#dfbd87"},1,1);
       // Lighter raised coping makes the roof's walkable edges unmistakable.
       const rimY=site.h+.61,rim=zombie?"#dddcc5":"#eadac3";
@@ -9248,6 +9356,12 @@
       box({x:x-.91,y:.45,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
       box({x:x-.91,y:1.9,z:z-.91,w:1.82,h:.34,d:1.82,color:"#f2c94f"},1,1);
       box({x:x-.72,y:2.8,z:z-.72,w:1.44,h:.18,d:1.44,color:"#472219"},1,1);
+    });
+    // Fixed mystery pads help players identify where the box can reappear.
+    if(zombie)combatMysterySpots().forEach(spot=>{
+      const y=spot.y+.04,x=spot.x,z=spot.z;
+      box({x:x-3.3,y,z:z-2.1,w:6.6,h:.10,d:4.2,color:"#655078"},.78,1);
+      box({x:x-2.85,y:y+.11,z:z-1.65,w:5.7,h:.08,d:3.3,color:"#30263c"},1,1);
     });
     // Ridgelines supply actual vertical scenery beyond the rock scatter.
     for(const hill of combatExteriorHills()){
@@ -11479,7 +11593,8 @@
 
   function viewmodelProject(point) {
     // Clip long barrels before projection so reload animation cannot fill the viewport.
-    const depth = Math.max(.9, Number(point[2]) || .9);
+    const clampedViewmodel=Math.max(.9,Number(point[2])||.9);
+    const depth=clampedViewmodel;
     const fov = 61 * Math.PI / 180;
     const focal = canvas.height / Math.max(.1, 2 * Math.tan(fov / 2));
     return [canvas.width/2 + Number(point[0]) * focal / depth, canvas.height/2 - Number(point[1]) * focal / depth, depth];
@@ -11495,14 +11610,29 @@
     const projected = points.map(viewmodelProject);
     ctx.save();
     ctx.globalAlpha = alpha;
+    ctx.lineJoin = "round";ctx.lineCap="round";
     ctx.beginPath();
     projected.forEach((point,index) => index ? ctx.lineTo(point[0],point[1]) : ctx.moveTo(point[0],point[1]));
     ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(1, canvas.width/1100); ctx.stroke(); }
+    if (fill) {ctx.fillStyle=fill;ctx.fill();}
+    // Fill-colored face outlines conceal subpixel cracks between adjacent
+    // polygons in the software painter, without introducing transparent seams.
+    ctx.strokeStyle=fill||stroke||"#1b272c";
+    ctx.lineWidth=Math.max(1.35,canvas.width/920);
+    ctx.stroke();
     ctx.restore();
   }
 
+  // A single depth-sorted viewmodel face pass prevents one part's rear
+  // polygon painting over another part's front, the source of see-through edges.
+  let viewmodelFaceQueue=null;
+  function flushViewmodelFaces(){
+    if(!viewmodelFaceQueue)return;
+    viewmodelFaceQueue.sort((a,b)=>b.depth-a.depth);
+    for(const face of viewmodelFaceQueue)
+      drawViewmodelPolygon(face.points,face.color,null,face.alpha);
+    viewmodelFaceQueue=null;
+  }
   function drawViewmodelBox(spec, root, alpha = 1) {
     const width = Number(spec.w), height = Number(spec.h), depth = Number(spec.d);
     const center = [Number(spec.x),Number(spec.y),Number(spec.z)];
@@ -11519,7 +11649,14 @@
       {i:[3,2,1,0],c:shade(spec.color,-.28)},{i:[4,5,6,7],c:spec.color},
     ].map((face) => ({...face,points:face.i.map((index)=>local[index])}));
     faces.sort((a,b) => b.points.reduce((sum,p)=>sum+p[2],0) - a.points.reduce((sum,p)=>sum+p[2],0));
-    faces.forEach((face)=>drawViewmodelPolygon(face.points,face.c,"rgba(8,14,17,.22)",alpha));
+    if(viewmodelFaceQueue){
+      faces.forEach(face=>viewmodelFaceQueue.push({
+        points:face.points,color:face.c,alpha,
+        depth:face.points.reduce((sum,p)=>sum+p[2],0)/4,
+      }));
+    }else{
+      faces.forEach(face=>drawViewmodelPolygon(face.points,face.c,null,alpha));
+    }
   }
 
   const remotePlayerVisuals = new Map();
@@ -11697,7 +11834,12 @@
     for (const station of effects.stations || []) {
       const health=station.type==="health";
       const x=Number(station.x),z=Number(station.z);
+      const stationY=Number(station.y)||0;
+      const stationBox=(shape,alpha=1,grow=1)=>stationBox({...shape,
+        y:(Number(shape.y)||0)+stationY},alpha,grow);
       if (!Number.isFinite(x)||!Number.isFinite(z)) continue;
+      if(state.cameraMode==="walk" &&
+        Math.hypot(x-(modelCenter()[0]+state.panX),z-(modelCenter()[1]+state.panZ))>185)continue;
       const pulse=.74+.26*Math.sin(time*.006);
       const glowColor=mysteryRarityColors[station.offer?.rarity] || "#e4a8fa";
       const body=health?"#23433f":station.offer?.rarity==="mythic"?"#47301b":station.offer?.rarity==="cursed"?"#40232e":"#29203e";
@@ -11705,16 +11847,16 @@
       const width=health?3.1:5.4;
       const depth=health?2.1:3.0;
       const frontZ=z-depth*.5;
-      box({x:x-width*.5,y:.15,z:frontZ,w:width,h:2.12,d:depth,color:"#11171e",rotationY:0},.99,1);
-      box({x:x-width*.5+.14,y:.38,z:frontZ-.05,w:width-.28,h:1.64,d:.22,color:body,rotationY:0},.96,1);
-      box({x:x-width*.5+.12,y:2.18,z:frontZ-.10,w:width-.24,h:.32,d:depth+.18,color:health?"#a6e6cd":"#5f447e",rotationY:0},1,1);
-      box({x:x-width*.5+.34,y:2.55,z:frontZ+.18,w:width-.68,h:.19,d:depth-.36,color:health?"#85d1b7":"#aa78d9",rotationY:0},.85,1);
+      stationBox({x:x-width*.5,y:.15,z:frontZ,w:width,h:2.12,d:depth,color:"#11171e",rotationY:0},.99,1);
+      stationBox({x:x-width*.5+.14,y:.38,z:frontZ-.05,w:width-.28,h:1.64,d:.22,color:body,rotationY:0},.96,1);
+      stationBox({x:x-width*.5+.12,y:2.18,z:frontZ-.10,w:width-.24,h:.32,d:depth+.18,color:health?"#a6e6cd":"#5f447e",rotationY:0},1,1);
+      stationBox({x:x-width*.5+.34,y:2.55,z:frontZ+.18,w:width-.68,h:.19,d:depth-.36,color:health?"#85d1b7":"#aa78d9",rotationY:0},.85,1);
       if (!health) {
         // Three recessed glowing reel windows along the wide front.
         for (let i=0;i<3;i++) {
           const reelX=x-2.04+i*1.37;
-          box({x:reelX,y:1.13,z:frontZ-.16,w:1.25,h:.75,d:.13,color:"#0a0d1b",rotationY:0},1,1);
-          box({x:reelX+.09,y:1.22,z:frontZ-.22,w:1.06,h:.53,d:.09,color:i===1?"#7748af":"#39294e",rotationY:0},i===1?pulse:.9,1);
+          stationBox({x:reelX,y:1.13,z:frontZ-.16,w:1.25,h:.75,d:.13,color:"#0a0d1b",rotationY:0},1,1);
+          stationBox({x:reelX+.09,y:1.22,z:frontZ-.22,w:1.06,h:.53,d:.09,color:i===1?"#7748af":"#39294e",rotationY:0},i===1?pulse:.9,1);
         }
         line3d([x-2.13,1.07,frontZ-.28],[x+2.13,1.07,frontZ-.28],"rgba(235,181,255,.9)",2.6,pulse);
         const offer=station.offer;
@@ -11728,18 +11870,18 @@
           const mysteryWeaponDesign=designLibrary["combat-weapon-"+weaponKey];
           if(weaponKey==="teddy"){
             // A simple blocky teddy silhouette signals the rare losing roll.
-            box({x:x-.48,y:weaponY-.15,z:z-.35,w:.96,h:.84,d:.7,color:"#94624d"},1,1);
-            box({x:x-.38,y:weaponY+.60,z:z-.25,w:.76,h:.65,d:.57,color:"#ba8c66"},1,1);
+            stationBox({x:x-.48,y:weaponY-.15,z:z-.35,w:.96,h:.84,d:.7,color:"#94624d"},1,1);
+            stationBox({x:x-.38,y:weaponY+.60,z:z-.25,w:.76,h:.65,d:.57,color:"#ba8c66"},1,1);
             for(const side of [-1,1]){
-              box({x:x+side*.43-.17,y:weaponY+1.04,z:z-.23,w:.34,h:.34,d:.34,color:"#94624d"},1,1);
-              box({x:x+side*.36-.15,y:weaponY-.38,z:z-.23,w:.3,h:.4,d:.4,color:"#805442"},1,1);
+              stationBox({x:x+side*.43-.17,y:weaponY+1.04,z:z-.23,w:.34,h:.34,d:.34,color:"#94624d"},1,1);
+              stationBox({x:x+side*.36-.15,y:weaponY-.38,z:z-.23,w:.3,h:.4,d:.4,color:"#805442"},1,1);
             }
           } else if (mysteryWeaponDesign?.components?.length) {
             const base=mysteryWeaponDesign.base||{},ww=Math.max(.2,Number(base.w)||4);
             const hh=Math.max(.2,Number(base.h)||1.65),dd=Math.max(.2,Number(base.d)||1.25);
             drawCustomDesign({id:"mystery-display-"+weaponKey,instanceId:"mystery-display-"+weaponKey,
               type:"combatWeapon",designId:mysteryWeaponDesign.id,
-              x:x-ww/2,y:weaponY-hh*.52,z:z-dd/2,w:ww,h:hh,d:dd,
+              x:x-ww/2,y:stationY+weaponY-hh*.52,z:z-dd/2,w:ww,h:hh,d:dd,
               color:"#d5dce6",rotationY:0},1,1,time,3,mysteryWeaponDesign.components,12);
           } else {
                     const pistol=/pistol|revolver/i.test(weaponKey);
@@ -11753,24 +11895,24 @@
           const tone=rolling?glowColor:isReturning?"#776a83":glowColor;
           // Barrel points to +X. Receiver, grip, stock, optic, magazine and
           // muzzle are recognizable silhouette parts for every prize category.
-          box({x:left+.68,y:weaponY,z:z-.32,w:pistol?.9:1.65,h:.48,d:.62,color:tone,rotationY:0},1,1);
-          box({x:left+(pistol?1.52:2.25),y:weaponY+.18,z:z-.17,w:pistol?.45:rocket?1.5:sniper?1.85:1.43,h:rocket?.37:.23,d:rocket?.47:.25,color:rocket?"#798a96":"#a0b1b9",rotationY:0},1,1);
-          box({x:left+.89,y:weaponY-.68,z:z-.23,w:.34,h:.84,d:.35,color:"#1e252e",rotationY:0},1,1);
+          stationBox({x:left+.68,y:weaponY,z:z-.32,w:pistol?.9:1.65,h:.48,d:.62,color:tone,rotationY:0},1,1);
+          stationBox({x:left+(pistol?1.52:2.25),y:weaponY+.18,z:z-.17,w:pistol?.45:rocket?1.5:sniper?1.85:1.43,h:rocket?.37:.23,d:rocket?.47:.25,color:rocket?"#798a96":"#a0b1b9",rotationY:0},1,1);
+          stationBox({x:left+.89,y:weaponY-.68,z:z-.23,w:.34,h:.84,d:.35,color:"#1e252e",rotationY:0},1,1);
           if (longGun) {
-            box({x:left+.06,y:weaponY-.12,z:z-.26,w:.74,h:.38,d:.5,color:"#2a303d",rotationY:0},1,1);
-            box({x:left+1.46,y:weaponY-.45,z:z-.24,w:.45,h:.59,d:.38,color:shotgun?"#6a4730":"#2a303d",rotationY:0},1,1);
-            box({x:left+1.13,y:weaponY+.5,z:z-.22,w:sniper?.9:.56,h:.22,d:.34,color:"#161f2a",rotationY:0},1,1);
-            if (lmg) box({x:left+1.65,y:weaponY-.6,z:z-.27,w:.9,h:.42,d:.47,color:"#58616b",rotationY:0},1,1);
+            stationBox({x:left+.06,y:weaponY-.12,z:z-.26,w:.74,h:.38,d:.5,color:"#2a303d",rotationY:0},1,1);
+            stationBox({x:left+1.46,y:weaponY-.45,z:z-.24,w:.45,h:.59,d:.38,color:shotgun?"#6a4730":"#2a303d",rotationY:0},1,1);
+            stationBox({x:left+1.13,y:weaponY+.5,z:z-.22,w:sniper?.9:.56,h:.22,d:.34,color:"#161f2a",rotationY:0},1,1);
+            if (lmg) stationBox({x:left+1.65,y:weaponY-.6,z:z-.27,w:.9,h:.42,d:.47,color:"#58616b",rotationY:0},1,1);
           }
-          if (rocket) box({x:left+2.5,y:weaponY+.08,z:z-.36,w:1.05,h:.46,d:.62,color:"#c07e32",rotationY:0},.96,1);
+          if (rocket) stationBox({x:left+2.5,y:weaponY+.08,z:z-.36,w:1.05,h:.46,d:.62,color:"#c07e32",rotationY:0},.96,1);
           }
           const haloRadius=1.25+raise*.75;
           const ring=[];
-          for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,weaponY-.75,z+Math.sin(angle)*.82]);}
+          for(let i=0;i<22;i++) {const angle=i*Math.PI/11;ring.push([x+Math.cos(angle)*haloRadius,stationY+weaponY-.75,z+Math.sin(angle)*.82]);}
           polygon(ring,"rgba(166,105,242,.08)",glowColor,2.2,.65+pulse*.28,{transparent:true});
           // The reel text changes alongside the physical prize model, slows to
           // the chosen gun, then says TAKE before dropping back through the lid.
-          const reelPoint=project(x,2.0,frontZ-.26);
+          const reelPoint=project(x,stationY+2.0,frontZ-.26);
           if (Number.isFinite(reelPoint?.[0]) && Number.isFinite(reelPoint?.[1]) && reelPoint[3]>0) {
             const scale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
             ctx.save();
@@ -11785,15 +11927,15 @@
           }
         }
       } else {
-        box({x:x-.58,y:1.24,z:frontZ-.12,w:1.16,h:.26,d:.13,color:"#a7ffe5",rotationY:0},1,1);
-        box({x:x-.13,y:.85,z:frontZ-.15,w:.26,h:1.04,d:.16,color:"#a7ffe5",rotationY:0},1,1);
+        stationBox({x:x-.58,y:1.24,z:frontZ-.12,w:1.16,h:.26,d:.13,color:"#a7ffe5",rotationY:0},1,1);
+        stationBox({x:x-.13,y:.85,z:frontZ-.15,w:.26,h:1.04,d:.16,color:"#a7ffe5",rotationY:0},1,1);
       }
       const radius=health?3.4:4.0;
       const floorRing=[];
-      for(let i=0;i<24;i++) {const angle=i/24*Math.PI*2;floorRing.push([x+Math.cos(angle)*radius,.07,z+Math.sin(angle)*radius]);}
+      for(let i=0;i<24;i++) {const angle=i/24*Math.PI*2;floorRing.push([x+Math.cos(angle)*radius,stationY+.07,z+Math.sin(angle)*radius]);}
       polygon(floorRing,health?"rgba(77,223,171,.045)":"rgba(164,108,248,.06)",health?"rgba(99,248,189,.62)":"rgba(220,165,255,.72)",1.5,pulse,{transparent:true});
       const labelY=health?3.95:station.offer?.phase==="ready"?7.2:5.1;
-      const textPoint=project(x,labelY,z);
+      const textPoint=project(x,stationY+labelY,z);
       if (Number.isFinite(textPoint?.[0]) && Number.isFinite(textPoint?.[1]) && textPoint[3]>0) {
         const scale=canvas.width/Math.max(1,canvas.getBoundingClientRect().width);
         const offer=station.offer;
@@ -11951,6 +12093,7 @@
     if (state.cameraMode !== "walk" || !combatController?.isActive?.()) return;
     const combat = combatController.playerRenderState?.(time);
     if (!combat) return;
+    viewmodelFaceQueue=[];
     const pixelRatio = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
     const moving = combat.moving ? 1 : 0;
     const sprint=Boolean(combat.sprinting&&moving&&!combat.reviving);
@@ -12076,9 +12219,9 @@
         x:((Number(part.z)||0)+(Number(part.d)||.1)*.5-bd*.5)*.63*rocketReloadScale,
         y:((Number(part.y)||0)+(Number(part.h)||.1)*.5-bh*.5)*.72*rocketReloadScale,
         z:(bw*.5-(Number(part.x)||0)-(Number(part.w)||.1)*.5)*factor*rocketReloadScale,
-        w:Math.max(.02,(Number(part.d)||.1)*.63*rocketReloadScale),
-        h:Math.max(.02,(Number(part.h)||.1)*.72*rocketReloadScale),
-        d:Math.max(.02,(Number(part.w)||.1)*factor*rocketReloadScale),
+        w:Math.max(.13,(Number(part.d)||.1)*.75*rocketReloadScale),
+        h:Math.max(.13,(Number(part.h)||.1)*.82*rocketReloadScale),
+        d:Math.max(.13,(Number(part.w)||.1)*factor*rocketReloadScale),
         color:part.color||"#58686c",
         rotationX:Number(part.rotationX)||0,rotationY:Number(part.rotationY)||0,rotationZ:Number(part.rotationZ)||0,
       }));
@@ -12091,6 +12234,7 @@
         w:.28,h:.22,d:.38,color:skin,rotationX:-27},root,1);
       drawViewmodelBox({x:.25,y:-.27-pulse,z:-.57-reach,
         w:.28,h:.22,d:.38,color:skin,rotationX:-24},root,1);
+      flushViewmodelFaces();
       return;
     }
     // Explicit hands survive any swap to a custom 3D weapon asset.
@@ -12120,6 +12264,7 @@
       }
       drawViewmodelBox(spec,root,1);
     });
+    flushViewmodelFaces();
     if (combat.weapon === "rifle" && !rifleAds && !sharedWeaponModel) {
       // Hip fire keeps the physical holographic sight on the rifle model; ADS
       // hides it so the dedicated aiming sight remains completely unobstructed.
@@ -13915,6 +14060,14 @@
     if(zombieExterior||desertExterior)drawRetainedObject(
       "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}|${combatController?.explosiveRevision?.()||0}`,drawCombatExterior
     );
+    if(zombieExterior){
+      // Visibility-dependent forest is retained per player travel cell, not
+      // permanently frozen at the initial camera location.
+      const camX=modelCenter()[0]+state.panX,camZ=modelCenter()[1]+state.panZ;
+      drawRetainedObject("plant:dead-forest",
+        `${bounds.join("|")}|${Math.floor(camX/24)}|${Math.floor(camZ/24)}`,
+        ()=>drawDeadForest(time));
+    }
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(
       "plant:shell",

@@ -61,7 +61,7 @@ assert.equal(outsider(10,-30,1.2),false,"Trees must physically block players");
 assert.equal(outsider(34,-30,1.2),true,"Clear gaps between trees remain walkable");
 assert.ok(plant.includes('kind:"forest-trunk"')&&plant.includes("drawDeadForest(time)"),
   "AI nav and rendering must share the same branch forest geometry");
-assert.ok(plant.includes("drawZombieMoon")&&plant.includes("drawDeadForest(performance.now())"),
+assert.ok(plant.includes("drawZombieMoon")&&plant.includes('drawRetainedObject("plant:dead-forest"'),
   "Zombie mode should show the blocky lunar body and its forest");
 assert.ok(plant.includes("Patches of silver illumination"),"Night scene should show lunar ground illumination");
 

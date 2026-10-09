@@ -9505,3 +9505,22 @@ body.viewer-fullscreen-fallback-active {
 .combat-station-prompt.mystery-ready {
   background:linear-gradient(130deg,rgba(21,65,48,.93),rgba(17,21,39,.94));
 }
+
+/* v0.13.88 — All players see the same authoritative multiplayer pause. */
+.combat-pause-overlay[data-combat-shared-paused="true"] {
+  background:rgba(9,13,26,.76);
+  backdrop-filter:blur(7px);
+}
+.combat-pause-overlay[data-combat-shared-paused="true"] .combat-pause-card {
+  border-color:rgba(112,175,248,.8);
+  box-shadow:0 0 0 1px rgba(112,175,248,.16),0 22px 65px rgba(0,0,0,.64);
+}
+.combat-pause-overlay[data-combat-shared-paused="true"] .combat-pause-heading h2 {
+  color:#cee6ff;
+  text-shadow:0 0 18px rgba(112,175,248,.27);
+}
+.combat-pause-overlay[data-combat-shared-paused="true"] [data-combat-pause-action="resume"]:disabled {
+  opacity:.44;
+  cursor:not-allowed;
+  filter:grayscale(.6);
+}

@@ -90,8 +90,8 @@
     smg: Object.freeze({ key: "smg", label: "SMG", range: 95, preferredMin: 18, preferredMax: 44, moveSpeed: 1.16, fireMin: 280, fireMax: 520, magazine: 32, reloadMs: 1700, damageMin: 4, damageMax: 7, accuracyNear: .68, accuracyFalloff: 170, tracer: "smg" }),
     shotgun: Object.freeze({ key: "shotgun", label: "Shotgun", range: 58, preferredMin: 11, preferredMax: 28, moveSpeed: 1.08, fireMin: 1050, fireMax: 1550, magazine: 6, reloadMs: 2350, damageMin: 10, damageMax: 18, accuracyNear: .84, accuracyFalloff: 92, tracer: "shotgun" }),
     sniper: Object.freeze({ key: "sniper", label: "Sniper", range: 180, preferredMin: 72, preferredMax: 125, moveSpeed: .78, fireMin: 2200, fireMax: 3300, magazine: 5, reloadMs: 2750, damageMin: 18, damageMax: 27, accuracyNear: .9, accuracyFalloff: 360, tracer: "sniper" }),
-    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, sightRange: 150, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, magazine: 1, reloadMs: 3100, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka", explosive: true, projectileSpeed: 92, explosionRadius: 9 }),
-    rocket: Object.freeze({ key: "rocket", label: "Rocket Launcher", range: 155, sightRange: 170, preferredMin: 58, preferredMax: 108, moveSpeed: .68, fireMin: 3100, fireMax: 4500, magazine: 1, reloadMs: 3500, damageMin: 22, damageMax: 34, accuracyNear: .78, accuracyFalloff: 285, tracer: "rocket", explosive: true, projectileSpeed: 76, explosionRadius: 11 }),
+    bazooka: Object.freeze({ key: "bazooka", label: "Bazooka", range: 130, sightRange: 150, preferredMin: 48, preferredMax: 92, moveSpeed: .72, fireMin: 2600, fireMax: 3900, magazine: 1, reloadMs: 3100, damageMin: 16, damageMax: 24, accuracyNear: .72, accuracyFalloff: 240, tracer: "bazooka", explosive: true, projectileSpeed: 92, explosionRadius: 12 }),
+    rocket: Object.freeze({ key: "rocket", label: "Rocket Launcher", range: 155, sightRange: 170, preferredMin: 58, preferredMax: 108, moveSpeed: .68, fireMin: 3100, fireMax: 4500, magazine: 1, reloadMs: 3500, damageMin: 22, damageMax: 34, accuracyNear: .78, accuracyFalloff: 285, tracer: "rocket", explosive: true, projectileSpeed: 76, explosionRadius: 14 }),
     pistol: Object.freeze({ key: "pistol", label: "Pistol", range: 88, preferredMin: 18, preferredMax: 42, moveSpeed: 1.08, fireMin: 760, fireMax: 1180, magazine: 12, reloadMs: 1500, damageMin: 7, damageMax: 11, accuracyNear: .74, accuracyFalloff: 165, tracer: "pistol" }),
     chainsaw: Object.freeze({ key: "chainsaw", label: "Chainsaw", melee: true, range: 5.4, sightRange: 165, preferredMin: 0, preferredMax: 4.9, moveSpeed: 2.8, fireMin: 430, fireMax: 650, damageMin: 13, damageMax: 20, accuracyNear: 1, accuracyFalloff: 1, tracer: null }),
   });
@@ -140,8 +140,8 @@
       range: 360, fireInterval: 980, reloadMs: 2450, automatic: false, scope: true,
     }),
     rocket: Object.freeze({
-      key: "rocket", shortLabel: "Rocket Launcher", magazine: 1, reserve: 7, damage: 145,
-      range: 245, fireInterval: 1350, reloadMs: 2850, automatic: false, explosive: true, projectileSpeed: 84, explosionRadius: 10,
+      key: "rocket", shortLabel: "Rocket Launcher", magazine: 1, reserve: 7, damage: 200,
+      range: 245, fireInterval: 1350, reloadMs: 2850, automatic: false, explosive: true, projectileSpeed: 84, explosionRadius: 16,
     }),
     smg: Object.freeze({key:"smg",shortLabel:"Viper SMG",magazine:42,reserve:252,damage:24,range:155,fireInterval:66,reloadMs:1300,automatic:true,visual:"rifle"}),
     carbine: Object.freeze({key:"carbine",shortLabel:"Tactical Carbine",magazine:36,reserve:180,damage:41,range:235,fireInterval:112,reloadMs:1550,automatic:true,scope:true,visual:"rifle"}),
@@ -519,6 +519,25 @@
         }
       }catch{/* Audio is cosmetic; never interrupt combat if a device lacks it. */}
     }
+    function soundPanFromWorld(point,player=options.getPlayer?.()){
+      if(!point || !player)return 0;
+      const dx=number(point.x)-number(player.x),dz=number(point.z)-number(player.z);
+      const distance=Math.hypot(dx,dz);
+      if(distance<.15)return 0;
+      // The first-person projector mirrors world-X on screen. The speaker
+      // basis must follow the same right vector as hit-direction indicators:
+      // world +X appears on the LEFT when facing world +Z.
+      const yaw=number(player.yaw);
+      return clamp((Math.sin(yaw)*dz-Math.cos(yaw)*dx)/distance,-.85,.85);
+    }
+    function playWorldCombatSound(cue,point,volume=1){
+      const player=options.getPlayer?.();
+      if(!point || !player){playCombatSound(cue,volume);return;}
+      const distance=Math.hypot(number(point.x)-number(player.x),
+        number(point.z)-number(player.z));
+      const attenuation=clamp(1-distance/190,.1,1);
+      playCombatSound(cue,volume*attenuation,soundPanFromWorld(point,player));
+    }
     // Short procedural score phrases stay quiet under footsteps and weapon
     // sounds, and get faster/denser only when threat distance or health warrants.
     function playMusicTone(frequency,start,duration,gain=.02,type="sine"){
@@ -620,9 +639,7 @@
         }
         if(nearestZombie){
           const proximity=zombieProximityLevel(nearestDistance);
-          const angle=Math.atan2(nearestZombie.x-number(player.x),nearestZombie.z-number(player.z));
-          const pan=Math.sin(angle-number(player.yaw));
-          playCombatSound("zombie-growl",.07+proximity*.90,pan);
+          playWorldCombatSound("zombie-growl",nearestZombie,.07+proximity*.90);
           nextAmbientAt=now+(3450-proximity*2400)+Math.random()*320;
         }else{
           playCombatSound("wind",.16);
@@ -818,6 +835,8 @@
     let matchType = "solo";
     let multiplayer = null;
     let multiplayerStartedRevision = 0;
+    let lastRematchGeneration = 0;
+    let gameOverAnnounced = false;
     let lastLocalSyncSample = null;
     let lastHostEnemySyncAt = -Infinity;
     let cachedEnemySyncState = [];
@@ -941,6 +960,18 @@
         restartButton.innerHTML=waiting
           ? '<span class="combat-restart-icon" aria-hidden="true">✚</span><span class="combat-restart-copy"><strong>Awaiting revive</strong><small>Teammates can rescue you before the timer runs out</small></span>'
           : '<span class="combat-restart-icon" aria-hidden="true">↻</span><span class="combat-restart-copy"><strong>Respawn</strong><small>Return to your team with full health</small></span>';
+        return;
+      }
+      if(roundState==="gameover" && matchType==="coop" && multiplayer?.getLobby?.()){
+        const lobby=multiplayer.getLobby();
+        const total=(lobby.players||[]).length;
+        const votes=Object.values(lobby.rematchVotes||{}).filter(Boolean).length;
+        const voted=lobby.rematchVotes?.[multiplayer.playerId]===true;
+        restartButton.disabled=voted;
+        restartButton.innerHTML='<span class="combat-restart-icon" aria-hidden="true">↻</span>'+
+          '<span class="combat-restart-copy"><strong>'+
+          (voted?"Vote recorded":"Vote to play again")+'</strong><small>'+
+          votes+' / '+total+' players ready to replay</small></span>';
         return;
       }
       const waitingForHost=matchType==="coop" && multiplayer?.getLobby?.() && !multiplayer.isHost?.();
@@ -1598,8 +1629,8 @@
       if(!id || destroyedExplosives.has(id))return false;
       destroyedExplosives.add(id);
       const point={x:number(o.x)+number(o.w)*.5,y:2,z:number(o.z)+number(o.d)*.5};
-      worldEffects.explosions.push({point,startAt:now,duration:900,radius:12,
-        damageMax:175,sourcePlayer:true,resolved:false,seed:Math.random()*1000});
+      worldEffects.explosions.push({point,startAt:now,duration:900,radius:18,
+        damageMax:225,sourcePlayer:true,resolved:false,seed:Math.random()*1000});
       if(matchType==="coop" && multiplayer?.getLobby?.())
         multiplayer.sendEvent?.("barrel-detonate",{id,point},"").catch(()=>{});
       setTransientStatus("EXPLOSIVE BARREL DETONATED",950);
@@ -1612,7 +1643,7 @@
       enemy.defeatedAt = now;
       const local=options.getPlayer?.();
       const distance=Math.hypot(number(local?.x)-number(enemy.x),number(local?.z)-number(enemy.z));
-      playCombatSound("enemy-down",clamp(35/Math.max(10,distance),.1,.8));
+      playWorldCombatSound("enemy-down",enemyCenter(enemy),clamp(35/Math.max(10,distance),.1,.8));
       if (zombieEndless() && !coopFollower() && enemy.wave === zombieWave) waveDefeated=Math.min(waveTotal,waveDefeated+1);
       // Start the fall on the exact kill frame. Corpses also get a small
       // obstacle-aware slide so a nearby machine cannot visually swallow the
@@ -1705,7 +1736,10 @@
       // Solid machinery or walls protect distant targets, without making
       // a point-blank impact inexplicably deal no damage.
       if(distance>2.25 && !hasLineOfSight({x:point.x,y:point.y+.25,z:point.z},target))return 0;
-      return Math.max(0,number(baseDamage))*clamp(1-distance/Math.max(.1,radius),0,1);
+      // Larger, more consistent blast damage throughout the radius, tapering
+      // to a quarter-strength shock at the edge. Occluding solid walls still
+      // block distant splash completely.
+      return Math.max(0,number(baseDamage))*(.25+.75*clamp(1-distance/Math.max(.1,radius),0,1));
     }
 
     function resolveExplosionDamage(now) {
@@ -1713,8 +1747,8 @@
       for(const explosion of worldEffects.explosions){
         if(explosion.resolved || now<explosion.startAt)continue;
         explosion.resolved=true;
-        playCombatSound("explosion",.88);
-        const radius=clamp(number(explosion.radius,10),1,14);
+        playWorldCombatSound("explosion",explosion.point,.88);
+        const radius=clamp(number(explosion.radius,10),1,20);
         const baseDamage=number(explosion.damageMax,145);
         const sourceEnemy=enemies.get(String(explosion.sourceEnemyId||""));
         if(player){
@@ -2812,6 +2846,7 @@
           kills:Math.max(0,Math.floor(number(stats.kills))),
           headshots:Math.max(0,Math.floor(number(stats.headshots))),
           deaths:Math.max(0,Math.floor(number(stats.deaths))),
+          downs:Math.max(0,Math.floor(number(stats.downs,stats.deaths))),
           points:entry.id===localId ? playerPoints : Math.max(0,Math.floor(number(state.points))),
         };
       }).sort((a,b) => b.kills-a.kills || a.deaths-b.deaths || a.name.localeCompare(b.name));
@@ -2820,13 +2855,16 @@
     function renderRoundLeaderboard(entries = roundLeaderboard()) {
       if (!scoreboard) return entries;
       scoreboard.innerHTML="";
-      scoreboard.hidden=!Array.isArray(entries) || entries.length < 2;
+      scoreboard.hidden=!Array.isArray(entries) || entries.length < (roundState==="gameover"?1:2);
       if (scoreboard.hidden) return entries;
+      const gameOver=roundState==="gameover";
       const mostKills=Math.max(...entries.map((entry)=>number(entry.kills)));
       const mostDeaths=Math.max(...entries.map((entry)=>number(entry.deaths)));
       const title=document.createElement("div");
       title.className="combat-scoreboard-heading";
-      title.innerHTML='<strong>TEAM LEADERBOARD</strong><span>KILLS · DEATHS · HEADSHOTS</span>';
+      title.innerHTML=gameOver
+        ? '<strong>FINAL TEAM LEADERBOARD</strong><span>NAME · POINTS · KILLS · DOWNS</span>'
+        : '<strong>TEAM LEADERBOARD</strong><span>KILLS · DEATHS · HEADSHOTS</span>';
       scoreboard.appendChild(title);
       entries.forEach((entry,index) => {
         const row=document.createElement("div");
@@ -2838,10 +2876,14 @@
         identity.append(playerName,character);
         const kills=document.createElement("span"); kills.innerHTML=`<small>K</small><strong>${entry.kills}</strong>`;
         const deaths=document.createElement("span"); deaths.innerHTML=`<small>D</small><strong>${entry.deaths}</strong>`;
-        const headshots=document.createElement("span"); headshots.innerHTML=`<small>HS</small><strong>${entry.headshots}</strong>`;
+        const headshots=document.createElement("span");
+        headshots.innerHTML=gameOver
+          ? `<small>PTS</small><strong>${Math.max(0,number(entry.points)).toLocaleString()}</strong>`
+          : `<small>HS</small><strong>${entry.headshots}</strong>`;
+        if(gameOver)deaths.innerHTML=`<small>DOWNS</small><strong>${Math.max(0,Math.floor(number(entry.downs,entry.deaths)))}</strong>`;
         const badges=document.createElement("em");
         const labels=[];
-        if (gameMode==="zombie") labels.push(`${entry.points.toLocaleString()} PTS`);
+        if (gameMode==="zombie" && !gameOver) labels.push(`${entry.points.toLocaleString()} PTS`);
         if (entry.kills===mostKills) labels.push("KILL LEADER");
         if (mostDeaths>0 && entry.deaths===mostDeaths) labels.push("MOST DEATHS");
         badges.textContent=labels.join(" · ");
@@ -2849,6 +2891,75 @@
         scoreboard.appendChild(row);
       });
       return entries;
+    }
+
+    function finishCoopGameOver(lobby = multiplayer?.getLobby?.()) {
+      if(!active || roundState==="gameover")return false;
+      // Everyone sees the same terminal screen; do not trigger the local
+      // killer-replay sequence or let surviving zombie AI continue moving.
+      roundState="gameover";
+      gameOverAnnounced=true;
+      ++roundRevealSerial;
+      respawnEndsAt=0;reviveUntil=0;respawnDisplay=0;
+      paused=false;pausedAt=0;playerDeathStartedAt=0;
+      mouseHeld=false;setAiming(false);
+      frame.classList.remove("combat-paused","combat-death-cinematic","combat-player-dead");
+      frame.classList.add("combat-team-gameover");
+      if(pauseOverlay)pauseOverlay.hidden=true;
+      if(killerReveal)killerReveal.hidden=true;
+      if(countdownOverlay)countdownOverlay.hidden=true;
+      options.resetDeathCinematic?.();
+      options.hideWalkMenu?.();
+      options.setMovementLocked?.(true);
+      options.releasePointer?.();
+      playMusicStinger("death");
+      if(roundOverlay){
+        roundOverlay.hidden=false;
+        roundOverlay.classList.remove("victory","killer-reveal");
+        roundOverlay.classList.add("coop-game-over");
+      }
+      if(roundKicker)roundKicker.textContent="ZOMBIE SURVIVAL · TEAM ELIMINATED";
+      if(roundTitle)roundTitle.textContent="GAME OVER";
+      if(roundCopy)roundCopy.textContent="Every survivor is down. Vote together to play another round or leave the match.";
+      if(timeLabel)timeLabel.textContent="SURVIVAL TIME";
+      const duration=Math.max(0,Math.round((performance.now()-(roundStartedAt||performance.now()))/1000));
+      if(victoryTime)victoryTime.textContent=formatTime(duration);
+      if(bestTime)bestTime.textContent=formatTime(recordRoundTime(duration));
+      if(regularKillsCopy)regularKillsCopy.textContent=String(regularKills);
+      if(headshotKillsCopy)headshotKillsCopy.textContent=String(headshotKills);
+      if(victoryHealth)victoryHealth.textContent="0";
+      if(victoryShield)victoryShield.textContent="0";
+      if(deathCountCopy)deathCountCopy.textContent=String(playerDeaths);
+      const results=Array.isArray(lobby?.finalLeaderboard)&&lobby.finalLeaderboard.length
+        ? lobby.finalLeaderboard.map(entry=>({...entry,
+          character:roundLeaderboard().find(e=>e.id===entry.id)?.character||"Survivor",
+          deaths:entry.downs,headshots:0}))
+        :roundLeaderboard();
+      renderRoundLeaderboard(results);
+      roundActions?.classList.remove("locked");
+      syncRestartButton();syncHud();
+      options.invalidate?.();
+      return true;
+    }
+    function checkCoopGameOver(lobby=multiplayer?.getLobby?.()) {
+      if(!active || gameMode!=="zombie" || matchType!=="coop" ||
+        !multiplayer?.isHost?.() || !lobby || lobby.status!=="started" ||
+        gameOverAnnounced || lobby.roundOutcome==="gameover" ||
+        ["setup","countdown","gameover","won"].includes(roundState))return false;
+      const humans=(lobby.players||[]);
+      if(!humans.length)return false;
+      const localAlive=!playerZombie && playerHealth>0 &&
+        !["respawning","respawn-choice","lost"].includes(roundState);
+      const allDown=humans.every(entry=>entry.id===multiplayer.playerId
+        ? !localAlive : entry.state?.alive===false);
+      if(!allDown)return false;
+      const leaderboard=roundLeaderboard().map(e=>({
+        id:e.id,name:e.name,kills:e.kills,points:e.points,downs:e.deaths
+      }));
+      finishCoopGameOver(lobby);
+      multiplayer.endCoopRound?.(leaderboard).catch(error=>
+        setTransientStatus(error?.message||"Could not synchronize the game over.",3000));
+      return true;
     }
 
     function recordPlayerDeath() {
@@ -3453,11 +3564,11 @@
       if(loadout.melee){
         const listener=options.getPlayer?.();
         const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
-        playCombatSound("chainsaw",clamp(22/Math.max(8,distance),.09,.62));
+        playWorldCombatSound("chainsaw",enemyCenter(enemy),clamp(22/Math.max(8,distance),.09,.62));
       }else if(Math.random()<.26){
         const listener=options.getPlayer?.();
         const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
-        playCombatSound("enemy-shot",clamp(22/Math.max(8,distance),.09,.5));
+        playWorldCombatSound("enemy-shot",enemyCenter(enemy),clamp(22/Math.max(8,distance),.09,.5));
       }
       enemy.firingUntil = now + shotDuration;
       enemy.muzzleFlashUntil = loadout.melee ? 0 : now + (loadout.explosive ? 145 : loadout.key === "sniper" ? 105 : 88);
@@ -3618,6 +3729,9 @@
       worldEffects.rockets.length = 0;
       worldEffects.explosions.length = 0;
       worldEffects.glassShards.length = 0;
+      frame.classList.remove("combat-team-gameover");
+      roundOverlay?.classList.remove("coop-game-over");
+      gameOverAnnounced=false;
       shatteredGlass.clear();
       destroyedExplosives.clear();
       worldEffects.pickups.length = 0;
@@ -3732,6 +3846,12 @@
         lastShieldUpdateAt = now;
         options.invalidate?.();
         frameRequest = window.requestAnimationFrame(loop);
+        return;
+      }
+      if(roundState==="gameover"){
+        lastFrameAt=now;lastShieldUpdateAt=now;
+        options.invalidate?.();
+        frameRequest=window.requestAnimationFrame(loop);
         return;
       }
       if (paused) {
@@ -4077,7 +4197,7 @@
         if(previouslyAlive&&enemy.health<=0){
           const listener=options.getPlayer?.();
           const distance=Math.hypot(number(listener?.x)-number(enemy.x),number(listener?.z)-number(enemy.z));
-          playCombatSound("enemy-down",clamp(35/Math.max(10,distance),.1,.8));
+          playWorldCombatSound("enemy-down",enemyCenter(enemy),clamp(35/Math.max(10,distance),.1,.8));
         }
         // Corpse locations remain authoritative; do not smooth a fallen
         // employee back into a standing/animated walking position.
@@ -4137,14 +4257,15 @@
         const raw=event.payload?.point||{};
         const point={x:number(raw.x,NaN),y:number(raw.y,NaN),z:number(raw.z,NaN)};
         if(![point.x,point.y,point.z].every(Number.isFinite))return;
-        const radius=clamp(number(event.payload?.radius,10),1,14);
-        const damage=clamp(number(event.payload?.damage,145),0,190);
+        const radius=clamp(number(event.payload?.radius,10),1,20);
+        const damage=clamp(number(event.payload?.damage,145),0,250);
         const victim=options.getPlayer?.();
         if(!victim)return;
         const local={x:number(victim.x),y:number(victim.y,5.5),z:number(victim.z)};
         const hurt=splashDamage(point,local,radius,damage);
         worldEffects.explosions.push({point,startAt:performance.now(),duration:800,
           radius,resolved:true,seed:Math.random()*1000});
+        playWorldCombatSound("explosion",point,.76);
         if(hurt>0){
           const enemy=enemyId ? enemies.get(enemyId) : null;
           const source=enemy||{
@@ -4198,7 +4319,8 @@
         const raw=event.payload?.point||{};
         const point={x:number(raw.x),y:number(raw.y),z:number(raw.z)};
         worldEffects.explosions.push({point,startAt:performance.now(),duration:900,
-          radius:12,resolved:true,seed:Math.random()*1000});
+          radius:18,resolved:true,seed:Math.random()*1000});
+        playWorldCombatSound("explosion",point,.80);
         return;
       }
       if (event.type === "player-death" && matchType === "coop") {
@@ -4238,6 +4360,32 @@
       if (roundState === "setup") syncLobbyUi(lobby);
       if (!active || !lobby) return;
       applySharedPause(lobby);
+      if(gameMode==="zombie" && matchType==="coop" && lobby.status==="started"){
+        const generation=Math.max(0,Math.floor(number(lobby.roundGeneration)));
+        if(generation>lastRematchGeneration){
+          lastRematchGeneration=generation;
+          gameOverAnnounced=false;
+          if(roundState==="gameover"){
+            resetRound({countdown:true});
+            options.capture?.();
+            return;
+          }
+        }
+        if(lobby.roundOutcome==="gameover"){
+          finishCoopGameOver(lobby);
+          // The server's final standings are authoritative for all clients.
+          if(roundState==="gameover" && Array.isArray(lobby.finalLeaderboard) &&
+            lobby.finalLeaderboard.length){
+            renderRoundLeaderboard(lobby.finalLeaderboard.map(entry=>({
+              ...entry,character:roundLeaderboard().find(e=>e.id===entry.id)?.character||"Survivor",
+              deaths:entry.downs,headshots:0
+            })));
+          }
+          syncRestartButton();
+          return;
+        }
+        if(multiplayer?.isHost?.())checkCoopGameOver(lobby);
+      }
       if (zombieEndless() && coopFollower() && lobby.status==="started") {
         const host=(lobby.players||[]).find((entry)=>entry.id===lobby.hostId)?.state;
         if (host) {
@@ -4430,6 +4578,8 @@
       if (matchSetup) matchSetup.hidden = true;
       multiplayer?.leave?.();
       multiplayerStartedRevision=0;
+      lastRematchGeneration=0;
+      gameOverAnnounced=false;
       reviveUntil=0;reviveHold=null;playerZombie=false;revivePrompt.hidden=true;
       options.onStateChange?.(false, gameMode);
       options.invalidate?.();
@@ -4569,6 +4719,11 @@
 
     hud.querySelector("[data-combat-restart]")?.addEventListener("click", async () => {
       if (roundState==="respawn-choice") {resumePlayerAfterDeath();return;}
+      if(roundState==="gameover" && matchType==="coop" && multiplayer?.getLobby?.()){
+        try{await multiplayer.voteRematch(true);}
+        catch(error){setTransientStatus(error?.message||"Vote could not be recorded.",2300);}
+        return;
+      }
       if (matchType === "coop" && multiplayer?.getLobby?.()) {
         if (!multiplayer.isHost?.()) return;
         try { await multiplayer.sendEvent("round-restart",{},""); }

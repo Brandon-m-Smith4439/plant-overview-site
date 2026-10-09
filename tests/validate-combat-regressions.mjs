@@ -53,7 +53,7 @@ assert.ok(server.includes("designId:cleanId(machineSource.designId"),"Network zo
 assert.ok(plant.includes("liveEnemy ? 1 : stageAlpha") && plant.includes("grow: liveEnemy ? 1"),"Co-op zombie bodies must render at full growth");
 assert.ok(plant.includes("function combatExteriorHills()") && plant.includes("kind:\"desert-hill\""),"Desert hills must be collision obstacles");
 assert.ok(plant.includes("REVIVE ·") && plant.includes("reviveSeconds"),"Downed players must show a red revive countdown");
-assert.ok(plant.includes("const scale = Number(root.scale)") && plant.includes("Math.max(.9, Number(point[2])"),"Viewmodel must not cover entire screen");
+assert.ok(plant.includes("const scale = Number(root.scale)") && plant.includes("const clampedViewmodel=Math.max(.9,Number(point[2])"),"Viewmodel must not cover entire screen");
 assert.ok(plant.includes("drawLegSegment(leftHip,leftKnee"),"Zombie legs must use actual volumes");
 assert.ok(movement.includes("const roofLanding =") && movement.includes("verticalOffset = climb.height"),"Player must land on solid roof slab");
 console.log("Combat gameplay regression checks passed: splash, blocked shots, portals, co-op, melee, rescue, collision, roof and viewmodel.");

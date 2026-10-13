@@ -26,3 +26,15 @@ BFS does not ship `plant-combat.js`, `combat-multiplayer.js`, or the `/api/comba
 
 ## Ownership
 The new BFS project starts in the currently connected Railway workspace. Formal handover needs BFS-approved Railway/GitHub ownership, company billing and access policy, secret/password rotation, domain ownership and layout sign-off. The existing personal Railway project has unrelated staged volume changes; do not deploy those as part of this work.
+
+
+## One-time transfer of saved layout, pointer and machine data
+
+The deployed BFS service executes \`scripts/seed-bfs-workspace.mjs\` **before** starting the app. Set:
+- \`PLANT_WORKSPACE_SEED_URL=https://monroe-glass-plant-evolution-production.up.railway.app/api/shared-workspace\`
+- \`PLANT_WORKSPACE_PATH=/data/plant-workspace.json\`
+- \`PLANT_WORKSPACE_FILE=/data/shared-workspace.json\`
+
+The import reads both published storage keys from the personal site's *read-only* API. The layout key includes \`processPointers\`, \`processConnections\`, machine geometry, route tags and stage settings; the second key holds reusable machine designs. The import validates both records, makes a backup of any pre-existing BFS workspace, writes each of the BFS storage formats atomically and records a checksum and pointer counts in \`/data/bfs-workspace-import.json\`. On later redeploys the marker prevents overwriting BFS edits. No future syncing is performed.
+
+Check the **BFS service deploy logs** for \`[BFS import] Completed\`, including nonzero saved-pointer counts when those were present in the source. If startup reports a missing/unpublished source workspace, sign in to the personal plant owner view and export/publish the latest layout, then redeploy BFS. Browser-only unsynced localStorage changes cannot be recovered from the server. Do not delete the volume or manually remove the import marker after BFS users start editing.

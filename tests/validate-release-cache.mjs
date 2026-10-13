@@ -15,12 +15,11 @@ try {
   fs.mkdirSync(path.join(fixture, "app"));
   fs.writeFileSync(path.join(fixture, "VERSION"), release);
   fs.writeFileSync(path.join(fixture, "public", "plant-app.js"), "original-script");
-  fs.writeFileSync(path.join(fixture, "public", "plant-combat.js"), "original-combat");
   fs.writeFileSync(path.join(fixture, "app", "globals.css"), "base-styles");
   const baseline = computeLegacyReleaseToken(fixture);
-  fs.writeFileSync(path.join(fixture, "public", "plant-combat.js"), "updated-combat");
-  assert.notEqual(computeLegacyReleaseToken(fixture), baseline, "Combat source changes must invalidate browser cache.");
-  fs.writeFileSync(path.join(fixture, "public", "plant-combat.js"), "original-combat");
+  fs.writeFileSync(path.join(fixture, "public", "plant-app.js"), "updated-plant");
+  assert.notEqual(computeLegacyReleaseToken(fixture), baseline, "Plant source changes must invalidate browser cache.");
+  fs.writeFileSync(path.join(fixture, "public", "plant-app.js"), "original-script");
   fs.writeFileSync(path.join(fixture, "app", "globals.css"), "updated-styles");
   assert.notEqual(computeLegacyReleaseToken(fixture), baseline, "Stylesheet changes must invalidate browser cache.");
 } finally {

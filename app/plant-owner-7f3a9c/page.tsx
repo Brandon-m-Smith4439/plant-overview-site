@@ -13,8 +13,8 @@ export default function PlantOwnerDashboard() {
         <div className="owner-dashboard-shell">
           <header className="owner-dashboard-header">
             <div>
-              <p>Private owner workspace</p>
-              <h1>Monroe Glass Plant Evolution</h1>
+              <p>BFS plant workspace</p>
+              <h1>Monroe Glass Plant Layout</h1>
             </div>
             <div className="owner-dashboard-account">
               <span>Password protected</span>
@@ -31,11 +31,6 @@ export default function PlantOwnerDashboard() {
               <h2>Machine library</h2>
               <p>Open the existing Machine Design Studio to build or edit reusable machines, nested assemblies, transforms, materials, and animation timelines.</p>
               <ProtectedEditorLink href="/machine-studio">Open Machine Design Studio</ProtectedEditorLink>
-            </article>
-            <article className="owner-dashboard-card owner-combat-card">
-              <h2>Combat Mode</h2>
-              <p>Turn the finished plant into an owner-only first-person game. Person and team-member machines become line-of-sight enemy AI while the normal public layout stays unchanged.</p>
-              <Link href="/?owner=combat">Open Combat Mode</Link>
             </article>
           </section>
           <aside className="owner-dashboard-note">

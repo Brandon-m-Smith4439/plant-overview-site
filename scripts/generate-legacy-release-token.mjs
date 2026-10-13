@@ -13,7 +13,7 @@ export function computeLegacyReleaseToken(root = defaultRoot) {
   const publicDir = path.join(root, "public");
   const sources = fs.readdirSync(publicDir).filter((name) => name.endsWith(".js")).sort()
     .map((name) => "public/" + name);
-  if (!sources.includes("public/plant-app.js") || !sources.includes("public/plant-combat.js")) {
+  if (!sources.includes("public/plant-app.js")) {
     throw new Error("Core plant scripts are missing from public/.");
   }
   const css = path.join(root, "app", "globals.css");

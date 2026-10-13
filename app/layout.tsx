@@ -9,7 +9,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Monroe Glass Plant Evolution",
+  title: "BFS · Monroe Glass Plant Layout",
   description:
     "Explore and edit the Monroe glass plant as it develops from an empty shell to current production.",
   icons: {

@@ -10,7 +10,7 @@ export default function Home() {
           <p className="eyebrow">
             <span /> Monroe, NC · Glass Plant
           </p>
-          <h1>Plant evolution explorer</h1>
+          <h1>Monroe Glass Plant Layout</h1>
         </div>
         <div className="masthead-actions">
           <nav className="site-nav" aria-label="Model tools">
@@ -101,8 +101,6 @@ export default function Home() {
           "/shared-workspace.js",
           "/animation-timeline.js",
           "/first-person-controller.js",
-          "/combat-multiplayer.js",
-          "/plant-combat.js",
           "/three-mf-exporter.js",
           "/plant-app.js",
         ]}

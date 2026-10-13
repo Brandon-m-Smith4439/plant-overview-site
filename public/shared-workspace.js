@@ -94,7 +94,7 @@
     const response = await fetch(API_PATH, {
       method: "PUT",
       credentials: "same-origin",
-      headers: { "content-type": "application/json", "x-monroe-owner-session": "granted" },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ payload }),
     });
     if (response.status === 401) return null;

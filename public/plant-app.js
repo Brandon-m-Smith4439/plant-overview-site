@@ -6775,12 +6775,10 @@
     if (!frame) return;
     const controls = document.createElement("div");
     controls.className = "model-controls";
-    const ownerCombatAllowed = () => window.monroeEditorAccess?.isOwner?.() === true;
+    const ownerCombatAllowed = () => false; // BFS: no gameplay.
     controls.innerHTML = `
       <button type="button" data-view="overview" aria-label="Reset to overview">Overview</button>
       <button type="button" data-toggle="walk" aria-pressed="false">First person</button>
-      <button type="button" data-toggle="combat" class="combat-mode-button" aria-pressed="false" hidden>Combat mode</button>
-      <button type="button" data-toggle="zombie" class="zombie-mode-button" aria-pressed="false" hidden>Zombie mode</button>
     `;
     frame.appendChild(controls);
     const fullscreenToggle = document.createElement("button");

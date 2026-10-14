@@ -2336,7 +2336,7 @@
       const design = machine.designId ? designLibrary[machine.designId] : null;
       // Open crane structures remain walk-through unless the Designer has real
       // envelopes. Once pillar/post envelopes are authored, those boxes become
-      // authoritative for first-person, bullets, and enemy pathing.
+      // authoritative for first-person walking and equipment collision.
       if (!designCollisionEnvelopes(design).length) return false;
     }
     return stageAlpha(machine.reveal, machine.retire) > 0.08;
@@ -2455,7 +2455,7 @@
     });
     displayedWallSections().forEach((wall) => {
       if (state.walls[wall.id] === false || state.walls[String(wall.id).split("-")[0]] === false) return;
-      // A raised lintel is visual/shot occlusion only; feet walk under it.
+      // Raised lintels are overhead geometry; pedestrians can walk below.
       if (String(wall.id).endsWith("-lintel")) return;
       entries.push({ kind: "wall", wall, x: wall.x, z: wall.z, w: wall.w, d: wall.d });
     });
@@ -10685,6 +10685,12 @@
     });
     for (const machine of sourceMachines) {
       if (machine.visible === false) continue;
+      const alpha = stageAlpha(
+        Number.isFinite(Number(machine.reveal)) ? Number(machine.reveal) : 0,
+        Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99,
+      );
+      if (alpha <= .01) continue;
+      const rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
       const visibilityBounds = state.cameraMode === "walk" ? firstPersonVisibilityBounds(machine, rendered, time) : rendered;
       let walkDistanceAlpha = 1;
       if (state.cameraMode === "walk") {

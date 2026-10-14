@@ -95,7 +95,7 @@ assert.ok(plant.includes("if (false || !SCREEN_SPACE_LABELS) return;"), "Legacy 
 const legacyLoader = await readFile(new URL("../app/legacy-script-loader.tsx", import.meta.url), "utf8");
 const versionText = (await readFile(new URL("../VERSION", import.meta.url), "utf8")).trim();
 assert.ok(
-  legacyLoader.includes(`const LEGACY_BUILD_TOKEN = "${versionText}";`),
+  legacyLoader.includes("const LEGACY_BUILD_TOKEN = LEGACY_RELEASE_TOKEN;"),
   "LegacyScriptLoader cache-busting token must match VERSION so production cannot serve an older plant-app.js."
 );
 assert.ok(

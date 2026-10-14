@@ -10717,7 +10717,7 @@
         machine,
         rendered,
         alpha: alpha * walkDistanceAlpha * (Number.isFinite(Number(rendered.renderAlpha)) ? Number(rendered.renderAlpha) : 1),
-        grow: liveEnemy ? 1 : clamp(state.stageFloat - Number(machine.reveal||0) + 1),
+        grow: clamp(state.stageFloat - Number(machine.reveal || 0) + 1),
         depth: sceneDepth(rendered.x+rendered.w/2,rendered.z+rendered.d/2),
       });
     }

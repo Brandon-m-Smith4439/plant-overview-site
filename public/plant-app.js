@@ -4579,6 +4579,8 @@
               <label>Leader thickness<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="24" step="0.5" title="Physical width of the leader line"></label>
               <label>Extra leader reach (ft)<input type="number" data-label-field="labelLeaderExtensionFeet" data-needs-selection min="0" max="100" step="1" title="Move the 3D label farther from its machine while keeping the connector attached"></label>
               <label>Leader opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5"></label>
+              <label>Leader style<select data-label-field="labelLineStyle" data-needs-selection><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label>
+              <label>Leader path<select data-label-field="labelLineShape" data-needs-selection><option value="straight">Straight</option><option value="elbow">Right-angle elbow</option></select></label>
             </div>
           </details>
 

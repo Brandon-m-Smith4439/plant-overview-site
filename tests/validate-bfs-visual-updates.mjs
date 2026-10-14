@@ -11,6 +11,8 @@ assert.ok(plant.includes('labelLeaderExtensionFeet: clamp('));
 assert.ok(plant.includes("function drawPhysicalLabelLeader("));
 assert.ok(plant.includes("drawPhysicalLabelLeader("));
 assert.ok(plant.includes('machine.labelLineStyle,'));
+assert.ok(plant.includes('data-label-field="labelLineStyle"'));
+assert.ok(plant.includes('data-label-field="labelLineShape"'));
 assert.ok(plant.includes('machine.labelLineShape,'));
 assert.ok(!plant.includes('depthRenderer.addLine?.(\n        leaderAnchor,'));
 assert.ok(plant.includes('const arrowClearance=connection.endStyle==="arrow"'));

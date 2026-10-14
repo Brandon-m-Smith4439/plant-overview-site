@@ -182,7 +182,7 @@
       context.closePath();
     }
 
-    const WORLD_LABEL_FACE_REVISION = "v0.13.47-extruded-text";
+    const WORLD_LABEL_FACE_REVISION = "bfs-glyph-contour-extrusion-20261014";
 
     function worldLabelTextureMetrics(options = {}) {
       const text = String(options.text || "Object").trim() || "Object";
@@ -356,6 +356,52 @@
       });
     }
 
+
+    // Turn the opaque outline of each canvas-rendered glyph into real sidewall
+    // triangles. The front/back remain crisp high-resolution text textures, but
+    // their silhouettes have physical depth and parallax from oblique cameras.
+    // Outlines are created once when the text changes, not on every frame.
+    function worldLabelGlyphSideGeometry(textureCanvas) {
+      const geometry = new THREE.BufferGeometry();
+      const context = textureCanvas?.getContext?.("2d", { willReadFrequently: true });
+      if (!context) return geometry;
+      const width = textureCanvas.width, height = textureCanvas.height;
+      const pixels = context.getImageData(0, 0, width, height).data;
+      const step = 3;
+      const gridW = Math.ceil(width / step), gridH = Math.ceil(height / step);
+      const mask = new Uint8Array(gridW * gridH);
+      // Exclude glow/shadow from the solid letter outline.
+      for (let y = 0; y < gridH; y++) {
+        for (let x = 0; x < gridW; x++) {
+          const sampleX = Math.min(width - 1, x * step + 1);
+          const sampleY = Math.min(height - 1, y * step + 1);
+          mask[y * gridW + x] = pixels[(sampleY * width + sampleX) * 4 + 3] >= 190 ? 1 : 0;
+        }
+      }
+      const vertices = [];
+      const solid = (x, y) => x >= 0 && x < gridW && y >= 0 && y < gridH && mask[y * gridW + x] === 1;
+      const sx = value => value * step / width - .5;
+      const sy = value => .5 - value * step / height;
+      const quad = (a, b) => {
+        vertices.push(...a, ...b, b[0], b[1], 1);
+        vertices.push(...a, b[0], b[1], 1, a[0], a[1], 1);
+      };
+      for (let y = 0; y < gridH; y++) {
+        for (let x = 0; x < gridW; x++) {
+          if (!solid(x, y)) continue;
+          const left = sx(x), right = sx(Math.min(gridW, x + 1));
+          const top = sy(y), bottom = sy(Math.min(gridH, y + 1));
+          if (!solid(x - 1, y)) quad([left, top, 0], [left, bottom, 0]);
+          if (!solid(x + 1, y)) quad([right, bottom, 0], [right, top, 0]);
+          if (!solid(x, y - 1)) quad([right, top, 0], [left, top, 0]);
+          if (!solid(x, y + 1)) quad([left, bottom, 0], [right, bottom, 0]);
+        }
+      }
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+      geometry.computeBoundingSphere();
+      return geometry;
+    }
+
     function createWorldLabelEntry(key, options = {}) {
       const group = new THREE.Group();
       group.matrixAutoUpdate = false;
@@ -381,16 +427,27 @@
       back.rotation.y = Math.PI;
       backText.rotation.y = Math.PI;
 
+      const glyphGeometry = new THREE.BufferGeometry();
+      const glyphMaterial = worldLabelEdgeMaterial({ backgroundColor: options.textColor || "#ffffff" });
+      const frontGlyphSides = new THREE.Mesh(glyphGeometry, glyphMaterial);
+      const backGlyphSides = new THREE.Mesh(glyphGeometry, glyphMaterial);
+      backGlyphSides.rotation.y = Math.PI;
+      frontGlyphSides.frustumCulled = false;
+      backGlyphSides.frustumCulled = false;
+      frontGlyphSides.renderOrder = 5;
+      backGlyphSides.renderOrder = 5;
+
       const edgeGeometry = new THREE.BoxGeometry(1, 1, 1);
       const edgeMaterial = worldLabelEdgeMaterial(options);
       const backing = new THREE.Mesh(edgeGeometry, edgeMaterial);
       backing.frustumCulled = false;
       backing.renderOrder = 3;
 
-      group.add(backing, front, back, frontText, backText);
+      group.add(backing, front, back, frontGlyphSides, backGlyphSides, frontText, backText);
       scene.add(group);
       const entry = {
-        key, group, front, back, frontText, backText, backing, faceGeometry, edgeGeometry,
+        key, group, front, back, frontText, backText, frontGlyphSides, backGlyphSides,
+        glyphGeometry, glyphMaterial, backing, faceGeometry, edgeGeometry,
         faceMaterial, textMaterial, edgeMaterial, revision: "", used: true,
         lastUsed: frame, lastUsedAt: frameTime,
       };
@@ -406,6 +463,8 @@
       entry.faceMaterial?.dispose?.();
       entry.textMaterial?.dispose?.();
       entry.edgeMaterial?.dispose?.();
+      entry.glyphMaterial?.dispose?.();
+      entry.glyphGeometry?.dispose?.();
       entry.faceGeometry?.dispose?.();
       entry.edgeGeometry?.dispose?.();
     }
@@ -439,6 +498,15 @@
         entry.edgeMaterial.uniforms.u_color.value.set(edge[0], edge[1], edge[2], 1);
         entry.faceMaterial.needsUpdate = true;
         entry.textMaterial.needsUpdate = true;
+        const glyphCanvas = entry.textMaterial.uniforms.u_map.value?.image;
+        entry.glyphGeometry?.dispose?.();
+        entry.glyphGeometry = worldLabelGlyphSideGeometry(glyphCanvas);
+        entry.frontGlyphSides.geometry = entry.glyphGeometry;
+        entry.backGlyphSides.geometry = entry.glyphGeometry;
+        const glyphColor = parseColor(options.textColor || "#ffffff", 1);
+        entry.glyphMaterial.uniforms.u_color.value.set(
+          glyphColor[0] * .72, glyphColor[1] * .72, glyphColor[2] * .72, 1,
+        );
         entry.revision = revision;
       }
 
@@ -446,6 +514,7 @@
       entry.faceMaterial.uniforms.u_opacity.value = opacity;
       entry.textMaterial.uniforms.u_opacity.value = opacity;
       entry.edgeMaterial.uniforms.u_opacity.value = opacity;
+      entry.glyphMaterial.uniforms.u_opacity.value = opacity;
 
       const texture = entry.faceMaterial.uniforms.u_map.value;
       const image = texture?.image;
@@ -514,12 +583,18 @@
       entry.back.position.set(0, 0, -faceOffset);
       entry.frontText.scale.set(worldWidth, worldHeight, 1);
       entry.frontText.position.set(0, 0, textOffset);
+      entry.frontGlyphSides.scale.set(worldWidth, worldHeight, textExtrude);
+      entry.frontGlyphSides.position.set(0, 0, faceOffset + .012);
+      entry.backGlyphSides.scale.set(worldWidth, worldHeight, textExtrude);
+      entry.backGlyphSides.position.set(0, 0, -faceOffset - .012);
       entry.backText.scale.set(worldWidth, worldHeight, 1);
       entry.backText.position.set(0, 0, -textOffset);
       entry.front.updateMatrix();
       entry.back.updateMatrix();
       entry.frontText.updateMatrix();
       entry.backText.updateMatrix();
+      entry.frontGlyphSides.updateMatrix();
+      entry.backGlyphSides.updateMatrix();
       entry.backing.updateMatrix();
     }
 
@@ -745,6 +820,7 @@
         if (entry?.faceMaterial) entry.faceMaterial.uniformsNeedUpdate = true;
         if (entry?.textMaterial) entry.textMaterial.uniformsNeedUpdate = true;
         if (entry?.edgeMaterial) entry.edgeMaterial.uniformsNeedUpdate = true;
+        if (entry?.glyphMaterial) entry.glyphMaterial.uniformsNeedUpdate = true;
       });
     }
 

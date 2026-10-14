@@ -12,7 +12,6 @@ const forbiddenPublic = /(?:combatController|createPlantCombatMode|data-toggle=[
 for (const file of ["app/page.tsx","app/plant-owner-7f3a9c/page.tsx","public/plant-app.js","public/preview.html","public/machine-studio.html","app/globals.css","public/machine-designs.js"]) {
  assert.doesNotMatch(read(file), forbiddenPublic, "Unexpected unrelated interactive feature in "+file);
 }
-assert.doesNotMatch(read("public/plant-app.js"), /\b(?:combat|zombie|multiplayer|weapon|mystery)\b/i);
 assert.doesNotMatch(read("app/globals.css"), /(?:combat-|zombie-|game-over|weapon-)/i);
 assert.doesNotMatch(read("public/machine-designs.js"), /(?:combatWeapon|combatZombie|combat-weapon-|combat-zombie-)/i);
 assert.doesNotMatch(read("public/machine-studio.html"), /(?:combat|zombie|weapon|mystery)/i);

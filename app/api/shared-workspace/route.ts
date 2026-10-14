@@ -1,3 +1,4 @@
+import { sanitizeCompanyWorkspaceItem } from "../_lib/company-designs";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -72,7 +73,7 @@ function sanitizePayload(value: unknown) {
   for (const [key, storedValue] of Object.entries(sourceItems)) {
     if (!ALLOWED_KEYS.has(key) || typeof storedValue !== "string") continue;
     if (Buffer.byteLength(storedValue, "utf8") > MAX_ITEM_BYTES) throw new Error(`Workspace item ${key} is too large.`);
-    items[key] = storedValue;
+    items[key] = sanitizeCompanyWorkspaceItem(key, storedValue);
   }
   if (!Object.keys(items).length) throw new Error("Workspace payload contains no publishable data.");
   return {

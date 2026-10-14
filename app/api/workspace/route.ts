@@ -1,3 +1,4 @@
+import { sanitizeCompanyWorkspaceItem } from "../_lib/company-designs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { requestHasEditorSession } from "../_lib/editor-session";
@@ -42,7 +43,7 @@ function normalizedPayload(value: unknown): WorkspacePayload | null {
   const items: Record<string, string> = {};
   for (const [key, storedValue] of Object.entries(source.items)) {
     if (!key.startsWith(STORAGE_PREFIX) || typeof storedValue !== "string") continue;
-    items[key] = storedValue;
+    items[key] = sanitizeCompanyWorkspaceItem(key, storedValue);
   }
   if (!Object.keys(items).length) return null;
   return {

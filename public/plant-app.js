@@ -360,7 +360,10 @@
     try {
       const saved = JSON.parse(localStorage.getItem(DESIGN_STORAGE_KEY) || "null");
       const overrides = saved?.designs && typeof saved.designs === "object" ? saved.designs : {};
-      return { ...clone(defaultDesignLibrary), ...clone(overrides) };
+      const approved = Object.fromEntries(Object.entries(overrides).filter(([id, design]) =>
+        !/^combat-(weapon|zombie)-/i.test(id) && !/^(combatWeapon|combatZombie)$/i.test(String(design?.machineType || ""))
+      ));
+      return { ...clone(defaultDesignLibrary), ...clone(approved) };
     } catch (error) {
       console.warn("Machine design overrides could not be loaded.", error);
       return clone(defaultDesignLibrary);

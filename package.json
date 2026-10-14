@@ -8,7 +8,7 @@
   "scripts": {
     "predev": "node scripts/generate-legacy-release-token.mjs",
     "dev": "vinext dev",
-    "build": "node scripts/generate-legacy-release-token.mjs && node tests/validate-release-cache.mjs && node --check public/plant-app.js && node --check public/first-person-controller.js && node tests/validate-bfs-separation.mjs && node tests/validate-bfs-workspace-import.mjs && node tests/validate-bfs-data-cleanup.mjs && node scripts/patch-vinext-windows-static-cache.mjs && vinext build",
+    "build": "node scripts/generate-legacy-release-token.mjs && node tests/validate-release-cache.mjs && node --check public/plant-app.js && node --check public/first-person-controller.js && node tests/validate-bfs-separation.mjs && node tests/validate-bfs-workspace-import.mjs && node tests/validate-bfs-data-cleanup.mjs && node tests/validate-bfs-visual-updates.mjs && node tests/validate-process-connection-runtime.mjs && node tests/validate-process-pointers.mjs && node tests/validate-label-system.mjs && node --check public/three-depth-scene-renderer.js && node scripts/patch-vinext-windows-static-cache.mjs && vinext build",
     "generate:types": "wrangler types worker-configuration.d.ts --config dist/server/wrangler.json",
     "typecheck": "npm run build && npm run generate:types && tsc --noEmit --incremental false",
     "start": "vinext start",
@@ -64,7 +64,8 @@
     "validate:published-workspace": "node tests/validate-published-workspace.mjs",
     "validate:cad": "py -B cad/validate_site.py",
     "validate:shared-workspace": "node tests/validate-shared-workspace.mjs",
-    "validate:bfs": "node tests/validate-bfs-separation.mjs && node tests/validate-bfs-workspace-import.mjs && node tests/validate-bfs-data-cleanup.mjs"
+    "validate:bfs": "node tests/validate-bfs-separation.mjs && node tests/validate-bfs-workspace-import.mjs && node tests/validate-bfs-data-cleanup.mjs",
+    "validate:bfs-visual": "node tests/validate-bfs-visual-updates.mjs && node tests/validate-process-connection-runtime.mjs && node tests/validate-process-pointers.mjs && node tests/validate-label-system.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

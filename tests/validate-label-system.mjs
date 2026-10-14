@@ -105,7 +105,7 @@ assert.ok(
 
 
 assert.ok(threeRenderer.includes("new THREE.BoxGeometry(1, 1, 1)"), "3D labels must have a real solid sign edge/backing.");
-assert.ok(threeRenderer.includes("group.add(backing, front, back, frontText, backText)"), "3D labels must contain distinct front/back faces plus raised front/back text meshes.");
+assert.ok(threeRenderer.includes("group.add(backing, front, back, frontGlyphSides, backGlyphSides, frontText, backText)"), "3D labels must contain distinct front/back faces plus raised front/back text meshes.");
 assert.ok(threeRenderer.includes("back.rotation.y = Math.PI"), "Back-side label text must be oriented for normal reading instead of mirrored.");
 assert.ok(threeRenderer.includes("Labels remain planted at one world position"), "3D billboards must keep a stable world position while their yaw follows the camera.");
 assert.ok(threeRenderer.includes("const cameraYaw = Number(currentView?.yaw) || 0;"), "3D billboards must derive their slow yaw target from camera heading.");
@@ -144,8 +144,8 @@ assert.ok(threeRenderer.includes("wrapHalfTurn") && threeRenderer.includes("erro
 assert.ok(threeRenderer.includes('context.createLinearGradient') && threeRenderer.includes('context.shadowColor = borderColor'), "3D billboard face should include polished depth/highlight styling.");
 
 
-assert.ok(plant.includes("for(let start=phase-period;start<metrics.total;start+=period)"), "World-route white highlights must travel from source toward destination.");
-assert.ok(threeRenderer.includes('WORLD_LABEL_FACE_REVISION = "v0.13.47-extruded-text"'), "3D labels must use the v0.13.47 extruded-text face revision.");
+assert.ok(plant.includes("for(let start=phase-period;start<flowDistance;start+=period)"), "World-route white highlights must travel from source toward destination.");
+assert.ok(threeRenderer.includes('WORLD_LABEL_FACE_REVISION = "bfs-glyph-contour-extrusion-20261014"'), "3D labels must use the v0.13.47 extruded-text face revision.");
 assert.ok(threeRenderer.includes('roundedRect(context, 20, 27, 5, height - 54, 2.5)') && !threeRenderer.includes('context.arc(46, 67, 15'), "3D labels must use the restrained single accent rail without the previous busy beacon/status treatment.");
 assert.ok(threeRenderer.includes('const edge = parseColor(options.backgroundColor || "#132126", 1);'), "3D label physical sides must use the dark background color instead of the bright accent color.");
 
@@ -153,7 +153,7 @@ assert.ok(threeRenderer.includes('const edge = parseColor(options.backgroundColo
 assert.ok(plant.includes('flowFloorHeight: readNumber("flowFloorHeight", 0.02, 30)'), "Process route Y height must persist up to 30 ft.");
 assert.ok(plant.includes('function worldRouteSegmentPrismFaces') && plant.includes('function addWorldRoutePrism'), "Raised process routes must gain real 3D prism geometry.");
 assert.ok(plant.includes('const elevationFactor=clamp((routeY-.26)/1.05,0,1);'), "Route 3D thickness must increase progressively as Route Y rises.");
-assert.ok(plant.includes('addWorldRoutePrism(slice') && plant.includes('routeThickness/2+highlightThickness/2+.012'), "Moving white route highlights must ride on top of elevated 3D rails.");
+assert.ok(plant.includes('drawWorldRouteMotionArrow(metrics,from,to') && plant.includes('routeThickness/2+.075'), "Moving white route highlights must ride on top of elevated 3D rails.");
 assert.ok(threeRenderer.includes('function createWorldLabelTextTexture'), "Billboard text must render on a separate texture plane.");
 assert.ok(threeRenderer.includes('frontText') && threeRenderer.includes('backText'), "Billboard text must have raised front and rear meshes.");
 assert.ok(threeRenderer.includes('const textExtrude = clamp(Number(options.textExtrudeFeet) || .065'), "3D billboard text must physically protrude from the sign face.");
@@ -173,8 +173,8 @@ assert.ok(plant.includes("matchingLabelColorPreset") && plant.includes("matching
 
 assert.ok(plant.includes('data-label-color-picker') && plant.includes('data-label-color-swatch="plant-teal"'), "Machine label colors must use the integrated custom/preset picker.");
 assert.ok(!plant.includes('data-label-color-preset data-needs-selection'), "Machine labels must not use a separate color preset dropdown.");
-assert.ok(plant.includes('data-label-field="labelAnchorXPercent" data-needs-selection min="-1000" max="1100"'), "Machine label X placement must extend outside machine bounds.");
-assert.ok(plant.includes('machine[field] = clamp(value, -1000, 1100)'), "Machine label anchor edits must persist the extended range.");
+assert.ok(plant.includes('data-label-field="labelAnchorXPercent" data-needs-selection min="-5000" max="5100"'), "Machine label X placement must extend outside machine bounds.");
+assert.ok(plant.includes('machine[field] = clamp(value, -5000, 5100)'), "Machine label anchor edits must persist the extended range.");
 assert.ok(plant.includes('const leaderAnchor = localPoint('), "Out-of-bounds labels must keep their leader attached to the machine surface.");
 assert.ok(plant.includes('machine.labelSizePercent = Math.max(5, Number(input.value) || 100);'), "Machine label size must no longer have a 250 percent ceiling.");
 assert.ok(plant.includes('const labelHeight = Math.max(.25, baseHeight * sizeMultiplier);'), "World-space billboard size must not retain the old 8 ft cap.");

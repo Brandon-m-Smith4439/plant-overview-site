@@ -1745,7 +1745,7 @@
           "labelUseMachineName", "labelText", "labelAbbreviation", "labelTextColor", "labelBackgroundColor", "labelSizePercent", "labelFontWeight", "labelUppercase", "labelShowToday",
           "labelReveal", "labelRetire",
           "labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent", "labelHeightOffset", "labelScreenOffsetX", "labelScreenOffsetY",
-          "labelLineColor", "labelLineWidth", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
+          "labelLineColor", "labelLineWidth", "labelLeaderExtensionFeet", "labelLineOpacity", "labelLineStyle", "labelLineShape", "labelLeaderSide", "labelTargetStyle", "labelTargetSize",
           "processPointerVisible", "processPointerText", "processPointerAnchorXPercent", "processPointerAnchorYPercent", "processPointerAnchorZPercent",
           "processPointerLabelOffset", "processPointerScreenOffsetX", "processPointerScreenOffsetY", "processPointerColor",
           "processPointerWidth", "processPointerOpacity", "processPointerStyle", "processPointerShape",
@@ -5483,6 +5483,7 @@
       machine.labelWorldOffsetX = 0;
       machine.labelWorldOffsetZ = 0;
       machine.labelHeightOffset = 4;
+      machine.labelLeaderExtensionFeet = 0;
       machine.labelRotationY = 0;
       labelVisualStates.delete(String(machine.instanceId));
       persistLayout();

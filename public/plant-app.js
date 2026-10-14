@@ -2521,8 +2521,7 @@
     const wallMargin = Math.max(0.45, Number(radius) || 1.2);
     const beyondFloor=worldX<bounds[0]+wallMargin||worldX>bounds[2]-wallMargin
       || worldZ<bounds[1]+wallMargin||worldZ>bounds[3]-wallMargin;
-    if(beyondFloor && combatController?.isActive?.())
-      return combatPerimeterPassage(worldX,worldZ,wallMargin) && exteriorWalkAllowed(worldX,worldZ,wallMargin);
+    
     if(beyondFloor)return false;
     // Pillars remain solid even if the broad-phase spatial index is stale.
     if (walkHitsStructuralColumn(worldX, worldZ, wallMargin)) return false;
@@ -6401,13 +6400,6 @@
         <button type="button" data-touch-action="crouch" aria-pressed="false">Crouch</button>
         <button type="button" data-touch-action="exit" class="touch-exit">Exit</button>
       </div>
-      <div class="touch-combat-actions" aria-label="Mobile combat controls">
-        <button type="button" data-touch-combat="fire" class="touch-combat-fire">FIRE</button>
-        <button type="button" data-touch-combat="aim" aria-pressed="false">AIM</button>
-        <button type="button" data-touch-combat="reload">RELOAD</button>
-        <button type="button" data-touch-combat="swap">SWAP</button>
-        <button type="button" data-touch-combat="menu">MENU</button>
-      </div>
     `;
     frame.appendChild(firstPersonTouchControls);
 
@@ -6646,8 +6638,7 @@
       firstPersonController?.setTouchCrouch?.(active);
     });
     firstPersonTouchControls.querySelector("[data-touch-action='exit']")?.addEventListener("click", () => {
-      if (combatController?.isActive?.()) combatController.handleEscape?.("mobile-exit");
-      else setWalkMode(false);
+      setWalkMode(false);
     });
     const touchLookPad = firstPersonTouchControls.querySelector("[data-touch-look]");
     let touchLookPointer = null;
@@ -6676,41 +6667,6 @@
       touchLookPad?.classList.remove("active");
     };
     ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => touchLookPad?.addEventListener(type, endTouchLook));
-
-    const touchFireButton = firstPersonTouchControls.querySelector("[data-touch-combat='fire']");
-    const setTouchFire = (active, event) => {
-      event?.preventDefault?.();
-      if (active) event?.currentTarget?.setPointerCapture?.(event.pointerId);
-      touchFireButton?.classList.toggle("active", active);
-      combatController?.setTriggerHeld?.(active);
-    };
-    touchFireButton?.addEventListener("pointerdown", (event) => setTouchFire(true, event));
-    ["pointerup", "pointercancel", "lostpointercapture"].forEach((type) => touchFireButton?.addEventListener(type, (event) => setTouchFire(false, event)));
-
-    const touchAimButton = firstPersonTouchControls.querySelector("[data-touch-combat='aim']");
-    touchAimButton?.addEventListener("click", (event) => {
-      event.preventDefault();
-      if (!combatController?.isActive?.()) return;
-      const activeAim = touchAimButton.getAttribute("aria-pressed") !== "true";      touchAimButton.setAttribute("aria-pressed", String(activeAim));
-      touchAimButton.classList.toggle("active", activeAim);
-      combatController.setAiming?.(activeAim);
-    });
-    firstPersonTouchControls.querySelector("[data-touch-combat='reload']")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      combatController?.reload?.();
-    });
-    firstPersonTouchControls.querySelector("[data-touch-combat='swap']")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      combatController?.toggleWeapon?.();
-      if (touchAimButton) {
-        touchAimButton.setAttribute("aria-pressed", "false");
-        touchAimButton.classList.remove("active");
-      }
-    });
-    firstPersonTouchControls.querySelector("[data-touch-combat='menu']")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      combatController?.handleEscape?.("mobile-menu");
-    });
 
     firstPersonHud.querySelector("[data-first-person-action='capture']")?.addEventListener("click", () => firstPersonController?.capture());
     firstPersonHud.querySelector("[data-first-person-action='exit']")?.addEventListener("click", () => setWalkMode(false));
@@ -6984,8 +6940,7 @@
   }
 
   function displayedWallSections() {
-    // In combat modes, both perimeter walls have a real, aligned narrow exit.
-    // The editor and normal construction timeline retain the original walls.
+
     const sections = wallSections();
     const roofProfile = structuralHeightProfile();
     if (!state.wallGeometry.extendToRoof) return sections;
@@ -7013,7 +6968,7 @@
         centerZ: modelCenter()[1] + state.panZ,
         yaw: state.yaw,
         pitch: state.pitch,
-        fov: Number.isFinite(state.combatAimFov) ? state.combatAimFov : state.walkFov,
+        fov: state.walkFov,
         near: WALK_NEAR_CLIP,
         far: Math.max(900, renderPerformance.walkDrawDistance() * 3),
       };
@@ -8545,7 +8500,7 @@
     const wall = blendHexColors(state.paint.wallBefore, state.paint.wallAfter, painted);
     displayedWallSections().forEach((section) => {
       const inheritedId=String(section.id).split("-")[0];
-      if (state.walls[section.id] !== false && (combatController?.isActive?.() || state.walls[inheritedId] !== false))
+      if (state.walls[section.id] !== false && state.walls[inheritedId] !== false)
         box({ ...section, color: wall });
     });
   }
@@ -9841,9 +9796,6 @@
     const renderComponents = lodLevel >= 2 ? visibleComponents : representativeDesignComponents(visibleComponents);
     try {
       renderComponents.forEach((component) => {
-      if (combatController?.isActive?.() && carrierGlassComponent(machine,component) &&
-        combatController.isGlassShattered?.(machine.instanceId||machine.id||machine.name,
-          component.id||component.name||"glass")) return;
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
       if (component.type === "box" || component.type === "glassPanel" || component.type === "text") {
         drawDesignBox(machine, component, design, componentAlpha, grow);
@@ -10067,24 +10019,9 @@
 
 
 
-  // A single depth-sorted viewmodel face pass prevents one part's rear
-  // polygon painting over another part's front, the source of see-through edges.
-
-
-  const ALLY_LABEL_FADE_DISTANCE = 78;
-  const ALLY_OUTLINE_DISTANCE = 118;
-  const ALLY_LABEL_HIDE_DISTANCE = 150;
-
-
-
-
 
   function drawMachineShape(machine, alpha, grow, time) {
     const customDesign = machine.designId ? designLibrary[machine.designId] : null;
-    if (combatController?.isActive?.() && machine.combatState && combatEnemyMachine(machine)) {
-      drawCombatEnemy(machine, alpha, grow, time);
-      return;
-    }
     const lodLevel = machineLodLevel(machine);
     if (lodLevel < 2) {
       box({
@@ -10211,7 +10148,7 @@
       box(localBox(machine,0,0,machine.w,machine.d,1.3*grow,"#333a3c"),alpha,1);
       const cabWidth = machine.w*.3;
       box(localBox(machine,0,.8,cabWidth,Math.max(.5,machine.d-1.6),4.3*grow,"#e1e5e2",1.2*grow),alpha,1);
-      if (!proceduralGlassShattered(machine,"procedural-windshield")) box(localBox(machine,cabWidth*.15,.55,cabWidth*.65,.3,1.5*grow,"#8fc6d4",3.5*grow),alpha*.9,1);
+      box(localBox(machine,cabWidth*.15,.55,cabWidth*.65,.3,1.5*grow,"#8fc6d4",3.5*grow),alpha*.9,1);
       const rackStart = cabWidth+.6;
       const peak = Math.max(3,topHeight);
       localLine(machine,[rackStart,1.3*grow,.5],[machine.w-.5,1.3*grow,.5],"#cfd5d2",3,alpha);
@@ -10222,7 +10159,7 @@
       }
       for (let panel=0; panel<4; panel++) {
         const offset = rackStart+1.2+panel*Math.max(1.4,(machine.w-rackStart-3)/3);
-        if (!proceduralGlassShattered(machine,`procedural-glass-${panel}`)) box(localBox(machine,Math.min(offset,machine.w-1.3),1.2,.45,Math.max(.5,machine.d-2.4),Math.max(2,machine.h*.72*grow),colors.glass,1.45*grow),alpha*.72,1);
+        box(localBox(machine,Math.min(offset,machine.w-1.3),1.2,.45,Math.max(.5,machine.d-2.4),Math.max(2,machine.h*.72*grow),colors.glass,1.45*grow),alpha*.72,1);
       }
       [[cabWidth*.25,.2],[cabWidth*.75,.2],[machine.w*.65,.2],[machine.w*.88,.2]].forEach(([x,z]) => {
         box(localBox(machine,x-.55,z,.95,1.2,1.0*grow,"#1d2224",-.15),alpha,1);
@@ -10239,8 +10176,8 @@
         localLine(machine,[x,1,machine.d-.6],[x,topHeight,machine.d/2],machine.color,isTruck ? 3 : 2.5,alpha);
       }
       localLine(machine,[.5,topHeight,machine.d/2],[machine.w-.5,topHeight,machine.d/2],machine.color,isTruck ? 4 : 3,alpha);
-      if (!proceduralGlassShattered(machine,"procedural-glass-left")) box(localBox3d(machine,1,.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass,1.4),alpha*.54,1);
-      if (!proceduralGlassShattered(machine,"procedural-glass-right")) box(localBox3d(machine,1,machine.d-Math.max(.3,machine.d*.12)-.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass,1.4),alpha*.54,1);
+      box(localBox3d(machine,1,.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass,1.4),alpha*.54,1);
+      box(localBox3d(machine,1,machine.d-Math.max(.3,machine.d*.12)-.9,Math.max(.5,machine.w-2),Math.max(.3,machine.d*.12),Math.max(2,machine.h*.72),colors.glass,1.4),alpha*.54,1);
       const wheelXs = isTruck ? [1.5,machine.w/2,machine.w-1.5] : [1,machine.w-1];
       wheelXs.forEach((x) => {
         [0.7,machine.d-.7].forEach((z) => {
@@ -10287,7 +10224,7 @@
       const panelCount = state.stageFloat >= stages.length - 1 ? 5 : 3;
       for (let panel=0; panel<panelCount; panel++) {
         const offset = 2.2 + panel * Math.max(1.3,(machine.w-5)/Math.max(1,panelCount-1));
-        if (!proceduralGlassShattered(machine,`procedural-lite-${panel}`)) box(localBox(machine,Math.min(offset,machine.w-1),1,.55,Math.max(.5,machine.d-2),(machine.h+4)*grow,colors.glass),alpha*.82,1);
+        box(localBox(machine,Math.min(offset,machine.w-1),1,.55,Math.max(.5,machine.d-2),(machine.h+4)*grow,colors.glass),alpha*.82,1);
       }
     } else if (machine.type === "room") {
       box(machine,alpha,grow);
@@ -10319,7 +10256,7 @@
         localLine3d(machine,[machine.w*.12,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],[machine.w*.88,drainHeight+.081,machine.d*.12 + machine.d*.76*ratio],"#879194",1,alpha);
       }
     } else if (machine.type === "animatedGlass") {
-      if (!proceduralGlassShattered(machine,"procedural-glass-body")) box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, color: machine.color || colors.glass, y: Number(machine.renderY ?? machine.y) || 0 }, alpha * .72, grow);
+      box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, color: machine.color || colors.glass, y: Number(machine.renderY ?? machine.y) || 0 }, alpha * .72, grow);
       localLine3d(machine,[machine.w/2,0,machine.d/2],[machine.w/2,machine.h*grow,machine.d/2],"rgba(255,255,255,.6)",1.2,alpha*.65);
     } else if (machine.type === "animatedBox") {
       box({ ...machine, rotationY: Number(machine.rotationY ?? machine.rotation) || 0, y: Number(machine.renderY ?? machine.y) || 0 },alpha,grow);
@@ -10744,41 +10681,10 @@
     // Moving machines can enter the view from outside their saved index cell.
     const sourceMachines = new Set(indexedMachines);
     machines.forEach((machine) => {
-      if (machineHasLayoutMotion(machine) || (state.cameraMode === "walk" && visibilitySensitiveMachine(machine)) || (combatController?.isActive?.() && combatEnemyMachine(machine))) sourceMachines.add(machine);
+      if (machineHasLayoutMotion(machine) || (state.cameraMode === "walk" && visibilitySensitiveMachine(machine))) sourceMachines.add(machine);
     });
-    if (combatController?.isActive?.()) combatEnemyMachines().forEach((machine) => sourceMachines.add(machine));
     for (const machine of sourceMachines) {
       if (machine.visible === false) continue;
-      if (combatController?.isEndlessZombie?.() && combatEnemyMachine(machine) && !machine.combatSpawned) continue;
-      if (combatController?.isActive?.() && combatEnemyMachine(machine)) {
-        const characterId=String(machine.instanceId || machine.id || machine.name || "");
-        if (combatController.isCharacterOccupied?.(characterId)) continue;
-      }
-      // Network-synthesized co-op zombies may not have stage fields. Stage NaN
-      // used to cull all body polygons while leaving stray foot primitives.
-      const liveEnemy=Boolean(combatController?.isActive?.() && combatEnemyMachine(machine)
-        && combatController.enemyRenderState?.(machine.instanceId,time));
-      const alpha = liveEnemy ? 1 : stageAlpha(
-        Number.isFinite(Number(machine.reveal)) ? Number(machine.reveal) : 0,
-        Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99);
-      if (alpha <= .01) continue;
-      let rendered = machineHasLayoutMotion(machine) ? animatedMachine(machine, time) : machine;
-      if (combatController?.isActive?.() && combatEnemyMachine(machine)) {
-        const combatState = combatController.enemyRenderState?.(machine.instanceId, time);
-        if (combatState) {
-          rendered = {
-            ...rendered,
-            x: Number(combatState.x),
-            z: Number(combatState.z),
-            rotationY: Number(combatState.rotationY),
-            rotation: Number(combatState.rotationY),
-            rotationZ: (Number(rendered.rotationZ) || 0) + (combatState.defeated ? 0 : combatState.hitReact * 5),
-            renderY: (Number(rendered.renderY ?? rendered.y) || 0) + (Number(combatState.elevation)||0)
-              + (combatState.defeated ? 0 : Math.abs(Math.sin(combatState.walkPhase || 0)) * .08 * combatState.movementBlend),
-            combatState,
-          };
-        }
-      }
       const visibilityBounds = state.cameraMode === "walk" ? firstPersonVisibilityBounds(machine, rendered, time) : rendered;
       let walkDistanceAlpha = 1;
       if (state.cameraMode === "walk") {
@@ -11060,7 +10966,6 @@
     const groups = new Map();
     machineEntries.forEach((entry) => {
       const { machine, rendered, alpha, grow } = entry;
-      if (combatController?.isActive?.() && combatEnemyMachine(machine)) return;
       const design = rendered.designId ? designLibrary[rendered.designId] : null;
       const lodLevel = machineLodLevel(rendered);
       if (
@@ -11224,12 +11129,7 @@
       batch.revisions.push(revision);
     };
     for (const { machine, rendered, alpha, grow } of entries) {
-      if (combatController?.isActive?.() && combatEnemyMachine(machine)) continue;
       const design = designLibrary[rendered.designId];
-      // Glass must pass the per-component shattered-state renderer instead
-      // of an instanced cache that keeps intact glass around after a hit.
-      if(combatController?.isActive?.() && design?.components &&
-         visibleDesignComponents(design,time).some(part=>carrierGlassComponent(rendered,part)))continue;
       if (!design || !machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 2
         || state.selectedMachineIds.has(machine.instanceId) || alpha < .9999 || grow < .9999) continue;
       const partition = designRenderPartition(design);
@@ -11421,7 +11321,7 @@
     const instancedProxyEntries = typeof depthRenderer.addBoxInstances === "function"
       ? machineEntries.filter(({ machine, rendered, alpha, grow }) => (
           machineLodLevel(rendered) < 2 && alpha >= .985 && grow >= .999
-          && !(combatController?.isActive?.() && combatEnemyMachine(machine))
+
         ))
       : [];
     if (instancedProxyEntries.length) {
@@ -11468,7 +11368,6 @@
         animated ? Math.floor(time / (renderPerformance.animationSampleMs?.() || 33)) : "static",
         design ? objectRenderIdentity(design) : "",
         machineCurveSegments(rendered),
-        combatController?.isActive?.() ? combatController.glassRevision?.() || 0 : 0,
       ].join("|");
       drawRetainedObject(`plant:machine:${machine.instanceId}`, revision, () => {
         drawCrane(rendered,alpha);
@@ -11481,19 +11380,9 @@
     // route sections correctly.
     const todayProductionFlow = isTodayStage() ? drawTodayProductionFlow(machineEntries, time) : null;
 
-    // World-space labels and Combat Mode effects are physical depth-tested scene geometry.
-    // Submitting impacts, blood, rockets and tracers before the scene is presented keeps
-    // them from bleeding through machines, walls or structural pillars.
     drawWorldMachineLabels(machineEntries, time);
-    drawCombatRemotePlayers(time);
-    drawCombatWorldEffects(time);
     state.visibleAnimationsActive = state.visibleAnimationsActive || Boolean(depthRenderer.worldLabelsAnimating?.());
     presentPhysicalScene?.();
-    // Remote-player identity tags are screen-space UI, so draw them only after
-    // the depth scene has been presented. Each tag shows both the lobby player
-    // name and the plant character they selected.
-    drawCombatRemotePlayerLabels(time);
-
     // Editor marks and route editing handles are UI overlays.
     machineEntries.forEach(({ machine, rendered }) => {
       drawOverlapIndicator(machine, overlappingIds);
@@ -11799,10 +11688,6 @@
     state.lastRenderedAt = time;
     updateCanvasSize();
     updateSkyBackground();
-    const zombieExterior=combatController?.isActive?.()&&combatController?.getMode?.()==="zombie";
-    const desertExterior=combatController?.isActive?.()&&combatController?.getMode?.()==="combat";
-    modelFrame.classList.toggle("combat-zombie-wasteland",Boolean(zombieExterior));
-    modelFrame.classList.toggle("combat-desert-exterior",Boolean(desertExterior));
     const blend = 1 - Math.pow(.93, elapsed / 16.667);
     state.stageFloat += (state.stage - state.stageFloat) * blend;
     if (Math.abs(state.stage - state.stageFloat) < .0005) state.stageFloat = state.stage;
@@ -11823,21 +11708,10 @@
     labelRects = [];
     renderPerformance.beginPhase?.("structure");
     const bounds = floorBounds();
-    if(zombieExterior||desertExterior)drawRetainedObject(
-      "plant:survival-exterior",`${bounds.join("|")}|${zombieExterior?"wasteland":"desert"}|${combatController?.explosiveRevision?.()||0}`,drawCombatExterior
-    );
-    if(zombieExterior){
-      // Visibility-dependent forest is retained per player travel cell, not
-      // permanently frozen at the initial camera location.
-      const camX=modelCenter()[0]+state.panX,camZ=modelCenter()[1]+state.panZ;
-      drawRetainedObject("plant:dead-forest",
-        `${bounds.join("|")}|${Math.floor(camX/24)}|${Math.floor(camZ/24)}`,
-        ()=>drawDeadForest(time));
-    }
     drawRetainedObject("plant:floor", `${bounds.join("|")}|${colors.floor}`, drawFloor);
     drawRetainedObject(
       "plant:shell",
-      `${bounds.join("|")}|${paintProgress(state.paint.wallStageId, 3).toFixed(3)}|${state.paint.wallBefore}|${state.paint.wallAfter}|${JSON.stringify(state.walls)}|${state.cameraMode}|${JSON.stringify(state.roof)}|${combatController?.isActive?.()?"portal-walls":"normal-walls"}`,
+      `${bounds.join("|")}|${paintProgress(state.paint.wallStageId, 3).toFixed(3)}|${state.paint.wallBefore}|${state.paint.wallAfter}|${JSON.stringify(state.walls)}|${state.cameraMode}|${JSON.stringify(state.roof)}`,
       drawShell,
     );
     drawRetainedObject(
@@ -11861,8 +11735,6 @@
       renderPerformance.beginPhase?.("overlays");
     }
     drawLayoutRulers();
-    drawCombatKillerOverlay(time);
-    drawFirstPersonCombatWeapon(time);
     renderPerformance.setRendererStats?.(depthRenderer.getStats?.());
     renderPerformance.endPhase?.();
     renderPerformance.recordFrame(performance.now() - frameStartedAt);
@@ -12241,12 +12113,6 @@
     if (!typing && state.cameraMode === "walk") {
       if (event.key === "Escape") {
         event.preventDefault();
-        if (combatController?.isActive?.()) {
-          // The first-person controller owns Esc in Combat Mode. Its capture-phase
-          // handler routes to the dedicated combat pause menu. After death, the
-          // combat controller intentionally ignores Esc so the death menu stays authoritative.
-          return;
-        }
         openFirstPersonOptions(true);
         return;
       }

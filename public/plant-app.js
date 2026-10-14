@@ -812,9 +812,9 @@
       labelSizePercent: Math.max(5, Number(machine.labelSizePercent) || 100),
       labelFontWeight: ["regular", "semibold", "bold"].includes(machine.labelFontWeight) ? machine.labelFontWeight : "semibold",
       labelUppercase: machine.labelUppercase === true,
-      labelAnchorXPercent: clamp(Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50, -1000, 1100),
-      labelAnchorYPercent: clamp(Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100, -1000, 1100),
-      labelAnchorZPercent: clamp(Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50, -1000, 1100),
+      labelAnchorXPercent: clamp(Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50, -5000, 5100),
+      labelAnchorYPercent: clamp(Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100, -5000, 5100),
+      labelAnchorZPercent: clamp(Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50, -5000, 5100),
       labelHeightOffset: clamp(Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4, 0, 200),
       // v0.13.38: machine labels now live at stable world-space offsets.
       // Keep the legacy screen offsets in saved layouts for backward compatibility,
@@ -833,7 +833,8 @@
       labelScreenOffsetX: clamp(Number.isFinite(Number(machine.labelScreenOffsetX)) ? Number(machine.labelScreenOffsetX) : 0, -400, 400),
       labelScreenOffsetY: clamp(Number.isFinite(Number(machine.labelScreenOffsetY)) ? Number(machine.labelScreenOffsetY) : 0, -400, 400),
       labelLineColor: /^#[0-9a-f]{6}$/i.test(String(machine.labelLineColor || "")) ? machine.labelLineColor : "#52b7aa",
-      labelLineWidth: clamp(Number.isFinite(Number(machine.labelLineWidth)) ? Number(machine.labelLineWidth) : 1.65, .5, 10),
+      labelLineWidth: clamp(Number.isFinite(Number(machine.labelLineWidth)) ? Number(machine.labelLineWidth) : 1.65, .5, 24),
+      labelLeaderExtensionFeet: clamp(Number.isFinite(Number(machine.labelLeaderExtensionFeet)) ? Number(machine.labelLeaderExtensionFeet) : 0, 0, 100),
       labelLineOpacity: clamp(Number.isFinite(Number(machine.labelLineOpacity)) ? Number(machine.labelLineOpacity) : 100, 10, 100),
       labelLineStyle: ["solid", "dashed", "dotted"].includes(machine.labelLineStyle) ? machine.labelLineStyle : "solid",
       labelLineShape: ["straight", "elbow"].includes(machine.labelLineShape) ? machine.labelLineShape : "straight",
@@ -845,9 +846,9 @@
       processStepLabelText: String(machine.processStepLabelText || "").trim().slice(0, 80),
       processPointerVisible: machine.processPointerVisible !== false,
       processPointerText: String(machine.processPointerText || "").trim(),
-      processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), -1000, 1100),
-      processPointerAnchorYPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorYPercent)) ? Number(machine.processPointerAnchorYPercent) : (Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100), -1000, 1100),
-      processPointerAnchorZPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorZPercent)) ? Number(machine.processPointerAnchorZPercent) : (Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50), -1000, 1100),
+      processPointerAnchorXPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorXPercent)) ? Number(machine.processPointerAnchorXPercent) : (Number.isFinite(Number(machine.labelAnchorXPercent)) ? Number(machine.labelAnchorXPercent) : 50), -5000, 5100),
+      processPointerAnchorYPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorYPercent)) ? Number(machine.processPointerAnchorYPercent) : (Number.isFinite(Number(machine.labelAnchorYPercent)) ? Number(machine.labelAnchorYPercent) : 100), -5000, 5100),
+      processPointerAnchorZPercent: clamp(Number.isFinite(Number(machine.processPointerAnchorZPercent)) ? Number(machine.processPointerAnchorZPercent) : (Number.isFinite(Number(machine.labelAnchorZPercent)) ? Number(machine.labelAnchorZPercent) : 50), -5000, 5100),
       processPointerLabelOffset: clamp(Number.isFinite(Number(machine.processPointerLabelOffset)) ? Number(machine.processPointerLabelOffset) : (Number.isFinite(Number(machine.labelHeightOffset)) ? Number(machine.labelHeightOffset) : 4), 0, 60),
       processPointerScreenOffsetX: clamp(Number.isFinite(Number(machine.processPointerScreenOffsetX)) ? Number(machine.processPointerScreenOffsetX) : (Number.isFinite(Number(machine.labelScreenOffsetX)) ? Number(machine.labelScreenOffsetX) : 0), -500, 500),
       processPointerScreenOffsetY: clamp(Number.isFinite(Number(machine.processPointerScreenOffsetY)) ? Number(machine.processPointerScreenOffsetY) : (Number.isFinite(Number(machine.labelScreenOffsetY)) ? Number(machine.labelScreenOffsetY) : 0), -500, 500),
@@ -1274,8 +1275,8 @@
   // destination object. 0..100 is the object itself; the extended range gives
   // enough room to route cleanly around equipment without creating fake helper
   // objects just to hold an endpoint.
-  const PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -1000;
-  const PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 1100;
+  const PROCESS_CONNECTION_ANCHOR_MIN_PERCENT = -5000;
+  const PROCESS_CONNECTION_ANCHOR_MAX_PERCENT = 5100;
   const PROCESS_FLOW_MAX_PIVOTS = 24;
 
   function normalizeProcessFlowPivotPoints(value) {
@@ -4560,9 +4561,9 @@
           <div class="label-settings-section">
             <div class="label-settings-heading"><strong>Position</strong><span>0–100% is inside the machine. Values below 0 or above 100 move the label outside its bounds, just like process-route endpoints.</span></div>
             <div class="label-format-grid label-position-grid">
-              <label>Label X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="-1000" max="1100" step="5"></label>
-              <label>Label Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="-1000" max="1100" step="5"></label>
-              <label>Label Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="-1000" max="1100" step="5"></label>
+              <label>Label X (%)<input type="number" data-label-field="labelAnchorXPercent" data-needs-selection min="-5000" max="5100" step="5"></label>
+              <label>Label Y (%)<input type="number" data-label-field="labelAnchorYPercent" data-needs-selection min="-5000" max="5100" step="5"></label>
+              <label>Label Z (%)<input type="number" data-label-field="labelAnchorZPercent" data-needs-selection min="-5000" max="5100" step="5"></label>
               <label>Extra lift Y (ft)<input type="number" data-label-field="labelHeightOffset" data-needs-selection min="0" max="200" step="0.5"></label>
               <label>Facing offset (°)<input type="number" data-label-field="labelRotationY" data-needs-selection min="-180" max="180" step="5"></label>
             </div>
@@ -4575,7 +4576,8 @@
               <label>Camera follow speed (%)<input type="number" data-label-field="labelTurnSpeedPercent" data-needs-selection min="25" max="200" step="5"></label>
               <label>Zoom min size (%)<input type="number" data-label-field="labelZoomMinPercent" data-needs-selection min="70" max="100" step="1"></label>
               <label>Zoom max size (%)<input type="number" data-label-field="labelZoomMaxPercent" data-needs-selection min="100" max="140" step="1"></label>
-              <label>Leader width<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="10" step="0.25"></label>
+              <label>Leader thickness<input type="number" data-label-field="labelLineWidth" data-needs-selection min="0.5" max="24" step="0.5" title="Physical width of the leader line"></label>
+              <label>Extra leader reach (ft)<input type="number" data-label-field="labelLeaderExtensionFeet" data-needs-selection min="0" max="100" step="1" title="Move the 3D label farther from its machine while keeping the connector attached"></label>
               <label>Leader opacity (%)<input type="number" data-label-field="labelLineOpacity" data-needs-selection min="10" max="100" step="5"></label>
             </div>
           </details>
@@ -4627,21 +4629,21 @@
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>4 · Start point · source object</legend>
-            <p>X and Z place the floor-route start relative to the source object. Values below 0% or above 100% move it outside the object. The range now extends to -1000% / 1100%. You can also drag the S handle directly on the floor. Y is retained for older saved routes; the flowing route height is controlled below.</p>
+            <p>X and Z place the floor-route start relative to the source object. Values below 0% or above 100% move it outside the object. The range now extends to -5000% / 5100%. You can also drag the S handle directly on the floor. Y is retained for older saved routes; the flowing route height is controlled below.</p>
             <div class="process-pointer-grid">
-              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="-1000" max="1100" step="5"></label>
-              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="-1000" max="1100" step="5"></label>
-              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" min="-1000" max="1100" step="5"></label>
+              <label>Start X (%)<input type="number" data-process-connection-field="startAnchorXPercent" min="-5000" max="5100" step="5"></label>
+              <label>Start Y (%)<input type="number" data-process-connection-field="startAnchorYPercent" min="-5000" max="5100" step="5"></label>
+              <label>Start Z (%)<input type="number" data-process-connection-field="startAnchorZPercent" min="-5000" max="5100" step="5"></label>
             </div>
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-start">Center source point</button></div>
           </fieldset>
           <fieldset class="process-pointer-controls">
             <legend>5 · End point · destination object</legend>
-            <p>X and Z place the floor-route end relative to the destination object. Values below 0% or above 100% move it outside the object. The range now extends to -1000% / 1100%. You can also drag the E handle directly on the floor. Y is retained for older saved routes; the flowing route height is controlled below.</p>
+            <p>X and Z place the floor-route end relative to the destination object. Values below 0% or above 100% move it outside the object. The range now extends to -5000% / 5100%. You can also drag the E handle directly on the floor. Y is retained for older saved routes; the flowing route height is controlled below.</p>
             <div class="process-pointer-grid">
-              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="-1000" max="1100" step="5"></label>
-              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="-1000" max="1100" step="5"></label>
-              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" min="-1000" max="1100" step="5"></label>
+              <label>End X (%)<input type="number" data-process-connection-field="endAnchorXPercent" min="-5000" max="5100" step="5"></label>
+              <label>End Y (%)<input type="number" data-process-connection-field="endAnchorYPercent" min="-5000" max="5100" step="5"></label>
+              <label>End Z (%)<input type="number" data-process-connection-field="endAnchorZPercent" min="-5000" max="5100" step="5"></label>
             </div>
             <div class="process-pointer-actions"><button type="button" data-editor-action="center-process-connection-end">Center destination point</button></div>
           </fieldset>
@@ -5334,7 +5336,7 @@
         } else if (["labelAnchorXPercent", "labelAnchorYPercent", "labelAnchorZPercent"].includes(field)) {
           const value = Number(input.value);
           if (Number.isFinite(value)) {
-            machine[field] = clamp(value, -1000, 1100);
+            machine[field] = clamp(value, -5000, 5100);
             // Extended anchors replace the old world X/Z offset controls. Once
             // the user moves an anchor, clear legacy offsets so placement is exact.
             machine.labelWorldOffsetX = 0;
@@ -5371,7 +5373,10 @@
           machine.labelPriority = ["automatic", "major", "normal", "support"].includes(input.value) ? input.value : "automatic";
         } else if (field === "labelLineWidth") {
           const value = Number(input.value);
-          if (Number.isFinite(value)) machine.labelLineWidth = clamp(value, .5, 10);
+          if (Number.isFinite(value)) machine.labelLineWidth = clamp(value, .5, 24);
+        } else if (field === "labelLeaderExtensionFeet") {
+          const value = Number(input.value);
+          if (Number.isFinite(value)) machine.labelLeaderExtensionFeet = clamp(value, 0, 100);
         } else if (field === "labelLineOpacity") {
           const value = Number(input.value);
           if (Number.isFinite(value)) machine.labelLineOpacity = clamp(value, 10, 100);
@@ -7890,6 +7895,37 @@
     depthRenderer.addPolygon?.(points,route.color,style==="ring"?opacity*.55:opacity,null,1,{transparent:true});
   }
 
+
+  // Each moving highlight is a directional glyph, not a white dash.
+  // The point is always later on the measured path than its shaft.
+  function drawWorldRouteMotionArrow(metrics, from, to, width, opacity, surfaceLift) {
+    if (to - from < .45 || typeof depthRenderer.addPolygon !== "function") return;
+    const tip = worldRoutePointAt(metrics, to);
+    const base = worldRoutePointAt(metrics, from);
+    const localTail = worldRoutePointAt(metrics, Math.max(from, to - .8));
+    if (!tip || !base || !localTail) return;
+    const dx = tip[0] - localTail[0], dz = tip[2] - localTail[2];
+    const magnitude = Math.hypot(dx, dz);
+    if (magnitude < .001) return;
+    const ux = dx / magnitude, uz = dz / magnitude, nx = -uz, nz = ux;
+    const length = Math.min(3.9, to - from), headLength = Math.min(length * .53, Math.max(.65, width * 1.3));
+    const baseCenter = worldRoutePointAt(metrics, Math.max(from, to - length));
+    if (!baseCenter) return;
+    const shoulder = [tip[0] - ux * headLength, tip[1], tip[2] - uz * headLength];
+    const tailWidth = Math.max(.15, width * .35), headWidth = Math.max(.43, width * 1.05);
+    const at = (p, side, radius) => [p[0] + nx * side * radius, p[1] + surfaceLift, p[2] + nz * side * radius];
+    const glowWhite = "#f2ffff";
+    depthRenderer.addPolygon(
+      [at(baseCenter,1,tailWidth),at(shoulder,1,tailWidth),
+       at(shoulder,-1,tailWidth),at(baseCenter,-1,tailWidth)],
+      glowWhite, opacity, null, 1, {transparent:opacity<1},
+    );
+    depthRenderer.addPolygon(
+      [at(shoulder,1,headWidth),at(tip,0,0),at(shoulder,-1,headWidth)],
+      glowWhite, opacity, null, 1, {transparent:opacity<1},
+    );
+  }
+
   function drawFloorProcessFlow(fromEntry,toEntry,connection,time){
     const route=processRouteTagDescriptor(fromEntry,toEntry,connection);if(!route?.worldPath?.length)return route;
     const opacity=clamp(Number(connection.opacity)||100,5,100)/100;
@@ -7898,6 +7934,13 @@
     const animationTime=effectiveAnimationTime(time);
     const speedFeetPerSecond=clamp(Number(connection.flowSpeed??42),0,180)*.12;
     const style=["solid","dashed","dotted"].includes(connection.style)?connection.style:"solid";
+    const metrics=worldRouteMetrics(route.worldPath);
+    const arrowSize=Math.max(coreWidth*2.4,clamp(Number(connection.endSize)||3.2,1,14)*.22);
+    // Stop the rail before the endpoint arrow so neither the glowing core nor
+    // a moving indicator obscures its triangular head.
+    const arrowClearance=connection.endStyle==="arrow"?Math.min(metrics.total*.38,arrowSize*.90):0;
+    const flowDistance=Math.max(0,metrics.total-arrowClearance);
+    const drawnPath=arrowClearance>0?worldRouteSlice(metrics,0,flowDistance):route.worldPath;
 
     // Near the floor the route stays a clean ribbon. As Route Y is raised, the
     // same path progressively gains vertical thickness and becomes a physical
@@ -7906,35 +7949,29 @@
     const elevationFactor=clamp((routeY-.26)/1.05,0,1);
     const routeThickness=Math.max(.06,coreWidth*(.16+elevationFactor*.68));
     if(elevationFactor>.01){
-      addWorldRoutePrism(route.worldPath,coreWidth*(2.15+glow*.62),routeThickness*1.45,route.color,opacity*(.06+glow*.045),0);
-      addWorldRoutePrism(route.worldPath,coreWidth*1.45,routeThickness*1.08,route.color,opacity*.34,0);
-      addWorldRoutePrism(route.worldPath,coreWidth,routeThickness,route.color,opacity*.90,0);
+      addWorldRoutePrism(drawnPath,coreWidth*(2.15+glow*.62),routeThickness*1.45,route.color,opacity*(.06+glow*.045),0);
+      addWorldRoutePrism(drawnPath,coreWidth*1.45,routeThickness*1.08,route.color,opacity*.34,0);
+      addWorldRoutePrism(drawnPath,coreWidth,routeThickness,route.color,opacity*.90,0);
     }else{
-      addWorldRouteRibbon(route.worldPath,coreWidth*(2.5+glow*.9),route.color,opacity*(.08+glow*.055),-.015);
-      addWorldRouteRibbon(route.worldPath,coreWidth*1.55,route.color,opacity*.34,.005);
-      addWorldRouteRibbon(route.worldPath,coreWidth,route.color,opacity*.88,.018);
+      addWorldRouteRibbon(drawnPath,coreWidth*(2.5+glow*.9),route.color,opacity*(.08+glow*.055),-.015);
+      addWorldRouteRibbon(drawnPath,coreWidth*1.55,route.color,opacity*.34,.005);
+      addWorldRouteRibbon(drawnPath,coreWidth,route.color,opacity*.88,.018);
     }
 
-    const metrics=worldRouteMetrics(route.worldPath);
-    if(metrics.total>.01&&speedFeetPerSecond>0){
+    if(flowDistance>.6&&speedFeetPerSecond>0){
       const dashLength=style==="dotted"?1.35:style==="dashed"?4.5:3.4;
       const gapLength=style==="dotted"?5.6:style==="dashed"?6.6:8.8;
       const period=dashLength+gapLength;
       const phase=((animationTime/1000*speedFeetPerSecond)%period+period)%period;
       // Move the white highlight from the route source toward its destination.
       // The previous world-space conversion advanced the pattern backward.
-      for(let start=phase-period;start<metrics.total;start+=period){
-        const from=Math.max(0,start),to=Math.min(metrics.total,start+dashLength);if(to<=from)continue;
-        const slice=worldRouteSlice(metrics,from,to);
-        if(elevationFactor>.01){
-          const highlightThickness=Math.max(.045,routeThickness*.20);
-          addWorldRoutePrism(slice,Math.max(.12,coreWidth*.38),highlightThickness,"#eaffff",opacity*.98,routeThickness/2+highlightThickness/2+.012);
-        }else{
-          addWorldRouteRibbon(slice,Math.max(.12,coreWidth*.38),"#eaffff",opacity*.98,.045);
-        }
+      for(let start=phase-period;start<flowDistance;start+=period){
+        const from=Math.max(0,start),to=Math.min(flowDistance,start+dashLength);if(to<=from)continue;
+        drawWorldRouteMotionArrow(metrics,from,to,coreWidth,opacity*.98,
+          elevationFactor>.01?routeThickness/2+.075:.07);
       }
     }
-    drawWorldProcessEndMarker(route,coreWidth,opacity,elevationFactor>.01?routeThickness/2+.035:.035);
+    drawWorldProcessEndMarker(route,coreWidth,opacity,elevationFactor>.01?routeThickness/2+.11:.11);
     return route;
   }
 
@@ -11217,6 +11254,63 @@
   // old outline pass made rear columns show through solid machines. Sorting both
   // object types together gives the expected result: rear columns are covered by
   // machinery and front columns remain visible without any see-through outline.
+
+  // Use world-space solids rather than WebGL line primitives: WebGL ignores
+  // requested line widths on many devices, making the old label leaders thin.
+  function drawPhysicalLabelLeader(from, to, color, width, opacity, style = "solid", shape = "straight") {
+    if (!from || !to || typeof depthRenderer.addPolygon !== "function") return;
+    const dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
+    const length = Math.hypot(dx, dy, dz);
+    if (length < .01) return;
+    const thickness = clamp(Number(width) || 1.65, .5, 24) * .085;
+    const points = shape === "elbow"
+      ? [from, [from[0], to[1], from[2]], to]
+      : [from, to];
+    const paintSegment = (a, b) => {
+      const vx = b[0] - a[0], vy = b[1] - a[1], vz = b[2] - a[2];
+      const distance = Math.hypot(vx, vy, vz);
+      if (distance < .005) return;
+      const dir = [vx / distance, vy / distance, vz / distance];
+      const reference = Math.abs(dir[1]) > .89 ? [1, 0, 0] : [0, 1, 0];
+      const cross = [
+        dir[1] * reference[2] - dir[2] * reference[1],
+        dir[2] * reference[0] - dir[0] * reference[2],
+        dir[0] * reference[1] - dir[1] * reference[0],
+      ];
+      const magnitude = Math.max(.001, Math.hypot(...cross));
+      const u = cross.map(v => v / magnitude * thickness / 2);
+      const v = [
+        dir[1] * u[2] - dir[2] * u[1],
+        dir[2] * u[0] - dir[0] * u[2],
+        dir[0] * u[1] - dir[1] * u[0],
+      ];
+      const corner = (center, uSign, vSign) => center.map((c, i) => c + u[i] * uSign + v[i] * vSign);
+      const ends = [a, b].map(point => [
+        corner(point, 1, 1), corner(point, 1, -1),
+        corner(point, -1, -1), corner(point, -1, 1),
+      ]);
+      for (let side = 0; side < 4; side++) {
+        depthRenderer.addPolygon(
+          [ends[0][side], ends[1][side], ends[1][(side + 1) % 4], ends[0][(side + 1) % 4]],
+          color, opacity * (side === 0 ? 1 : .84), null, 1, { transparent: opacity < 1 },
+        );
+      }
+    };
+    for (let segment = 0; segment < points.length - 1; segment++) {
+      const a = points[segment], b = points[segment + 1];
+      const length = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      if (length < .01) continue;
+      if (style === "solid") { paintSegment(a, b); continue; }
+      const dash = style === "dotted" ? Math.max(.28, thickness * 1.2) : Math.max(.8, thickness * 4);
+      const gap = style === "dotted" ? dash * 2 : dash * .85;
+      for (let start = 0; start < length; start += dash + gap) {
+        const finish = Math.min(length, start + dash);
+        const pointAt = t => a.map((v, i) => v + (b[i] - v) * t / length);
+        paintSegment(pointAt(start), pointAt(finish));
+      }
+    }
+  }
+
   function drawWorldMachineLabels(machineEntries, time) {
     if (false || !WORLD_MACHINE_LABELS || !state.showLabels || state.labelMode === "off") return;
     if (typeof depthRenderer.addWorldLabel !== "function") return;
@@ -11227,9 +11321,9 @@
       if (isTodayStage() && state.todayLabelMode === "necessary" && machine.labelShowToday !== true) return;
       const text = displayMachineLabel(machine, profile);
       if (!text) return;
-      const labelAnchorX = clamp(Number(machine.labelAnchorXPercent ?? 50), -1000, 1100);
-      const labelAnchorY = clamp(Number(machine.labelAnchorYPercent ?? 100), -1000, 1100);
-      const labelAnchorZ = clamp(Number(machine.labelAnchorZPercent ?? 50), -1000, 1100);
+      const labelAnchorX = clamp(Number(machine.labelAnchorXPercent ?? 50), -5000, 5100);
+      const labelAnchorY = clamp(Number(machine.labelAnchorYPercent ?? 100), -5000, 5100);
+      const labelAnchorZ = clamp(Number(machine.labelAnchorZPercent ?? 50), -5000, 5100);
       const anchor = localPoint(
         rendered,
         rendered.w * labelAnchorX / 100,
@@ -11245,7 +11339,8 @@
         rendered.d * clamp(labelAnchorZ, 0, 100) / 100,
       );
       const x = anchor[0] + clamp(Number(machine.labelWorldOffsetX ?? 0), -80, 80);
-      const y = anchor[1] + Math.max(0, clamp(Number(machine.labelHeightOffset ?? 4), 0, 200));
+      const y = anchor[1] + Math.max(0, clamp(Number(machine.labelHeightOffset ?? 4), 0, 200))
+        + clamp(Number(machine.labelLeaderExtensionFeet ?? 0), 0, 100);
       const z = anchor[2] + clamp(Number(machine.labelWorldOffsetZ ?? 0), -80, 80);
       const sizeMultiplier = Math.max(5, Number(machine.labelSizePercent) || 100) / 100;
       const baseHeight = profile.rank >= 4 ? 4.6 : profile.rank <= 1 ? 2.8 : 3.5;
@@ -11277,13 +11372,14 @@
         backgroundColor: machine.labelBackgroundColor || "#132126",
         borderColor,
       });
-      depthRenderer.addLine?.(
+      drawPhysicalLabelLeader(
         leaderAnchor,
         [x, y - displayedLabelHeight * .52, z],
         borderColor,
-        Math.max(1, Number(machine.labelLineWidth) || 1.25),
-        clamp((Number(machine.labelLineOpacity) || 100) / 100, .15, 1),
-        { depthBias: -0.0002 },
+        machine.labelLineWidth,
+        clamp(Number(machine.labelLineOpacity ?? 100) / 100, .1, 1),
+        machine.labelLineStyle,
+        machine.labelLineShape,
       );
     });
   }
@@ -11470,9 +11566,9 @@
       const visibleTarget = Boolean(text) && eligible && withinBudget && withinRepeatLimit;
       const pointerAnchor = localPoint(
         rendered,
-        rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), -1000, 1100) / 100,
-        rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), -1000, 1100) / 100,
-        rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), -1000, 1100) / 100,
+        rendered.w * clamp(Number(machine.labelAnchorXPercent ?? 50), -5000, 5100) / 100,
+        rendered.h * clamp(Number(machine.labelAnchorYPercent ?? 100), -5000, 5100) / 100,
+        rendered.d * clamp(Number(machine.labelAnchorZPercent ?? 50), -5000, 5100) / 100,
       );
       const result = label(
         text,

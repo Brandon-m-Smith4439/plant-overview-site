@@ -88,8 +88,8 @@ assert.ok(threeRenderer.includes("depthTest: true") && threeRenderer.includes("u
 const worldLabelSubmit = plant.indexOf("drawWorldMachineLabels(machineEntries, time);");
 const physicalPresent = plant.indexOf("presentPhysicalScene?.();", worldLabelSubmit);
 assert.ok(worldLabelSubmit >= 0 && physicalPresent > worldLabelSubmit, "3D labels must be submitted before the physical WebGL frame is presented.");
-assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS || !state.showLabels"), "Legacy normal machine labels must stay off in comparison mode.");
-assert.ok(plant.includes("if (!SCREEN_SPACE_LABELS) return;"), "Legacy process-step and route-tag canvas labels must stay off in comparison mode.");
+assert.ok(plant.includes("const SCREEN_SPACE_LABELS = false"), "Company viewer must disable old screen-space machine labels.");
+assert.ok(plant.includes("if (false || !SCREEN_SPACE_LABELS) return;"), "Legacy canvas process labels must remain disabled.");
 
 
 const legacyLoader = await readFile(new URL("../app/legacy-script-loader.tsx", import.meta.url), "utf8");

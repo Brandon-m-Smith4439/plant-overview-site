@@ -3355,6 +3355,31 @@
       else input.value = String(Number(value ?? 0));
     });
 
+
+    const paintPanel = panel.querySelector("[data-machine-paint-controls]");
+    if (paintPanel) {
+      const singleMachine = selectionCount === 1 ? machine : null;
+      paintPanel.hidden = !singleMachine;
+      const design = singleMachine?.designId ? designLibrary[singleMachine.designId] : null;
+      const list = paintPanel.querySelector("[data-instance-part-color-list]");
+      const details = paintPanel.querySelector("[data-machine-part-color-details]");
+      if (details) details.hidden = !design?.components?.length;
+      if (list) {
+        const overrides = singleMachine?.partColorOverrides || {};
+        list.innerHTML = singleMachine && design
+          ? designColorParts(design).map((part) => {
+              const picked = overrides[part.id] || singleMachine.paintColorOverride || part.color;
+              const changed = Boolean(overrides[part.id]);
+              return \`<div class="instance-color-row">
+                <span title="\${escapeHtml(part.name)}">\${escapeHtml(part.name)}</span>
+                <input type="color" data-instance-part-color="\${escapeHtml(part.id)}" value="\${escapeHtml(picked)}" aria-label="Color for \${escapeHtml(part.name)}">
+                <button type="button" data-reset-instance-part="\${escapeHtml(part.id)}" \${changed ? "" : "disabled"} title="Return to default/overall machine color">Reset</button>
+              </div>\`;
+            }).join("")
+          : "";
+      }
+    }
+
     const scaleModes = selectionItems.map((item) => normalizedMachineScaleEditMode(item.scaleEditMode, item));
     const commonScaleMode = scaleModes[0] || "uniform";
     const mixedScaleModes = scaleModes.some((value) => value !== commonScaleMode);
@@ -4467,7 +4492,18 @@
           </fieldset>
           <label>Appears at<select data-machine-field="reveal" data-stage-select data-needs-selection></select></label>
           <label>Disappears after<select data-machine-field="retire" data-stage-select data-allow-never data-needs-selection></select></label>
-          <label>Color<input data-machine-field="color" data-needs-selection type="color"></label>
+          <label>Machine color<input data-machine-field="color" data-needs-selection type="color" title="Change only this copy; shared machine designs stay unchanged."></label>
+            <div class="wide instance-paint-controls" data-machine-paint-controls>
+              <div class="instance-paint-header">
+                <strong>Machine-specific colors</strong>
+                <button type="button" data-reset-machine-paint data-needs-selection>Reset all to default</button>
+              </div>
+              <p class="label-help">Main color paints this copy of the machine. Individual parts can use their own colors without changing the library design or another machine.</p>
+              <details data-machine-part-color-details>
+                <summary>Edit individual part colors</summary>
+                <div class="instance-part-color-list" data-instance-part-color-list></div>
+              </details>
+            </div>
           <label>Collision check<select data-machine-field="collisionMode" data-needs-selection>
             <option value="solid">Solid · warn on overlap</option>
             <option value="ignore">Ignore overlaps</option>
@@ -5102,6 +5138,44 @@
     });
     panel.querySelector("[data-editor-action='clear-selection']")?.addEventListener("click", () => {
       clearMachineSelection();
+      updateEditorPanel();
+    });
+
+
+    panel.querySelector("[data-reset-machine-paint]")?.addEventListener("click", () => {
+      const machine = selectedMachine();
+      if (!machine || selectedMachines().length !== 1) return;
+      pushHistory();
+      resetMachinePaint(machine);
+      persistLayout();
+      updateEditorPanel();
+      showToast("Machine colors restored to the original design.");
+    });
+    const partColorList = panel.querySelector("[data-instance-part-color-list]");
+    partColorList?.addEventListener("change", (event) => {
+      const field = event.target.closest?.("[data-instance-part-color]");
+      const machine = selectedMachine();
+      if (!field || !machine || selectedMachines().length !== 1) return;
+      const id = field.dataset.instancePartColor, color = field.value;
+      const design = machine.designId ? designLibrary[machine.designId] : null;
+      if (!/^#[0-9a-f]{6}$/i.test(color) || !designColorParts(design).some(part => part.id === id)) return;
+      pushHistory();
+      machine.partColorOverrides = { ...(machine.partColorOverrides || {}), [id]: color };
+      persistLayout();
+      updateEditorPanel();
+      showToast("Only this machine's selected part color was changed.");
+    });
+    partColorList?.addEventListener("click", (event) => {
+      const button = event.target.closest?.("[data-reset-instance-part]");
+      const machine = selectedMachine();
+      if (!button || !machine || selectedMachines().length !== 1) return;
+      const id = button.dataset.resetInstancePart;
+      if (!(id in (machine.partColorOverrides || {}))) return;
+      pushHistory();
+      const next = { ...(machine.partColorOverrides || {}) };
+      delete next[id];
+      machine.partColorOverrides = next;
+      persistLayout();
       updateEditorPanel();
     });
 

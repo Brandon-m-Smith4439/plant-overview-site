@@ -4983,7 +4983,7 @@
           <button type="button" data-editor-action="recover-layout-backup">Restore previous layout backup</button>
           <button type="button" data-editor-action="recover-design-backup">Restore previous machine-design backup</button>
           <button type="button" data-editor-action="recover-publish-snapshot">Restore pre-publish rescue snapshot</button>
-          <button type="button" data-editor-action="export-workspace">Export full workspace</button>
+          <button type="button" data-editor-action="export-workspace">Export full workspace backup</button> <button type="button" data-editor-action="publish-workspace">Save workspace to BFS server</button>
           <button type="button" data-editor-action="import-workspace">Import full workspace</button>
           <input type="file" data-workspace-file accept="application/json,.json" hidden>
           <button type="button" data-editor-action="export">Export layout</button>
@@ -6143,6 +6143,20 @@
       fileInput.value = "";
     });
     panel.querySelector("[data-editor-action='export-workspace']").addEventListener("click",exportWorkspace);
+    panel.querySelector("[data-editor-action='publish-workspace']")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const api = window.PLANT_SHARED_WORKSPACE;
+        if (!api?.publishNow) throw new Error("Company workspace service unavailable.");
+        const result = await api.publishNow();
+        if (!result) throw new Error("Editor authentication is required to publish. Sign in with the editor password and retry.");
+        if (api.remoteRevision() + 1000 < api.localRevision()) throw new Error("Local work is newer than the server response. Export a backup and retry.");
+        showToast("BFS server save verified. Your layout and machine library are published.");
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Could not publish. Keep this tab open and export a workspace backup.");
+      } finally { button.disabled = false; }
+    });
     const workspaceFileInput = panel.querySelector("[data-workspace-file]");
     panel.querySelector("[data-editor-action='import-workspace']").addEventListener("click",() => workspaceFileInput.click());
     workspaceFileInput.addEventListener("change", async () => {

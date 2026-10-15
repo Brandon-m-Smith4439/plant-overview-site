@@ -88,7 +88,7 @@
   }
 
   async function publishNow() {
-    if (window.monroeEditorAccess?.isOwner?.() !== true) return null;
+    if (window.monroeEditorAccess?.hasAccess?.() !== true) return null;
     const payload = localPayload();
     if (!Object.keys(payload.items || {}).length) return null;
     const response = await fetch(API_PATH, {
@@ -114,35 +114,35 @@
         return { source: "local", applied: false };
       }
 
-      const owner = window.monroeEditorAccess?.isOwner?.() === true;
+      const editor = window.monroeEditorAccess?.hasAccess?.() === true;
       const localRev = localRevision();
       const remoteRev = remoteRevision(remote);
       lastRemoteRevision = remoteRev;
 
       if (!remote?.payload?.items) {
-        if (owner) {
-          try { await publishNow(); return { source: "local-published", applied: false }; }
+        if (editor) {
+          try { const published = await publishNow(); if (published) return { source: "local-published", applied: false }; }
           catch (error) { console.warn("Initial shared workspace publish failed.", error); }
         }
         return { source: "local", applied: false };
       }
 
-      if (owner && localRev > remoteRev + 1000) {
-        try { await publishNow(); return { source: "local-published", applied: false }; }
-        catch (error) { console.warn("Newer owner workspace could not be published.", error); }
+      // Critical: never replace a newer local editing session with an older
+      // server snapshot, even if a publish fails or authentication has expired.
+      if (localRev > remoteRev + 1000) {
+        if (editor) {
+          try { const published = await publishNow(); if (published) return { source: "local-published", applied: false }; }
+          catch (error) { console.warn("Newer editor workspace could not be published.", error); }
+        }
+        return { source: "local-newer", applied: false };
       }
-
-      const protectedEditor = window.monroeEditorAccess?.hasEditorProfile?.() === true;
-      if (!protectedEditor || remoteRev >= localRev || owner) {
-        return { source: "remote", applied: applyRemote(remote) };
-      }
-      return { source: "local-newer", applied: false };
+      return { source: "remote", applied: applyRemote(remote) };
     })().finally(() => { inFlight = null; });
     return inFlight;
   }
 
   function schedulePublish(delay = 550) {
-    if (window.monroeEditorAccess?.isOwner?.() !== true) return;
+    if (window.monroeEditorAccess?.hasAccess?.() !== true) return;
     if (publishTimer) window.clearTimeout(publishTimer);
     publishTimer = window.setTimeout(() => {
       publishTimer = 0;

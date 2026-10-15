@@ -1,3 +1,4 @@
+import { requestHasEditorSession } from "../_lib/editor-session";
 import { sanitizeCompanyWorkspaceItem } from "../_lib/company-designs";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -105,7 +106,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  if (!ownerSessionValid(request)) {
+  if (!ownerSessionValid(request) && !requestHasEditorSession(request)) {
     return Response.json({ ok: false, error: "Owner session required." }, { status: 401 });
   }
   let body: { payload?: unknown } = {};

@@ -9950,7 +9950,7 @@
   function resetMachinePaint(machine) {
     if (!machine) return;
     const design = machine.designId ? designLibrary[machine.designId] : null;
-    machine.color = machine.paintOriginalColor || (design ? designMachineColor(design) : machine.color);
+    machine.color = design ? designMachineColor(design) : (machine.paintOriginalColor || machine.color);
     machine.paintColorOverride = "";
     machine.paintOriginalColor = "";
     machine.partColorOverrides = {};
@@ -11770,7 +11770,7 @@
         return;
       }
       if (component.type !== "text" || !String(component.text || "").trim()) return;
-      const renderedComponent = animateDesignComponent(component, time, design);
+      const renderedComponent = paintDesignComponent(machine, animateDesignComponent(component, time, design));
       const center = designComponentCenter(renderedComponent);
       const world = designLocalPointToWorld(machine, design, center, grow);
       const widthPoint = designLocalPointToWorld(machine, design, [center[0] + Number(renderedComponent.w) / 2, center[1], center[2]], grow);

@@ -794,6 +794,12 @@
       reveal: Number.isFinite(Number(machine.reveal)) ? Number(machine.reveal) : 0,
       retire: Number.isFinite(Number(machine.retire)) ? Number(machine.retire) : 99,
       color: machine.color || "#277d78",
+      paintColorOverride: /^#[0-9a-f]{6}$/i.test(String(machine.paintColorOverride || "")) ? machine.paintColorOverride : "",
+      paintOriginalColor: /^#[0-9a-f]{6}$/i.test(String(machine.paintOriginalColor || "")) ? machine.paintOriginalColor : "",
+      partColorOverrides: Object.fromEntries(Object.entries(
+        machine.partColorOverrides && typeof machine.partColorOverrides === "object" && !Array.isArray(machine.partColorOverrides)
+          ? machine.partColorOverrides : {}
+      ).filter(([id,color]) => typeof id === "string" && id.length <= 120 && /^#[0-9a-f]{6}$/i.test(String(color))).slice(0,500)),
       visible: machine.visible !== false,
       locked: machine.locked === true,
       showLabel: machine.showLabel !== false,
@@ -5089,7 +5095,7 @@
       const color = String(event.target.value || "");
       if (!selection.length || !/^#[0-9a-f]{6}$/i.test(color)) return;
       pushHistory();
-      selection.forEach((machine) => { machine.color = color; });
+      selection.forEach((machine) => { applyMachinePaint(machine, color); });
       persistLayout();
       updateEditorPanel();
       showToast(`Applied ${color.toUpperCase()} to ${selection.length} selected object${selection.length === 1 ? "" : "s"}.`);
@@ -5104,6 +5110,7 @@
       if (!machine) return;
       pushHistory();
       machine.designId = event.target.value || "";
+      machine.partColorOverrides = {};
       if (machine.designId && designLibrary[machine.designId]) {
         const base = designBaseDimensions(designLibrary[machine.designId], machine);
         machine.naturalW = base.w;
@@ -5189,6 +5196,7 @@
             machine.category = objectCategory(value);
             const suggestedDesign = defaultDesignForType(value);
             machine.designId = suggestedDesign || "";
+            machine.partColorOverrides = {};
             if (isAnimationType(value)) {
               Object.assign(machine, animationDefaults(value), {
                 animationEnabled: true,
@@ -5218,7 +5226,7 @@
               syncMachineDimensionsToDesign(machine, designLibrary[machine.designId], { preserveScale: false });
             }
           } else if (/^#[0-9a-f]{6}$/i.test(value)) {
-            targets.forEach((item) => { item.color = value; });
+            targets.forEach((item) => { applyMachinePaint(item, value); });
           }
         } else {
           let value = Number(input.value);
@@ -9823,6 +9831,56 @@
       .map((index) => components[index]);
   }
 
+
+  // All paint changes belong to one placed instance, never the shared design.
+  function hasMachinePaintOverrides(machine) {
+    return /^#[0-9a-f]{6}$/i.test(String(machine?.paintColorOverride || ""))
+      || Object.keys(machine?.partColorOverrides || {}).length > 0;
+  }
+  function machinePaintRevision(machine) {
+    return [machine?.paintColorOverride || "", JSON.stringify(machine?.partColorOverrides || {})].join("|");
+  }
+  function designColorParts(design, limit = 500) {
+    const found = [], seen = new Set();
+    const visit = (parts, prefix = "") => {
+      for (const part of parts || []) {
+        if (!part || found.length >= limit || part.visible === false) continue;
+        const name = prefix ? prefix + " / " + (part.name || part.id || "Part") : (part.name || part.id || "Part");
+        if (part.type === "group") visit(part.children || [], name);
+        else {
+          const id = String(part.id || "");
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          found.push({id,name,color:/^#[0-9a-f]{6}$/i.test(String(part.color||""))?part.color:"#68777a"});
+        }
+      }
+    };
+    visit(design?.components);
+    return found;
+  }
+  function paintDesignComponent(machine, part) {
+    if (!hasMachinePaintOverrides(machine)) return part;
+    const overrides = machine.partColorOverrides || {};
+    const originalId = String(part.id || "").replace(/-rectangle-\d+$/, "");
+    const chosen = overrides[part.id] || overrides[originalId] || machine.paintColorOverride;
+    if (!/^#[0-9a-f]{6}$/i.test(String(chosen || ""))) return part;
+    // The reusable library and cached animation components must not be changed.
+    return { ...part, color: chosen, ...(part.type === "text" ? {textColor:chosen} : {}) };
+  }
+  function applyMachinePaint(machine, color) {
+    if (!machine || !/^#[0-9a-f]{6}$/i.test(String(color || ""))) return;
+    if (!machine.paintOriginalColor) machine.paintOriginalColor = machine.color || "#277d78";
+    machine.color = color;
+    machine.paintColorOverride = color;
+  }
+  function resetMachinePaint(machine) {
+    if (!machine) return;
+    const design = machine.designId ? designLibrary[machine.designId] : null;
+    machine.color = machine.paintOriginalColor || (design ? designMachineColor(design) : machine.color);
+    machine.paintColorOverride = "";
+    machine.paintOriginalColor = "";
+    machine.partColorOverrides = {};
+  }
   function drawCustomDesign(machine, alpha, grow, time, lodLevel = 3, componentsOverride = null, segmentCap = machineCurveSegments(machine)) {
     const design = machine.designId ? designLibrary[machine.designId] : null;
     if (!design || !Array.isArray(design.components)) return false;
@@ -9838,7 +9896,8 @@
     // Distance detail reduces curve tessellation, not the machine's parts.
     const renderComponents = lodLevel >= 2 ? visibleComponents : representativeDesignComponents(visibleComponents);
     try {
-      renderComponents.forEach((component) => {
+      renderComponents.forEach((rawComponent) => {
+      const component = paintDesignComponent(machine, rawComponent);
       const componentAlpha = alpha * clamp(Number(component.opacity ?? 1), 0, 1);
       if (component.type === "box" || component.type === "glassPanel" || component.type === "text") {
         drawDesignBox(machine, component, design, componentAlpha, grow);
@@ -10695,7 +10754,7 @@
       rendered?.w, rendered?.h, rendered?.d,
       rendered?.rotationX, rendered?.rotationY ?? rendered?.rotation, rendered?.rotationZ,
       rendered?.color, Number(alpha).toFixed(3), Number(grow).toFixed(3),
-      rendered?.designId || "", rendered?.crane?.height || "", rendered?.crane?.capacity || "",
+      rendered?.designId || "", machinePaintRevision(rendered), rendered?.crane?.height || "", rendered?.crane?.capacity || "",
     ].join(":");
   }
 
@@ -11021,6 +11080,7 @@
         !design
         || lodLevel < 2
         || designRenderPartCount(design) <= 4
+        || hasMachinePaintOverrides(rendered)
         || state.editing
         || machineHasGeometryAnimation(machine, design)
         || state.selectedMachineIds.has(machine.instanceId)
@@ -11179,7 +11239,7 @@
     };
     for (const { machine, rendered, alpha, grow } of entries) {
       const design = designLibrary[rendered.designId];
-      if (!design || !machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 2
+      if (!design || hasMachinePaintOverrides(rendered) || !machineHasGeometryAnimation(machine, design) || machineLodLevel(rendered) < 2
         || state.selectedMachineIds.has(machine.instanceId) || alpha < .9999 || grow < .9999) continue;
       const partition = designRenderPartition(design);
       const segments = machineCurveSegments(rendered);
@@ -11470,7 +11530,7 @@
       const revision = [
         rendered.x, rendered.y, rendered.z, rendered.w, rendered.h, rendered.d,
         rendered.rotationX, rendered.rotationY ?? rendered.rotation, rendered.rotationZ,
-        rendered.color, rendered.type, rendered.designId || "", machineLodLevel(rendered),
+        rendered.color, machinePaintRevision(rendered), rendered.type, rendered.designId || "", machineLodLevel(rendered),
         instancedDesignIds.has(machine.instanceId) ? "shared-design" : "individual-design",
         alpha.toFixed(3), grow.toFixed(3), rendered.crane?.height || "", rendered.crane?.capacity || "",
         animated ? Math.floor(time / (renderPerformance.animationSampleMs?.() || 33)) : "static",

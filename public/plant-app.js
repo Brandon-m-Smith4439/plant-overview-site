@@ -3370,11 +3370,11 @@
           ? designColorParts(design).map((part) => {
               const picked = overrides[part.id] || singleMachine.paintColorOverride || part.color;
               const changed = Boolean(overrides[part.id]);
-              return \`<div class="instance-color-row">
-                <span title="\${escapeHtml(part.name)}">\${escapeHtml(part.name)}</span>
-                <input type="color" data-instance-part-color="\${escapeHtml(part.id)}" value="\${escapeHtml(picked)}" aria-label="Color for \${escapeHtml(part.name)}">
-                <button type="button" data-reset-instance-part="\${escapeHtml(part.id)}" \${changed ? "" : "disabled"} title="Return to default/overall machine color">Reset</button>
-              </div>\`;
+              return `<div class="instance-color-row">
+                <span title="${escapeHtml(part.name)}">${escapeHtml(part.name)}</span>
+                <input type="color" data-instance-part-color="${escapeHtml(part.id)}" value="${escapeHtml(picked)}" aria-label="Color for ${escapeHtml(part.name)}">
+                <button type="button" data-reset-instance-part="${escapeHtml(part.id)}" ${changed ? "" : "disabled"} title="Return to default/overall machine color">Reset</button>
+              </div>`;
             }).join("")
           : "";
       }
